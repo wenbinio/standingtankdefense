@@ -53,13 +53,15 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     waves::spawn(s);
     // 4. Weapons select targets and emit projectiles.
     combat::fire_weapons(s);
-    // 5. Projectiles move; on arrival apply (splash) damage; kills award bounty.
+    // 5. Projectiles move; on arrival apply (splash) damage; kills → pending_kills.
     combat::advance_projectiles(s);
     // 6. Enemies advance toward the tank; contact damage on arrival.
     combat::move_enemies(s);
-    // 7. Passive income.
+    // 7. Drain pending_kills → award bounty (scaled by bounty_mult).
+    economy::collect_bounties(s);
+    // 8. Passive income.
     economy::tick_income(s);
-    // 8. Death check (tank hp ≤ 0).
+    // 9. Death check (tank hp ≤ 0).
     economy::resolve_deaths(s);
 
     s.tick += 1;
@@ -90,6 +92,10 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_u32(s.next_entity_id);
     c.write_u32(s.dead as u32);
     c.write_u32(s.death_tick.unwrap_or(u32::MAX));
+    c.write_u32(s.pending_kills.len() as u32);
+    for k in &s.pending_kills {
+        c.write_u32(*k as u32);
+    }
 
     c.write_u64(s.rng_spawn.state());
     c.write_u64(s.rng_targeting.state());

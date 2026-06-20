@@ -1,34 +1,434 @@
 //! Combat behavior — AGENT B. Implement the three phases below. Read content via
-//! `crate::content`, use `s.rng_targeting`/`s.rng_proc` for any randomness, and
-//! keep all math integer/Fixed (no floats). Preserve determinism: iterate in a
-//! stable order (by `instance_id` / `id`); never iterate a HashMap.
+//! `crate::content`, use `s.rng_targeting` for any randomness, keep all math
+//! integer/Fixed (no floats), and iterate in a stable order (by `instance_id` /
+//! `id`); never iterate a HashMap. No cross-module calls: record kills by pushing
+//! the dead enemy's `def` onto `s.pending_kills` (economy drains it later).
 use crate::content::{self, Attack};
-use crate::economy;
+use crate::ids::EntityId;
 use crate::state::*;
 use determinism::Fixed;
 
-/// Phase 4: each ready weapon picks a target (RANDOM among enemies in range,
-/// via `s.rng_targeting` — matches the source's "attack at random") and emits a
-/// `Projectile`. Update `next_fire_tick = s.tick + cooldown`. No target ⇒ no fire.
+/// Phase 4: each ready weapon (`s.tick >= next_fire_tick`) picks a target —
+/// RANDOM among enemies within `range` (via `s.rng_targeting.below(n)`, matching
+/// the source's "attack at random") — and emits a `Projectile` toward it
+/// (`damage`, `damage_type`, `splash_radius` = 0 for SingleTarget or
+/// `Splash(r)` radius, `speed` = proj_speed). Set `next_fire_tick = s.tick +
+/// cooldown_ticks`. No enemy in range ⇒ do not fire (do not advance cooldown).
 pub(crate) fn fire_weapons(s: &mut ArenaState) {
-    let _ = (&content::WEAPONS, Fixed::ZERO, s);
-    todo!("AGENT B: fire_weapons")
+    // Collect new projectiles first so we don't borrow `s` mutably while
+    // iterating its weapons/enemies. Weapons are processed in their existing
+    // (instance_id) order; for each, candidate enemies are gathered in the
+    // existing enemy (id) order before a random one is picked.
+    let mut new_projectiles: Vec<Projectile> = Vec::new();
+
+    for wi in 0..s.weapons.len() {
+        let def = s.weapons[wi].def;
+        if s.tick < s.weapons[wi].next_fire_tick {
+            continue;
+        }
+        let wdef = &content::WEAPONS[def as usize];
+        let range = Fixed::from_int(wdef.range);
+        let range_sq = range.mul(range);
+
+        // Candidates: enemies within range, in stable id order.
+        let mut candidates: Vec<usize> = Vec::new();
+        for (ei, e) in s.enemies.iter().enumerate() {
+            // Range is measured from the tank (weapon mount = origin).
+            if s.tank.pos.dist_sq(e.pos) <= range_sq {
+                candidates.push(ei);
+            }
+        }
+        if candidates.is_empty() {
+            // No enemy in range: do not fire, do not advance cooldown.
+            continue;
+        }
+
+        let pick = s.rng_targeting.below(candidates.len() as u32) as usize;
+        let enemy = &s.enemies[candidates[pick]];
+
+        let splash_radius = match wdef.attack {
+            Attack::SingleTarget => Fixed::ZERO,
+            Attack::Splash(r) => Fixed::from_int(r),
+        };
+
+        new_projectiles.push(Projectile {
+            id: EntityId(0), // assigned below once we can borrow `s` mutably
+            pos: s.tank.pos,
+            target: enemy.id,
+            last_target_pos: enemy.pos,
+            damage: wdef.damage,
+            damage_type: wdef.damage_type,
+            splash_radius,
+            speed: Fixed::from_int(wdef.proj_speed),
+        });
+
+        s.weapons[wi].next_fire_tick = s.tick + wdef.cooldown_ticks;
+    }
+
+    for mut p in new_projectiles {
+        p.id = s.alloc_entity_id();
+        s.projectiles.push(p);
+    }
 }
 
-/// Phase 5: move each projectile toward its target by `speed` (use
-/// `Vec2::step_toward`). On arrival apply damage: single-target hits the target;
-/// `Attack::Splash(r)` hits all enemies within `r` of the impact point. Apply
-/// `content::damage_multiplier(dmg_type, enemy.armor_class)`. Remove dead enemies
-/// and call `economy::award_bounty(s, enemy_def)` for each kill. Remove arrived
-/// projectiles (and projectiles whose target vanished — detonate at last_target_pos).
+/// Phase 5: move each projectile toward its target by `speed`
+/// (`Vec2::step_toward`). On arrival (reached target pos) apply damage: single
+/// target hits the target enemy; `splash_radius > 0` hits all enemies within
+/// that radius of the impact point. Multiply damage by
+/// `content::damage_multiplier(damage_type, enemy_def.armor_class)`. Subtract
+/// from enemy hp; if hp <= 0 remove the enemy and push its `def` to
+/// `s.pending_kills`. Remove projectiles that have arrived; if a projectile's
+/// target enemy no longer exists, detonate at `last_target_pos` (splash) or just
+/// remove it (single target). Keep `s.enemies` ordered by id.
 pub(crate) fn advance_projectiles(s: &mut ArenaState) {
-    let _ = (Attack::SingleTarget, economy::on_round_start as fn(&mut ArenaState), s);
-    todo!("AGENT B: advance_projectiles")
+    // Move each projectile toward its target, detect arrival, and on arrival
+    // apply damage. We collect "impacts" while iterating (so the enemy borrow
+    // is read-only) then apply hp changes / removals afterward in a stable pass.
+    struct Impact {
+        point: Vec2,
+        target: EntityId,
+        damage: i64,
+        damage_type: u8,
+        splash_radius: Fixed,
+    }
+
+    let mut impacts: Vec<Impact> = Vec::new();
+    let mut survivors: Vec<Projectile> = Vec::with_capacity(s.projectiles.len());
+
+    // Take ownership of the projectile list to iterate without aliasing `s`.
+    let projectiles = std::mem::take(&mut s.projectiles);
+    for mut p in projectiles {
+        // Resolve current target position (if the enemy still exists).
+        let target_pos = s
+            .enemies
+            .iter()
+            .find(|e| e.id == p.target)
+            .map(|e| e.pos);
+
+        match target_pos {
+            Some(tpos) => {
+                p.last_target_pos = tpos;
+                let moved = p.pos.step_toward(tpos, p.speed);
+                if moved == tpos {
+                    // Arrived: detonate at the target position.
+                    impacts.push(Impact {
+                        point: tpos,
+                        target: p.target,
+                        damage: p.damage,
+                        damage_type: p.damage_type,
+                        splash_radius: p.splash_radius,
+                    });
+                } else {
+                    p.pos = moved;
+                    survivors.push(p);
+                }
+            }
+            None => {
+                // Target gone: splash projectiles detonate at last known pos;
+                // single-target projectiles simply vanish.
+                if p.splash_radius > Fixed::ZERO {
+                    impacts.push(Impact {
+                        point: p.last_target_pos,
+                        target: p.target,
+                        damage: p.damage,
+                        damage_type: p.damage_type,
+                        splash_radius: p.splash_radius,
+                    });
+                }
+                // either way, projectile is removed (not pushed to survivors).
+            }
+        }
+    }
+
+    s.projectiles = survivors;
+
+    // Apply impacts in order. Track kills to push their defs after.
+    for imp in impacts {
+        if imp.splash_radius > Fixed::ZERO {
+            let radius_sq = imp.splash_radius.mul(imp.splash_radius);
+            // Hit every enemy within the splash radius of the impact point,
+            // in stable id order.
+            for e in s.enemies.iter_mut() {
+                if imp.point.dist_sq(e.pos) <= radius_sq {
+                    let edef = &content::ENEMIES[e.def as usize];
+                    let mult = content::damage_multiplier(imp.damage_type, edef.armor_class);
+                    e.hp -= mult.scale_i64(imp.damage);
+                }
+            }
+        } else if let Some(e) = s.enemies.iter_mut().find(|e| e.id == imp.target) {
+            let edef = &content::ENEMIES[e.def as usize];
+            let mult = content::damage_multiplier(imp.damage_type, edef.armor_class);
+            e.hp -= mult.scale_i64(imp.damage);
+        }
+    }
+
+    // Remove dead enemies, preserving id order, recording their defs.
+    let mut survivors_e: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
+    for e in std::mem::take(&mut s.enemies) {
+        if e.hp <= 0 {
+            s.pending_kills.push(e.def);
+        } else {
+            survivors_e.push(e);
+        }
+    }
+    s.enemies = survivors_e;
 }
 
-/// Phase 6: move each enemy toward the tank (origin) by its `move_speed`. On
-/// contact (reaches the tank) deal `contact_damage` to `s.tank.hp` and remove
-/// the enemy. Keep `s.enemies` ordered by id (append on spawn; stable removal).
+/// Phase 6: move each enemy toward the tank (origin) by `EnemyDef::move_speed`
+/// (`Vec2::step_toward`). On contact (reaches origin) deal `contact_damage` to
+/// `s.tank.hp` and remove the enemy (no bounty for self-destruct). Keep
+/// `s.enemies` ordered by id.
 pub(crate) fn move_enemies(s: &mut ArenaState) {
-    todo!("AGENT B: move_enemies")
+    let tank_pos = s.tank.pos;
+    let mut survivors: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
+
+    for mut e in std::mem::take(&mut s.enemies) {
+        let edef = &content::ENEMIES[e.def as usize];
+        let speed = Fixed::from_int(edef.move_speed);
+        let moved = e.pos.step_toward(tank_pos, speed);
+        if moved == tank_pos {
+            // Contact: deal contact damage, remove enemy (no bounty for
+            // self-destruct, so do NOT push to pending_kills).
+            s.tank.hp -= edef.contact_damage;
+        } else {
+            e.pos = moved;
+            survivors.push(e);
+        }
+    }
+
+    s.enemies = survivors;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::ArenaState;
+
+    fn blank_state() -> ArenaState {
+        // ArenaState::new seeds one starting Bow weapon. We replace the weapon
+        // list per-test as needed. We never call sim::step() (would hit other
+        // agents' todo!() stubs); only the combat functions under test.
+        ArenaState::new(0xABCDEF, 0)
+    }
+
+    fn mk_enemy(s: &mut ArenaState, def: u16, hp: i64, pos: Vec2) -> EntityId {
+        let id = s.alloc_entity_id();
+        s.enemies.push(Enemy { id, def, hp, pos });
+        id
+    }
+
+    // ---- fire_weapons -------------------------------------------------------
+
+    #[test]
+    fn fire_only_when_enemy_in_range() {
+        let mut s = blank_state();
+        // Starting weapon is the Bow (def 0, range 900). Put an enemy far out.
+        s.weapons.clear();
+        let wid = s.alloc_entity_id();
+        s.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 0 });
+
+        // Enemy out of range (1500 > 900) → no fire, no cooldown advance.
+        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(1500), Fixed::ZERO));
+        fire_weapons(&mut s);
+        assert!(s.projectiles.is_empty(), "should not fire at out-of-range enemy");
+        assert_eq!(s.weapons[0].next_fire_tick, 0, "cooldown must not advance");
+
+        // Enemy in range (300 < 900) → fires one projectile, advances cooldown.
+        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(300), Fixed::ZERO));
+        fire_weapons(&mut s);
+        assert_eq!(s.projectiles.len(), 1, "should fire at in-range enemy");
+        let p = &s.projectiles[0];
+        assert_eq!(p.damage, 75);
+        assert_eq!(p.damage_type, content::DMG_PIERCING);
+        assert_eq!(p.splash_radius, Fixed::ZERO, "Bow is single-target");
+        // cooldown_ticks for Bow = 30, tick = 0.
+        assert_eq!(s.weapons[0].next_fire_tick, 30);
+    }
+
+    #[test]
+    fn fire_respects_cooldown() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let wid = s.alloc_entity_id();
+        s.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 100 });
+        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        s.tick = 50; // 50 < 100, not ready.
+        fire_weapons(&mut s);
+        assert!(s.projectiles.is_empty(), "weapon on cooldown must not fire");
+    }
+
+    // ---- advance_projectiles ------------------------------------------------
+
+    #[test]
+    fn projectile_kills_and_records_def() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        // Enemy with low hp so a single hit kills it.
+        let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
+        let eid = mk_enemy(&mut s, 0, 100, pos);
+        // Single-target projectile already adjacent (speed huge so it arrives).
+        let pid = s.alloc_entity_id();
+        s.projectiles.push(Projectile {
+            id: pid,
+            pos: Vec2::ZERO,
+            target: eid,
+            last_target_pos: pos,
+            damage: 200, // piercing vs armor 0 → 2x = 400, lethal
+            damage_type: content::DMG_PIERCING,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+        });
+        advance_projectiles(&mut s);
+        assert!(s.enemies.is_empty(), "enemy should be dead");
+        assert_eq!(s.pending_kills, vec![0u16], "dead enemy def pushed");
+        assert!(s.projectiles.is_empty(), "arrived projectile removed");
+    }
+
+    #[test]
+    fn projectile_in_flight_survives_and_moves() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let pos = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
+        let eid = mk_enemy(&mut s, 0, 200, pos);
+        let pid = s.alloc_entity_id();
+        s.projectiles.push(Projectile {
+            id: pid,
+            pos: Vec2::ZERO,
+            target: eid,
+            last_target_pos: pos,
+            damage: 75,
+            damage_type: content::DMG_PIERCING,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(10), // far from arriving
+        });
+        advance_projectiles(&mut s);
+        assert_eq!(s.projectiles.len(), 1, "still in flight");
+        assert_eq!(s.enemies.len(), 1, "enemy unharmed yet");
+        assert_eq!(s.enemies[0].hp, 200);
+        // Moved 10 units along +x.
+        assert_eq!(s.projectiles[0].pos.x, Fixed::from_int(10));
+    }
+
+    #[test]
+    fn splash_hits_multiple_enemies() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let impact = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
+        // Three enemies: two within 300 of impact, one far away.
+        let near1 = mk_enemy(&mut s, 0, 100, impact); // distance 0
+        let _near2 = mk_enemy(&mut s, 0, 100, Vec2::new(Fixed::from_int(250), Fixed::ZERO)); // 150 away
+        let _far = mk_enemy(&mut s, 0, 100, Vec2::new(Fixed::from_int(1000), Fixed::ZERO)); // 900 away
+        let pid = s.alloc_entity_id();
+        // Mortar: siege 300, splash 300. Siege vs armor 0 → 1x = 300 dmg, lethal.
+        s.projectiles.push(Projectile {
+            id: pid,
+            pos: impact,
+            target: near1,
+            last_target_pos: impact,
+            damage: 300,
+            damage_type: content::DMG_SIEGE,
+            splash_radius: Fixed::from_int(300),
+            speed: Fixed::from_int(1000),
+        });
+        advance_projectiles(&mut s);
+        // Two near enemies dead, far one survives.
+        assert_eq!(s.enemies.len(), 1, "only the far enemy survives");
+        assert_eq!(s.pending_kills.len(), 2, "two kills recorded");
+    }
+
+    #[test]
+    fn splash_detonates_at_last_pos_when_target_gone() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let impact = Vec2::new(Fixed::from_int(50), Fixed::ZERO);
+        // A bystander near the last known position, but the actual target id
+        // does not exist anymore.
+        let _bystander = mk_enemy(&mut s, 0, 100, impact);
+        let pid = s.alloc_entity_id();
+        s.projectiles.push(Projectile {
+            id: pid,
+            pos: Vec2::ZERO,
+            target: EntityId(99999), // nonexistent
+            last_target_pos: impact,
+            damage: 300,
+            damage_type: content::DMG_SIEGE,
+            splash_radius: Fixed::from_int(300),
+            speed: Fixed::from_int(10),
+        });
+        advance_projectiles(&mut s);
+        assert!(s.enemies.is_empty(), "bystander killed by detonation");
+        assert_eq!(s.pending_kills, vec![0u16]);
+        assert!(s.projectiles.is_empty());
+    }
+
+    #[test]
+    fn single_target_vanishes_when_target_gone() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let _bystander = mk_enemy(&mut s, 0, 100, Vec2::ZERO);
+        let pid = s.alloc_entity_id();
+        s.projectiles.push(Projectile {
+            id: pid,
+            pos: Vec2::ZERO,
+            target: EntityId(99999),
+            last_target_pos: Vec2::ZERO,
+            damage: 1000,
+            damage_type: content::DMG_PIERCING,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(10),
+        });
+        advance_projectiles(&mut s);
+        assert_eq!(s.enemies.len(), 1, "bystander untouched by single-target miss");
+        assert!(s.projectiles.is_empty(), "stale projectile removed");
+        assert!(s.pending_kills.is_empty());
+    }
+
+    // ---- move_enemies -------------------------------------------------------
+
+    #[test]
+    fn enemy_reaching_tank_deals_contact_damage() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let hp0 = s.tank.hp;
+        // Enemy 0 right next to origin; move_speed 8 ≥ distance → arrives.
+        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(3), Fixed::ZERO));
+        move_enemies(&mut s);
+        assert!(s.enemies.is_empty(), "enemy removed on contact");
+        assert_eq!(s.tank.hp, hp0 - 500, "contact_damage applied");
+        assert!(s.pending_kills.is_empty(), "self-destruct grants no bounty");
+    }
+
+    #[test]
+    fn enemy_marches_toward_tank() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        let hp0 = s.tank.hp;
+        move_enemies(&mut s);
+        assert_eq!(s.enemies.len(), 1, "still marching");
+        // Moved 8 units toward origin (move_speed 8) along -x.
+        assert_eq!(s.enemies[0].pos.x, Fixed::from_int(92));
+        assert_eq!(s.tank.hp, hp0, "no contact yet");
+    }
+
+    // ---- determinism --------------------------------------------------------
+
+    #[test]
+    fn fire_weapons_is_deterministic_same_seed() {
+        // Multiple in-range candidates so the random target pick is exercised.
+        let mut a = blank_state();
+        a.weapons.clear();
+        let wid = a.alloc_entity_id();
+        a.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 0 });
+        for i in 0..5 {
+            mk_enemy(&mut a, 0, 200, Vec2::new(Fixed::from_int(100 + i), Fixed::from_int(i)));
+        }
+        let mut b = a.clone();
+
+        fire_weapons(&mut a);
+        fire_weapons(&mut b);
+        assert_eq!(a.projectiles, b.projectiles, "same seed → same target chosen");
+        assert_eq!(a.rng_targeting.state(), b.rng_targeting.state());
+        assert_eq!(a.projectiles.len(), 1);
+    }
 }

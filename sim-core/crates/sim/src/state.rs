@@ -131,6 +131,11 @@ pub struct ArenaState {
     pub dead: bool,
     pub death_tick: Option<Tick>,
 
+    /// Enemy defs killed this tick (pushed by combat/Clear, drained by
+    /// economy::collect_bounties in the same tick). Decouples Agent B from
+    /// Agent C — no cross-module calls. Empty at end of every tick.
+    pub pending_kills: Vec<u16>,
+
     // Per-purpose RNG streams (cursors ride in snapshots).
     pub rng_spawn: Rng,
     pub rng_targeting: Rng,
@@ -169,6 +174,7 @@ impl ArenaState {
             next_entity_id: 1,
             dead: false,
             death_tick: None,
+            pending_kills: Vec::new(),
             rng_spawn: d(Purpose::Spawn),
             rng_targeting: d(Purpose::Targeting),
             rng_shop: d(Purpose::Shop),

@@ -1,0 +1,28 @@
+name: sim-core CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: sim-core
+
+jobs:
+  determinism:
+    name: build + test + determinism gate (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Test (incl. cross-platform golden checksum)
+        run: cargo test --workspace --locked
+      - name: M0 determinism gate
+        run: cargo run --locked -p harness

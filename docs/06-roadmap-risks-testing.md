@@ -6,9 +6,10 @@ How to build Standing Tank Defense in de-risking order, what can go wrong (netwo
 
 Each milestone is a *playable* slice; we add network surface before content depth, because networking is the expensive-to-retrofit risk.
 
-### M0 — Deterministic single-arena sim (no network)
+### M0 — Deterministic single-arena sim (no network) ✅ **DONE**
 - Fixed 30 Hz tick; integer/fixed-point combat; one tank, a few weapons, one wave, the offer/shop loop, gold, death.
 - **Exit test**: run the same seed + scripted input log twice → **identical `state_checksum`** every tick (the determinism harness, §6.3). This gates everything else.
+- **Status:** implemented in [`sim-core/`](../sim-core/) — `determinism` + `sim` + `harness` crates, 48 tests passing, gate `PASS`. A golden-checksum test runs across the CI OS matrix to prove *cross-platform* bit-identical results, not just same-machine reproducibility. Built orchestrator-style: central seams (`ids`/`state`/`content`/`lib`/determinism) hand-authored, behavior modules (`combat`/`waves`, `economy`/`shop`/`input`) implemented by parallel agents against fixed interfaces, integrated centrally.
 
 ### M1 — Shadow-sim & checksums in-process
 - Run two instances of the sim (the "client" and the "shadow") in one process from the same seed+inputs; diff checksums each tick.

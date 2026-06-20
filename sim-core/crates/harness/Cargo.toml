@@ -2,9 +2,15 @@
 name = "harness"
 version = "0.1.0"
 edition.workspace = true
+
+[lib]
+name = "harness"
+path = "src/lib.rs"
+
 [[bin]]
 name = "harness"
 path = "src/main.rs"
+
 [dependencies]
 sim = { path = "../sim" }
 determinism = { path = "../determinism" }
