@@ -9,6 +9,7 @@
 //! - behavior modules: `combat`, `waves` (Agent B); `economy`, `shop`, `input` (Agent C).
 
 pub mod content;
+pub mod snapshot;
 mod combat;
 mod economy;
 mod ids;
