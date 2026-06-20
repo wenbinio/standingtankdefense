@@ -76,7 +76,7 @@ Each milestone is a *playable* slice; we add network surface before content dept
 | Meta (leaderboards/stats/achievements) | **Steam Stats & Leaderboards** | Last Stand / placement / challenge score, server-side stored |
 | Save (challenge meta) | **Steam Cloud** | Replaces the WC3 "codeless save/load" hack outright |
 | Sim language | determinism-friendly (Rust/C++/C#-with-fixed-point) | Bit-stable cross-platform sim (R1/R8) |
-| Engine | agnostic (Godot/Unity/bespoke) | Sim is engine-independent; render is not |
+| Engine | **Godot 4 + Rust sim core (locked)** ([`08`](08-engine-choice.md)) | Sim is an engine-independent Rust crate; Godot renders; Steam via GodotSteam |
 
 ## 6.5 Open questions
 

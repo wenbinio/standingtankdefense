@@ -20,9 +20,9 @@ Short answer: **the engine is deliberately the *second* decision, not the first.
 
 The sim core never imports the engine's vector/physics/RNG types (those are non-deterministic across platforms). The engine only **reads** sim state to draw it. This is already baked into [`05`](05-data-model.md) ("integer/fixed-point everywhere in the hot path; floats only in render code") and means **the engine choice cannot break the netcode** — the worst an engine can do is render slightly differently, never desync the simulation.
 
-## 8.2 Recommendation
+## 8.2 Decision (locked)
 
-**Godot 4.x as the presentation/UI/input layer, on top of a standalone deterministic simulation core written in Rust and exposed via GDExtension. Steam via GodotSteam. This is the default unless team skills point elsewhere (§8.4).**
+**✅ DECIDED: Godot 4.x as the presentation/UI/input layer, on top of a standalone deterministic simulation core written in Rust and exposed via GDExtension. Steam via GodotSteam.** (Confirmed by the project owner.) The alternatives in §8.3 are retained for context and as fallbacks if circumstances change, but the spec now proceeds on this stack.
 
 Why this combination for *this* project:
 
@@ -44,13 +44,12 @@ Why this combination for *this* project:
 | **Pure C++ (raylib/SDL + EnTT)** | Maximum control; Steam SDK is native C++; trivially deterministic | Most engineering for UI/tooling/content pipeline; slowest to iterate. Best only if the team is deeply C++-native. |
 | **Engine with authoritative built-in netcode (Mirror/Fish-Net/Photon)** | Fast to get "networked movement" | **Anti-fit**: these assume entity-replication/shared-world models — exactly the bandwidth-heavy approach [`03 §3.11`](03-network-architecture.md) rejects. Our model ships *inputs + seeds*, not entities, so built-in replication buys little and fights the design. |
 
-## 8.4 The one factor that flips it
+## 8.4 What would have flipped it (now resolved)
 
-The decoupled-core architecture (§8.1) is **fixed regardless**. Only the rendering engine choice depends on **the team's strongest language/ecosystem**:
+The decoupled-core architecture (§8.1) is **fixed regardless** of engine. The renderer choice came down to **the team's strongest language/ecosystem**, and **Godot 4 + Rust core** was selected (§8.2). For the record, the other branches were:
 
 - **Rust-first team →** Bevy (render in Bevy; core is just ECS).
-- **Generalist / 2D-focused / values free+open →** **Godot 4 + Rust core (the default).**
 - **Existing Unity shop →** Unity + custom fixed-point core.
 - **Deeply C++-native →** raylib/SDL + EnTT.
 
-This is the open question to lock (tracked alongside [`06 §6.5`](06-roadmap-risks-testing.md)); the spec proceeds on the Godot 4 + Rust-core default until told otherwise. None of [`02`](02-game-design.md)–[`07`](07-steamworks-integration.md) changes with the engine pick — only this doc does.
+Importantly, none of [`02`](02-game-design.md)–[`07`](07-steamworks-integration.md) changes with the engine pick — only this doc does — so the decision carries low downstream risk. Concretely, the locked stack means: a Rust simulation crate (fixed-point, `hecs`/`bevy_ecs`-as-library) compiled to a GDExtension, Godot 4 for rendering/UI/input/audio, and GodotSteam binding `ISteamNetworkingSockets`/lobbies/auth/stats/cloud per [`07`](07-steamworks-integration.md).
