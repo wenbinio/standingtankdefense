@@ -1,0 +1,183 @@
+# Appendix A — Map Extraction Evidence (Tower Survivors v1.58)
+
+> Auto-generated from the uploaded `TowerSurvivors v1.58.w3x` (MPQ archive) by extracting `war3map.wts` (trigger strings) and reading the in-game tooltip data. Author: **Nethalythic**. Players: **2–8**. This is the *raw evidence* behind the design docs; numbers here are taken directly from the shipped map.
+
+## A.1 Unit roster (118 named units: tower, weapons, enemies, shops, boss)
+
+Survivor's Tower, Bow, Poison Bow, Mortar Launcher, Moon Glaive, Throwing Axes, Boulder, Magic Missile, Frost Bow, Quills, Frost, Lightning Generator, Catapult, Chaos Orb, Demon Eye, Inferno Stone, Flamecaster, Steam Cannon, Bandit Rider, Healthstone, Ballista, Glaive Thrower, Storm Hammer, Living Spittle, Survivor's Shop, Cluster Rockets, Missile Barrage, Living Ice, Chaos Claw, Shockwave Axe, Chaos Swarm, Impaler, Flame Generator, Goblin Land Mines, Goblin Land Mine Stun, Poison Bomb, Arcane Blaster, Net Thrower, Splasher, Immolation, Steam Tank, Thorn, Fire Bow, Soulstealer, Bombs, Crippler, Poison Spear, Knives, Living Water, Meatapult, Frost Armor, Gold Wagon, Tower Ghost, Serpent, Magic Claw, Chaos Heart, Chaotic Spirit, Blaster, Fel Orc Peon, Fel Orc Grunt, Fel Orc Raider, Fel Orc Warlock, Holy Bolt, Skin Selection, Chaotic Spirit Poison, Chain Heal, Ice Generator, Wind Spear, Spikewheel Launcher, Poison Bomb Poison, Blight Aura, Poison Armor Poison, Net Thrower Stun, Seeker Axe, Chaos Web, Magic Bolt, Healing Sprayer, Chaos Web Stun, Ale Launcher, Spell Glaive, Lifeleecher, Death Generator, Black Market, Rejuvenating Petal, Rotating Orb of Lightning, Storm Hammer Stun, Living Water Stun, Ballista Stun, Viewing Skins, Bouncy Cannonball, Bombs Stun, Ale Launcher Miss Chance, Flamecaster Damage, Poisonous Spike Poison, Clear Damage, Manastone, Ice Spears, Frost Bomb, Chaos Skulls, Frostbolt, Ice Shard Freeze, Energy Pulse Stun, Death Coil, Fire, Shocker, Poisonspitter, Lavaspitter, Icebreather, Target Dummy, Firebreather, Liquid Fire Hurler, Necromancer's Tome (for challenge), Bloody Spikes Bleed, Samwise, Overloaded Catapult, Overloaded Catapult Splash Damage, Monsoon, Entangler
+
+## A.2 Weapon catalog (79 unique weapon stat blocks)
+
+Each weapon carries a damage type (Normal/Piercing/Magic/Siege/Chaos, optionally + a status flavor Poison/Frost/Fire/Spikes), an attack type, base damage, DPS, attack cooldown, range, and an optional special ability.
+
+- Weapon - Piercing Attack Type: Single Target Damage: 75 (75 DPS) Attack Cooldown: 1.0 Range: 900
+- Weapon - Normal Attack Type: Single Target Damage: 75 (75 DPS) Attack Cooldown: 1.0 Range: 900
+- Weapon - Siege Attack Type: Single Target Damage: 75 (75 DPS) Attack Cooldown: 1.0 Range: 900
+- Weapon - Magic Attack Type: Single Target Damage: 75 (75 DPS) Attack Cooldown: 1.0 Range: 900
+- Weapon - Chaos Attack Type: Single Target Damage: 75 (75 DPS) Attack Cooldown: 1.0 Range: 900
+- Weapon - Siege Attack Type: Splash (300) Damage: 300 (150 DPS) Attack Cooldown: 2.0 Range: 1200
+- Weapon - Piercing Attack Type: Bounce (4 Targets) Damage: 100 (200 DPS) Attack Cooldown: 0.5 Range: 300
+- Weapon - Siege Attack Type: Barrage (4 Targets) Damage: 100 (100 DPS) Attack Cooldown: 1.0 Range: 1200
+- Weapon - Chaos Attack Type: Bounce (4 Targets) Damage: 75 (150 DPS) Attack Cooldown: 0.5 Range: 600
+- Weapon - Chaos Attack Type: Wave (+300 Range) Damage: 600 (200 DPS) Attack Cooldown: 3.0 Range: 300 Ability: Heal 40 health per enemy hit
+- Weapon - Piercing Attack Type: Barrage (8 Targets) Damage: 2500 (500 DPS) Attack Cooldown: 5.0 Range: 1200 Ability: Stun (3 seconds)
+- Weapon - Piercing Attack Type: Bounce (4 Targets) & Splash (150) Damage: 150 (150 DPS) Attack Cooldown: 1.0 Range: 900
+- Weapon - Siege Attack Type: Splash (300) Damage: 200 (200 DPS) Attack Cooldown: 1.0 Range: 300 Ability: Stun (0.5 seconds)
+- Weapon - Chaos Attack Type: Single Target Damage: 800 (800 DPS) Attack Cooldown: 1.0 Range: 600 Ability: Attacks reduce enemy damage by 50% for 10 seconds
+- Weapon - Piercing Attack Type: Single Target Damage: 150 (300 DPS) Attack Cooldown: 0.5 Range: 600 Ability: Stun (0.75 seconds)
+- Weapon - Chaos Attack Type: Splash (300) Damage: 150 (150 DPS) Attack Cooldown: 1.0 Range: 1200
+- Weapon - Siege Attack Type: Single Target Damage: 300 (300 DPS) Attack Cooldown: 1.0 Range: 600 Ability: +10% Damage per Bash upgrade and +25% Damage per Dazing Stuns upgrade
+- Weapon - Piercing Attack Type: Single Target Damage: 4000 (4000 DPS) Attack Cooldown: 1.0 Range: 900 Ability: Knockback (300)
+- Weapon - Piercing Attack Type: Single Target Damage: 1000 (1000 DPS) Attack Cooldown: 1.0 Range: 600 Ability: Attacks grant +0.2 permanent HP Regen and 60 Instant HP Regen
+- Weapon - Normal Attack Type: Single Target Damage: 500 (250 DPS) Attack Cooldown: 2.0 Range: 1200 Ability: Heal 80 health
+- Weapon - Magic Attack Type: Bounce (4 Targets) Damage: 300 (150 DPS) Attack Cooldown: 2.0 Range: 600
+- Weapon - Normal Attack Type: Bounce (4 Targets) Damage: 150 (150 DPS) Attack Cooldown: 1.0 Range: 600
+- Weapon - Siege Attack Type: Bounce (8 Targets) Damage: 400 (200 DPS) Attack Cooldown: 2.0 Range: 1200
+- Weapon - Normal Attack Type: Splash (300) Damage: 500 (250 DPS) Attack Cooldown: 2.0 Range: 900 Ability: Stun (2 seconds)
+- Weapon - Magic Attack Type: Single Target Damage: 300 (300 DPS) Attack Cooldown: 1.0 Range: 600 Ability: Stun (1.5 seconds)
+- Weapon - Piercing & Poison Attack Type: Single Target Damage: 200 (200 DPS) Attack Cooldown: 1.0 Range: 900 Ability: Poison (300 damage over 3 seconds)
+- Weapon - Magic & Poison Attack Type: Single Target Damage: 200 (200 DPS) Attack Cooldown: 1.0 Range: 900 Ability: Poison (300 damage over 3 seconds)
+- Weapon - Siege & Poison Attack Type: Splash (300) Damage: 400 (200 DPS) Attack Cooldown: 2.0 Range: 1200 Ability: Poison (300 damage over 3 seconds)
+- Weapon - Normal & Poison Attack Type: Single Target Damage: 600 (600 DPS) Attack Cooldown: 1.0 Range: 600 Ability: Poison (50% attack speed and movement speed reduction & 900 damage over 3 seconds)
+- Weapon - Siege Attack Type: Splash (300) Damage: 600 (300 DPS) Attack Cooldown: 2.0 Range: 600 Ability: +1% Damage per 500 Max HP Gained & +% Damage equal to +% Max HP
+- Weapon - Chaos Attack Type: Single Target Damage: 250 (250 DPS) Attack Cooldown: 1.0 Range: 900 Ability: Stun (1.5 seconds)
+- Weapon - Normal Attack Type: Single Target Damage: 125 (250 DPS) Attack Cooldown: 0.5 Range: 1200 Ability: Stun (0.75 seconds)
+- Weapon - Piercing & Spikes Attack Type: Area (Enemies In Range) Damage: 150 (75 DPS) Attack Cooldown: 2.0 Range: 600
+- Weapon - Magic Attack Type: Bounce (8 Targets) Damage: 1250 (250 DPS) Attack Cooldown: 5.0 Range: 900
+- Weapon - Normal Attack Type: Wave (+300 Range) Damage: 500 (250 DPS) Attack Cooldown: 2.0 Range: 300
+- Weapon - Magic Attack Type: Wave (+300 Range) Damage: 800 (250 DPS) Attack Cooldown: 3.0 Range: 300 Ability: Stun (2 seconds)
+- Weapon - Chaos Attack Type: Barrage (12 Targets) Damage: 600 (150 DPS) Attack Cooldown: 4.0 Range: 1200
+- Weapon - Piercing & Frost Attack Type: Splash (150) Damage: 500 (1000 DPS) Attack Cooldown: 0.5 Range: 600
+- Weapon - Normal Attack Type: Bounce (4 Targets) Damage: 600 (200 DPS) Attack Cooldown: 3.0 Range: 900 Ability: Stun (3 seconds)
+- Weapon - Normal Attack Type: Bounce (4 Targets) Damage: 7500 (2500 DPS) Attack Cooldown: 3.0 Range: 600 Ability: Heal 200 health per enemy hit
+- Weapon - Normal Attack Type: Splash (300) Damage: 75 (225 DPS) Attack Cooldown: 0.33 Range: 600
+- Weapon - Piercing & Fire Attack Type: Barrage (4 Targets) Damage: 400 (400 DPS) Attack Cooldown: 1.0 Range: 600
+- Weapon - Chaos & Poison Attack Type: Bounce (8 Targets) Damage: 250 (250 DPS) Attack Cooldown: 1.0 Range: 600 Ability: Poison (450 damage over 3 seconds)
+- Weapon - Magic Attack Type: Bounce (4 Targets) Damage: 300 (300 DPS) Attack Cooldown: 1.0 Range: 300 Ability: +1% Damage per 1000 Mana Shield Gained & +% Damage equal to +% Mana Regen while Mana Shield is active, otherwise restore 20 Mana Shield per enemy hit
+- Weapon - Siege & Fire Attack Type: Single Target Damage: 333 (1000 DPS) Attack Cooldown: 0.33 Range: 900 Ability: Attacks drench the target in liquid fire for 1 second that inceases Fire damage taken by 25% from sources other than Liquid Fire Hurlers.
+- Weapon - Normal Attack Type: Splash (300) Damage: 900 (300 DPS) Attack Cooldown: 3.0 Range: 300 Ability: Attacks reduce enemy chance to hit by 25% for 3 seconds
+- Weapon - Normal & Spikes Attack Type: Wave (+300 Range) Damage: 5000 (5000 DPS) Attack Cooldown: 1.0 Range: 300 Ability: Stun (1 second)
+- Weapon - Chaos & Fire Attack Type: Area (150) Damage: 3000 (375 DPS) Attack Cooldown: 8.0 Range: 900 Ability: Summon Infernal (8 seconds) Ability: Stun (2 seconds) Infernal Damage: 500 (500 DPS) Infernal Ability: Immolation (150 Damage, Fire (50 stacks) to nearby enemies every second) - Fire increases all damage taken by 0.5% per stack, and enemies with Fire explode upon death, dealing 1 damage per 5 Stacks to surrounding enemies. Explosion damage type is based on the damage source that landed the killing blow.
+- Weapon - Magic & Fire Attack Type: Area (300) Damage: 5000 (1000 DPS) Attack Cooldown: 5.0 Range: 600 Ability: Attacks occur as a pillar of flame that deals the 5000 damage over 3 seconds Ability: Fire (250 stacks over 3 seconds) - Fire increases all damage taken by 0.5% per stack, and enemies with Fire explode upon death, dealing 1 damage per 5 Stacks to surrounding enemies. Explosion damage type is based on the damage source that landed the killing blow.
+- Weapon - Piercing & Fire Attack Type: Splash (150) Damage: 100 (200 DPS) Attack Cooldown: 0.5 Range: 900 Ability: Fire (5 stacks) - Fire increases all damage taken by 0.5% per stack, and enemies with Fire explode upon death, dealing 1 damage per 5 Stacks to surrounding enemies. Explosion damage type is based on the damage source that landed the killing blow.
+- Weapon - Siege & Fire Attack Type: Splash (300) Damage: 1500 (500 DPS) Attack Cooldown: 3.0 Range: 1200 Ability: Attacks leave behind burning oil for 3 seconds that does 1000 damage per second Ability: Fire (150 stacks, 75 on attack, 75 over 3 seconds) - Fire increases all damage taken by 0.5% per stack, and enemies with Fire explode upon death, dealing 1 damage per 5 Stacks to surrounding enemies. Explosion damage type is based on the damage source that landed the killing blow.
+- Weapon - Piercing & Frost Attack Type: Single Target Damage: 125 (250 DPS) Attack Cooldown: 0.5 Range: 900 Ability: Frost (5 stacks) - Frost reduces movement speed and attack speed by 2% per stack for 5 seconds, max 25 stacks.
+- Weapon - Magic & Frost Attack Type: Splash (150) Damage: 200 (200 DPS) Attack Cooldown: 1.0 Range: 900 Ability: Frost (2 stacks) - Frost reduces movement speed and attack speed by 2% per stack for 5 seconds, max 25 stacks.
+- Weapon - Magic & Frost Attack Type: Area (375) Damage: 1500 (1500 DPS) Attack Cooldown: N/A Range: 1200 Ability: Attacks occur as a wave of freezing ice shards Ability: Frost (5 stacks) - Frost reduces movement speed and attack speed by 2% per stack for 5 seconds, max 25 stacks.
+- Weapon - Normal & Frost Attack Type: Barrage (4 Targets) Damage: 450 (300 DPS) Attack Cooldown: 1.5 Range: 600 Ability: Frost (5 stacks) - Frost reduces movement speed and attack speed by 2% per stack for 5 seconds, max 25 stacks.
+- Weapon - Piercing & Poison Attack Type: Barrage (4 Targets) Damage: 50 (100 DPS) Attack Cooldown: 0.5 Range: 900
+- Weapon - Siege Attack Type: Single Target Damage: 150 (300 DPS) Attack Cooldown: 0.5 Range: 600 Ability: Attacks increase Siege damage taken by 5%, stacking
+- Weapon - Normal Attack Type: Single Target Damage: 100 (200 DPS) Attack Cooldown: 0.5 Range: 900 Ability: Attacks increase Normal damage taken by 5%, stacking
+- Weapon - Siege Attack Type: Splash (300) Damage: 250 (250 DPS) Attack Cooldown: 1.0 Range: 300 Ability: Stun (0.5 seconds)
+- Weapon - Chaos Attack Type: Single Target Damage: 200 (200 DPS) Attack Cooldown: 1.0 Range: 900 Ability: Attacks increase Chaos damage taken by 10%, stacking
+- Weapon - Chaos Attack Type: Splash (150) Damage: 450 (150 DPS) Attack Cooldown: 3.0 Range: 900 Ability: Stun (1.5 seconds)
+- Weapon - Siege & Frost Attack Type: Splash (300) Damage: 600 (200 DPS) Attack Cooldown: 3.0 Range: 900 Ability: Frost (2 stacks) Ability: Attacks create a bomb that explodes after 1 second, dealing 600 damage and applying 3 Frost stacks - Frost reduces movement speed and attack speed by 2% per stack for 5 seconds, max 25 stacks.
+- Weapon - Magic & Frost Attack Type: Wave (+150 Range) Damage: 500 (250 DPS) Attack Cooldown: 2.0 Range: 300 Ability: Attacks in a counterclockwise rotating pattern Ability: Frost (3 stacks) - Frost reduces movement speed and attack speed by 2% per stack for 5 seconds, max 25 stacks.
+- Weapon - Normal & Fire Attack Type: Wave (+150 Range) Damage: 400 (200 DPS) Attack Cooldown: 2.0 Range: 300 Ability: Attacks in a clockwise rotating pattern Ability: Fire (20 stacks) - Fire increases all damage taken by 0.5% per stack, and enemies with Fire explode upon death, dealing 1 damage per 5 Stacks to surrounding enemies. Explosion damage type is based on the damage source that landed the killing blow.
+- Weapon - Chaos Attack Type: Single Target Damage: 125 (375 DPS) Attack Cooldown: 0.334 Range: 600 Ability: Continously drains life from a target until it dies, with the tick rate increased by +% Attack Speed Ability: Heal 40 health per second while attacking
+- Weapon - Magic Attack Type: Single Target Damage: 266 (800 DPS) Attack Cooldown: 0.334 Range: 1200 Ability: Continously drains mana from a target until it dies, with the tick rate increased by +% Attack Speed Ability: Restores 80 mana per second while attacking
+- Weapon - Chaos Attack Type: Single Target Damage: 1500 (1000 DPS) (Skeletal Mage) Attack Cooldown: N/A Range: 1200 Ability: Raises a Skeletal Mage from a corpse every 10 seconds. The Skeletal Mage lasts 10 seconds, increased by +% Attack Speed.
+- Weapon - Magic & Fire Attack Type: Wave (+150 Range) Damage: 60 (300 DPS) Attack Cooldown: 0.2 Range: 300 Ability: Constantly attacks in a councterclockwise rotating pattern Ability: Fire (2 stacks) - Fire increases all damage taken by 0.5% per stack, and enemies with Fire explode upon death, dealing 1 damage per 5 Stacks to surrounding enemies. Explosion damage type is based on the damage source that landed the killing blow.
+- Weapon - Siege Attack Type: Wave (+150 Range) Damage: 7500 (1500 DPS) Attack Cooldown: N/A Range: 300 Ability: Plants a land mine that lasts 60 seconds in a clockwise rotating pattern, with each additional purchase of Goblin Land Mines planting an additional mine further away Ability: Stun (3 seconds)
+- Weapon - Piercing Attack Type: Splash (300) Damage: 400 (200 DPS) Attack Cooldown: 2.0 Range: 1200 Ability: Attacks increase Piercing damage taken by 10%, stacking
+- Weapon - Magic Attack Type: Splash (300) Damage: 400 (200 DPS) Attack Cooldown: 2.0 Range: 1200 Ability: Attacks increase Magic damage taken by 10%, stacking
+- Weapon - Siege Attack Type: Barrage (8 Targets) & Splash (300) Damage: 5000 (500 DPS) Attack Cooldown: 10.0 Range: 1200
+- Weapon - Siege Attack Type: Splash (150) Damage: 100 (200 DPS) Attack Cooldown: 0.5 Range: 900 Ability: Heal 4 health per enemy hit
+- Weapon - Chaos Attack Type: Single Target Damage: 200 (600 DPS) Attack Cooldown: 0.334 Range: 1200 Ability: Deals +10% damage for each additional Death Generator.
+- Weapon - Magic Attack Type: Area (900) Damage: 600 (200 DPS) Attack Cooldown: 1.0 (While Active) Range: 900 Ability: Activates once per round (every 30 seconds) to damage all enemies in range once every 1 second for 10 seconds. +% Attack Speed increases the duration.
+- Weapon - Magic Attack Type: Single Target Damage: 500 (250 DPS) Attack Cooldown: 2.0 Range: 1200 Ability: Attacks grant +20 Mana Shield
+- Weapon - Chaos & Fire Attack Type: Area (Enemies In Range) Damage: 200 (200 DPS) Attack Cooldown: 1.0 Range: 300 Ability: Fire (20 stacks) - Fire increases all damage taken by 0.5% per stack, and enemies with Fire explode upon death, dealing 1 damage per 5 Stacks to surrounding enemies. Explosion damage type is based on the damage source that landed the killing blow.
+- Weapon - Siege Attack Type: Area (375) Damage: 125 (500 DPS) Attack Cooldown: 0.25 Range: 900 Ability: Continously launches rockets for 2 seconds at a target area before switching target Ability: Stun (2 seconds)
+- Weapon - Normal & Poison Attack Type: Single Target Damage: 1500 (4500 DPS) Attack Cooldown: 0.334 Range: 900 Ability: Root (1 second) - Rooted enemies are considered Stunned & Poisoned, but roots do not benefit from +% Stun Duration.
+
+## A.3 Upgrade / modifier catalog (89 unique upgrade effects, first line only)
+
+- Vulnerability Pulse: Increases all damage taken by all enemies within 1200 range by 5% every second, stacking.
+- Terror:
+- Upon fatal damage, fully repair the Survivor's Tower, using up the Ankh but gaining +2000 Max HP.
+- +50% Stun Duration
+- +4000 Mana Shield +20% Damage while Mana Shield is active
+- +500 Max HP
+- +10% Piercing Damage
+- +10% Normal Damage
+- +10% Siege Damage
+- +10% Chaos Damage
+- +5% Normal / Piercing / Magic / Siege / Chaos Damage
+- -100 HP Regen +5000 Gold
+- +25% Damage for 300 and 600 Attack Range Weapons
+- +1000 Max HP +15 Heal when an enemy dies
+- +10 Armor +15 Bonus Armor every 30 seconds
+- +2000 Max HP +1.5% Missing HP Heal every second
+- +100% Damage for 500 Gold (Common) Weapons
+- +50% Kill Bounty
+- +25% Healing
+- +2000 Mana Shield +10 Mana Shield every second
+- +20 Gold Income +25% of Gold Income as instant HP Regen
+- -1000 Max HP +2000 Gold
+- +5 Armor
+- +2000 Max HP +25% Max HP
+- +10% Attack Speed
+- +80 HP Regen +25% HP Regen
+- +2% Damage +1% Damage every 30 seconds
+- +4000 Mana Shield +25% Mana Regeneration
+- +5 instant HP Regen when an enemy takes Poison damage from a Weapon +1 instant HP Regen when an enemy takes Poison damage from an Upgrade
+- +20 HP Regen
+- +5 Gold Income
+- +10 Gold Income +10% Gold Income
+- +25% Damage for 900 and 1200 Attack Range Weapons
+- +100% Kill Bounty +200% Bounty Gold with 5% activation chance
+- +10% Magic Damage
+- +25% Enemies hit by Bounce and Barrage
+- +20% Chaos Damage +3% Chaos Damage every 30 seconds
+- +20% Piercing Damage +3% Piercing Damage every 30 seconds
+- +20% Siege Damage +3% Siege Damage every 30 seconds
+- +20% Normal Damage +3% Normal Damage every 30 seconds
+- +20% Magic Damage +3% Magic Damage every 30 seconds
+- Buy 1 Uncommon Weapon or Spikes Damage Upgrade of your choosing. The Black Market lasts until a choice is made.
+- +25% Damage for Splash Weapons
+- +1 extra copy of the next Rare Weapon or Spikes Damage Upgrade
+- +10% Frost damage and slow strength
+- +1.5 seconds of Freeze when an enemy reaches 25 stacks of Frost , resetting stacks to 0. Freeze increases Frost damage taken by 50% and freezes the enemy in place
+- +40 HP Regen +0.2 HP Regen every second
+- +20% Damage to Stunned enemies
+- +1000 Max HP +5 Max HP every second
+- +2000 Mana Shield +15 Mana regenerated when an enemy dies
+- +2000 Mana Shield +0.5 seconds of Stun to enemies in 1200 range when Mana Shield de-activates
+- +10000 Mana Shield +30% Damage Reduction while Mana Shield is active
+- +10% Dodge
+- +10 Armor +0.25% stacking Spikes Damage when damaged by an enemy, resetting every 30 seconds
+- +25% Damage for Single Target Weapons
+- +10% Poison damage
+- +25% Damage to Poisoned enemies
+- +30% Normal / Piercing / Magic / Siege / Chaos / Spikes Damage +30% Damage to Stunned enemies +15% Poison Damage +15% Frost damage and slow strength +15% Fire damage and damage vulnerability
+- +10% Fire damage and damage vulnerability
+- Duplicates the next Rare Weapon or Spikes Damage Upgrade you purchase, granting you additional copies of it equal to the amount of charges.
+- Multiplies the next 500 Gold (Common) Upgrade you purchase, granting you additional copies of it equal to the amount of charges. Does not work on Magic Coins, Magic Treasures or Black Markets.
+- +3 extra copies of the next 500 Gold (Common) Upgrade Does not work on Magic Coins, Magic Treasures or Black Markets.
+- +40 HP Regen +100% of HP Regen health regenerated over 10 seconds every 30 seconds
+- +200% Kill Bounty +1% Damage per 50% Kill Bounty
+- +80 Spikes Damage +8 Heal when damaged
+- +40 Spikes Damage
+- +80 Spikes Damage +10% Spikes Damage
+- +160 Spikes Damage +30% Spikes Damage
+- +400 Spikes Damage +30% of Damage Taken Spikes Damage
+- +80 Spikes Damage +10 Spikes Damage every 30 seconds
+- +80 Spikes Damage +240 Spikes Damage on the first attack
+- +160 Spikes Damage +20 stacks of Fire to an enemy when damaged
+- +160 Spikes Damage +50 Spikes / Poison damage per second for 3 seconds to an enemy when damaged
+- +5000 Max HP +1% Damage per 2000 Max HP Gained
+- +100% Piercing Damage +1% Piercing Damage per Bow
+- +100% Chaos Damage +1% Chaos Damage per Chaos Orb
+- +100% Magic Damage +1% Magic Damage per Magic Missile
+- +100% Siege Damage +1% Siege Damage per Boulder
+- +10 Armor +2 stacks of Frost to an enemy when damaged
+- +50% Healing +35% Damage for Healing Weapons and Upgrades when at 95% health or above
+- +100% Normal Damage +1% Normal Damage per Throwing Axe
+- +80 Spikes Damage +10 Spikes damage per second to an enemy when damaged, stacking. Each stack adds +100% more damage.
+- +10 Armor +40 Poison damage per second for 3 seconds to an enemy when damaged, increased by 2.5% per 1 Armor
+- +25% Damage for Wave Weapons
+- +160 Spikes Damage +5% of Spikes Damage as Flat Damage Reduction, but cannot reduce more than 50% of an attack
+- +500% Fire Explosion damage
+- When used, gain +250 Gold Gold value increases by 2 per second Purchasing a second Magic Treasure uses the first
+- +1000 Mana Shield
+- +200 HP Regen Deal 200 Poison damage to all enemies in 600 range every 1 second, increased by 1% per 5 HP Regen and further increased by 10% for each active Poison on the enemy
