@@ -4,6 +4,10 @@
 
 This repository currently holds the **planning / specification package**. No engine code yet — the goal of this pass is a buildable, opinionated spec with the multiplayer architecture nailed down first, because networking is the part that is expensive to retrofit.
 
+**Shipping target:** a **free Steam app**, built on **Steamworks P2P / Steam Datagram Relay** — no server budget, the authority runs on a host player over Valve's relay backbone. See [`docs/07-steamworks-integration.md`](docs/07-steamworks-integration.md).
+
+**The inspiration map was extracted and analyzed first-hand** (`TowerSurvivors v1.58.w3x`); the raw data and a re-runnable extractor live in [`research/tower-survivors-map/`](research/tower-survivors-map/) so future work doesn't repeat it, with the full catalog written up in [`docs/appendix-A-map-extraction.md`](docs/appendix-A-map-extraction.md).
+
 ---
 
 ## The pitch in one paragraph
@@ -28,6 +32,10 @@ The key realization that drives this whole spec: **the arenas are independent.**
 | [`docs/04-protocol-and-messages.md`](docs/04-protocol-and-messages.md) | Wire protocol: transport & channels, the full message catalog, time synchronization, the match state machine, and sequence diagrams. |
 | [`docs/05-data-model.md`](docs/05-data-model.md) | Simulation entity model and the content‑data schemas (weapons, modifiers, enemies, wave tables) plus the RNG‑stream design that makes randomization deterministic. |
 | [`docs/06-roadmap-risks-testing.md`](docs/06-roadmap-risks-testing.md) | Milestones / vertical slices, the risk register (networking‑weighted), the determinism & netcode test plan, and open questions. |
+| [`docs/07-steamworks-integration.md`](docs/07-steamworks-integration.md) | **Steam deployment.** Host‑authoritative‑over‑SDR for a free game, the Steamworks API mapping (sockets, lobbies, auth, stats, cloud), host migration on Steam, and the honest anti‑cheat trade‑offs of free P2P. |
+| [`docs/08-engine-choice.md`](docs/08-engine-choice.md) | Engine decision: decouple the deterministic sim core from the renderer; recommended **Godot 4 + Rust sim core** (with the alternatives and the one factor that flips it). |
+| [`docs/appendix-A-map-extraction.md`](docs/appendix-A-map-extraction.md) | Evidence appendix: the full extracted catalog (118 units, 79 weapons, 87 upgrades) from `TowerSurvivors v1.58.w3x`. |
+| [`research/tower-survivors-map/`](research/tower-survivors-map/) | The finalized map extraction: raw WC3 files, a re‑runnable `extract.py`, and `parsed/catalog.json`. |
 
 ## Status & scope of this spec
 

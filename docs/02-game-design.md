@@ -1,97 +1,112 @@
 # 02 — Game Design
 
-Design spec for **Standing Tank Defense**. This is deliberately a "GDD‑lite": enough to drive the data model and the network design, not a balance bible. Numbers tagged _(inferred)_ are starting points adapted from the WC3 source and should be tuned in playtest. Everything here is built so the simulation is **deterministic and shardable** — see [`03-network-architecture.md`](03-network-architecture.md).
+Design spec for **Standing Tank Defense**, grounded in the extracted Tower Survivors v1.58 data (see [`01-source-analysis.md`](01-source-analysis.md) and [`appendix-A-map-extraction.md`](appendix-A-map-extraction.md)). This is a "GDD-lite": enough to drive the data model and the network design. Every system here is built to stay **deterministic and shardable** — see [`03-network-architecture.md`](03-network-architecture.md). Values taken directly from the map are stated as such; our own choices are marked **[design choice]**.
 
 ## 2.1 Design pillars
 
-1. **One tank, no movement, no aiming.** The only verbs are *buy* and *upgrade*. All skill is in build decisions under time pressure. (One exception: a single manual ability — see *Clear*.)
-2. **Everything stacks.** Power comes from layering weapons and multiplicative modifiers, not from a tech tree you climb and leave behind.
-3. **Randomized offers, meaningful choices.** Each decision point presents a random subset of the catalog; scarcity + rarity make builds emergent and replayable.
+1. **One tank, no movement, no aiming.** The only verbs are *buy*, *upgrade*, *reroll*, and one manual ability. All skill is in build decisions under time pressure.
+2. **Everything stacks, multiplicatively across sources.** The map's rule — *"different damage increases are multiplicative with each other"* — is the power-curve engine. Power comes from layering, not from a tech tree you outgrow.
+3. **Randomized offers, meaningful choices.** Each round opens a new shop of random offers, weighted by rarity; rerolls and targeted shop items let you steer the randomness at a cost.
 4. **You race the lobby, not fight it.** Players never touch each other's arenas. The competition is *relative survival time*. This is a pillar **and** the reason the netcode can be cheap.
-5. **Readable escalation.** Difficulty ramps on a clear clock so a player always knows roughly how close the next breakpoint is.
+5. **Readable escalation.** Difficulty ramps on a fixed clock with known breakpoints (10 min, 15 min, then the boss).
 
 ## 2.2 The tank (player avatar)
 
-- **Stationary.** Fixed position in the center (or rear) of a personal arena.
-- **Has HP.** Enemies that reach the tank (or its objective) deal damage; at 0 HP the tank dies and the player is eliminated (and gets a placement).
-- **Auto‑fires.** All equipped weapons fire automatically on their own cadence at targets selected by their targeting rule.
-- **One manual ability — `Clear`.** A long‑cooldown panic/burst button (themed as a cannon "clear"). It is also the **only** thing that can damage the end boss (carried from the source's Samwise rule). Manual `Clear` activation is the *one* real‑time player input that affects combat timing, so it is a first‑class networked input (see protocol doc). Everything else is a menu decision.
+- **Stationary**, fixed in its personal arena. (The source calls it "Survivor's Tower"; we re-skin to a tank.)
+- **Has HP** plus optional defensive layers: **Armor**, **HP Regen** (with retroactive multipliers), **Dodge** (diminishing returns), and a **Mana Shield** absorb-pool subsystem. At 0 HP the tank dies and the player is eliminated with a recorded placement.
+- **Auto-fires** every equipped weapon on its own cadence at a **randomly selected** valid target (no armor-type preference — see RNG, §2.8).
+- **One manual ability — `Clear`.** A long-cooldown burst that is also the **only** thing that can damage the end boss. Manual `Clear` is the single real-time combat input a player makes; everything else is a menu action. It is therefore a first-class networked input (see [`04-protocol-and-messages.md`](04-protocol-and-messages.md)).
 
 ## 2.3 Match structure & clock
 
-| Phase | Duration _(inferred)_ | Notes |
+| Phase | Timing | Notes |
 | --- | --- | --- |
 | Lobby | until ready/countdown | Server assigns slots + master seed |
-| Countdown | ~5 s | Time‑sync converges here |
-| Rounds 1–40 | ~30 s each → ~20 min | Each round = one wave + a shop/offer window |
-| Boss | after round 40 | **Boss** spawns; only `Clear` damages it |
-| Resolution | — | Placement + Last Stand awarded |
+| Countdown | ~5 s **[design choice]** | Time-sync converges here |
+| Rounds | **~30 s each**, a new **shop every round** | ~15 min of escalating waves |
+| Scaling steps | at **10 min** and **15 min** | enemy HP/damage jump; 15-min step "brings the game to a swift end" |
+| Boss | after ~15 min | **Samwise** spawns; **fixed** HP/damage (does not scale); shop "flees in fear"; only `Clear` damages it |
+| Resolution | — | placement + Last Stand awarded |
 
-- The **round number and global clock are server‑authoritative** and the same for everyone (so "wave N" is comparable across the leaderboard).
-- Within a round, each player's arena runs **independently** — your wave‑12 swarm is the same *composition* as everyone else's wave‑12 swarm (same spawn table) but seeded per‑player so individual spawn jitter differs and can't be copied.
+- **Round number and global clock are server-authoritative** and identical for everyone, so "round N" / "minute N" are comparable across the leaderboard.
+- Within a round each arena runs **independently**: your round-N wave is the same *composition* as everyone else's round-N wave (shared wave table) but **per-player seeded**, so spawn timing/positions differ and can't be mirror-copied.
+- **Game speed**: the source exposes Normal/Fast/Faster/Hyper, host-controlled. **[design choice]** We fix the *simulation* tick rate (for determinism) and treat "speed" purely as a host-set time-scale on the authoritative clock, applied identically everywhere — never a per-client setting.
 
 ## 2.4 Economy
 
-Two income sources, deliberately scoped so multipliers don't trivially compound:
+Three income sources, scoped so multipliers don't trivially compound (matching the source's careful scoping):
 
-1. **Passive income** — a flat gold/second that rises slightly per round. *Income multipliers do NOT apply to this* (carried from the source rule).
-2. **Bounty income** — gold per kill, scaled by enemy tier. *Income multipliers DO apply here* (e.g. Golden Medallion's +100% bounty).
-3. **Round bonus** — a lump sum at round end (some economy upgrades add to this, e.g. Gold Delivery's +1000/round).
+1. **Passive Gold Income** — flat gold/sec, rising slightly per round. Income-% multipliers apply only to *bonus* income, not the base (source rule).
+2. **Kill Bounty** — gold per kill by enemy tier; **+% Bounty** multipliers apply here, plus a fixed **5%-chance proc** for bonus bounty (source: "+200% Bounty Gold with 5% activation chance").
+3. **Round bonus / meta-items** — lump sums and time-growing items (e.g. **Magic Treasure**: +250 gold now, value grows +2/sec).
 
-Gold is spent in the **offer window**: a randomized set of purchasable cards (new weapons, category modifiers, economy upgrades) drawn from the catalog by rarity weighting.
+Gold is spent in the **per-round shop**. **Rerolls** refresh the offers: you start with **5** rerolls, cost escalates per use, and some effects grant **Free Rerolls**.
 
-## 2.5 Content model (weapons / modifiers / rarities)
+## 2.5 Content model
 
-This is summarized here and formalized as schemas in [`05-data-model.md`](05-data-model.md).
+Summarized here; formalized as schemas in [`05-data-model.md`](05-data-model.md). Full extracted lists in Appendix A.
 
-### Weapons (categories)
-Each weapon is an auto‑firing emitter with: damage, fire interval, range, projectile/AoE behavior, and a **targeting rule**. Starting categories (adapted from source):
+### Damage-type matrix
+Five base types — **Normal, Piercing, Magic, Siege, Chaos** — each with armor-class multipliers from a matrix (the source's `war3mapMisc.txt`, e.g. Piercing 2× vs the first armor class). Layered on top are **status flavors**: **Poison, Frost, Fire, Spikes**. Damage bonuses are **additive within a source, multiplicative across sources**.
 
-- **Single‑target** — high per‑hit, picks one target.
-- **Area** — AoE on hit/impact.
-- **Poison / DoT** — applies stacking damage‑over‑time.
-- **Multifire** — fires at multiple targets / extra projectiles.
-- **Focusfire** — ramps damage the longer it hits the same target.
-- **Bombardment** — periodic large AoE strikes at range.
-- **Spikes** — short‑range retaliation / contact damage near the tank.
+### Weapons (the auto-fire emitters)
+Each weapon = `{base damage types, attack type, damage, DPS, attack cooldown, range, ability}`. From the 79-weapon extract:
 
-**Targeting is randomized** (no armor‑type preference). Random target selection is an explicit RNG draw and therefore uses a dedicated deterministic RNG stream (see §2.8 and the data‑model doc).
+- **Attack types**: `Single Target`, `Splash(R)`, `Bounce(N targets)`, `Barrage(N targets)`, `Wave(+R, rotating)`, `Area(R)` / `Area(enemies-in-range)`.
+- **Range tiers**: 300 / 600 / 900 / 1200 (upgrades target these tiers).
+- **Cooldown tiers**: 0.2 → 10.0, plus **`N/A`** (no cooldown; *does not benefit from +Attack Speed* — a real special case).
+- **Abilities** attached to weapons: Stun, Root, Knockback, Freeze, on-hit vulnerability stacks, life/mana drain, summons (Skeletal Mage, Infernal), heals, etc.
 
-### Modifiers (the "stacking" engine)
-- **Category modifiers** — e.g. *Areafire*: +% damage and +% AoE to all Area weapons. The general form is `{scope: category, stat: X, op: add|mul, value: v}`.
-- **Global modifiers** — affect all weapons (e.g. +attack speed, +range).
-- **Economy modifiers** — *Gold Delivery* (+flat/sec, +flat/round), *Golden Medallion* (+% bounty, proc chance for extra bounty).
-- **Defensive modifiers** — +max HP, +regen, damage reduction, slow auras.
+### Status effects (exact rules from source)
+- **Poison** — DoT + move/attack-speed slow (e.g. "50% slow & 900 dmg over 3s").
+- **Frost** — 2% move/attack-speed slow per stack, **max 25**; upgrades can **Freeze** at 25 stacks (+50% frost damage taken).
+- **Fire** — +0.5% all-damage-taken per stack; enemies **explode on death**.
+- **Spikes** — retaliation damage when the tank is hit; its own +% scaling.
+- **Stun / Root / Knockback** — crowd control; `+% Stun Duration` and "+% damage to stunned" upgrades exist.
 
-### Rarity / quality tiers
-Offers are drawn with rarity weighting: **Common → Rare → Epic** (e.g. Epic‑quality 5000g upgrades like Multifire/Focusfire/Bombardment from the source). Rarity affects draw weight, cost, and magnitude.
+### Modifiers (the stacking engine)
+- **Category/scope modifiers** — by damage type ("+10% Chaos Damage"), by range tier, by attack class ("+25% Splash Weapons", "+25% Single Target Weapons"), by rarity ("+100% Common Weapons"), by enemy state ("+25% to Poisoned/Stunned").
+- **Global modifiers** — +Attack Speed, +Range, +Max HP / +%, +HP Regen / +%, +Armor, +Dodge, Mana Shield grants, +Income, +Bounty.
+- **Time/round modifiers** — "+X% every 30 s (each new shop)"; some sources "no longer stack after 15 minutes."
+
+### Rarity ladder (offer weighting & cost)
+**Common (500g) → Uncommon → Rare → Epic (~5000g)**. Rarity sets draw weight, cost, and magnitude.
+
+### Meta / targeted shop items (make the offer stream *stateful*)
+- **Black Market** — buy one specific Uncommon weapon of your choice.
+- **Multiplication Gems** — next Common upgrade is granted +3 copies.
+- **Magic Treasure / Magic Coins** — economy items used from a shop inventory.
+- **Copy effects** — "+1 copy of the next Rare weapon."
+
+> These matter for networking: because items modify *future* offers, the offer RNG stream is **stateful and order-dependent**, so it must be replayed exactly on reconnect (§2.8, [`05`](05-data-model.md)).
 
 ## 2.6 Enemies & waves
 
-- Enemies are simple: HP, move speed, contact damage, bounty, and an archetype (swarmer, tank, fast, splitter, etc.). Late game adds **scaling multipliers** to base HP/damage per round.
-- A **wave table** per round defines spawn composition, counts, and cadence. The same table is used by all players in a given round; the **per‑player seed** decides spawn timing/positions so arenas feel individual and can't be mirrored.
-- **Boss** (after round 40): a single high‑HP unit, immune to normal weapons, killable only by `Clear`. Surviving it (or outliving the lobby) is the terminal event.
+- Enemy fields: `{HP, move speed, contact damage, bounty, armor class, archetype, abilities}`. Archetypes seen in the roster: melee swarmers (Fel Orc Peon/Grunt/Raider), casters (Warlock, Necromancer), ranged "breathers/spitters" (Fire/Ice/Poison/Lava breathers that attack in rotating arcs).
+- **Wave table per round** defines composition, counts, and cadence; shared across players for a given round, **per-player seeded** for individual spawn timing/position.
+- **Scaling**: enemy base HP/damage step up over time (notably at 10 and 15 min).
+- **Boss** (~15 min): **Samwise**, fixed stats, immune to normal weapons, killable only by `Clear`.
 
 ## 2.7 Win / lose & placement (last man standing)
 
-- A player is **eliminated** when their tank reaches 0 HP. Their **death tick** (server‑authoritative) is recorded.
-- **Placement = reverse order of elimination.** Last to die = 1st place.
-- **Win** = finishing in the **surviving (top) half** of the lobby; **lose** = bottom half. Sole survivor additionally earns a **Last Stand**.
-- Ties / simultaneous deaths are broken by a deterministic tiebreak (e.g. higher wave reached, then more damage dealt, then lower player slot) so placement is fully ordered without a coin flip.
-- The match **ends** when ≤1 player remains *or* the boss is resolved; remaining survivors are placed by current survival metric.
+- **Eliminated** at 0 HP; server records the **death tick**.
+- **Placement = reverse order of elimination** (last to die = 1st).
+- **Win = surviving (top) half of the lobby; lose = bottom half.** Sole survivor = **Last Stand**. The prestige objective (source score +250): *survive 15 min, outlive everyone, kill Samwise.*
+- **Tiebreak** (deterministic, no coin flip) **[design choice]**: simultaneous deaths broken by (1) higher round reached, then (2) more damage dealt, then (3) lower slot index — so placement is a total order.
+- The match **ends** when ≤1 tank remains or the boss is resolved.
 
-Because placement is just "an ordering of server‑confirmed death ticks," the only thing the network layer must get exactly right competitively is **who died when** — a tiny, low‑rate fact. That's a deliberate design choice that keeps the netcode honest.
+Competitively, the only fact the network must agree on exactly is **"who died, in what order"** — small and low-frequency. That is a deliberate design choice that keeps the netcode honest.
 
-## 2.8 Randomization & determinism (design‑level)
+## 2.8 Randomization & determinism (design-level)
 
-The game is "randomized," but for a fair, cheat‑resistant, reconnectable multiplayer game, randomness must be **deterministic and server‑owned**:
+The game is "randomized," but for a fair, cheat-resistant, reconnectable multiplayer game, randomness is **deterministic and server-owned**:
 
-- The server issues a **master seed** per match and derives **per‑player, per‑purpose RNG streams** (spawn stream, offer/loot stream, targeting stream, proc stream). See [`05-data-model.md`](05-data-model.md) §RNG.
-- Given a player's seed + their ordered input log, their entire arena is **reproducible** — this is what makes reconnection and server‑side validation possible.
-- Players cannot "reroll" loot by save‑scumming because the offer stream is server‑seeded and advances deterministically.
+- The server issues a **master seed** per match and derives **per-player, per-purpose RNG streams**: `spawn`, `offer/shop`, `targeting`, `proc` (crit/bounty/Fire-explosion), `reroll`. See [`05-data-model.md`](05-data-model.md) §RNG.
+- Given a player's seeds + their **ordered input log**, their entire arena is **reproducible** — the basis for reconnection and server-side validation.
+- The **shop/offer stream is stateful** (Black Market, copies, Multiplication Gems alter future draws), so it is modeled as a deterministic state machine advanced only by ordered inputs — players can't save-scum a reroll.
 
 ## 2.9 Out of scope for v1
 
-- Co‑op / shared‑arena mode (the architecture *can* grow into it; see [03 §9](03-network-architecture.md)).
-- Cosmetics/meta‑progression economy.
-- Cross‑arena interaction ("send a creep to a rival") — explicitly excluded in v1 because it would couple the otherwise‑independent sims; noted as a future networking trade‑off, not a v1 feature.
+- Co-op / shared-arena mode (architecture can grow into it; [03 §9](03-network-architecture.md)).
+- The full single-player **challenge/score & skins** meta (the system exists in the source; we note it as a v2 meta-progression layer, not v1 multiplayer).
+- **Cross-arena interaction** ("send a creep to a rival"): explicitly excluded in v1 because it would couple the otherwise-independent sims — noted as a deliberate networking trade-off in [03 §9](03-network-architecture.md), not a v1 feature.
