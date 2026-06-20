@@ -2,9 +2,10 @@
 
 The **deterministic simulation core** for Standing Tank Defense — engine-independent, fixed-tick, fixed-point. Everything the netcode relies on lives here (`docs/03`, `docs/05`). No Godot/engine types; the renderer will only ever *read* this state.
 
-## Milestone status: **M0 complete** ✅
+## Milestone status: **M0 + M1 complete** ✅
 
-Single-arena deterministic sim + the determinism gate (`docs/06` M0). Exit test holds: same `(seed, input log)` ⇒ **bit-identical** `state_checksum` every tick, verified same-machine and (via the golden-checksum test) across the CI OS matrix.
+- **M0** — single-arena deterministic sim + determinism gate. Same `(seed, input log)` ⇒ **bit-identical** `state_checksum` every tick, verified same-machine and (golden-checksum test) across the CI OS matrix.
+- **M1** — in-process shadow-sim + byte snapshots. `sim::snapshot` round-trips `ArenaState` to portable bytes; `harness::shadow::ShadowRunner` detects client/shadow divergence at digest boundaries and corrects from a snapshot; `replay_from_snapshot` is the reconnect path. Injected divergence is detected and corrected within one interval and reconverges.
 
 ## Layout
 
@@ -43,6 +44,6 @@ cargo run -p harness --example liveness   # sanity: shows the sim actually simul
 - `step()` phase order is part of the spec — client and shadow-sim must match it.
 - `overflow-checks = true` in every profile (no silent wrapping).
 
-## Next: M1
+## Next: M2
 
-In-process shadow-sim + snapshot serialize/replay + deliberate-divergence correction (`docs/06`). The core is already shaped for it: `ArenaState` is `Clone`/`PartialEq` and all RNG is cursor-serializable.
+Match director + transport over Steam (`docs/06`/`docs/07`): the authoritative meta-layer (clock, seed schedule, input ordering/ack, leaderboard, death/placement) over `ISteamNetworkingSockets`, with the per-arena shadow-sim from M1 reused server-side. Two players, two independent arenas, proving one client's lag never stalls the other.

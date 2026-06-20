@@ -11,10 +11,11 @@ Each milestone is a *playable* slice; we add network surface before content dept
 - **Exit test**: run the same seed + scripted input log twice → **identical `state_checksum`** every tick (the determinism harness, §6.3). This gates everything else.
 - **Status:** implemented in [`sim-core/`](../sim-core/) — `determinism` + `sim` + `harness` crates, 48 tests passing, gate `PASS`. A golden-checksum test runs across the CI OS matrix to prove *cross-platform* bit-identical results, not just same-machine reproducibility. Built orchestrator-style: central seams (`ids`/`state`/`content`/`lib`/determinism) hand-authored, behavior modules (`combat`/`waves`, `economy`/`shop`/`input`) implemented by parallel agents against fixed interfaces, integrated centrally.
 
-### M1 — Shadow-sim & checksums in-process
+### M1 — Shadow-sim & checksums in-process ✅ **DONE**
 - Run two instances of the sim (the "client" and the "shadow") in one process from the same seed+inputs; diff checksums each tick.
 - Build `Snapshot` serialize/deserialize + replay-from-snapshot.
 - **Exit test**: inject a deliberate divergence → detected within one digest interval → corrected by snapshot → checksums reconverge.
+- **Status:** done in [`sim-core/`](../sim-core/). `sim::snapshot` gives byte-level `serialize`/`deserialize` (round-trip identity, versioned, zero-dep). `harness::shadow::ShadowRunner` runs client+shadow, compares `state_checksum` every digest interval, and corrects the client from a shadow snapshot on mismatch; `replay_from_snapshot` is the reconnect path. Verified: injected divergence detected and corrected within one interval (byte-identical after), reconverges with no spurious corrections, and snapshot+input-log replay reproduces the reference exactly. 58 tests passing. Built orchestrator-style: snapshot seam authored centrally, the shadow driver + exit tests by a scoped agent, integrated and independently re-verified.
 
 ### M2 — Match director + transport (Steam)
 - Stand up the match director (lobby, clock/time beacons, seed schedule, input ordering/ack, leaderboard, death/placement) over **SteamNetworkingSockets** ([`07`](07-steamworks-integration.md)).

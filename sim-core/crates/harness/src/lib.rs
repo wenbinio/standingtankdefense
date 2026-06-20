@@ -1,5 +1,8 @@
-//! M0 determinism harness — the gate that proves `(seed, input_log)` replays
-//! bit-identically (`docs/06` M0 exit test). Owned by the integrator.
+//! Determinism + shadow-sim harness. M0: prove `(seed, input_log)` replays
+//! bit-identically. M1: in-process shadow-sim, divergence detection and
+//! snapshot correction (`docs/06`). Owned by the integrator.
+
+pub mod shadow;
 
 use sim::{checksum, step, ArenaState, Input};
 
@@ -31,8 +34,10 @@ pub fn m0_scenario() -> Scenario {
     }
 }
 
+/// The scripted input for a given tick (`Noop` if none). Public so the shadow
+/// driver and reconnect-replay tests can reuse the M0 input log.
 #[inline]
-fn input_at(sc: &Scenario, tick: u32) -> Input {
+pub fn input_at(sc: &Scenario, tick: u32) -> Input {
     for (t, i) in &sc.scripted {
         if *t == tick {
             return *i;
