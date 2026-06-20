@@ -1,0 +1,6 @@
+[package]
+name = "determinism"
+version = "0.1.0"
+edition.workspace = true
+# ZERO external dependencies, by mandate (determinism + offline build).
+[dependencies]
