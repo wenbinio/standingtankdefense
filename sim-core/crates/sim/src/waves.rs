@@ -8,6 +8,22 @@ use crate::state::*;
 /// `s.alloc_entity_id()`; push to `s.enemies` (keep id order). Set hp from
 /// `EnemyDef::base_hp`.
 pub(crate) fn spawn(s: &mut ArenaState) {
+    // Boss phase: spawn Samwise exactly once at the boss tick; afterwards normal
+    // waves stop (the shop "flees"). Samwise uses its fixed HP (no scaling) and
+    // is immune to weapon fire — only `Clear` damages it (handled in combat).
+    if s.tick == content::BOSS_SPAWN_TICK {
+        let edef = &content::ENEMIES[content::SAMWISE as usize];
+        let id = s.alloc_entity_id();
+        s.enemies
+            .push(Enemy::new(id, content::SAMWISE, edef.base_hp, content::SPAWN_RING[0]));
+        return;
+    }
+    if s.tick >= content::BOSS_SPAWN_TICK {
+        return;
+    }
+
+    // Enemy HP scales with match time (identity until 10 min).
+    let hp_mult = content::enemy_hp_mult(s.tick);
     // Process wave entries in their fixed catalog order so the rng_spawn draws
     // happen in a deterministic sequence.
     for ws in content::WAVE_M0 {
@@ -18,8 +34,9 @@ pub(crate) fn spawn(s: &mut ArenaState) {
             let ring_idx = s.rng_spawn.below(content::SPAWN_RING.len() as u32) as usize;
             let pos = content::SPAWN_RING[ring_idx];
             let edef = &content::ENEMIES[ws.enemy as usize];
+            let hp = hp_mult.scale_i64(edef.base_hp);
             let id = s.alloc_entity_id();
-            s.enemies.push(Enemy::new(id, ws.enemy, edef.base_hp, pos));
+            s.enemies.push(Enemy::new(id, ws.enemy, hp, pos));
         }
     }
 }
@@ -91,6 +108,53 @@ mod tests {
         s.tick = 0;
         spawn(&mut s);
         assert!(s.enemies[0].id < s.enemies[1].id, "ids allocated in order");
+    }
+
+    #[test]
+    fn scaling_is_identity_before_ten_minutes() {
+        // Early game (the golden-checksum window) must be unscaled.
+        assert_eq!(content::enemy_hp_mult(0), determinism::Fixed::ONE);
+        assert_eq!(content::enemy_hp_mult(2000), determinism::Fixed::ONE);
+        assert_eq!(
+            content::enemy_hp_mult(content::SCALE_STEP_1_TICK - 1),
+            determinism::Fixed::ONE
+        );
+        // At 15 min, enemies have ~2× HP.
+        assert_eq!(
+            content::enemy_hp_mult(content::SCALE_STEP_2_TICK).scale_i64(1000),
+            2000
+        );
+    }
+
+    #[test]
+    fn late_game_enemies_spawn_with_scaled_hp() {
+        let mut s = blank_state();
+        s.tick = content::SCALE_STEP_2_TICK; // 15 min, but this is the boss tick…
+        // …so use a tick just before the boss where scaling is ~2×.
+        s.tick = content::SCALE_STEP_2_TICK - 15; // a grunt-cadence tick before boss
+        // ensure it is a grunt cadence tick (cadence 15)
+        assert_eq!(s.tick % 15, 0);
+        spawn(&mut s);
+        let grunt_base = content::ENEMIES[0].base_hp;
+        // hp should be roughly 2× base (just under, since ~tick before 15 min).
+        assert!(s.enemies[0].hp > grunt_base, "late enemy HP must be scaled up");
+        assert!(s.enemies[0].hp <= grunt_base * 2);
+    }
+
+    #[test]
+    fn boss_spawns_once_at_boss_tick_then_no_normal_waves() {
+        let mut s = blank_state();
+        s.tick = content::BOSS_SPAWN_TICK;
+        spawn(&mut s);
+        assert_eq!(s.enemies.len(), 1, "exactly Samwise spawns at the boss tick");
+        assert_eq!(s.enemies[0].def, content::SAMWISE);
+        assert!(content::ENEMIES[s.enemies[0].def as usize].boss);
+
+        // After the boss tick, normal waves no longer spawn.
+        s.enemies.clear();
+        s.tick = content::BOSS_SPAWN_TICK + 15; // a former grunt-cadence tick
+        spawn(&mut s);
+        assert!(s.enemies.is_empty(), "no normal waves during the boss phase");
     }
 
     #[test]

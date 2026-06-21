@@ -240,6 +240,28 @@ pub static ENEMIES: &[EnemyDef] = &[
 /// Index of the boss enemy def.
 pub const SAMWISE: u16 = 2;
 
+// Match timeline (ticks @ 30 Hz). Enemy scaling steps at 10 and 15 minutes; the
+// boss spawns at 15 minutes (`docs/02 §2.3`, adapted from the source map).
+pub const SCALE_STEP_1_TICK: u32 = 10 * 60 * 30; // 18000 — 10 min
+pub const SCALE_STEP_2_TICK: u32 = 15 * 60 * 30; // 27000 — 15 min
+/// Samwise spawns here; normal waves stop.
+pub const BOSS_SPAWN_TICK: u32 = SCALE_STEP_2_TICK;
+
+/// Enemy HP scaling at `tick`: identity until 10 min, then ramps to ×2 by 15
+/// min, then steeper "to bring the game to a swift end". Deterministic.
+pub fn enemy_hp_mult(tick: u32) -> Fixed {
+    let span = (SCALE_STEP_2_TICK - SCALE_STEP_1_TICK) as i64; // 5 min window
+    if tick < SCALE_STEP_1_TICK {
+        Fixed::ONE
+    } else if tick < SCALE_STEP_2_TICK {
+        // +100% linearly across minutes 10–15.
+        Fixed::ONE + Fixed::from_ratio((tick - SCALE_STEP_1_TICK) as i64, span)
+    } else {
+        // ×2 at 15 min, then +100% per additional 5 minutes.
+        Fixed::from_int(2) + Fixed::from_ratio((tick - SCALE_STEP_2_TICK) as i64, span)
+    }
+}
+
 /// M0 wave: a steady mix, continuous (no scaling). Used every round.
 pub static WAVE_M0: &[WaveSpawn] = &[
     WaveSpawn {

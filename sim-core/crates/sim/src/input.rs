@@ -3,8 +3,10 @@ use crate::ids::Input;
 use crate::shop;
 use crate::state::*;
 
-/// Damage dealt to every enemy by a `Clear` (M0: effectively a full wipe).
-const CLEAR_DAMAGE: i64 = i64::MAX;
+/// Damage dealt to every enemy by a `Clear`. Large but FINITE: it wipes normal
+/// enemies instantly, but the boss (Samwise, ~10M HP) takes several Clears —
+/// and `Clear` is the ONLY thing that can hurt the boss.
+const CLEAR_DAMAGE: i64 = 3_000_000;
 /// Cooldown (in ticks) imposed after a `Clear`.
 const CLEAR_COOLDOWN_TICKS: u32 = 300;
 /// Gold increment added to `reroll_cost` after a paid reroll.
@@ -215,15 +217,27 @@ mod tests {
     }
 
     #[test]
-    fn clear_wipes_even_max_hp_enemy() {
-        // CLEAR_DAMAGE is i64::MAX, so any positive-hp enemy dies.
+    fn clear_chips_the_boss_over_several_uses() {
+        // Clear deals a large FINITE amount: normal enemies die instantly, but
+        // the boss (huge fixed HP) takes several Clears — the only thing that
+        // can hurt it.
         let mut s = fresh();
         s.tick = 0;
         s.tank.clear_cooldown_end = 0;
-        s.enemies = vec![mk_enemy(10, 1, i64::MAX)];
-        let _ = Fixed::ONE; // keep import used regardless of feature flags
+        let _ = Fixed::ONE;
+        let boss_hp = content::ENEMIES[content::SAMWISE as usize].base_hp;
+        s.enemies = vec![mk_enemy(10, content::SAMWISE, boss_hp)];
+
         apply(&mut s, Input::Clear);
-        assert!(s.enemies.is_empty());
-        assert_eq!(s.pending_kills, vec![1]);
+        assert_eq!(s.enemies.len(), 1, "boss survives a single Clear");
+        assert_eq!(s.enemies[0].hp, boss_hp - CLEAR_DAMAGE);
+
+        let needed = (boss_hp + CLEAR_DAMAGE - 1) / CLEAR_DAMAGE; // ceil
+        for _ in 1..needed {
+            s.tick = s.tank.clear_cooldown_end; // come off cooldown
+            apply(&mut s, Input::Clear);
+        }
+        assert!(s.enemies.is_empty(), "boss dies after enough Clears");
+        assert_eq!(s.pending_kills.last(), Some(&content::SAMWISE));
     }
 }
