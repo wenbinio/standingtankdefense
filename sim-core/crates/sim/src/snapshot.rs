@@ -198,11 +198,23 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.u32(s.economy.rerolls_remaining);
     w.i64(s.economy.reroll_cost);
 
+    // modifiers
+    w.fixed(s.modifiers.add_global);
+    for a in &s.modifiers.add_by_type {
+        w.fixed(*a);
+    }
+    w.fixed(s.modifiers.mul_global);
+    w.fixed(s.modifiers.attack_speed);
+
     // shop
     w.u32(s.shop.shop_seq);
     w.len(s.shop.offers.len());
     for o in &s.shop.offers {
-        w.u16(o.weapon_def);
+        w.u8(match o.kind {
+            OfferKind::Weapon => 0,
+            OfferKind::Modifier => 1,
+        });
+        w.u16(o.def);
         w.i64(o.cost);
     }
 
@@ -288,11 +300,24 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         reroll_cost: r.i64()?,
     };
 
+    let modifiers = Modifiers {
+        add_global: r.fixed()?,
+        add_by_type: [r.fixed()?, r.fixed()?, r.fixed()?, r.fixed()?, r.fixed()?],
+        mul_global: r.fixed()?,
+        attack_speed: r.fixed()?,
+    };
+
     let shop_seq = r.u32()?;
     let mut offers = Vec::new();
     for _ in 0..r.len()? {
+        let kind = match r.u8()? {
+            0 => OfferKind::Weapon,
+            1 => OfferKind::Modifier,
+            t => return Err(SnapshotError::BadTag(t)),
+        };
         offers.push(Offer {
-            weapon_def: r.u16()?,
+            kind,
+            def: r.u16()?,
             cost: r.i64()?,
         });
     }
@@ -327,6 +352,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         projectiles,
         economy,
         shop,
+        modifiers,
         next_entity_id,
         dead,
         death_tick,

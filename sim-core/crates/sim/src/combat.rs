@@ -62,7 +62,13 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
             speed: Fixed::from_int(wdef.proj_speed),
         });
 
-        s.weapons[wi].next_fire_tick = s.tick + wdef.cooldown_ticks;
+        // Effective cooldown is reduced by the attack-speed modifier.
+        let asm = s.modifiers.attack_speed_mult();
+        let cd = Fixed::from_int(wdef.cooldown_ticks as i64)
+            .div(asm)
+            .floor_to_int()
+            .max(1) as u32;
+        s.weapons[wi].next_fire_tick = s.tick + cd;
     }
 
     for mut p in new_projectiles {
@@ -142,8 +148,10 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
 
     s.projectiles = survivors;
 
-    // Apply impacts in order. Track kills to push their defs after.
+    // Apply impacts in order. Track kills to push their defs after. Final damage
+    // = base × armor-matrix × modifier-stack (`docs/05 §5.3`).
     for imp in impacts {
+        let mod_mult = s.modifiers.damage_mult(imp.damage_type);
         if imp.splash_radius > Fixed::ZERO {
             let radius_sq = imp.splash_radius.mul(imp.splash_radius);
             // Hit every enemy within the splash radius of the impact point,
@@ -151,14 +159,14 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
             for e in s.enemies.iter_mut() {
                 if imp.point.dist_sq(e.pos) <= radius_sq {
                     let edef = &content::ENEMIES[e.def as usize];
-                    let mult = content::damage_multiplier(imp.damage_type, edef.armor_class);
-                    e.hp -= mult.scale_i64(imp.damage);
+                    let armor = content::damage_multiplier(imp.damage_type, edef.armor_class);
+                    e.hp -= armor.mul(mod_mult).scale_i64(imp.damage);
                 }
             }
         } else if let Some(e) = s.enemies.iter_mut().find(|e| e.id == imp.target) {
             let edef = &content::ENEMIES[e.def as usize];
-            let mult = content::damage_multiplier(imp.damage_type, edef.armor_class);
-            e.hp -= mult.scale_i64(imp.damage);
+            let armor = content::damage_multiplier(imp.damage_type, edef.armor_class);
+            e.hp -= armor.mul(mod_mult).scale_i64(imp.damage);
         }
     }
 
@@ -255,6 +263,48 @@ mod tests {
         s.tick = 50; // 50 < 100, not ready.
         fire_weapons(&mut s);
         assert!(s.projectiles.is_empty(), "weapon on cooldown must not fire");
+    }
+
+    #[test]
+    fn modifiers_scale_dealt_damage() {
+        // Same impact with and without a +100% global damage modifier: the
+        // modified hit deals exactly double the base (modifier wiring works).
+        let setup = |add_global: Fixed| {
+            let mut s = blank_state();
+            s.weapons.clear();
+            s.modifiers.add_global = add_global;
+            let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
+            let eid = mk_enemy(&mut s, 0, 1_000_000, pos); // huge hp, survives
+            let pid = s.alloc_entity_id();
+            s.projectiles.push(Projectile {
+                id: pid,
+                pos: Vec2::ZERO,
+                target: eid,
+                last_target_pos: pos,
+                damage: 1000,
+                damage_type: content::DMG_NORMAL, // armor matrix = 1.0 here
+                splash_radius: Fixed::ZERO,
+                speed: Fixed::from_int(1000),
+            });
+            advance_projectiles(&mut s);
+            1_000_000 - s.enemies[0].hp // damage dealt
+        };
+        let base = setup(Fixed::ZERO);
+        let doubled = setup(Fixed::from_ratio(1, 1)); // +100%
+        assert_eq!(base, 1000);
+        assert_eq!(doubled, 2000, "modifier did not scale combat damage");
+    }
+
+    #[test]
+    fn attack_speed_modifier_shortens_cooldown() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let wid = s.alloc_entity_id();
+        s.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 0 });
+        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        s.modifiers.attack_speed = Fixed::from_ratio(1, 1); // +100% ⇒ ×2 ⇒ cd 30→15
+        fire_weapons(&mut s);
+        assert_eq!(s.weapons[0].next_fire_tick, 15);
     }
 
     // ---- advance_projectiles ------------------------------------------------

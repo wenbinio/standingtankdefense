@@ -22,7 +22,9 @@
 pub mod client;
 pub mod director;
 pub mod hub;
+pub mod results;
 pub mod schedule;
+pub mod steam;
 pub mod transport;
 pub mod wire;
 

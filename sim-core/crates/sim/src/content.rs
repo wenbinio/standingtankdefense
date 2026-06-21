@@ -50,6 +50,48 @@ pub struct WaveSpawn {
     pub cadence_ticks: u32, // spawn one every N ticks
 }
 
+/// A stacking modifier's effect. Ratios are `(num, den)` → `Fixed::from_ratio`.
+#[derive(Clone, Copy, Debug)]
+pub enum ModEffect {
+    /// +% additive to ALL weapon damage.
+    DamageGlobalPct(i64, i64),
+    /// +% additive to one damage type's damage.
+    DamageTypePct(u8, i64, i64),
+    /// A multiplicative damage factor: multiplies total damage by `1 + num/den`.
+    DamageMulPct(i64, i64),
+    /// +% additive attack speed (reduces effective cooldown).
+    AttackSpeedPct(i64, i64),
+    /// +% additive kill bounty.
+    BountyPct(i64, i64),
+    /// +flat passive gold income per tick.
+    IncomeFlat(i64),
+    /// +flat max HP (and current HP).
+    MaxHp(i64),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ModifierDef {
+    pub name: &'static str,
+    pub rarity: u8,
+    pub cost: i64,
+    pub effect: ModEffect,
+}
+
+/// M4 modifier catalog — a representative slice across every scope (additive
+/// global/by-type, multiplicative, attack-speed, economy, defensive). Numbers
+/// adapted from the extracted upgrades (`docs/appendix-A-map-extraction.md`).
+pub static MODIFIERS: &[ModifierDef] = &[
+    ModifierDef { name: "+10% Damage", rarity: 0, cost: 500, effect: ModEffect::DamageGlobalPct(1, 10) },
+    ModifierDef { name: "+10% Piercing Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_PIERCING, 1, 10) },
+    ModifierDef { name: "+10% Siege Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_SIEGE, 1, 10) },
+    ModifierDef { name: "+10% Magic Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_MAGIC, 1, 10) },
+    ModifierDef { name: "+25% Damage (Epic)", rarity: 3, cost: 5000, effect: ModEffect::DamageMulPct(1, 4) },
+    ModifierDef { name: "+10% Attack Speed", rarity: 0, cost: 500, effect: ModEffect::AttackSpeedPct(1, 10) },
+    ModifierDef { name: "+50% Kill Bounty", rarity: 1, cost: 1500, effect: ModEffect::BountyPct(1, 2) },
+    ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(20) },
+    ModifierDef { name: "+2000 Max HP", rarity: 1, cost: 1500, effect: ModEffect::MaxHp(2000) },
+];
+
 /// The weapon the tank starts with (index into [`WEAPONS`]).
 pub const STARTING_WEAPON: u16 = 0;
 

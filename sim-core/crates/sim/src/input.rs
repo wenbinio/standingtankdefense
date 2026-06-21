@@ -31,12 +31,17 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
             if let Some(offer) = s.shop.offers.get(idx).copied() {
                 if s.economy.gold >= offer.cost {
                     s.economy.gold -= offer.cost;
-                    let id = s.alloc_entity_id();
-                    s.weapons.push(WeaponInstance {
-                        instance_id: id,
-                        def: offer.weapon_def,
-                        next_fire_tick: s.tick,
-                    });
+                    match offer.kind {
+                        OfferKind::Weapon => {
+                            let id = s.alloc_entity_id();
+                            s.weapons.push(WeaponInstance {
+                                instance_id: id,
+                                def: offer.def,
+                                next_fire_tick: s.tick,
+                            });
+                        }
+                        OfferKind::Modifier => s.buy_modifier(offer.def),
+                    }
                 }
             }
         }
@@ -74,7 +79,7 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
 mod tests {
     use super::*;
     use crate::content;
-    use crate::state::{Enemy, Offer, Vec2};
+    use crate::state::{Enemy, Offer, OfferKind, Vec2};
     use determinism::Fixed;
 
     fn fresh() -> ArenaState {
@@ -101,7 +106,7 @@ mod tests {
     #[test]
     fn buy_offer_deducts_gold_and_adds_weapon_when_affordable() {
         let mut s = fresh();
-        s.shop.offers = vec![Offer { weapon_def: 1, cost: 200 }];
+        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 1, cost: 200 }];
         s.economy.gold = 500;
         let weapons_before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 0 });
@@ -115,7 +120,7 @@ mod tests {
     #[test]
     fn buy_offer_ignored_when_unaffordable() {
         let mut s = fresh();
-        s.shop.offers = vec![Offer { weapon_def: 1, cost: 600 }];
+        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 1, cost: 600 }];
         s.economy.gold = 500;
         let weapons_before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 0 });
@@ -126,7 +131,7 @@ mod tests {
     #[test]
     fn buy_offer_ignored_for_invalid_slot() {
         let mut s = fresh();
-        s.shop.offers = vec![Offer { weapon_def: 0, cost: 0 }];
+        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 0, cost: 0 }];
         s.economy.gold = 500;
         let weapons_before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 5 });
@@ -169,12 +174,12 @@ mod tests {
         s.economy.rerolls_remaining = 0;
         s.economy.gold = 50;
         s.economy.reroll_cost = 100;
-        s.shop.offers = vec![Offer { weapon_def: 7, cost: 1 }];
+        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 7, cost: 1 }];
         let seq_before = s.shop.shop_seq;
         apply(&mut s, Input::Reroll);
         assert_eq!(s.economy.gold, 50);
         assert_eq!(s.shop.shop_seq, seq_before, "no regeneration when ignored");
-        assert_eq!(s.shop.offers[0].weapon_def, 7);
+        assert_eq!(s.shop.offers[0].def, 7);
     }
 
     #[test]

@@ -97,11 +97,38 @@ pub struct Economy {
     pub reroll_cost: i64,
 }
 
-/// One purchasable shop slot.
+/// What a shop slot sells.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OfferKind {
+    /// `def` indexes `content::WEAPONS`.
+    Weapon,
+    /// `def` indexes `content::MODIFIERS`.
+    Modifier,
+}
+
+/// One purchasable shop slot (a weapon or a stacking modifier).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Offer {
-    pub weapon_def: u16,
+    pub kind: OfferKind,
+    pub def: u16,
     pub cost: i64,
+}
+
+/// Aggregated damage & attack-speed modifiers (`docs/05 §5.3`). The genre's
+/// "everything stacks" engine: **additive within a source kind, multiplicative
+/// across distinct multiplicative sources**. Economy/defensive modifiers apply
+/// immediately on purchase (to `Economy`/`Tank`); this aggregate holds only what
+/// damage resolution consults live each tick. Impl lives in `modifiers.rs`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Modifiers {
+    /// Additive % applied to all weapon damage.
+    pub add_global: Fixed,
+    /// Additive % per damage type (Normal, Piercing, Magic, Siege, Chaos).
+    pub add_by_type: [Fixed; 5],
+    /// Product of multiplicative damage factors (starts at `ONE`).
+    pub mul_global: Fixed,
+    /// Additive % attack speed (reduces effective weapon cooldown).
+    pub attack_speed: Fixed,
 }
 
 /// The per-round shop. M0 offers weapons only.
@@ -126,6 +153,8 @@ pub struct ArenaState {
     pub projectiles: Vec<Projectile>,
     pub economy: Economy,
     pub shop: ShopState,
+    /// Aggregated damage/attack-speed modifiers consulted during combat.
+    pub modifiers: Modifiers,
 
     pub next_entity_id: u32,
     pub dead: bool,
@@ -171,6 +200,7 @@ impl ArenaState {
                 reroll_cost: 100,
             },
             shop: ShopState::default(),
+            modifiers: Modifiers::new(),
             next_entity_id: 1,
             dead: false,
             death_tick: None,
@@ -201,5 +231,13 @@ impl ArenaState {
     /// Index of a live enemy by id, if present.
     pub fn enemy_index(&self, id: EntityId) -> Option<usize> {
         self.enemies.iter().position(|e| e.id == id)
+    }
+
+    /// Apply a purchased modifier (folds into the damage/attack-speed aggregate,
+    /// and applies any immediate economy/defensive effect). Disjoint field
+    /// borrows keep this single-call.
+    pub fn buy_modifier(&mut self, def_idx: u16) {
+        let def = &content::MODIFIERS[def_idx as usize];
+        self.modifiers.apply(def, &mut self.economy, &mut self.tank);
     }
 }

@@ -1,24 +1,27 @@
-//! Shop / offers — AGENT C. Deterministic; randomness only from `s.rng_shop`.
+//! Shop / offers. Deterministic; randomness only from `s.rng_shop`.
 use crate::content;
 use crate::state::*;
 
 /// Number of purchasable slots presented each round / reroll.
 const OFFER_SLOTS: usize = 3;
 
-/// Generate a fresh set of offers (recommend 3 slots) by drawing weapon defs
-/// from `content::WEAPONS` via `s.rng_shop`. Set each `Offer.cost` from the
-/// weapon's `cost`. Replace `s.shop.offers`, increment `s.shop.shop_seq`.
-/// Called at each round boundary and on reroll.
+/// Generate a fresh set of offers by drawing from the combined pool of weapons
+/// and modifiers via `s.rng_shop`. Replace `s.shop.offers`, increment
+/// `s.shop.shop_seq`. Called at each round boundary and on reroll.
 pub(crate) fn generate_offers(s: &mut ArenaState) {
-    let n = content::WEAPONS.len() as u32;
+    let nw = content::WEAPONS.len();
+    let nm = content::MODIFIERS.len();
+    let total = (nw + nm) as u32;
     let mut offers = Vec::with_capacity(OFFER_SLOTS);
     for _ in 0..OFFER_SLOTS {
-        let idx = s.rng_shop.below(n) as usize;
-        let def = idx as u16;
-        offers.push(Offer {
-            weapon_def: def,
-            cost: content::WEAPONS[idx].cost,
-        });
+        let r = s.rng_shop.below(total) as usize;
+        let offer = if r < nw {
+            Offer { kind: OfferKind::Weapon, def: r as u16, cost: content::WEAPONS[r].cost }
+        } else {
+            let mi = r - nw;
+            Offer { kind: OfferKind::Modifier, def: mi as u16, cost: content::MODIFIERS[mi].cost }
+        };
+        offers.push(offer);
     }
     s.shop.offers = offers;
     s.shop.shop_seq += 1;
@@ -40,12 +43,21 @@ mod tests {
     }
 
     #[test]
-    fn offer_costs_match_weapon_defs() {
+    fn offer_costs_match_their_catalog_def() {
         let mut s = fresh();
         generate_offers(&mut s);
         for off in &s.shop.offers {
-            assert!((off.weapon_def as usize) < content::WEAPONS.len());
-            assert_eq!(off.cost, content::WEAPONS[off.weapon_def as usize].cost);
+            let expected = match off.kind {
+                OfferKind::Weapon => {
+                    assert!((off.def as usize) < content::WEAPONS.len());
+                    content::WEAPONS[off.def as usize].cost
+                }
+                OfferKind::Modifier => {
+                    assert!((off.def as usize) < content::MODIFIERS.len());
+                    content::MODIFIERS[off.def as usize].cost
+                }
+            };
+            assert_eq!(off.cost, expected);
         }
     }
 
@@ -61,22 +73,39 @@ mod tests {
 
     #[test]
     fn deterministic_for_fixed_rng() {
-        // Two states with identical seeds must produce identical offers.
         let mut a = ArenaState::new(777, 1);
         let mut b = ArenaState::new(777, 1);
         generate_offers(&mut a);
         generate_offers(&mut b);
         assert_eq!(a.shop.offers, b.shop.offers);
-        // And the rng cursor advanced identically.
         assert_eq!(a.rng_shop.state(), b.rng_shop.state());
+    }
+
+    #[test]
+    fn offers_can_include_both_kinds_over_many_draws() {
+        // Across enough rerolls both a weapon and a modifier should appear,
+        // confirming the combined pool is sampled.
+        let mut s = ArenaState::new(0x5151, 2);
+        let mut saw_weapon = false;
+        let mut saw_modifier = false;
+        for _ in 0..50 {
+            generate_offers(&mut s);
+            for o in &s.shop.offers {
+                match o.kind {
+                    OfferKind::Weapon => saw_weapon = true,
+                    OfferKind::Modifier => saw_modifier = true,
+                }
+            }
+        }
+        assert!(saw_weapon && saw_modifier, "combined pool not sampled");
     }
 
     #[test]
     fn replaces_previous_offers() {
         let mut s = fresh();
-        s.shop.offers = vec![Offer { weapon_def: 99, cost: -1 }];
+        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 99, cost: -1 }];
         generate_offers(&mut s);
         assert_eq!(s.shop.offers.len(), OFFER_SLOTS);
-        assert!(s.shop.offers.iter().all(|o| o.weapon_def != 99));
+        assert!(s.shop.offers.iter().all(|o| o.def != 99 || o.cost != -1));
     }
 }

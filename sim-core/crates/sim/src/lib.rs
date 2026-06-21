@@ -14,6 +14,7 @@ mod combat;
 mod economy;
 mod ids;
 mod input;
+mod modifiers;
 mod shop;
 mod state;
 mod waves;
@@ -114,11 +115,23 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.next_fire_tick);
     }
 
+    // Modifiers aggregate.
+    c.write_fixed(s.modifiers.add_global);
+    for a in &s.modifiers.add_by_type {
+        c.write_fixed(*a);
+    }
+    c.write_fixed(s.modifiers.mul_global);
+    c.write_fixed(s.modifiers.attack_speed);
+
     // Shop offers (slot order is meaningful).
     c.write_u32(s.shop.shop_seq);
     c.write_u32(s.shop.offers.len() as u32);
     for o in &s.shop.offers {
-        c.write_u32(o.weapon_def as u32);
+        c.write_u32(match o.kind {
+            OfferKind::Weapon => 0,
+            OfferKind::Modifier => 1,
+        });
+        c.write_u32(o.def as u32);
         c.write_i64(o.cost);
     }
 

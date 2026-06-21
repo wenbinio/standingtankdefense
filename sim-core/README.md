@@ -8,6 +8,7 @@ The **deterministic simulation core** for Standing Tank Defense — engine-indep
 - **M1** — in-process shadow-sim + byte snapshots. `sim::snapshot` round-trips `ArenaState` to portable bytes; `harness::shadow::ShadowRunner` detects client/shadow divergence at digest boundaries and corrects from a snapshot; `replay_from_snapshot` is the reconnect path. Injected divergence is detected and corrected within one interval and reconverges.
 - **M2** — authoritative match director + transport (`crates/net`). Transport-abstracted (deterministic `Hub` now; Steam `ISteamNetworkingSockets` adapter drops in behind the same interface). `Director` owns the clock, per-player shadow-sims, input ordering/acks, digest→snapshot correction, and death/placement; thin non-predictive `Client`; `wire` codec + shared `Schedule`. **Exit test proves the thesis**: one client's stall can't perturb another client's arena.
 - **M3** — 8 players, reconnect, host migration. A mid-match `Client::reconnecting` adopts an authoritative snapshot and tracks the arena tick; **`eight_players_reconnect`**: one of 8 drops and rejoins on the canonical trajectory, the other 7 unaffected. **`host_migration`**: a hot-standby director (fed identical inbound, bit-identical at the handoff) takes over on host loss with clients continuing in sync.
+- **M4** — content depth (in progress). The **modifier / stacking engine** (`sim::modifiers`) is in: scoped, deterministic, multiplicative-across-sources damage/attack-speed/economy modifiers, purchasable in the shop, snapshotted + checksummed (golden re-baselined). **Steam** results mapping (`net::results`) + transport-adapter plan (`net::steam`) scaffold the Steam build behind the same interface. Status effects, more attack types, boss, and the full catalog are the remaining content follow-on (see `docs/06`).
 
 ## Layout
 
@@ -48,6 +49,6 @@ cargo run -p harness --example liveness   # sanity: shows the sim actually simul
 - `step()` phase order is part of the spec — client and shadow-sim must match it.
 - `overflow-checks = true` in every profile (no silent wrapping).
 
-## Next: M4
+## Next: finish M4, then M5
 
-Content depth + the real Steam adapter (`docs/06`/`docs/07`): import the full extracted catalog (`research/.../catalog.json`) — all weapons/modifiers/enemies/waves, rarities, status systems, Mana Shield, the Samwise boss, `Clear` — and wire the real `ISteamNetworkingSockets`/SDR adapter behind the M2/M3 transport interface, plus Steam stats/leaderboards for placement, Last Stand, and the challenge/score meta.
+Remaining M4 content (each a tight agent task against the existing seams): status effects (Poison/Frost/Fire/Spikes), the rest of the attack types (Bounce/Barrage/Wave/Area), Mana Shield/armor/dodge, enemy archetypes + wave tables + scaling curves, the Samwise boss, and bulk import of the full 79-weapon / 87-upgrade catalog. Then **M5**: hardening — anti-cheat posture for free P2P, soak/chaos tests, and the Steam release. See `docs/06`.
