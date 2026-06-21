@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- Grimdark "Ashen Vigil" — heart: HP icon, ally palette. -->
+  <!-- Iron/brass heraldic shield-heart with a COLD glow_cold core. -->
+  <defs>
+    <!-- Iron shield body: lit top to shadowed point. -->
+    <linearGradient id="ht_body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#5A6677"/>
+      <stop offset="42%"  stop-color="#3B4655"/>
+      <stop offset="100%" stop-color="#1C212B"/>
+    </linearGradient>
+    <radialGradient id="ht_core" cx="50%" cy="42%" r="58%">
+      <stop offset="0%"   stop-color="#BDEEFB"/>
+      <stop offset="45%"  stop-color="#5BC8E6"/>
+      <stop offset="100%" stop-color="#1C5F75"/>
+    </radialGradient>
+    <filter id="ht_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="2.4"/>
+    </filter>
+    <filter id="ht_ao" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.2"/>
+    </filter>
+  </defs>
+
+  <!-- Ground AO -->
+  <ellipse cx="24" cy="42" rx="12" ry="3" fill="#06070A" opacity="0.45" filter="url(#ht_ao)"/>
+
+  <!-- Heart/shield silhouette (crisp dark edge) -->
+  <path d="M 24 41
+           C 12 32 7 24 7 17
+           C 7 11 11.5 7.5 16 7.5
+           C 19.5 7.5 22.5 9.5 24 12.5
+           C 25.5 9.5 28.5 7.5 32 7.5
+           C 36.5 7.5 41 11 41 17
+           C 41 24 36 32 24 41 Z"
+        fill="url(#ht_body)" stroke="#06070A" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- AO in the top cleft and seams -->
+  <path d="M 24 12.5 C 23 14.5 21.5 16 20 17" fill="none" stroke="#06070A"
+        stroke-width="2" opacity="0.5" filter="url(#ht_ao)"/>
+
+  <!-- Brass reinforcing band across the heart -->
+  <path d="M 11 22 Q 24 28 37 22" fill="none" stroke="#8A6A33" stroke-width="2.2"
+        stroke-linecap="round" opacity="0.85"/>
+
+  <!-- Cold emissive core (glow then crisp lens) -->
+  <circle cx="24" cy="22" r="7" fill="#5BC8E6" opacity="0.6" filter="url(#ht_glow)"/>
+  <circle cx="24" cy="22" r="5" fill="url(#ht_core)" stroke="#1C5F75" stroke-width="0.8"/>
+  <circle cx="22.2" cy="20" r="1.4" fill="#E6FBFF" opacity="0.9"/>
+
+  <!-- One cold rim catch on the lit upper-left edge -->
+  <path d="M 16 8.6 C 12 9.2 8.8 12 8.4 16.5" fill="none" stroke="#6E7C8C"
+        stroke-width="1.4" stroke-linecap="round" opacity="0.8"/>
+</svg>

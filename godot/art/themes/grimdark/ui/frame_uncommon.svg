@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Grimdark "Ashen Vigil" — frame_uncommon (rarity #5E9C6B). -->
+  <!-- Rounded dark loot slot; rarity border + inner glow; top rim; gem notch. Inner ~70% clear. -->
+  <defs>
+    <linearGradient id="fr_fill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#15171E"/>
+      <stop offset="100%" stop-color="#0A0B0F"/>
+    </linearGradient>
+    <radialGradient id="fr_innerglow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#5E9C6B" stop-opacity="0"/>
+      <stop offset="74%"  stop-color="#5E9C6B" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#5E9C6B" stop-opacity="0.45"/>
+    </radialGradient>
+    <linearGradient id="fr_gem" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#5E9C6B"/>
+      <stop offset="100%" stop-color="#2E4E36"/>
+    </linearGradient>
+    <filter id="fr_glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.4"/>
+    </filter>
+  </defs>
+
+  <!-- Outer rarity glow -->
+  <rect x="7" y="7" width="82" height="82" rx="14" fill="none"
+        stroke="#5E9C6B" stroke-width="5" opacity="0.45" filter="url(#fr_glow)"/>
+  <!-- Dark slot fill -->
+  <rect x="8" y="8" width="80" height="80" rx="12" fill="url(#fr_fill)" stroke="#06070A" stroke-width="2"/>
+  <!-- Inner rarity glow ring (keeps center ~70% clear) -->
+  <rect x="12" y="12" width="72" height="72" rx="9" fill="url(#fr_innerglow)"/>
+  <!-- Rarity-color border -->
+  <rect x="9.5" y="9.5" width="77" height="77" rx="11" fill="none" stroke="#5E9C6B" stroke-width="4.5"/>
+  <!-- Subtle top rim light -->
+  <path d="M 20 11.5 Q 48 9 76 11.5" fill="none" stroke="#6E7C8C" stroke-width="1.6"
+        stroke-linecap="round" opacity="0.6"/>
+  <!-- Gem notch at top-center -->
+  <path d="M 48 4 L 56 12 L 48 20 L 40 12 Z" fill="url(#fr_gem)" stroke="#06070A" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="48" cy="12" r="2.4" fill="#5E9C6B" opacity="0.7" filter="url(#fr_glow)"/>
+  <path d="M 44 9 L 48 5 L 47 11 Z" fill="#D8CFB8" opacity="0.55"/>
+</svg>

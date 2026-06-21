@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- GRIMDARK player FX: muzzle FLASH. Brass + cold-white firing burst, short radial -->
+  <!-- spikes, cold core. Radial, centered, no facing. Player = cold glow. -->
+  <defs>
+    <radialGradient id="m_core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#FFFFFF"/>
+      <stop offset="28%" stop-color="#D7F4FB"/>
+      <stop offset="60%" stop-color="#5BC8E6"/>
+      <stop offset="100%" stop-color="#5BC8E6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="m_halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#5BC8E6" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#8A6A33" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#8A6A33" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="m_spike" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#EAFBFF"/>
+      <stop offset="45%" stop-color="#5BC8E6"/>
+      <stop offset="100%" stop-color="#8A6A33" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="m_spikeb" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#D7F4FB"/>
+      <stop offset="40%" stop-color="#B89A5A"/>
+      <stop offset="100%" stop-color="#8A6A33" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="m_glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="3.5"/>
+    </filter>
+  </defs>
+
+  <!-- soft brass+cold halo -->
+  <circle cx="64" cy="64" r="44" fill="url(#m_halo)" filter="url(#m_glow)"/>
+
+  <!-- short radial spikes (8, alternating cold-white / brass) -->
+  <g transform="translate(64 64)">
+    <g>
+      <path d="M-5 0 L0 -52 L5 0 Z" fill="url(#m_spike)"/>
+      <path d="M-5 0 L0 -52 L5 0 Z" fill="url(#m_spike)" transform="rotate(90)"/>
+      <path d="M-5 0 L0 -52 L5 0 Z" fill="url(#m_spike)" transform="rotate(180)"/>
+      <path d="M-5 0 L0 -52 L5 0 Z" fill="url(#m_spike)" transform="rotate(270)"/>
+    </g>
+    <g opacity="0.9">
+      <path d="M-4 0 L0 -38 L4 0 Z" fill="url(#m_spikeb)" transform="rotate(45)"/>
+      <path d="M-4 0 L0 -38 L4 0 Z" fill="url(#m_spikeb)" transform="rotate(135)"/>
+      <path d="M-4 0 L0 -38 L4 0 Z" fill="url(#m_spikeb)" transform="rotate(225)"/>
+      <path d="M-4 0 L0 -38 L4 0 Z" fill="url(#m_spikeb)" transform="rotate(315)"/>
+    </g>
+  </g>
+
+  <!-- cold blooming core (emissive glow) -->
+  <circle cx="64" cy="64" r="30" fill="url(#m_core)" filter="url(#m_glow)"/>
+  <circle cx="64" cy="64" r="14" fill="url(#m_core)"/>
+  <circle cx="64" cy="64" r="6" fill="#FFFFFF"/>
+</svg>

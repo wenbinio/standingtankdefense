@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Grimdark "Ashen Vigil" — arena_ground: full battlefield floor. -->
+  <!-- Dark, ash-choked, non-distracting stage; lit entities pop above it. -->
+  <defs>
+    <!-- Base ground: lit loam center fading to ash, then void at edges. -->
+    <radialGradient id="ag_floor" cx="50%" cy="46%" r="62%">
+      <stop offset="0%"  stop-color="#23252E"/>
+      <stop offset="42%" stop-color="#15171E"/>
+      <stop offset="78%" stop-color="#0A0B0F"/>
+      <stop offset="100%" stop-color="#06070A"/>
+    </radialGradient>
+    <!-- Heavy edge vignette pushing focus to center. -->
+    <radialGradient id="ag_vig" cx="50%" cy="50%" r="58%">
+      <stop offset="0%"   stop-color="#06070A" stop-opacity="0"/>
+      <stop offset="66%"  stop-color="#06070A" stop-opacity="0"/>
+      <stop offset="88%"  stop-color="#06070A" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#06070A" stop-opacity="0.92"/>
+    </radialGradient>
+    <radialGradient id="ag_scorch" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#06070A" stop-opacity="0.45"/>
+      <stop offset="60%"  stop-color="#06070A" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#06070A" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ag_blood" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#6E1F1C" stop-opacity="0.30"/>
+      <stop offset="70%"  stop-color="#6E1F1C" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#6E1F1C" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="ag_blur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <!-- Void backdrop -->
+  <rect x="0" y="0" width="1024" height="1024" fill="#0A0B0F"/>
+  <!-- Ground floor -->
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#ag_floor)"/>
+
+  <!-- Faint scorch / ash blooms (low opacity, blurred, non-busy) -->
+  <g filter="url(#ag_blur)" opacity="0.7">
+    <ellipse cx="360" cy="380" rx="150" ry="120" fill="url(#ag_scorch)"/>
+    <ellipse cx="690" cy="600" rx="180" ry="130" fill="url(#ag_scorch)"/>
+    <ellipse cx="540" cy="780" rx="160" ry="100" fill="url(#ag_scorch)"/>
+    <ellipse cx="280" cy="700" rx="110" ry="90"  fill="url(#ag_scorch)"/>
+  </g>
+
+  <!-- Faint dried-blood stains -->
+  <g filter="url(#ag_blur)" opacity="0.8">
+    <ellipse cx="430" cy="560" rx="70" ry="48" fill="url(#ag_blood)"/>
+    <ellipse cx="650" cy="420" rx="58" ry="40" fill="url(#ag_blood)"/>
+  </g>
+
+  <!-- Faint ground cracks (thin, near-shadow, low opacity) -->
+  <g stroke="#06070A" fill="none" stroke-linecap="round" opacity="0.4">
+    <path d="M 300 300 L 380 420 L 350 520 L 450 600" stroke-width="3"/>
+    <path d="M 720 360 L 660 470 L 700 560" stroke-width="2.5"/>
+    <path d="M 520 660 L 600 740 L 560 840" stroke-width="3"/>
+    <path d="M 240 560 L 320 640" stroke-width="2"/>
+  </g>
+
+  <!-- Edge vignette on top to seal the murk -->
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#ag_vig)"/>
+</svg>

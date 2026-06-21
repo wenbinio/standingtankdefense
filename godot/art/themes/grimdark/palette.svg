@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="256" viewBox="0 0 768 256">
+  <!-- Grimdark theme "Ashen Vigil" — PALETTE swatch sheet -->
+  <!-- Dark stage; each swatch shows name + exact hex in parchment ink. -->
+  <rect x="0" y="0" width="768" height="256" fill="#0A0B0F"/>
+  <rect x="0" y="0" width="768" height="256" fill="none" stroke="#2A2E38" stroke-width="2"/>
+  <text x="16" y="26" fill="#D8CFB8" font-family="monospace" font-size="15" font-weight="bold">GRIMDARK — "ASHEN VIGIL" PALETTE</text>
+
+  <!-- 6 columns x 3 rows. Each cell: 120 wide swatch + label below. -->
+  <!-- Row 1 -->
+  <g font-family="monospace" font-size="10">
+    <!-- col layout: x = 16 + col*122 ; row y origin -->
+    <!-- ROW 1 (y 44) -->
+    <g>
+      <rect x="16"  y="44" width="112" height="40" fill="#0A0B0F" stroke="#2A2E38" stroke-width="1"/>
+      <text x="16"  y="98"  fill="#D8CFB8">bg_void</text>
+      <text x="16"  y="110" fill="#9CA3AE">#0A0B0F</text>
+    </g>
+    <g>
+      <rect x="138" y="44" width="112" height="40" fill="#15171E" stroke="#2A2E38" stroke-width="1"/>
+      <text x="138" y="98"  fill="#D8CFB8">bg_ash</text>
+      <text x="138" y="110" fill="#9CA3AE">#15171E</text>
+    </g>
+    <g>
+      <rect x="260" y="44" width="112" height="40" fill="#23252E" stroke="#2A2E38" stroke-width="1"/>
+      <text x="260" y="98"  fill="#D8CFB8">ground_loam</text>
+      <text x="260" y="110" fill="#9CA3AE">#23252E</text>
+    </g>
+    <g>
+      <rect x="382" y="44" width="112" height="40" fill="#06070A" stroke="#2A2E38" stroke-width="1"/>
+      <text x="382" y="98"  fill="#D8CFB8">shadow_cast</text>
+      <text x="382" y="110" fill="#9CA3AE">#06070A</text>
+    </g>
+    <g>
+      <rect x="504" y="44" width="112" height="40" fill="#1C212B" stroke="#2A2E38" stroke-width="1"/>
+      <text x="504" y="98"  fill="#D8CFB8">iron_dark</text>
+      <text x="504" y="110" fill="#9CA3AE">#1C212B</text>
+    </g>
+    <g>
+      <rect x="626" y="44" width="112" height="40" fill="#3B4655" stroke="#2A2E38" stroke-width="1"/>
+      <text x="626" y="98"  fill="#D8CFB8">iron_steel</text>
+      <text x="626" y="110" fill="#9CA3AE">#3B4655</text>
+    </g>
+
+    <!-- ROW 2 (y 124) -->
+    <g>
+      <rect x="16"  y="124" width="112" height="40" fill="#6E7C8C" stroke="#2A2E38" stroke-width="1"/>
+      <text x="16"  y="178" fill="#D8CFB8">iron_light</text>
+      <text x="16"  y="190" fill="#9CA3AE">#6E7C8C</text>
+    </g>
+    <g>
+      <rect x="138" y="124" width="112" height="40" fill="#8A6A33" stroke="#2A2E38" stroke-width="1"/>
+      <text x="138" y="178" fill="#D8CFB8">brass_dim</text>
+      <text x="138" y="190" fill="#9CA3AE">#8A6A33</text>
+    </g>
+    <g>
+      <rect x="260" y="124" width="112" height="40" fill="#5BC8E6" stroke="#2A2E38" stroke-width="1"/>
+      <text x="260" y="178" fill="#D8CFB8">glow_cold</text>
+      <text x="260" y="190" fill="#9CA3AE">#5BC8E6</text>
+    </g>
+    <g>
+      <rect x="382" y="124" width="112" height="40" fill="#5C6B4A" stroke="#2A2E38" stroke-width="1"/>
+      <text x="382" y="178" fill="#D8CFB8">flesh_diseased</text>
+      <text x="382" y="190" fill="#9CA3AE">#5C6B4A</text>
+    </g>
+    <g>
+      <rect x="504" y="124" width="112" height="40" fill="#8A9468" stroke="#2A2E38" stroke-width="1"/>
+      <text x="504" y="178" fill="#D8CFB8">flesh_light</text>
+      <text x="504" y="190" fill="#9CA3AE">#8A9468</text>
+    </g>
+    <g>
+      <rect x="626" y="124" width="112" height="40" fill="#C9C1A8" stroke="#2A2E38" stroke-width="1"/>
+      <text x="626" y="178" fill="#D8CFB8">bone_pale</text>
+      <text x="626" y="190" fill="#9CA3AE">#C9C1A8</text>
+    </g>
+
+    <!-- ROW 3 (y 204) -->
+    <g>
+      <rect x="16"  y="204" width="112" height="34" fill="#6E1F1C" stroke="#2A2E38" stroke-width="1"/>
+      <text x="16"  y="252" fill="#D8CFB8">blood_dried  #6E1F1C</text>
+    </g>
+    <g>
+      <rect x="138" y="204" width="112" height="34" fill="#FF7A2E" stroke="#2A2E38" stroke-width="1"/>
+      <text x="138" y="252" fill="#D8CFB8">glow_ember  #FF7A2E</text>
+    </g>
+    <g>
+      <rect x="260" y="204" width="55" height="34" fill="#D8CFB8" stroke="#2A2E38" stroke-width="1"/>
+      <rect x="317" y="204" width="55" height="34" fill="#2A2E38" stroke="#2A2E38" stroke-width="1"/>
+      <text x="260" y="252" fill="#D8CFB8">ui_parch/iron</text>
+    </g>
+    <g>
+      <rect x="382" y="204" width="55" height="34" fill="#9CA3AE" stroke="#2A2E38" stroke-width="1"/>
+      <text x="382" y="252" fill="#D8CFB8">common</text>
+    </g>
+    <g>
+      <rect x="504" y="204" width="55" height="34" fill="#5E9C6B" stroke="#2A2E38" stroke-width="1"/>
+      <text x="504" y="252" fill="#D8CFB8">uncommon</text>
+    </g>
+    <g>
+      <rect x="626" y="204" width="50" height="34" fill="#3E78C8" stroke="#2A2E38" stroke-width="1"/>
+      <rect x="688" y="204" width="50" height="34" fill="#9A4FD0" stroke="#2A2E38" stroke-width="1"/>
+      <text x="626" y="252" fill="#D8CFB8">rare / epic</text>
+    </g>
+  </g>
+</svg>

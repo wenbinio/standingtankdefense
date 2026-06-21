@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- GRIMDARK player projectile: iron BOLT, steel head + brass, faint cold spark. -->
+  <!-- Points UP (travel = up). No baked rotation. Centered, ~8% margin. Player = cold. -->
+  <defs>
+    <!-- steel shaft cylinder: left lit -> right shadow -->
+    <linearGradient id="a_shaft" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#1C212B"/>
+      <stop offset="35%" stop-color="#6E7C8C"/>
+      <stop offset="60%" stop-color="#3B4655"/>
+      <stop offset="100%" stop-color="#15171E"/>
+    </linearGradient>
+    <!-- steel head volume (top-front lit) -->
+    <linearGradient id="a_head" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"  stop-color="#6E7C8C"/>
+      <stop offset="45%" stop-color="#3B4655"/>
+      <stop offset="100%" stop-color="#1C212B"/>
+    </linearGradient>
+    <!-- brass collar -->
+    <linearGradient id="a_brass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#B89A5A"/>
+      <stop offset="45%" stop-color="#8A6A33"/>
+      <stop offset="100%" stop-color="#3A2C12"/>
+    </linearGradient>
+    <radialGradient id="a_spark" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#D7F4FB"/>
+      <stop offset="40%" stop-color="#5BC8E6"/>
+      <stop offset="100%" stop-color="#5BC8E6" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="a_glow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+    <filter id="a_ao" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.2"/>
+    </filter>
+  </defs>
+
+  <!-- faint cold spark trailing behind (down) the bolt -->
+  <ellipse cx="24" cy="42" rx="3.5" ry="5" fill="url(#a_spark)" filter="url(#a_glow)"/>
+
+  <!-- AO under head where it meets shaft -->
+  <ellipse cx="24" cy="20" rx="6" ry="2.4" fill="#06070A" opacity="0.5" filter="url(#a_ao)"/>
+
+  <!-- iron shaft -->
+  <rect x="21" y="16" width="6" height="24" rx="2.2" fill="url(#a_shaft)" stroke="#0E1117" stroke-width="1.4" stroke-linejoin="round"/>
+  <!-- rim catch on lit (left) shaft edge -->
+  <rect x="22" y="18" width="1.4" height="20" rx="0.7" fill="#6E7C8C" opacity="0.75"/>
+
+  <!-- iron fletch / tail vanes (steel, near tail) -->
+  <path d="M21 33 L15 41 L21 39 Z" fill="#3B4655" stroke="#0E1117" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M27 33 L33 41 L27 39 Z" fill="#1C212B" stroke="#0E1117" stroke-width="1" stroke-linejoin="round"/>
+
+  <!-- brass collar behind the head -->
+  <rect x="19" y="14" width="10" height="5" rx="1.6" fill="url(#a_brass)" stroke="#2A2010" stroke-width="1.1"/>
+
+  <!-- steel arrow head (broadhead, points UP) -->
+  <path d="M24 4 L33 17 L24 13 L15 17 Z" fill="url(#a_head)" stroke="#0E1117" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- single rim catch on lit forward edge of head -->
+  <path d="M24 4 L29 11 L24 9 Z" fill="#6E7C8C" opacity="0.7"/>
+  <!-- cold tip glint -->
+  <circle cx="24" cy="6" r="1.3" fill="#D7F4FB" opacity="0.9"/>
+</svg>

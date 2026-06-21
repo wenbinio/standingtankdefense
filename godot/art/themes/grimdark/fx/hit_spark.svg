@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- GRIMDARK FX: hit SPARK. Sharp impact shards, ember #FF7A2E + bone, from a hot core. -->
+  <!-- Radial, centered, no facing. Impact = hot ember (damage on enemy flesh). -->
+  <defs>
+    <radialGradient id="h_core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#FFF4E2"/>
+      <stop offset="30%" stop-color="#FFC27A"/>
+      <stop offset="65%" stop-color="#FF7A2E"/>
+      <stop offset="100%" stop-color="#FF7A2E" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="h_shard" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#FFF1D6"/>
+      <stop offset="35%" stop-color="#FF7A2E"/>
+      <stop offset="100%" stop-color="#6E1F1C" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="h_bone" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#F2ECDA"/>
+      <stop offset="45%" stop-color="#C9C1A8"/>
+      <stop offset="100%" stop-color="#C9C1A8" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="h_glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="2.6"/>
+    </filter>
+  </defs>
+
+  <!-- ember halo from hot core -->
+  <circle cx="64" cy="64" r="30" fill="#FF7A2E" opacity="0.4" filter="url(#h_glow)"/>
+
+  <!-- sharp impact shards radiating out (uneven lengths = visceral) -->
+  <g transform="translate(64 64)">
+    <path d="M-3 0 L0 -54 L3 0 Z" fill="url(#h_shard)"/>
+    <path d="M-3 0 L0 -44 L3 0 Z" fill="url(#h_bone)" transform="rotate(40)"/>
+    <path d="M-3 0 L0 -50 L3 0 Z" fill="url(#h_shard)" transform="rotate(78)"/>
+    <path d="M-3 0 L0 -38 L3 0 Z" fill="url(#h_bone)" transform="rotate(118)"/>
+    <path d="M-3 0 L0 -52 L3 0 Z" fill="url(#h_shard)" transform="rotate(162)"/>
+    <path d="M-3 0 L0 -40 L3 0 Z" fill="url(#h_bone)" transform="rotate(205)"/>
+    <path d="M-3 0 L0 -48 L3 0 Z" fill="url(#h_shard)" transform="rotate(248)"/>
+    <path d="M-3 0 L0 -36 L3 0 Z" fill="url(#h_bone)" transform="rotate(295)"/>
+    <path d="M-2.5 0 L0 -30 L2.5 0 Z" fill="url(#h_shard)" transform="rotate(20)"/>
+    <path d="M-2.5 0 L0 -32 L2.5 0 Z" fill="url(#h_shard)" transform="rotate(330)"/>
+  </g>
+
+  <!-- hot core -->
+  <circle cx="64" cy="64" r="20" fill="url(#h_core)" filter="url(#h_glow)"/>
+  <circle cx="64" cy="64" r="9" fill="url(#h_core)"/>
+  <circle cx="64" cy="64" r="4" fill="#FFF4E2"/>
+</svg>

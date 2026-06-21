@@ -152,12 +152,18 @@ impl Modifiers {
                     per: Fixed::from_ratio(num, 100),
                 });
             }
+            ModEffect::GoldPerDamagePct(n, d) => economy.gold_per_damage += Fixed::from_ratio(n, d),
+            ModEffect::IncomeShieldPct(n, d) => economy.income_shield_pct += Fixed::from_ratio(n, d),
             // Registered as per-arena trigger / purchase-flow state in
-            // `buy_modifier`; they have no aggregate contribution here.
+            // `buy_modifier`; they have no aggregate contribution here. The
+            // HP/regen→gold trades need the full ArenaState (gold scoreboard) and
+            // are likewise intercepted in `buy_modifier`.
             ModEffect::GrantVulnPulse(..)
             | ModEffect::GrantDuplicator(..)
             | ModEffect::GrantVoucher(..)
-            | ModEffect::GrantGold(..) => {}
+            | ModEffect::GrantGold(..)
+            | ModEffect::TradeMaxHpForGold(..)
+            | ModEffect::TradeRegenForGold(..) => {}
         }
     }
 

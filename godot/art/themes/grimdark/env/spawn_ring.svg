@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Grimdark "Ashen Vigil" — spawn_ring: ember runic decal ring at ~90% radius. -->
+  <!-- Transparent inside and outside the band; soft ember glow. Subtle. -->
+  <defs>
+    <!-- Glow band: ember falls off on both sides of the ring stroke. -->
+    <radialGradient id="sr_band" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#FF7A2E" stop-opacity="0"/>
+      <stop offset="80%"  stop-color="#FF7A2E" stop-opacity="0"/>
+      <stop offset="89%"  stop-color="#FF7A2E" stop-opacity="0.35"/>
+      <stop offset="92%"  stop-color="#FF7A2E" stop-opacity="0.55"/>
+      <stop offset="95%"  stop-color="#FF7A2E" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#FF7A2E" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="sr_glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <filter id="sr_softglow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <!-- Soft ember halo of the band (transparent center & exterior). -->
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#sr_band)"/>
+
+  <!-- Scorched ring base: dark burnt groove just under the ember line. -->
+  <circle cx="512" cy="512" r="460" fill="none" stroke="#06070A"
+          stroke-width="22" opacity="0.6" filter="url(#sr_softglow)"/>
+
+  <!-- Crisp ember ring (the runic scorched line). -->
+  <g filter="url(#sr_glow)">
+    <circle cx="512" cy="512" r="460" fill="none" stroke="#FF7A2E"
+            stroke-width="5" opacity="0.85"/>
+    <!-- Runic tick marks around the ring (scorched glyphs). -->
+    <g stroke="#FF7A2E" stroke-width="6" stroke-linecap="round" opacity="0.8">
+      <line x1="512" y1="38"  x2="512" y2="74"/>
+      <line x1="512" y1="950" x2="512" y2="986"/>
+      <line x1="38"  y1="512" x2="74"  y2="512"/>
+      <line x1="950" y1="512" x2="986" y2="512"/>
+      <line x1="187" y1="187" x2="212" y2="212"/>
+      <line x1="837" y1="187" x2="812" y2="212"/>
+      <line x1="187" y1="837" x2="212" y2="812"/>
+      <line x1="837" y1="837" x2="812" y2="812"/>
+    </g>
+  </g>
+
+  <!-- Hot inner thread for a touch of focal heat. -->
+  <circle cx="512" cy="512" r="460" fill="none" stroke="#FFB07A"
+          stroke-width="1.5" opacity="0.5"/>
+</svg>

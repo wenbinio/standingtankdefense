@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - GRIMDARK PLAYER TANK "Ashen Vigil Fortress-Cannon" -->
+  <!-- High 3/4 top-down. Facing UP (north, -Y). No baked rotation. Centered, ~8% margin. -->
+  <!-- Painterly: gradient lit/shadow sides, AO in seams, one rim per form, crisp dark -->
+  <!-- silhouette, COLD ally glow core. Heavy battered cold-iron war-machine, dim brass. -->
+  <defs>
+    <!-- warm key from upper-front: steel body volume -->
+    <radialGradient id="g_body" cx="42%" cy="30%" r="85%">
+      <stop offset="0%"  stop-color="#6E7C8C"/>
+      <stop offset="45%" stop-color="#3B4655"/>
+      <stop offset="100%" stop-color="#1C212B"/>
+    </radialGradient>
+    <!-- barrel cylinder shading (left lit -> right shadow) -->
+    <linearGradient id="g_barrel" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#1C212B"/>
+      <stop offset="30%" stop-color="#6E7C8C"/>
+      <stop offset="55%" stop-color="#3B4655"/>
+      <stop offset="100%" stop-color="#15171E"/>
+    </linearGradient>
+    <!-- brass band volume -->
+    <linearGradient id="g_brass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#B89A5A"/>
+      <stop offset="40%" stop-color="#8A6A33"/>
+      <stop offset="100%" stop-color="#3A2C12"/>
+    </linearGradient>
+    <!-- cold core glow -->
+    <radialGradient id="g_core" cx="50%" cy="42%" r="60%">
+      <stop offset="0%"  stop-color="#D7F4FB"/>
+      <stop offset="35%" stop-color="#5BC8E6"/>
+      <stop offset="100%" stop-color="#0E4756"/>
+    </radialGradient>
+    <filter id="cold_glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+    <filter id="ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow under pivot -->
+  <ellipse cx="96" cy="158" rx="64" ry="20" fill="#06070A" opacity="0.55"/>
+  <ellipse cx="96" cy="158" rx="44" ry="12" fill="#06070A" opacity="0.45"/>
+
+  <!-- ================= GROUNDED BASE / BOLTED FOOTING ================= -->
+  <!-- splayed planted skirts -->
+  <path d="M40 148 L36 168 L78 168 L74 138 Z" fill="#1C212B" stroke="#06070A" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M152 148 L156 168 L114 168 L118 138 Z" fill="#1C212B" stroke="#06070A" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- skirt rim light (lit edges) -->
+  <path d="M74 138 L78 168 L72 168 L68 140 Z" fill="#6E7C8C" opacity="0.5"/>
+  <path d="M118 138 L114 168 L120 168 L124 140 Z" fill="#3B4655" opacity="0.6"/>
+
+  <!-- ================= BARREL (faces UP) ================= -->
+  <!-- cast shadow toward away (right) side -->
+  <rect x="92" y="20" width="20" height="62" rx="8" fill="#06070A" opacity="0.4" filter="url(#ao)"/>
+  <!-- battered cylinder barrel -->
+  <rect x="80" y="14" width="32" height="74" rx="13" fill="url(#g_barrel)" stroke="#0E1117" stroke-width="3.5" stroke-linejoin="round"/>
+  <!-- AO where barrel meets body -->
+  <ellipse cx="96" cy="86" rx="22" ry="8" fill="#06070A" opacity="0.5" filter="url(#ao)"/>
+  <!-- brass reinforcing band -->
+  <rect x="74" y="44" width="44" height="13" rx="3" fill="url(#g_brass)" stroke="#2A2010" stroke-width="2.5"/>
+  <!-- muzzle ring -->
+  <rect x="76" y="8" width="40" height="16" rx="6" fill="url(#g_barrel)" stroke="#0E1117" stroke-width="3.5"/>
+  <!-- bore mouth, dark -->
+  <ellipse cx="96" cy="16" rx="11" ry="6" fill="#06070A"/>
+  <ellipse cx="96" cy="16" rx="6" ry="3" fill="#15171E"/>
+  <!-- single rim catch on lit (left) barrel edge -->
+  <rect x="83" y="20" width="4" height="58" rx="2" fill="#6E7C8C" opacity="0.7"/>
+
+  <!-- ================= MAIN BODY (heavy iron mantlet) ================= -->
+  <path d="M96 60
+           C140 60 156 86 156 116
+           C156 146 130 160 96 160
+           C62 160 36 146 36 116
+           C36 86 52 60 96 60 Z"
+        fill="url(#g_body)" stroke="#0E1117" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- deep AO on the away (lower) half -->
+  <path d="M156 116 C156 146 130 160 96 160 C62 160 36 146 36 116
+           C36 130 64 144 96 144 C128 144 156 130 156 116 Z"
+        fill="#06070A" opacity="0.55" filter="url(#ao)"/>
+  <!-- single warm-ish rim on lit forward-left edge -->
+  <path d="M96 60 C124 60 144 70 154 92 C140 76 120 70 96 70
+           C72 70 52 78 40 94 C50 72 70 60 96 60 Z"
+        fill="#6E7C8C" opacity="0.45"/>
+
+  <!-- battle scars / plate seams (sparse, AO grooves) -->
+  <path d="M58 100 L72 124" stroke="#06070A" stroke-width="2.5" opacity="0.5" stroke-linecap="round"/>
+  <path d="M132 96 L120 116" stroke="#06070A" stroke-width="2.5" opacity="0.5" stroke-linecap="round"/>
+
+  <!-- brass brow plate over core -->
+  <path d="M64 82 C78 72 114 72 128 82 L122 96 C108 88 84 88 70 96 Z"
+        fill="url(#g_brass)" stroke="#2A2010" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- ================= COLD GLOWING CORE / LENS (ally read) ================= -->
+  <circle cx="96" cy="118" r="24" fill="#5BC8E6" opacity="0.55" filter="url(#cold_glow)"/>
+  <circle cx="96" cy="118" r="20" fill="#0A0B0F" stroke="#8A6A33" stroke-width="3.5"/>
+  <circle cx="96" cy="118" r="13" fill="url(#g_core)"/>
+  <circle cx="91" cy="113" r="4" fill="#D7F4FB"/>
+
+  <!-- bolts / rivets (dim brass, sparse) -->
+  <g fill="#8A6A33" stroke="#2A2010" stroke-width="1">
+    <circle cx="52" cy="112" r="3.5"/>
+    <circle cx="140" cy="112" r="3.5"/>
+    <circle cx="74" cy="76" r="3"/>
+    <circle cx="118" cy="76" r="3"/>
+  </g>
+</svg>

@@ -185,6 +185,13 @@ pub struct Economy {
     pub bounty_proc_chance_pct: i64,
     /// Bonus fraction of the base bounty paid when a proc fires (e.g. `2.0` ⇒ +200%).
     pub bounty_proc_bonus: Fixed,
+    /// Damage-scaled bounty rate (the source's "Bloodmoney"): each point of
+    /// player damage dealt awards `floor(damage × gold_per_damage)` gold. Additive
+    /// across owned copies (starts `ZERO`).
+    pub gold_per_damage: Fixed,
+    /// Fraction of each income award also added to the Mana-Shield pool (capped at
+    /// its max), mirroring `income_regen_pct` for HP (starts `ZERO`).
+    pub income_shield_pct: Fixed,
     pub rerolls_remaining: u32,
     pub reroll_cost: i64,
 }
@@ -323,6 +330,12 @@ pub struct ArenaState {
     /// Agent C — no cross-module calls. Empty at end of every tick.
     pub pending_kills: Vec<u16>,
 
+    /// Running scoreboard: total damage dealt by PLAYER sources over the match
+    /// and total gold earned (bounty + income + grants + trades). Authoritative
+    /// (feed the checksum); never reset.
+    pub total_damage_dealt: i64,
+    pub total_gold_earned: i64,
+
     // Per-purpose RNG streams (cursors ride in snapshots).
     pub rng_spawn: Rng,
     pub rng_targeting: Rng,
@@ -373,6 +386,8 @@ impl ArenaState {
                 bounty_mult: Fixed::ONE,
                 bounty_proc_chance_pct: 0,
                 bounty_proc_bonus: Fixed::ZERO,
+                gold_per_damage: Fixed::ZERO,
+                income_shield_pct: Fixed::ZERO,
                 rerolls_remaining: 5,
                 reroll_cost: 100,
             },
@@ -386,6 +401,8 @@ impl ArenaState {
             dead: false,
             death_tick: None,
             pending_kills: Vec::new(),
+            total_damage_dealt: 0,
+            total_gold_earned: 0,
             rng_spawn: d(Purpose::Spawn),
             rng_targeting: d(Purpose::Targeting),
             rng_shop: d(Purpose::Shop),
@@ -412,6 +429,32 @@ impl ArenaState {
     /// Index of a live enemy by id, if present.
     pub fn enemy_index(&self, id: EntityId) -> Option<usize> {
         self.enemies.iter().position(|e| e.id == id)
+    }
+
+    /// The single chokepoint for every gold gain: credits the wallet AND the
+    /// `total_gold_earned` scoreboard. ALL gold income (bounty, passive income,
+    /// grants, trades) routes through here so the scoreboard stays authoritative.
+    #[inline]
+    pub fn award_gold(&mut self, amount: i64) {
+        if amount == 0 {
+            return;
+        }
+        self.economy.gold += amount;
+        self.total_gold_earned += amount;
+    }
+
+    /// Record `amount` of damage dealt by a PLAYER source: accumulates the
+    /// scoreboard total and pays the damage-scaled bounty (Bloodmoney) through
+    /// `award_gold`. Called once per damage site after the enemy borrow ends.
+    #[inline]
+    pub fn record_player_damage(&mut self, amount: i64) {
+        if amount <= 0 {
+            return;
+        }
+        self.total_damage_dealt += amount;
+        if self.economy.gold_per_damage > Fixed::ZERO {
+            self.award_gold(self.economy.gold_per_damage.scale_i64(amount));
+        }
     }
 
     /// Apply a purchased modifier (folds into the damage/attack-speed aggregate,
@@ -446,7 +489,19 @@ impl ArenaState {
                     free: true,
                 });
             }
-            content::ModEffect::GrantGold(g) => self.economy.gold += g,
+            content::ModEffect::GrantGold(g) => self.award_gold(g),
+            // HP/defense ↔ Gold trades: pay tank stats for gold, intercepted here
+            // so the gold routes through the scoreboard.
+            content::ModEffect::TradeMaxHpForGold(hp_cost, gold_gain) => {
+                self.tank.max_hp -= hp_cost;
+                self.tank.hp = self.tank.hp.min(self.tank.max_hp);
+                self.award_gold(gold_gain);
+            }
+            content::ModEffect::TradeRegenForGold(regen_cost, gold_gain) => {
+                // MAY go negative — a negative regen drains HP each tick.
+                self.tank.hp_regen_per_tick -= regen_cost;
+                self.award_gold(gold_gain);
+            }
             other => self.modifiers.apply_effect(other, &mut self.economy, &mut self.tank),
         }
         if let Some(r) = ramp {

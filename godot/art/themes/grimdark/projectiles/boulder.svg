@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- GRIMDARK player projectile: cracked iron-grey siege ROCK, painterly facets, -->
+  <!-- slight motion smear. Travel = UP, no baked rotation. Centered, ~8% margin. -->
+  <defs>
+    <!-- stone volume: warm key upper-front -> shadow underside -->
+    <radialGradient id="b_rock" cx="40%" cy="32%" r="80%">
+      <stop offset="0%"  stop-color="#6E7C8C"/>
+      <stop offset="45%" stop-color="#3B4655"/>
+      <stop offset="100%" stop-color="#1C212B"/>
+    </radialGradient>
+    <!-- motion smear trailing down -->
+    <linearGradient id="b_smear" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#3B4655" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#15171E" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="b_blur" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="2.4"/>
+    </filter>
+    <filter id="b_ao" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.6"/>
+    </filter>
+  </defs>
+
+  <!-- motion smear behind (below) the rock -->
+  <path d="M14 30 Q24 50 34 30 Q24 40 14 30 Z" fill="url(#b_smear)" filter="url(#b_blur)"/>
+
+  <!-- ground/away AO under the mass -->
+  <ellipse cx="24" cy="34" rx="15" ry="6" fill="#06070A" opacity="0.45" filter="url(#b_ao)"/>
+
+  <!-- crisp dark silhouette + main stone body (irregular) -->
+  <path d="M24 6
+           L36 11 L41 22 L37 33 L26 39 L13 36 L7 24 L11 12 Z"
+        fill="url(#b_rock)" stroke="#06070A" stroke-width="2.2" stroke-linejoin="round"/>
+
+  <!-- deep AO on the away (lower) half -->
+  <path d="M37 33 L26 39 L13 36 L7 24 C12 31 20 35 28 33 C33 32 36 28 41 22 Z"
+        fill="#06070A" opacity="0.5" filter="url(#b_ao)"/>
+
+  <!-- painterly facets (lighter planes catching key) -->
+  <path d="M24 6 L36 11 L30 20 L18 18 Z" fill="#6E7C8C" opacity="0.5"/>
+  <path d="M11 12 L18 18 L14 27 L7 24 Z" fill="#3B4655" opacity="0.6"/>
+  <path d="M30 20 L41 22 L37 33 L29 30 Z" fill="#1C212B" opacity="0.55"/>
+
+  <!-- cracks (AO grooves) -->
+  <path d="M22 9 L24 19 L18 28" fill="none" stroke="#06070A" stroke-width="1.6" opacity="0.6" stroke-linecap="round"/>
+  <path d="M30 20 L24 19 L31 31" fill="none" stroke="#06070A" stroke-width="1.4" opacity="0.55" stroke-linecap="round"/>
+
+  <!-- single rim catch on lit upper-left edge -->
+  <path d="M11 12 L24 6 L30 9 C22 9 15 12 12 18 Z" fill="#6E7C8C" opacity="0.6"/>
+</svg>

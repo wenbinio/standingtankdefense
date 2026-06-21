@@ -159,6 +159,19 @@ pub enum ModEffect {
     /// Self-scaling damage `(weapon_def, dmg_type, num_pct)`: +`num_pct`% damage
     /// of `dmg_type` per owned copy of `weapon_def` ("+1% Piercing per Bow").
     DamagePerWeapon(i64, i64, i64),
+    /// Trade `(hp_cost, gold_gain)`: reduce Max HP by `hp_cost` (clamp HP to the
+    /// new max) and grant `gold_gain` gold. Intercepted in `buy_modifier`.
+    TradeMaxHpForGold(i64, i64),
+    /// Trade `(regen_cost, gold_gain)`: reduce HP regen/tick by `regen_cost` (MAY
+    /// go negative → a per-tick drain) and grant `gold_gain` gold. Intercepted in
+    /// `buy_modifier`.
+    TradeRegenForGold(i64, i64),
+    /// +damage-scaled bounty `(num, den)`: each point of player damage dealt
+    /// awards `floor(damage × num/den)` gold (the source's "Bloodmoney").
+    GoldPerDamagePct(i64, i64),
+    /// +% of each income award also added to the Mana-Shield pool `(num, den)`,
+    /// capped at its max (mirrors `IncomeRegenPct` for the shield).
+    IncomeShieldPct(i64, i64),
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
@@ -224,6 +237,10 @@ impl ModEffect {
             ModEffect::MissingHpHealPct(n, d) => (28, n, d, 0),
             ModEffect::GrantRevive(b) => (29, b, 0, 0),
             ModEffect::DamagePerWeapon(def, ty, n) => (30, def, ty, n),
+            ModEffect::TradeMaxHpForGold(hp, g) => (31, hp, g, 0),
+            ModEffect::TradeRegenForGold(r, g) => (32, r, g, 0),
+            ModEffect::GoldPerDamagePct(n, d) => (33, n, d, 0),
+            ModEffect::IncomeShieldPct(n, d) => (34, n, d, 0),
         }
     }
 
@@ -232,7 +249,11 @@ impl ModEffect {
     pub fn is_meta(self) -> bool {
         matches!(
             self,
-            ModEffect::GrantDuplicator(..) | ModEffect::GrantVoucher(..) | ModEffect::GrantGold(..)
+            ModEffect::GrantDuplicator(..)
+                | ModEffect::GrantVoucher(..)
+                | ModEffect::GrantGold(..)
+                | ModEffect::TradeMaxHpForGold(..)
+                | ModEffect::TradeRegenForGold(..)
         )
     }
     /// Inverse of [`words`](Self::words).
@@ -269,6 +290,10 @@ impl ModEffect {
             28 => ModEffect::MissingHpHealPct(a, b),
             29 => ModEffect::GrantRevive(a),
             30 => ModEffect::DamagePerWeapon(a, b, c),
+            31 => ModEffect::TradeMaxHpForGold(a, b),
+            32 => ModEffect::TradeRegenForGold(a, b),
+            33 => ModEffect::GoldPerDamagePct(a, b),
+            34 => ModEffect::IncomeShieldPct(a, b),
             _ => return None,
         })
     }

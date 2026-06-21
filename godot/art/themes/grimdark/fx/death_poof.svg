@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- GRIMDARK FX: death POOF. Diseased-green/bone smoke puff + a little dried-blood mist, -->
+  <!-- soft. Radial, centered, no facing. Enemy death = sickly flesh dissolving. -->
+  <defs>
+    <radialGradient id="d_smoke" cx="48%" cy="46%" r="58%">
+      <stop offset="0%"  stop-color="#8A9468"/>
+      <stop offset="45%" stop-color="#5C6B4A"/>
+      <stop offset="100%" stop-color="#23252E" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="d_smoke2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#5C6B4A" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#15171E" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="d_bone" cx="50%" cy="45%" r="55%">
+      <stop offset="0%"  stop-color="#D8D2BE"/>
+      <stop offset="55%" stop-color="#C9C1A8" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#C9C1A8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="d_blood" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#6E1F1C" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#6E1F1C" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="d_soft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <filter id="d_softer" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <!-- broad diseased smoke base, soft -->
+  <circle cx="64" cy="66" r="42" fill="url(#d_smoke)" filter="url(#d_softer)"/>
+
+  <!-- billowing puff lobes (diseased green-grey) -->
+  <g filter="url(#d_soft)">
+    <circle cx="50" cy="58" r="20" fill="url(#d_smoke2)"/>
+    <circle cx="78" cy="60" r="22" fill="url(#d_smoke2)"/>
+    <circle cx="64" cy="48" r="19" fill="url(#d_smoke2)"/>
+    <circle cx="58" cy="74" r="18" fill="url(#d_smoke2)"/>
+    <circle cx="80" cy="78" r="15" fill="url(#d_smoke2)"/>
+  </g>
+
+  <!-- dried-blood mist tucked low -->
+  <g filter="url(#d_soft)">
+    <circle cx="56" cy="80" r="14" fill="url(#d_blood)"/>
+    <circle cx="76" cy="84" r="11" fill="url(#d_blood)"/>
+  </g>
+
+  <!-- pale bone wisps rising (bone fragments / spirit escaping) -->
+  <g filter="url(#d_soft)">
+    <circle cx="62" cy="50" r="13" fill="url(#d_bone)"/>
+    <circle cx="72" cy="44" r="8" fill="url(#d_bone)"/>
+  </g>
+</svg>

@@ -5,7 +5,7 @@
 extends Node
 
 # Default first. Add new themes here; each must mirror the filename contract.
-var themes := ["gaslamp_bulwark"]
+var themes := ["grimdark", "gaslamp_bulwark"]
 var active := 0
 
 func base() -> String:

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="96" viewBox="0 0 320 96">
+  <!-- Grimdark "Ashen Vigil" — panel: clean dark HUD panel (text background). -->
+  <!-- bg_ash -> bg_void fill, thin shadow_cast border, subtle top rim light, ~10u corners. -->
+  <defs>
+    <linearGradient id="pn_fill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#15171E"/>
+      <stop offset="100%" stop-color="#0A0B0F"/>
+    </linearGradient>
+    <filter id="pn_ao" x="-10%" y="-30%" width="120%" height="160%">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+  </defs>
+
+  <!-- Soft drop AO under the panel -->
+  <rect x="6" y="8" width="308" height="84" rx="12" fill="#06070A" opacity="0.45" filter="url(#pn_ao)"/>
+  <!-- Panel body -->
+  <rect x="4" y="4" width="312" height="84" rx="10" fill="url(#pn_fill)" stroke="#06070A" stroke-width="2"/>
+  <!-- Subtle inner depth AO at the bottom -->
+  <rect x="8" y="8" width="304" height="76" rx="8" fill="none" stroke="#06070A" stroke-width="2" opacity="0.3"/>
+  <!-- Subtle top rim light -->
+  <path d="M 16 6.5 Q 160 4 304 6.5" fill="none" stroke="#2A2E38" stroke-width="1.6"
+        stroke-linecap="round" opacity="0.75"/>
+</svg>

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- GRIMDARK player projectile: cold #5BC8E6 emissive core under soft glow, iron rim, -->
+  <!-- comet wisp. Travel = UP, no baked rotation. Centered, ~8% margin. Player = cold. -->
+  <defs>
+    <!-- emissive cold core -->
+    <radialGradient id="o_core" cx="46%" cy="42%" r="58%">
+      <stop offset="0%"  stop-color="#EAFBFF"/>
+      <stop offset="30%" stop-color="#5BC8E6"/>
+      <stop offset="75%" stop-color="#1E7C95"/>
+      <stop offset="100%" stop-color="#0E4756"/>
+    </radialGradient>
+    <!-- iron rim ring volume -->
+    <linearGradient id="o_rim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"  stop-color="#6E7C8C"/>
+      <stop offset="50%" stop-color="#3B4655"/>
+      <stop offset="100%" stop-color="#1C212B"/>
+    </linearGradient>
+    <!-- comet wisp (trailing down) -->
+    <linearGradient id="o_wisp" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#5BC8E6" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#5BC8E6" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="o_glow" x="-140%" y="-140%" width="380%" height="380%">
+      <feGaussianBlur stdDeviation="3.4"/>
+    </filter>
+    <filter id="o_glowsoft" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.6"/>
+    </filter>
+  </defs>
+
+  <!-- comet wisp trailing behind (down) -->
+  <path d="M19 24 Q24 50 29 24 Q24 30 19 24 Z" fill="url(#o_wisp)" filter="url(#o_glowsoft)"/>
+
+  <!-- soft outer glow on the emissive core ONLY -->
+  <circle cx="24" cy="21" r="16" fill="#5BC8E6" opacity="0.5" filter="url(#o_glow)"/>
+
+  <!-- iron rim ring (crisp dark silhouette) -->
+  <circle cx="24" cy="21" r="13" fill="url(#o_rim)" stroke="#06070A" stroke-width="2"/>
+  <!-- AO inside rim where it meets core -->
+  <circle cx="24" cy="21" r="10.5" fill="#06070A" opacity="0.55"/>
+  <!-- single rim catch on lit upper-left of iron ring -->
+  <path d="M14 13 A13 13 0 0 1 30 11" fill="none" stroke="#6E7C8C" stroke-width="1.8" opacity="0.7" stroke-linecap="round"/>
+
+  <!-- emissive cold core -->
+  <circle cx="24" cy="21" r="9" fill="url(#o_core)"/>
+  <!-- hot inner glint -->
+  <circle cx="21" cy="18" r="2.6" fill="#EAFBFF"/>
+</svg>
