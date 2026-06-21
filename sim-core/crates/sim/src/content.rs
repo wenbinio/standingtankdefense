@@ -87,7 +87,7 @@ pub struct WaveSpawn {
 }
 
 /// A stacking modifier's effect. Ratios are `(num, den)` → `Fixed::from_ratio`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ModEffect {
     /// +% additive to ALL weapon damage.
     DamageGlobalPct(i64, i64),
@@ -113,59 +113,123 @@ pub enum ModEffect {
     Dodge(u32),
 }
 
+impl ModEffect {
+    /// Stable `(tag, a, b, c)` encoding for checksum/snapshot of ramps.
+    pub fn words(self) -> (u8, i64, i64, i64) {
+        match self {
+            ModEffect::DamageGlobalPct(n, d) => (0, n, d, 0),
+            ModEffect::DamageTypePct(t, n, d) => (1, t as i64, n, d),
+            ModEffect::DamageMulPct(n, d) => (2, n, d, 0),
+            ModEffect::AttackSpeedPct(n, d) => (3, n, d, 0),
+            ModEffect::BountyPct(n, d) => (4, n, d, 0),
+            ModEffect::IncomeFlat(f) => (5, f, 0, 0),
+            ModEffect::MaxHp(f) => (6, f, 0, 0),
+            ModEffect::Armor(a) => (7, a, 0, 0),
+            ModEffect::ManaShield(p, r) => (8, p, r, 0),
+            ModEffect::HpRegen(r) => (9, r, 0, 0),
+            ModEffect::Dodge(n) => (10, n as i64, 0, 0),
+        }
+    }
+    /// Inverse of [`words`](Self::words).
+    pub fn from_words(tag: u8, a: i64, b: i64, c: i64) -> Option<ModEffect> {
+        Some(match tag {
+            0 => ModEffect::DamageGlobalPct(a, b),
+            1 => ModEffect::DamageTypePct(a as u8, b, c),
+            2 => ModEffect::DamageMulPct(a, b),
+            3 => ModEffect::AttackSpeedPct(a, b),
+            4 => ModEffect::BountyPct(a, b),
+            5 => ModEffect::IncomeFlat(a),
+            6 => ModEffect::MaxHp(a),
+            7 => ModEffect::Armor(a),
+            8 => ModEffect::ManaShield(a, b),
+            9 => ModEffect::HpRegen(a),
+            10 => ModEffect::Dodge(a as u32),
+            _ => return None,
+        })
+    }
+}
+
+/// A per-interval growth attached to a modifier — the source's "+X every 30 s".
+/// On purchase the modifier's base `effect` applies once; then `effect` here is
+/// re-applied every `interval_ticks` for the rest of the match.
+#[derive(Clone, Copy, Debug)]
+pub struct RampSpec {
+    pub effect: ModEffect,
+    pub interval_ticks: u32,
+}
+
+/// Interval for "every 30 seconds" ramps (= one round @ 30 Hz).
+pub const RAMP_PER_ROUND: u32 = 30 * 30;
+
 #[derive(Clone, Copy, Debug)]
 pub struct ModifierDef {
     pub name: &'static str,
     pub rarity: u8,
     pub cost: i64,
     pub effect: ModEffect,
+    /// Optional per-interval growth (`None` for most modifiers).
+    pub ramp: Option<RampSpec>,
 }
 
 /// M4 modifier catalog — a representative slice across every scope (additive
 /// global/by-type, multiplicative, attack-speed, economy, defensive). Numbers
 /// adapted from the extracted upgrades (`docs/appendix-A-map-extraction.md`).
 pub static MODIFIERS: &[ModifierDef] = &[
-    ModifierDef { name: "+10% Damage", rarity: 0, cost: 500, effect: ModEffect::DamageGlobalPct(1, 10) },
-    ModifierDef { name: "+10% Piercing Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_PIERCING, 1, 10) },
-    ModifierDef { name: "+10% Siege Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_SIEGE, 1, 10) },
-    ModifierDef { name: "+10% Magic Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_MAGIC, 1, 10) },
-    ModifierDef { name: "+25% Damage (Epic)", rarity: 3, cost: 5000, effect: ModEffect::DamageMulPct(1, 4) },
-    ModifierDef { name: "+10% Attack Speed", rarity: 0, cost: 500, effect: ModEffect::AttackSpeedPct(1, 10) },
-    ModifierDef { name: "+50% Kill Bounty", rarity: 1, cost: 1500, effect: ModEffect::BountyPct(1, 2) },
-    ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(20) },
-    ModifierDef { name: "+2000 Max HP", rarity: 1, cost: 1500, effect: ModEffect::MaxHp(2000) },
-    ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effect: ModEffect::Armor(10) },
-    ModifierDef { name: "+2000 Mana Shield", rarity: 1, cost: 1500, effect: ModEffect::ManaShield(2000, 10) },
-    ModifierDef { name: "+50 HP Regen", rarity: 0, cost: 500, effect: ModEffect::HpRegen(50) },
-    ModifierDef { name: "+10% Dodge", rarity: 1, cost: 1500, effect: ModEffect::Dodge(10) },
+    ModifierDef { name: "+10% Damage", rarity: 0, cost: 500, effect: ModEffect::DamageGlobalPct(1, 10), ramp: None },
+    ModifierDef { name: "+10% Piercing Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_PIERCING, 1, 10), ramp: None },
+    ModifierDef { name: "+10% Siege Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_SIEGE, 1, 10), ramp: None },
+    ModifierDef { name: "+10% Magic Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_MAGIC, 1, 10), ramp: None },
+    ModifierDef { name: "+25% Damage (Epic)", rarity: 3, cost: 5000, effect: ModEffect::DamageMulPct(1, 4), ramp: None },
+    ModifierDef { name: "+10% Attack Speed", rarity: 0, cost: 500, effect: ModEffect::AttackSpeedPct(1, 10), ramp: None },
+    ModifierDef { name: "+50% Kill Bounty", rarity: 1, cost: 1500, effect: ModEffect::BountyPct(1, 2), ramp: None },
+    ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(20), ramp: None },
+    ModifierDef { name: "+2000 Max HP", rarity: 1, cost: 1500, effect: ModEffect::MaxHp(2000), ramp: None },
+    ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effect: ModEffect::Armor(10), ramp: None },
+    ModifierDef { name: "+2000 Mana Shield", rarity: 1, cost: 1500, effect: ModEffect::ManaShield(2000, 10), ramp: None },
+    ModifierDef { name: "+50 HP Regen", rarity: 0, cost: 500, effect: ModEffect::HpRegen(50), ramp: None },
+    ModifierDef { name: "+10% Dodge", rarity: 1, cost: 1500, effect: ModEffect::Dodge(10), ramp: None },
+    // Time-scaling growth modifiers (`docs/06`): a base effect now + a smaller
+    // effect re-applied every round, so they compound over a match.
+    ModifierDef { name: "Building Power (+2% Damage, +1%/round)", rarity: 2, cost: 3000,
+        effect: ModEffect::DamageGlobalPct(2, 100),
+        ramp: Some(RampSpec { effect: ModEffect::DamageGlobalPct(1, 100), interval_ticks: RAMP_PER_ROUND }) },
+    ModifierDef { name: "Escalating Chaos (+20% Chaos, +3%/round)", rarity: 2, cost: 3000,
+        effect: ModEffect::DamageTypePct(DMG_CHAOS, 20, 100),
+        ramp: Some(RampSpec { effect: ModEffect::DamageTypePct(DMG_CHAOS, 3, 100), interval_ticks: RAMP_PER_ROUND }) },
+    ModifierDef { name: "Compounding Greed (+10 Income, +5/round)", rarity: 1, cost: 1500,
+        effect: ModEffect::IncomeFlat(10),
+        ramp: Some(RampSpec { effect: ModEffect::IncomeFlat(5), interval_ticks: RAMP_PER_ROUND }) },
+    ModifierDef { name: "Hardening (+10 Armor, +5/round)", rarity: 1, cost: 1500,
+        effect: ModEffect::Armor(10),
+        ramp: Some(RampSpec { effect: ModEffect::Armor(5), interval_ticks: RAMP_PER_ROUND }) },
     // GEN-MODIFIERS-BEGIN (generated by research/tower-survivors-map/gen_catalog.py)
-    ModifierDef { name: "+4000 Mana Shield", rarity: 3, cost: 5000, effect: ModEffect::ManaShield(4000, 20) },
-    ModifierDef { name: "+500 Max HP", rarity: 0, cost: 500, effect: ModEffect::MaxHp(500) },
-    ModifierDef { name: "+10% Piercing Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_PIERCING, 10, 100) },
-    ModifierDef { name: "+10% Normal Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_NORMAL, 10, 100) },
-    ModifierDef { name: "+10% Siege Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_SIEGE, 10, 100) },
-    ModifierDef { name: "+10% Chaos Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_CHAOS, 10, 100) },
-    ModifierDef { name: "+1000 Max HP", rarity: 1, cost: 1500, effect: ModEffect::MaxHp(1000) },
-    ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effect: ModEffect::Armor(10) },
-    ModifierDef { name: "+2000 Max HP", rarity: 2, cost: 3000, effect: ModEffect::MaxHp(2000) },
-    ModifierDef { name: "+50% Kill Bounty", rarity: 2, cost: 3000, effect: ModEffect::BountyPct(50, 100) },
-    ModifierDef { name: "+2000 Mana Shield", rarity: 2, cost: 3000, effect: ModEffect::ManaShield(2000, 10) },
-    ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(20) },
-    ModifierDef { name: "+5 Armor", rarity: 0, cost: 500, effect: ModEffect::Armor(5) },
-    ModifierDef { name: "+10% Attack Speed", rarity: 0, cost: 500, effect: ModEffect::AttackSpeedPct(10, 100) },
-    ModifierDef { name: "+80 HP Regen", rarity: 1, cost: 1500, effect: ModEffect::HpRegen(80) },
-    ModifierDef { name: "+20 HP Regen", rarity: 0, cost: 500, effect: ModEffect::HpRegen(20) },
-    ModifierDef { name: "+5 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(5) },
-    ModifierDef { name: "+10 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(10) },
-    ModifierDef { name: "+100% Kill Bounty", rarity: 2, cost: 3000, effect: ModEffect::BountyPct(100, 100) },
-    ModifierDef { name: "+10% Magic Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_MAGIC, 10, 100) },
-    ModifierDef { name: "+40 HP Regen", rarity: 0, cost: 500, effect: ModEffect::HpRegen(40) },
-    ModifierDef { name: "+10000 Mana Shield", rarity: 3, cost: 5000, effect: ModEffect::ManaShield(10000, 50) },
-    ModifierDef { name: "+10% Dodge", rarity: 0, cost: 500, effect: ModEffect::Dodge(10) },
-    ModifierDef { name: "+200% Kill Bounty", rarity: 2, cost: 3000, effect: ModEffect::BountyPct(200, 100) },
-    ModifierDef { name: "+5000 Max HP", rarity: 3, cost: 5000, effect: ModEffect::MaxHp(5000) },
-    ModifierDef { name: "+1000 Mana Shield", rarity: 1, cost: 1500, effect: ModEffect::ManaShield(1000, 5) },
-    ModifierDef { name: "+200 HP Regen", rarity: 1, cost: 1500, effect: ModEffect::HpRegen(200) },
+    ModifierDef { name: "+4000 Mana Shield", rarity: 3, cost: 5000, effect: ModEffect::ManaShield(4000, 20), ramp: None },
+    ModifierDef { name: "+500 Max HP", rarity: 0, cost: 500, effect: ModEffect::MaxHp(500), ramp: None },
+    ModifierDef { name: "+10% Piercing Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_PIERCING, 10, 100), ramp: None },
+    ModifierDef { name: "+10% Normal Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_NORMAL, 10, 100), ramp: None },
+    ModifierDef { name: "+10% Siege Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_SIEGE, 10, 100), ramp: None },
+    ModifierDef { name: "+10% Chaos Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_CHAOS, 10, 100), ramp: None },
+    ModifierDef { name: "+1000 Max HP", rarity: 1, cost: 1500, effect: ModEffect::MaxHp(1000), ramp: None },
+    ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effect: ModEffect::Armor(10), ramp: None },
+    ModifierDef { name: "+2000 Max HP", rarity: 2, cost: 3000, effect: ModEffect::MaxHp(2000), ramp: None },
+    ModifierDef { name: "+50% Kill Bounty", rarity: 2, cost: 3000, effect: ModEffect::BountyPct(50, 100), ramp: None },
+    ModifierDef { name: "+2000 Mana Shield", rarity: 2, cost: 3000, effect: ModEffect::ManaShield(2000, 10), ramp: None },
+    ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(20), ramp: None },
+    ModifierDef { name: "+5 Armor", rarity: 0, cost: 500, effect: ModEffect::Armor(5), ramp: None },
+    ModifierDef { name: "+10% Attack Speed", rarity: 0, cost: 500, effect: ModEffect::AttackSpeedPct(10, 100), ramp: None },
+    ModifierDef { name: "+80 HP Regen", rarity: 1, cost: 1500, effect: ModEffect::HpRegen(80), ramp: None },
+    ModifierDef { name: "+20 HP Regen", rarity: 0, cost: 500, effect: ModEffect::HpRegen(20), ramp: None },
+    ModifierDef { name: "+5 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(5), ramp: None },
+    ModifierDef { name: "+10 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(10), ramp: None },
+    ModifierDef { name: "+100% Kill Bounty", rarity: 2, cost: 3000, effect: ModEffect::BountyPct(100, 100), ramp: None },
+    ModifierDef { name: "+10% Magic Damage", rarity: 0, cost: 500, effect: ModEffect::DamageTypePct(DMG_MAGIC, 10, 100), ramp: None },
+    ModifierDef { name: "+40 HP Regen", rarity: 0, cost: 500, effect: ModEffect::HpRegen(40), ramp: None },
+    ModifierDef { name: "+10000 Mana Shield", rarity: 3, cost: 5000, effect: ModEffect::ManaShield(10000, 50), ramp: None },
+    ModifierDef { name: "+10% Dodge", rarity: 0, cost: 500, effect: ModEffect::Dodge(10), ramp: None },
+    ModifierDef { name: "+200% Kill Bounty", rarity: 2, cost: 3000, effect: ModEffect::BountyPct(200, 100), ramp: None },
+    ModifierDef { name: "+5000 Max HP", rarity: 3, cost: 5000, effect: ModEffect::MaxHp(5000), ramp: None },
+    ModifierDef { name: "+1000 Mana Shield", rarity: 1, cost: 1500, effect: ModEffect::ManaShield(1000, 5), ramp: None },
+    ModifierDef { name: "+200 HP Regen", rarity: 1, cost: 1500, effect: ModEffect::HpRegen(200), ramp: None },
     // GEN-MODIFIERS-END
 ];
 

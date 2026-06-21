@@ -9,12 +9,12 @@
 //! - Field order mirrors `checksum()` so the two are easy to keep in sync.
 
 use crate::ids::EntityId;
-use crate::content::StatusOnHit;
+use crate::content::{ModEffect, StatusOnHit};
 use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 3;
+pub const SNAPSHOT_VERSION: u32 = 4;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -225,6 +225,18 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.fixed(s.modifiers.mul_global);
     w.fixed(s.modifiers.attack_speed);
 
+    // active ramps
+    w.len(s.ramps.len());
+    for r in &s.ramps {
+        let (tag, a, b, c) = r.effect.words();
+        w.u8(tag);
+        w.i64(a);
+        w.i64(b);
+        w.i64(c);
+        w.u32(r.interval_ticks);
+        w.u32(r.next_apply);
+    }
+
     // shop
     w.u32(s.shop.shop_seq);
     w.len(s.shop.offers.len());
@@ -348,6 +360,20 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         attack_speed: r.fixed()?,
     };
 
+    let mut ramps = Vec::new();
+    for _ in 0..r.len()? {
+        let tag = r.u8()?;
+        let a = r.i64()?;
+        let b = r.i64()?;
+        let c = r.i64()?;
+        let effect = ModEffect::from_words(tag, a, b, c).ok_or(SnapshotError::BadTag(tag))?;
+        ramps.push(ActiveRamp {
+            effect,
+            interval_ticks: r.u32()?,
+            next_apply: r.u32()?,
+        });
+    }
+
     let shop_seq = r.u32()?;
     let mut offers = Vec::new();
     for _ in 0..r.len()? {
@@ -394,6 +420,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         economy,
         shop,
         modifiers,
+        ramps,
         next_entity_id,
         dead,
         death_tick,

@@ -184,7 +184,7 @@ def emit_modifiers(upgrades):
             continue
         seen.add(eff)
         r = mod_rarity(name)
-        out.append('    ModifierDef { name: "%s", rarity: %d, cost: %d, effect: %s },'
+        out.append('    ModifierDef { name: "%s", rarity: %d, cost: %d, effect: %s, ramp: None },'
                    % (name, r, COST[r], eff))
     return out, skipped
 

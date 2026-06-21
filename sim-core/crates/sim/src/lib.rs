@@ -53,6 +53,8 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     }
     // 2. Player input (buy / reroll / clear).
     input::apply(s, inp);
+    // 2b. Time-scaling growth: apply any ramping modifiers whose interval elapsed.
+    modifiers::apply_ramps(s);
     // 3. Spawn enemies for the current wave.
     waves::spawn(s);
     // 4. Weapons select targets and emit projectiles.
@@ -135,6 +137,18 @@ pub fn checksum(s: &ArenaState) -> u64 {
     }
     c.write_fixed(s.modifiers.mul_global);
     c.write_fixed(s.modifiers.attack_speed);
+
+    // Active time-scaling ramps (append-only order).
+    c.write_u32(s.ramps.len() as u32);
+    for r in &s.ramps {
+        let (tag, a, b, d) = r.effect.words();
+        c.write_u32(tag as u32);
+        c.write_i64(a);
+        c.write_i64(b);
+        c.write_i64(d);
+        c.write_u32(r.interval_ticks);
+        c.write_u32(r.next_apply);
+    }
 
     // Shop offers (slot order is meaningful).
     c.write_u32(s.shop.shop_seq);

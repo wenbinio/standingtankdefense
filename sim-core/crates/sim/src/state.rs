@@ -152,6 +152,16 @@ pub struct Offer {
     pub cost: i64,
 }
 
+/// An active time-scaling growth: re-applies `effect` every `interval_ticks`
+/// (the source's "+X every 30 seconds"). Registered when a ramping modifier is
+/// purchased; lives for the rest of the match.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ActiveRamp {
+    pub effect: content::ModEffect,
+    pub interval_ticks: u32,
+    pub next_apply: Tick,
+}
+
 /// Aggregated damage & attack-speed modifiers (`docs/05 §5.3`). The genre's
 /// "everything stacks" engine: **additive within a source kind, multiplicative
 /// across distinct multiplicative sources**. Economy/defensive modifiers apply
@@ -193,6 +203,8 @@ pub struct ArenaState {
     pub shop: ShopState,
     /// Aggregated damage/attack-speed modifiers consulted during combat.
     pub modifiers: Modifiers,
+    /// Active time-scaling growths (re-applied at their intervals).
+    pub ramps: Vec<ActiveRamp>,
 
     pub next_entity_id: u32,
     pub dead: bool,
@@ -246,6 +258,7 @@ impl ArenaState {
             },
             shop: ShopState::default(),
             modifiers: Modifiers::new(),
+            ramps: Vec::new(),
             next_entity_id: 1,
             dead: false,
             death_tick: None,
@@ -283,6 +296,14 @@ impl ArenaState {
     /// borrows keep this single-call.
     pub fn buy_modifier(&mut self, def_idx: u16) {
         let def = &content::MODIFIERS[def_idx as usize];
+        let ramp = def.ramp;
         self.modifiers.apply(def, &mut self.economy, &mut self.tank);
+        if let Some(r) = ramp {
+            self.ramps.push(ActiveRamp {
+                effect: r.effect,
+                interval_ticks: r.interval_ticks,
+                next_apply: self.tick + r.interval_ticks,
+            });
+        }
     }
 }

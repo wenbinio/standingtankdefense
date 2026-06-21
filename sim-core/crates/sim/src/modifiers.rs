@@ -9,8 +9,25 @@
 //! flavor sum, then the result is multiplied by each independent `×` source.
 
 use crate::content::{ModEffect, ModifierDef};
-use crate::state::{Economy, Modifiers, Tank};
+use crate::state::{ArenaState, Economy, Modifiers, Tank};
 use determinism::Fixed;
+
+/// Phase: apply each active time-scaling ramp whose interval has elapsed
+/// (`docs/06`). Deterministic — fixed ticks, fixed order (ramps are append-only,
+/// never reordered).
+pub(crate) fn apply_ramps(s: &mut ArenaState) {
+    if s.ramps.is_empty() {
+        return;
+    }
+    let mut ramps = std::mem::take(&mut s.ramps);
+    for r in ramps.iter_mut() {
+        while s.tick >= r.next_apply {
+            s.modifiers.apply_effect(r.effect, &mut s.economy, &mut s.tank);
+            r.next_apply += r.interval_ticks;
+        }
+    }
+    s.ramps = ramps;
+}
 
 impl Modifiers {
     pub fn new() -> Modifiers {
@@ -22,11 +39,16 @@ impl Modifiers {
         }
     }
 
-    /// Fold a purchased modifier in. Damage/attack-speed effects accumulate in
-    /// this aggregate; economy/defensive effects apply immediately to `economy`
-    /// / `tank` (they need no per-tick re-evaluation).
+    /// Fold a purchased modifier in (applies its base `effect`).
     pub fn apply(&mut self, def: &ModifierDef, economy: &mut Economy, tank: &mut Tank) {
-        match def.effect {
+        self.apply_effect(def.effect, economy, tank);
+    }
+
+    /// Apply a single [`ModEffect`] (used both for a modifier's base effect and
+    /// for each tick of a time-scaling ramp). Damage/attack-speed effects
+    /// accumulate in this aggregate; economy/defensive effects apply immediately.
+    pub fn apply_effect(&mut self, effect: ModEffect, economy: &mut Economy, tank: &mut Tank) {
+        match effect {
             ModEffect::DamageGlobalPct(n, d) => self.add_global += Fixed::from_ratio(n, d),
             ModEffect::DamageTypePct(t, n, d) => {
                 self.add_by_type[t as usize % 5] += Fixed::from_ratio(n, d)
@@ -81,7 +103,7 @@ mod tests {
     }
 
     fn modifier(effect: ModEffect) -> ModifierDef {
-        ModifierDef { name: "t", rarity: 0, cost: 0, effect }
+        ModifierDef { name: "t", rarity: 0, cost: 0, effect, ramp: None }
     }
 
     #[test]
@@ -142,5 +164,48 @@ mod tests {
         let (mut m, mut e, mut t) = parts();
         m.apply(&modifier(ModEffect::AttackSpeedPct(1, 4)), &mut e, &mut t);
         assert_eq!(m.attack_speed_mult().scale_i64(1000), 1250);
+    }
+
+    #[test]
+    fn ramping_modifier_grows_each_interval() {
+        // Find a ramping modifier in the catalog (Building Power: +2% now, +1%/round).
+        let idx = content::MODIFIERS
+            .iter()
+            .position(|md| md.ramp.is_some()
+                && matches!(md.effect, ModEffect::DamageGlobalPct(2, 100)))
+            .expect("a +2%/+1% global-damage ramp exists") as u16;
+
+        let mut s = ArenaState::new(1, 0);
+        s.buy_modifier(idx);
+        assert_eq!(s.ramps.len(), 1, "ramp registered on purchase");
+        let base = s.modifiers.damage_mult(0); // ≈ ×1.02
+
+        // Apply three intervals of growth.
+        let interval = content::RAMP_PER_ROUND;
+        for k in 1..=3u32 {
+            s.tick = interval * k;
+            apply_ramps(&mut s);
+        }
+        let after = s.modifiers.damage_mult(0); // ≈ ×1.05 (0.02 + 3×0.01)
+        assert!(after > base, "ramp increased the multiplier");
+        let v = after.scale_i64(1_000_000);
+        assert!((1_049_000..=1_050_000).contains(&v), "expected ≈1.05, got {v}");
+
+        // The ramp's next_apply advanced past the last interval (no double-apply).
+        assert_eq!(s.ramps[0].next_apply, interval * 4);
+    }
+
+    #[test]
+    fn ramp_apply_is_idempotent_between_intervals() {
+        let idx = content::MODIFIERS.iter().position(|md| md.ramp.is_some()).unwrap() as u16;
+        let mut s = ArenaState::new(2, 0);
+        s.buy_modifier(idx);
+        let snap = (s.modifiers.clone(), s.economy.clone(), s.tank.clone());
+        // A tick before the first interval: nothing should change.
+        s.tick = content::RAMP_PER_ROUND - 1;
+        apply_ramps(&mut s);
+        assert_eq!(s.modifiers, snap.0);
+        assert_eq!(s.economy, snap.1);
+        assert_eq!(s.tank, snap.2);
     }
 }
