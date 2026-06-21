@@ -1,0 +1,19 @@
+# GDExtension binding crate — the ONLY place Godot types meet the sim. Kept out
+# of the sim-core workspace so that core stays engine-independent and the
+# zero-dependency sandbox build is unaffected. Built locally (needs network to
+# fetch `godot`, and a Godot 4 editor to run). See ../README.md.
+[package]
+name = "standing_tank_gdext"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# godot-rust (gdext). Pinned to a 0.3 line (Godot 4.3+). If your gdext differs,
+# a couple of Packed*Array `push`/`from` signatures may need trivial tweaks.
+godot = "0.3"
+# The deterministic core, by path — the binding never duplicates game logic.
+sim = { path = "../../sim-core/crates/sim" }

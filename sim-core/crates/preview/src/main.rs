@@ -113,7 +113,7 @@ fn main() {
 
         // ---- render on cadence ----
         if s.tick % args.every == 0 {
-            let f = render::frame(&s, &log);
+            let f = render::frame(&sim::view::snapshot(&s), &log);
             if args.watch {
                 print!("\x1b[2J\x1b[H{}", f);
                 use std::io::Write;
@@ -134,7 +134,7 @@ fn main() {
             let secs = s.tick / sim::TICK_HZ;
             push(&mut log, format!("TANK DESTROYED at {:02}:{:02}", secs / 60, secs % 60));
             // Show one final frame, then stop.
-            println!("{}", render::frame(&s, &log));
+            println!("{}", render::frame(&sim::view::snapshot(&s), &log));
             break;
         }
     }

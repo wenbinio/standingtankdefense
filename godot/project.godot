@@ -1,0 +1,19 @@
+; Standing Tank Defense — Godot 4 front-end over the Rust deterministic core.
+; Open this folder in Godot 4.3+ AFTER building the gdext lib (see README.md).
+config_version=5
+
+[application]
+
+config/name="Standing Tank Defense (preview)"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.3", "Forward Plus")
+
+[physics]
+
+; The sim runs at a fixed 30 Hz — drive one sim tick per physics frame.
+common/physics_ticks_per_second=30
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720

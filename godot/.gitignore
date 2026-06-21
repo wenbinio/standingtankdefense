@@ -1,0 +1,4 @@
+# Rust build artifacts for the gdext binding.
+rust/target/
+# Godot editor cache / imports.
+.godot/

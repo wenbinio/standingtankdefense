@@ -10,6 +10,7 @@
 
 pub mod content;
 pub mod snapshot;
+pub mod view;
 mod combat;
 mod defense;
 mod economy;

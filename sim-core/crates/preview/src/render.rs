@@ -1,9 +1,8 @@
-//! Text renderer for the live `ArenaState`. Reads only public sim state — this
-//! is exactly the data a Godot front-end will pull each frame to draw the arena,
-//! HUD, and shop. Kept engine-agnostic and allocation-light.
+//! Text renderer driven by [`sim::view::RenderView`] — the engine-agnostic
+//! snapshot the Godot front-end also consumes. Proves the view contract carries
+//! everything a renderer needs. Allocation-light; no sim internals touched.
 
-use sim::{content, ArenaState, OfferKind};
-use std::collections::BTreeMap;
+use sim::view::RenderView;
 use std::fmt::Write as _;
 
 /// Arena glyph grid size (characters).
@@ -12,7 +11,7 @@ const GRID_H: usize = 19;
 /// World half-extent (units). The spawn ring sits at 1500, so 1600 leaves a rim.
 const WORLD: i64 = 1600;
 
-/// Map a world coordinate to a grid cell (y points up). Returns `None` if off-grid.
+/// Map a world coordinate to a grid cell (y points up). `None` if off-grid.
 fn to_cell(x: i64, y: i64) -> Option<(usize, usize)> {
     if !(-WORLD..=WORLD).contains(&x) || !(-WORLD..=WORLD).contains(&y) {
         return None;
@@ -22,37 +21,35 @@ fn to_cell(x: i64, y: i64) -> Option<(usize, usize)> {
     Some((col.min(GRID_W - 1), row.min(GRID_H - 1)))
 }
 
-/// Compose one full frame for the given state, with a recent-event log.
-pub fn frame(s: &ArenaState, log: &[String]) -> String {
+/// Compose one full frame from a view snapshot and a recent-event log.
+pub fn frame(v: &RenderView, log: &[String]) -> String {
     let mut grid = [[' '; GRID_W]; GRID_H];
 
-    // Projectiles first (lowest priority), then enemies, then the tank on top.
-    for p in &s.projectiles {
-        if let Some((c, r)) = to_cell(p.pos.x.floor_to_int(), p.pos.y.floor_to_int()) {
+    // Projectiles (lowest priority), then enemies, then the tank on top.
+    for p in &v.projectiles {
+        if let Some((c, r)) = to_cell(p.x, p.y) {
             grid[r][c] = '.';
         }
     }
-    for e in &s.enemies {
-        if let Some((c, r)) = to_cell(e.pos.x.floor_to_int(), e.pos.y.floor_to_int()) {
-            let edef = &content::ENEMIES[e.def as usize];
-            grid[r][c] = if edef.boss {
+    for e in &v.enemies {
+        if let Some((c, r)) = to_cell(e.x, e.y) {
+            grid[r][c] = if e.boss {
                 'B'
             } else {
-                // First letter of the enemy name, lowercased, as its glyph.
-                edef.name.chars().next().unwrap_or('o').to_ascii_lowercase()
+                e.name.chars().next().unwrap_or('o').to_ascii_lowercase()
             };
         }
     }
-    if let Some((c, r)) = to_cell(s.tank.pos.x.floor_to_int(), s.tank.pos.y.floor_to_int()) {
+    if let Some((c, r)) = to_cell(v.tank.x, v.tank.y) {
         grid[r][c] = '@';
     }
 
-    let inner = GRID_W; // box inner width is the grid width
+    let inner = GRID_W;
     let mut out = String::with_capacity(GRID_H * (GRID_W + 4) + 1024);
 
     let bar = |hp: i64, max: i64, width: usize| -> String {
         let filled = if max > 0 {
-            ((hp.max(0) as i128 * width as i128) / max as i128) as usize
+            (((hp.max(0) as i128) * width as i128) / max as i128) as usize
         } else {
             0
         };
@@ -60,8 +57,8 @@ pub fn frame(s: &ArenaState, log: &[String]) -> String {
         format!("{}{}", "#".repeat(filled), "-".repeat(width - filled))
     };
 
-    let secs = s.tick / sim::TICK_HZ;
-    let status = if s.dead { "DESTROYED" } else { "ALIVE" };
+    let secs = v.tick / sim::TICK_HZ;
+    let status = if v.dead { "DESTROYED" } else { "ALIVE" };
 
     // ---- header / HUD -------------------------------------------------------
     let _ = writeln!(out, "+{}+", "=".repeat(inner));
@@ -70,25 +67,17 @@ pub fn frame(s: &ArenaState, log: &[String]) -> String {
     let _ = writeln!(
         out,
         "| {:<width$}|",
-        format!(
-            "t={:02}:{:02}  tick {}  round {}  [{}]",
-            secs / 60, secs % 60, s.tick, s.round, status
-        ),
+        format!("t={:02}:{:02}  tick {}  round {}  [{}]", secs / 60, secs % 60, v.tick, v.round, status),
         width = inner - 1
     );
     let _ = writeln!(
         out,
         "| {:<width$}|",
-        format!(
-            "HP [{}] {}/{}",
-            bar(s.tank.hp, s.tank.max_hp, 18),
-            s.tank.hp.max(0),
-            s.tank.max_hp
-        ),
+        format!("HP [{}] {}/{}", bar(v.tank.hp, v.tank.max_hp, 18), v.tank.hp.max(0), v.tank.max_hp),
         width = inner - 1
     );
-    let revives = if s.tank.revives > 0 {
-        format!("  revives {}", s.tank.revives)
+    let revives = if v.tank.revives > 0 {
+        format!("  revives {}", v.tank.revives)
     } else {
         String::new()
     };
@@ -97,10 +86,10 @@ pub fn frame(s: &ArenaState, log: &[String]) -> String {
         "| {:<width$}|",
         format!(
             "gold {} (+{}/t)  weapons {}  enemies {}{}",
-            s.economy.gold,
-            s.economy.income_mult.scale_i64(s.economy.income_per_tick),
-            s.weapons.len(),
-            s.enemies.len(),
+            v.economy.gold,
+            v.economy.income_per_tick,
+            v.arsenal.iter().map(|a| a.count).sum::<u32>(),
+            v.enemies.len(),
             revives
         ),
         width = inner - 1
@@ -115,32 +104,24 @@ pub fn frame(s: &ArenaState, log: &[String]) -> String {
 
     // ---- shop ---------------------------------------------------------------
     let _ = writeln!(out, "+{} SHOP {}+", "-".repeat(2), "-".repeat(inner - 8));
-    for (i, off) in s.shop.offers.iter().enumerate() {
-        let (name, owned) = match off.kind {
-            OfferKind::Weapon => (content::WEAPONS[off.def as usize].name, ""),
-            OfferKind::Modifier => (content::MODIFIERS[off.def as usize].name, ""),
-        };
-        let mark = if off.cost > s.economy.gold { "x" } else { "$" };
+    for off in &v.shop {
+        let mark = if off.affordable { "$" } else { "x" };
         let _ = writeln!(
             out,
             "| {:<width$}|",
-            format!("[{}] {:<28} {:>6}g {}{}", i, trunc(name, 28), off.cost, mark, owned),
+            format!("[{}] {:<28} {:>6}g {}", off.slot, trunc(off.name, 28), off.cost, mark),
             width = inner - 1
         );
     }
 
-    // ---- arsenal (counts by weapon) ----------------------------------------
+    // ---- arsenal ------------------------------------------------------------
     let _ = writeln!(out, "+{} ARSENAL {}+", "-".repeat(2), "-".repeat(inner - 11));
-    let mut counts: BTreeMap<&'static str, u32> = BTreeMap::new();
-    for w in &s.weapons {
-        *counts.entry(content::WEAPONS[w.def as usize].name).or_insert(0) += 1;
-    }
-    let arsenal = if counts.is_empty() {
+    let arsenal = if v.arsenal.is_empty() {
         "(none)".to_string()
     } else {
-        counts
+        v.arsenal
             .iter()
-            .map(|(n, c)| format!("{}x{}", trunc(n, 14), c))
+            .map(|a| format!("{}x{}", trunc(a.name, 14), a.count))
             .collect::<Vec<_>>()
             .join("  ")
     };
@@ -157,7 +138,7 @@ pub fn frame(s: &ArenaState, log: &[String]) -> String {
     out
 }
 
-/// Truncate a string to `n` display chars (ASCII), adding nothing.
+/// Truncate to `n` display chars (ASCII), appending an ellipsis when cut.
 fn trunc(s: &str, n: usize) -> String {
     if s.chars().count() <= n {
         s.to_string()
@@ -166,7 +147,7 @@ fn trunc(s: &str, n: usize) -> String {
     }
 }
 
-/// Word-wrap to `width` columns (greedy, whitespace-split).
+/// Greedy word-wrap to `width` columns.
 fn wrap(s: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut cur = String::new();
