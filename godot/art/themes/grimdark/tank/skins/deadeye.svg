@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Deadeye Dan" -->
+  <!-- High 3/4 top-down. Huge telescopic scope-barrel points UP (north, -Y). No baked rotation. -->
+  <!-- One-eyed sniper turret: hunched gunmetal body, giant eyeball squinting up the scope. -->
+  <!-- Steel-blue / gunmetal, cyan targeting-glint core. Deadpan cowboy. -->
+  <defs>
+    <radialGradient id="de_body" cx="40%" cy="30%" r="88%">
+      <stop offset="0%"  stop-color="#7E93A8"/>
+      <stop offset="45%" stop-color="#41525F"/>
+      <stop offset="100%" stop-color="#1A222B"/>
+    </radialGradient>
+    <linearGradient id="de_barrel" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#1A222B"/>
+      <stop offset="28%" stop-color="#8198AC"/>
+      <stop offset="52%" stop-color="#46596A"/>
+      <stop offset="100%" stop-color="#11161D"/>
+    </linearGradient>
+    <radialGradient id="de_lens" cx="42%" cy="34%" r="70%">
+      <stop offset="0%"  stop-color="#DFFAFF"/>
+      <stop offset="35%" stop-color="#4FD0F0"/>
+      <stop offset="75%" stop-color="#0E6E8C"/>
+      <stop offset="100%" stop-color="#06303E"/>
+    </radialGradient>
+    <radialGradient id="de_eye" cx="44%" cy="36%" r="75%">
+      <stop offset="0%"  stop-color="#FFFFFF"/>
+      <stop offset="60%" stop-color="#EAF2F6"/>
+      <stop offset="100%" stop-color="#9FB4C2"/>
+    </radialGradient>
+    <radialGradient id="de_core" cx="50%" cy="42%" r="62%">
+      <stop offset="0%"  stop-color="#EAFEFF"/>
+      <stop offset="40%" stop-color="#5FE0FF"/>
+      <stop offset="100%" stop-color="#0C5A74"/>
+    </radialGradient>
+    <linearGradient id="de_brass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#C2A766"/>
+      <stop offset="45%" stop-color="#8C6E36"/>
+      <stop offset="100%" stop-color="#3A2C12"/>
+    </linearGradient>
+    <filter id="de_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <filter id="de_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="96" cy="164" rx="60" ry="18" fill="#06090D" opacity="0.55"/>
+  <ellipse cx="96" cy="164" rx="40" ry="11" fill="#06090D" opacity="0.45"/>
+
+  <!-- ================= HUNCHED BODY / GUN MOUNT ================= -->
+  <!-- planted feet -->
+  <path d="M44 144 L38 166 L74 166 L70 138 Z" fill="#1A222B" stroke="#06090D" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M148 144 L154 166 L118 166 L122 138 Z" fill="#1A222B" stroke="#06090D" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- hunched mantlet body, lopsided/lower on right (cowboy slouch) -->
+  <path d="M96 64
+           C138 62 156 88 154 120
+           C152 150 128 162 94 162
+           C60 162 38 148 40 116
+           C42 86 56 66 96 64 Z"
+        fill="url(#de_body)" stroke="#0C1117" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- deep AO lower-right -->
+  <path d="M154 120 C152 150 128 162 94 162 C60 162 38 148 40 116
+           C42 130 66 146 96 146 C128 146 152 134 154 120 Z"
+        fill="#06090D" opacity="0.55" filter="url(#de_ao)"/>
+  <!-- rim light forward-left -->
+  <path d="M96 64 C122 63 142 72 152 94 C138 78 118 72 94 73
+           C70 74 52 82 42 98 C52 76 70 65 96 64 Z"
+        fill="#8198AC" opacity="0.45"/>
+  <!-- plate seams -->
+  <path d="M60 104 L74 128" stroke="#06090D" stroke-width="2.5" opacity="0.5" stroke-linecap="round"/>
+  <path d="M132 100 L120 120" stroke="#06090D" stroke-width="2.5" opacity="0.5" stroke-linecap="round"/>
+
+  <!-- tiny cowboy hat brim cocked over the body, north-west -->
+  <ellipse cx="78" cy="70" rx="30" ry="11" fill="#3A2C16" stroke="#15100A" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M62 70 C64 52 70 44 80 44 C90 44 94 54 94 70 Z"
+        fill="#4A3A1E" stroke="#15100A" stroke-width="3" stroke-linejoin="round"/>
+  <ellipse cx="78" cy="64" rx="16" ry="5" fill="url(#de_brass)" opacity="0.85"/>
+
+  <!-- ================= GIANT SCOPE-BARREL (faces UP) ================= -->
+  <!-- cast shadow toward right -->
+  <rect x="96" y="18" width="22" height="72" rx="10" fill="#06090D" opacity="0.4" filter="url(#de_ao)"/>
+  <!-- AO where scope meets body -->
+  <ellipse cx="96" cy="92" rx="26" ry="9" fill="#06090D" opacity="0.55" filter="url(#de_ao)"/>
+  <!-- big telescopic scope tube -->
+  <rect x="76" y="12" width="40" height="84" rx="18" fill="url(#de_barrel)" stroke="#0B0F15" stroke-width="4" stroke-linejoin="round"/>
+  <!-- brass adjustment rings -->
+  <rect x="70" y="40" width="52" height="11" rx="4" fill="url(#de_brass)" stroke="#2A2010" stroke-width="2.5"/>
+  <rect x="70" y="62" width="52" height="11" rx="4" fill="url(#de_brass)" stroke="#2A2010" stroke-width="2.5"/>
+  <!-- lit rim on left of tube -->
+  <rect x="80" y="18" width="5" height="72" rx="2.5" fill="#8198AC" opacity="0.7"/>
+
+  <!-- scope muzzle ring -->
+  <rect x="72" y="6" width="48" height="16" rx="7" fill="url(#de_barrel)" stroke="#0B0F15" stroke-width="4"/>
+  <!-- ================= GLOWING TARGETING LENS (down the scope, ally read) ================= -->
+  <ellipse cx="96" cy="14" rx="22" ry="13" fill="#4FD0F0" opacity="0.55" filter="url(#de_glow)"/>
+  <ellipse cx="96" cy="14" rx="17" ry="9" fill="url(#de_lens)" stroke="#0B5A72" stroke-width="2.5"/>
+  <!-- crosshair reticle in the lens -->
+  <g stroke="#06303E" stroke-width="1.6" opacity="0.8">
+    <path d="M80 14 L112 14"/><path d="M96 6 L96 22"/>
+  </g>
+  <circle cx="96" cy="14" r="3.5" fill="#EAFEFF"/>
+  <ellipse cx="90" cy="10" rx="5" ry="2.5" fill="#FFFFFF" opacity="0.7"/>
+
+  <!-- ================= GIANT SQUINTING EYEBALL (in body, looking up scope) ================= -->
+  <ellipse cx="96" cy="120" rx="32" ry="26" fill="#06090D" opacity="0.5" filter="url(#de_glow)"/>
+  <circle cx="96" cy="118" r="26" fill="url(#de_eye)" stroke="#0C1117" stroke-width="3.5"/>
+  <!-- squint lids, top and bottom, deadpan -->
+  <path d="M70 110 C84 100 108 100 122 110 L122 104 C108 96 84 96 70 104 Z"
+        fill="#41525F" stroke="#0C1117" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M72 130 C84 138 108 138 120 130 L120 136 C108 142 84 142 72 136 Z"
+        fill="#41525F" stroke="#0C1117" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- bushy brow over eye, cowboy scowl -->
+  <path d="M68 100 C82 92 110 92 124 100 L120 96 C106 90 86 90 72 96 Z"
+        fill="#2A2014" opacity="0.85"/>
+  <!-- iris = cyan targeting glint core -->
+  <circle cx="96" cy="120" r="13" fill="url(#de_core)" stroke="#0B5A72" stroke-width="2.5"/>
+  <circle cx="96" cy="120" r="6" fill="#0A0B0F"/>
+  <circle cx="92" cy="116" r="3" fill="#EAFEFF"/>
+
+  <!-- rivets -->
+  <g fill="#8C6E36" stroke="#2A2010" stroke-width="1">
+    <circle cx="54" cy="116" r="3.5"/>
+    <circle cx="138" cy="118" r="3.5"/>
+  </g>
+</svg>

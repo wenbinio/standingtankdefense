@@ -201,6 +201,9 @@ impl StSim {
         let mut a = PackedInt64Array::new();
         a.push(v.stats.damage_dealt);
         a.push(v.stats.gold_earned);
+        a.push(v.stats.bought_attack_mask as i64);
+        a.push(v.stats.weapons_bought as i64);
+        a.push(v.stats.economy_purchases as i64);
         a
     }
 }
@@ -380,6 +383,9 @@ impl StMatch {
         if let Some(v) = self.snap(i) {
             a.push(v.stats.damage_dealt);
             a.push(v.stats.gold_earned);
+            a.push(v.stats.bought_attack_mask as i64);
+            a.push(v.stats.weapons_bought as i64);
+            a.push(v.stats.economy_purchases as i64);
         }
         a
     }

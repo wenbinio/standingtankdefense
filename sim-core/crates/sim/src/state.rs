@@ -336,6 +336,15 @@ pub struct ArenaState {
     pub total_damage_dealt: i64,
     pub total_gold_earned: i64,
 
+    /// Playstyle telemetry for cosmetic achievements (which weapon *attack
+    /// classes* the player chose to BUY, how many weapons, how many income
+    /// purchases). Render/profile-only — NOT fed to the checksum, so it can
+    /// never affect determinism. The free starting Bow is granted, not bought,
+    /// so it does not set a bit here. Bit `n` == `attack_scope_id` `n` (0..6).
+    pub bought_attack_mask: u16,
+    pub weapons_bought: u32,
+    pub economy_purchases: u32,
+
     // Per-purpose RNG streams (cursors ride in snapshots).
     pub rng_spawn: Rng,
     pub rng_targeting: Rng,
@@ -403,6 +412,9 @@ impl ArenaState {
             pending_kills: Vec::new(),
             total_damage_dealt: 0,
             total_gold_earned: 0,
+            bought_attack_mask: 0,
+            weapons_bought: 0,
+            economy_purchases: 0,
             rng_spawn: d(Purpose::Spawn),
             rng_targeting: d(Purpose::Targeting),
             rng_shop: d(Purpose::Shop),
@@ -520,13 +532,22 @@ impl ArenaState {
         match offer.kind {
             OfferKind::Weapon => {
                 let id = self.alloc_entity_id();
+                let def = &content::WEAPONS[offer.def as usize];
+                // Telemetry (cosmetic, off-checksum): record the attack class bought.
+                self.bought_attack_mask |= 1u16 << content::attack_scope_id(def.attack);
+                self.weapons_bought += 1;
                 self.weapons.push(WeaponInstance {
                     instance_id: id,
                     def: offer.def,
                     next_fire_tick: self.tick,
                 });
             }
-            OfferKind::Modifier => self.buy_modifier(offer.def),
+            OfferKind::Modifier => {
+                if content::MODIFIERS[offer.def as usize].effect.is_economy() {
+                    self.economy_purchases += 1;
+                }
+                self.buy_modifier(offer.def);
+            }
         }
     }
 

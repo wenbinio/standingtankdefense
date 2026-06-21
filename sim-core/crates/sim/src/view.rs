@@ -35,6 +35,10 @@ pub struct RenderView {
 pub struct RenderStats {
     pub damage_dealt: i64,
     pub gold_earned: i64,
+    /// Playstyle telemetry (cosmetic achievements). See `ArenaState`.
+    pub bought_attack_mask: u16,
+    pub weapons_bought: u32,
+    pub economy_purchases: u32,
 }
 
 /// World-space integer point (units; tank sits at the origin).
@@ -185,6 +189,9 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         stats: RenderStats {
             damage_dealt: s.total_damage_dealt,
             gold_earned: s.total_gold_earned,
+            bought_attack_mask: s.bought_attack_mask,
+            weapons_bought: s.weapons_bought,
+            economy_purchases: s.economy_purchases,
         },
     }
 }

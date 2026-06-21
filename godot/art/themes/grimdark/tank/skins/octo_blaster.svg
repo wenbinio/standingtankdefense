@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Octo-Blaster" -->
+  <!-- High 3/4 top-down. Cluster of little barrels fans UP (north, -Y). No baked rotation. -->
+  <!-- Cartoon purple octopus, tentacles clutching guns. Purple/magenta, warm muzzle-glow core. -->
+  <defs>
+    <radialGradient id="ob_head" cx="40%" cy="28%" r="90%">
+      <stop offset="0%"  stop-color="#C77BF0"/>
+      <stop offset="45%" stop-color="#8A36C4"/>
+      <stop offset="100%" stop-color="#3E1060"/>
+    </radialGradient>
+    <radialGradient id="ob_tent" cx="40%" cy="30%" r="90%">
+      <stop offset="0%"  stop-color="#B85FE0"/>
+      <stop offset="50%" stop-color="#7A2AB0"/>
+      <stop offset="100%" stop-color="#330C50"/>
+    </radialGradient>
+    <linearGradient id="ob_gun" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#1A1320"/>
+      <stop offset="32%" stop-color="#6E6478"/>
+      <stop offset="60%" stop-color="#3A3242"/>
+      <stop offset="100%" stop-color="#100B16"/>
+    </linearGradient>
+    <radialGradient id="ob_core" cx="50%" cy="44%" r="62%">
+      <stop offset="0%"  stop-color="#FFF6E0"/>
+      <stop offset="38%" stop-color="#FFB347"/>
+      <stop offset="75%" stop-color="#FF5BA0"/>
+      <stop offset="100%" stop-color="#7A1248"/>
+    </radialGradient>
+    <radialGradient id="ob_muzzle" cx="50%" cy="50%" r="60%">
+      <stop offset="0%"  stop-color="#FFF2C0"/>
+      <stop offset="55%" stop-color="#FFA63A"/>
+      <stop offset="100%" stop-color="#FF4D6D"/>
+    </radialGradient>
+    <filter id="ob_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <filter id="ob_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="96" cy="166" rx="64" ry="18" fill="#180626" opacity="0.55"/>
+  <ellipse cx="96" cy="166" rx="42" ry="11" fill="#180626" opacity="0.45"/>
+
+  <!-- ================= SPRAWLING TENTACLES (base) ================= -->
+  <g stroke="#2A0840" stroke-width="3.5" stroke-linejoin="round">
+    <path d="M96 130 C66 134 40 150 30 166 C44 158 56 156 70 156 C58 162 50 166 52 170 C66 162 84 152 96 142 Z" fill="url(#ob_tent)"/>
+    <path d="M96 130 C126 134 152 150 162 166 C148 158 136 156 122 156 C134 162 142 166 140 170 C126 162 108 152 96 142 Z" fill="url(#ob_tent)"/>
+    <path d="M96 134 C84 150 62 158 46 176 C66 162 82 158 96 150 Z" fill="url(#ob_tent)"/>
+    <path d="M96 134 C108 150 130 158 146 176 C126 162 110 158 96 150 Z" fill="url(#ob_tent)"/>
+  </g>
+  <!-- suckers on splayed tentacles -->
+  <g fill="#E2A8F5" stroke="#3E1060" stroke-width="1" opacity="0.9">
+    <circle cx="62" cy="156" r="3"/><circle cx="52" cy="164" r="2.4"/>
+    <circle cx="130" cy="156" r="3"/><circle cx="140" cy="164" r="2.4"/>
+    <circle cx="70" cy="160" r="2.6"/><circle cx="122" cy="160" r="2.6"/>
+  </g>
+
+  <!-- ================= BULBOUS HEAD ================= -->
+  <ellipse cx="96" cy="110" rx="56" ry="13" fill="#180626" opacity="0.5" filter="url(#ob_ao)"/>
+  <path d="M96 44
+           C140 44 156 76 152 110
+           C148 134 124 144 96 144
+           C68 144 44 134 40 110
+           C36 76 52 44 96 44 Z"
+        fill="url(#ob_head)" stroke="#2A0840" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- AO lower-right -->
+  <path d="M152 110 C148 134 124 144 96 144 C68 144 44 134 40 110
+           C44 122 68 132 96 132 C124 132 148 122 152 110 Z"
+        fill="#180626" opacity="0.5" filter="url(#ob_ao)"/>
+  <!-- rim light upper-left -->
+  <path d="M96 44 C124 44 144 56 152 82 C138 62 118 54 96 54
+           C74 54 54 62 40 82 C48 56 68 44 96 44 Z"
+        fill="#D89BF2" opacity="0.5"/>
+  <!-- head spots -->
+  <g fill="#6A1FA0" opacity="0.5">
+    <circle cx="72" cy="96" r="5"/><circle cx="120" cy="100" r="4"/><circle cx="100" cy="116" r="4"/>
+  </g>
+
+  <!-- ================= GUN-CLUTCHING TENTACLES, BARRELS FAN UP ================= -->
+  <!-- each: a curling tentacle holding a little cannon pointing up -->
+  <g stroke="#0B0810" stroke-width="3" stroke-linejoin="round">
+    <!-- far-left gun (angled out) -->
+    <rect x="44" y="30" width="13" height="42" rx="5" fill="url(#ob_gun)" transform="rotate(-22 50 50)"/>
+    <!-- left gun -->
+    <rect x="66" y="20" width="14" height="48" rx="5" fill="url(#ob_gun)" transform="rotate(-10 73 44)"/>
+    <!-- center-left gun (tall) -->
+    <rect x="83" y="12" width="14" height="56" rx="5" fill="url(#ob_gun)"/>
+    <!-- center-right gun (tall) -->
+    <rect x="100" y="14" width="14" height="54" rx="5" fill="url(#ob_gun)" transform="rotate(6 107 40)"/>
+    <!-- right gun -->
+    <rect x="120" y="22" width="14" height="46" rx="5" fill="url(#ob_gun)" transform="rotate(16 127 44)"/>
+    <!-- far-right gun (angled out) -->
+    <rect x="138" y="32" width="13" height="40" rx="5" fill="url(#ob_gun)" transform="rotate(26 144 52)"/>
+  </g>
+  <!-- tentacle wraps around each gun -->
+  <g fill="url(#ob_tent)" stroke="#2A0840" stroke-width="2.5">
+    <ellipse cx="51" cy="60" rx="9" ry="6" transform="rotate(-22 51 60)"/>
+    <ellipse cx="73" cy="58" rx="9" ry="6"/>
+    <ellipse cx="90" cy="58" rx="9" ry="6"/>
+    <ellipse cx="108" cy="58" rx="9" ry="6" transform="rotate(6 108 58)"/>
+    <ellipse cx="126" cy="60" rx="9" ry="6" transform="rotate(16 126 60)"/>
+    <ellipse cx="145" cy="62" rx="9" ry="6" transform="rotate(26 145 62)"/>
+  </g>
+  <!-- warm muzzle glows at the tips -->
+  <g filter="url(#ob_glow)" opacity="0.85">
+    <circle cx="45" cy="30" r="7" fill="url(#ob_muzzle)"/>
+    <circle cx="68" cy="20" r="7.5" fill="url(#ob_muzzle)"/>
+    <circle cx="90" cy="12" r="8" fill="url(#ob_muzzle)"/>
+    <circle cx="108" cy="14" r="8" fill="url(#ob_muzzle)"/>
+    <circle cx="130" cy="22" r="7.5" fill="url(#ob_muzzle)"/>
+    <circle cx="148" cy="34" r="7" fill="url(#ob_muzzle)"/>
+  </g>
+  <!-- dark bores -->
+  <g fill="#0B0810">
+    <circle cx="45" cy="31" r="2.6"/><circle cx="68" cy="21" r="2.8"/><circle cx="90" cy="13" r="3"/>
+    <circle cx="108" cy="15" r="3"/><circle cx="130" cy="23" r="2.8"/><circle cx="148" cy="35" r="2.6"/>
+  </g>
+
+  <!-- ================= BIG GOOGLY EYES ================= -->
+  <circle cx="80" cy="92" r="17" fill="#FFFFFF" stroke="#2A0840" stroke-width="3.5"/>
+  <circle cx="114" cy="92" r="17" fill="#FFFFFF" stroke="#2A0840" stroke-width="3.5"/>
+  <circle cx="84" cy="96" r="8" fill="#16121C"/>
+  <circle cx="110" cy="95" r="8" fill="#16121C"/>
+  <circle cx="81" cy="92" r="3" fill="#FFFFFF"/>
+  <circle cx="107" cy="91" r="3" fill="#FFFFFF"/>
+  <!-- goofy little smile -->
+  <path d="M82 122 C90 132 102 132 110 122" stroke="#2A0840" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+  <!-- ================= WARM MUZZLE-GLOW CORE (belly, ally read) ================= -->
+  <circle cx="96" cy="124" r="18" fill="#FF8A3A" opacity="0.5" filter="url(#ob_glow)"/>
+  <circle cx="96" cy="124" r="12" fill="url(#ob_core)" stroke="#7A1248" stroke-width="2.5"/>
+  <circle cx="92" cy="120" r="3.5" fill="#FFF6E0"/>
+</svg>

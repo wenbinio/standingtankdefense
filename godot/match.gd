@@ -51,6 +51,9 @@ func _physics_process(_delta: float) -> void:
 			"gold": st[1] if st.size() > 1 else 0,
 			"round": arena[5] if arena.size() > 5 else 0,
 			"won": m.placement(0) == 1,
+			"attack_mask": st[2] if st.size() > 2 else 0,
+			"weapons_bought": st[3] if st.size() > 3 else 0,
+			"economy_buys": st[4] if st.size() > 4 else 0,
 		}
 		for id in Profile.record_match(rec):
 			_toast.append(Profile.ach_def(id).get("name", id))

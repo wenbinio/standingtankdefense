@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Franken-Tank" -->
+  <!-- High 3/4 top-down. Mismatched barrels point UP (north, -Y). No baked rotation. -->
+  <!-- Mad-science mash-up: stitched lopsided body, tesla coils, brain jar, electric green core. -->
+  <defs>
+    <radialGradient id="ft_flesh" cx="42%" cy="30%" r="86%">
+      <stop offset="0%"  stop-color="#A8D88A"/>
+      <stop offset="45%" stop-color="#5E8C44"/>
+      <stop offset="100%" stop-color="#243A18"/>
+    </radialGradient>
+    <radialGradient id="ft_metal" cx="40%" cy="28%" r="88%">
+      <stop offset="0%"  stop-color="#9AA6B2"/>
+      <stop offset="50%" stop-color="#566270"/>
+      <stop offset="100%" stop-color="#1E242C"/>
+    </radialGradient>
+    <linearGradient id="ft_bar1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#1E242C"/>
+      <stop offset="32%" stop-color="#8A96A2"/>
+      <stop offset="58%" stop-color="#4A5460"/>
+      <stop offset="100%" stop-color="#141A20"/>
+    </linearGradient>
+    <linearGradient id="ft_bar2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#243A18"/>
+      <stop offset="35%" stop-color="#7CA85A"/>
+      <stop offset="60%" stop-color="#3E5E2A"/>
+      <stop offset="100%" stop-color="#16240E"/>
+    </linearGradient>
+    <radialGradient id="ft_core" cx="50%" cy="40%" r="62%">
+      <stop offset="0%"  stop-color="#EAFFE6"/>
+      <stop offset="40%" stop-color="#5CFF7A"/>
+      <stop offset="100%" stop-color="#0A6A22"/>
+    </radialGradient>
+    <radialGradient id="ft_jar" cx="42%" cy="32%" r="80%">
+      <stop offset="0%"  stop-color="#CFF3E6"/>
+      <stop offset="55%" stop-color="#7FC9B0"/>
+      <stop offset="100%" stop-color="#2C5A48"/>
+    </radialGradient>
+    <filter id="ft_glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+    <filter id="ft_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="96" cy="166" rx="62" ry="16" fill="#040A06" opacity="0.5"/>
+  <ellipse cx="96" cy="166" rx="40" ry="10" fill="#040A06" opacity="0.42"/>
+
+  <!-- ================= TESLA COILS w/ sparks (rear bits) ================= -->
+  <g>
+    <rect x="40" y="92" width="9" height="40" rx="3" fill="url(#ft_metal)" stroke="#0C1016" stroke-width="2.5"/>
+    <circle cx="44.5" cy="86" r="8" fill="#3A4450" stroke="#0C1016" stroke-width="2.5"/>
+    <circle cx="44.5" cy="86" r="9" fill="#9CFFB0" opacity="0.5" filter="url(#ft_glow)"/>
+    <circle cx="44.5" cy="84" r="2.5" fill="#EAFFE6"/>
+    <rect x="143" y="92" width="9" height="40" rx="3" fill="url(#ft_metal)" stroke="#0C1016" stroke-width="2.5"/>
+    <circle cx="147.5" cy="86" r="8" fill="#3A4450" stroke="#0C1016" stroke-width="2.5"/>
+    <circle cx="147.5" cy="86" r="9" fill="#9CFFB0" opacity="0.5" filter="url(#ft_glow)"/>
+    <circle cx="147.5" cy="84" r="2.5" fill="#EAFFE6"/>
+  </g>
+  <!-- electric arc between coils -->
+  <path d="M52 84 L64 78 L58 90 L74 84 L66 96 L82 90" stroke="#BFFFCB" stroke-width="2" fill="none" opacity="0.85" stroke-linecap="round"/>
+  <path d="M140 84 L128 78 L134 90 L118 84 L126 96 L110 90" stroke="#BFFFCB" stroke-width="2" fill="none" opacity="0.85" stroke-linecap="round"/>
+
+  <!-- ================= MISMATCHED BARRELS (all face UP) ================= -->
+  <!-- BIG dark metal barrel (left-of-center) -->
+  <rect x="68" y="18" width="20" height="8" rx="3" fill="#0C1016"/>
+  <rect x="64" y="22" width="28" height="68" rx="9" fill="url(#ft_bar1)" stroke="#0C1016" stroke-width="3.5" stroke-linejoin="round"/>
+  <ellipse cx="78" cy="22" rx="14" ry="5" fill="#0C1016"/>
+  <ellipse cx="78" cy="21" rx="7" ry="2.6" fill="#2A3038"/>
+  <rect x="67" y="28" width="3.5" height="56" rx="1.7" fill="#9AA6B2" opacity="0.6"/>
+  <!-- SMALL green barrel (right-of-center, shorter) -->
+  <rect x="106" y="40" width="22" height="50" rx="7" fill="url(#ft_bar2)" stroke="#0C1016" stroke-width="3.5" stroke-linejoin="round"/>
+  <ellipse cx="117" cy="40" rx="11" ry="4.5" fill="#0C1016"/>
+  <ellipse cx="117" cy="39" rx="5.5" ry="2.2" fill="#2A4A1C"/>
+  <rect x="108" y="46" width="3" height="40" rx="1.5" fill="#A8D88A" opacity="0.55"/>
+  <!-- SPIKY bit (sharp triangle prong) -->
+  <path d="M132 64 L138 30 L146 66 Z" fill="url(#ft_metal)" stroke="#0C1016" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M138 34 L135 62" stroke="#9AA6B2" stroke-width="1.6" opacity="0.5"/>
+  <!-- crooked TUBE (thin, bent) -->
+  <path d="M58 86 C46 70 60 56 52 42" fill="none" stroke="#46525E" stroke-width="8" stroke-linecap="round"/>
+  <path d="M58 86 C46 70 60 56 52 42" fill="none" stroke="#0C1016" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <circle cx="52" cy="42" r="5" fill="#2A3038" stroke="#0C1016" stroke-width="2"/>
+
+  <!-- ================= LOPSIDED STITCHED BODY ================= -->
+  <ellipse cx="96" cy="142" rx="54" ry="14" fill="#040A06" opacity="0.4" filter="url(#ft_ao)"/>
+  <!-- asymmetric blob body -->
+  <path d="M96 78
+           C140 74 158 96 156 122
+           C154 150 124 160 92 159
+           C58 158 34 144 36 114
+           C38 90 54 80 96 78 Z"
+        fill="url(#ft_flesh)" stroke="#0C1016" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- patchwork metal plate (left half is bolted-on metal) -->
+  <path d="M40 110 C38 132 56 152 88 154 L86 96 C60 92 44 96 40 110 Z"
+        fill="url(#ft_metal)" stroke="#0C1016" stroke-width="3.5" stroke-linejoin="round"/>
+  <!-- deep AO lower-right -->
+  <path d="M156 122 C154 150 124 160 92 159 C120 154 142 142 144 116 Z"
+        fill="#040A06" opacity="0.45" filter="url(#ft_ao)"/>
+  <!-- rim light upper-left -->
+  <path d="M96 78 C66 78 48 90 42 108 C54 86 70 80 96 80 Z" fill="#C8EBA8" opacity="0.55"/>
+
+  <!-- big stitch seam down the middle (flesh|metal join) -->
+  <path d="M88 90 L86 154" stroke="#1A2410" stroke-width="3" opacity="0.7"/>
+  <g stroke="#16200C" stroke-width="2.2" stroke-linecap="round">
+    <path d="M82 98 L94 94"/>
+    <path d="M82 112 L94 108"/>
+    <path d="M82 126 L94 122"/>
+    <path d="M82 140 L94 136"/>
+  </g>
+  <!-- second crooked stitch on flesh -->
+  <path d="M114 96 L132 132" stroke="#1A2410" stroke-width="2.6" opacity="0.6"/>
+  <g stroke="#16200C" stroke-width="2" stroke-linecap="round">
+    <path d="M112 104 L124 100"/>
+    <path d="M118 116 L130 112"/>
+    <path d="M124 128 L136 124"/>
+  </g>
+
+  <!-- ================= BRAIN-JAR on top ================= -->
+  <ellipse cx="116" cy="92" rx="18" ry="14" fill="#040A06" opacity="0.3" filter="url(#ft_ao)"/>
+  <rect x="98" y="60" width="36" height="34" rx="14" fill="url(#ft_jar)" stroke="#163A2C" stroke-width="3" opacity="0.92"/>
+  <!-- jar lid -->
+  <rect x="100" y="56" width="32" height="9" rx="3" fill="#46525E" stroke="#0C1016" stroke-width="2.5"/>
+  <!-- the brain -->
+  <path d="M104 78 C104 70 112 68 116 72 C120 68 128 70 128 78 C128 86 118 90 116 86 C114 90 104 86 104 78 Z"
+        fill="#E89AAE" stroke="#9A4A60" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M116 72 L116 86 M110 76 Q113 79 110 82 M122 76 Q119 79 122 82" stroke="#9A4A60" stroke-width="1.4" fill="none"/>
+  <!-- jar glass highlight -->
+  <ellipse cx="108" cy="70" rx="5" ry="9" fill="#EAFFF6" opacity="0.45" transform="rotate(-14 108 70)"/>
+
+  <!-- ================= ELECTRIC GREEN-WHITE CORE (ally read) ================= -->
+  <circle cx="92" cy="124" r="22" fill="#5CFF7A" opacity="0.6" filter="url(#ft_glow)"/>
+  <circle cx="92" cy="124" r="15" fill="url(#ft_core)" stroke="#0A4A18" stroke-width="3.5"/>
+  <circle cx="92" cy="124" r="8" fill="#EAFFE6" opacity="0.55"/>
+  <circle cx="87" cy="119" r="3.5" fill="#FFFFFF"/>
+  <!-- tiny arcs off the core -->
+  <path d="M76 122 L70 118 L74 126" stroke="#BFFFCB" stroke-width="1.6" fill="none" opacity="0.8" stroke-linecap="round"/>
+
+  <!-- big mismatched bolts/rivets -->
+  <g stroke="#0C1016" stroke-width="1.4">
+    <circle cx="50" cy="128" r="4.5" fill="#7A8693"/>
+    <circle cx="138" cy="120" r="4" fill="#5E8C44"/>
+    <circle cx="118" cy="146" r="3.5" fill="#7A8693"/>
+    <rect x="60" y="142" width="7" height="7" rx="1.5" fill="#5E8C44" transform="rotate(20 63 145)"/>
+  </g>
+</svg>

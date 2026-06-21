@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Stone Broke" -->
+  <!-- High 3/4 top-down. Rusty stovepipe barrel points UP (north, -Y). No baked rotation. -->
+  <!-- Dead-broke hobo turret: cardboard box body, taped patches, begging cup, weak dim core. -->
+  <defs>
+    <radialGradient id="sb_box" cx="40%" cy="30%" r="86%">
+      <stop offset="0%"  stop-color="#D8AF74"/>
+      <stop offset="45%" stop-color="#A87A40"/>
+      <stop offset="100%" stop-color="#4E3414"/>
+    </radialGradient>
+    <linearGradient id="sb_boxtop" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#E8C58A"/>
+      <stop offset="100%" stop-color="#9A6E36"/>
+    </linearGradient>
+    <linearGradient id="sb_pipe" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#3A2A1A"/>
+      <stop offset="32%" stop-color="#9A7A5A"/>
+      <stop offset="55%" stop-color="#6E5236"/>
+      <stop offset="100%" stop-color="#241810"/>
+    </linearGradient>
+    <linearGradient id="sb_tape" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#C9C2A8"/>
+      <stop offset="100%" stop-color="#8E876C"/>
+    </linearGradient>
+    <radialGradient id="sb_core" cx="50%" cy="42%" r="62%">
+      <stop offset="0%"  stop-color="#FFF3C0"/>
+      <stop offset="45%" stop-color="#D9A93A"/>
+      <stop offset="100%" stop-color="#6A4708"/>
+    </radialGradient>
+    <radialGradient id="sb_tin" cx="40%" cy="30%" r="85%">
+      <stop offset="0%"  stop-color="#D6DDE4"/>
+      <stop offset="55%" stop-color="#8B949E"/>
+      <stop offset="100%" stop-color="#3A4048"/>
+    </radialGradient>
+    <filter id="sb_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="3.5"/>
+    </filter>
+    <filter id="sb_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="96" cy="166" rx="58" ry="15" fill="#160E04" opacity="0.5"/>
+  <ellipse cx="96" cy="166" rx="38" ry="9" fill="#160E04" opacity="0.42"/>
+
+  <!-- ================= TATTERED FLAG (atop, leaning) ================= -->
+  <path d="M70 22 L70 64" stroke="#3A2A1A" stroke-width="3" stroke-linecap="round"/>
+  <path d="M70 24 L98 28 L90 34 L100 40 L70 44 Z" fill="#8E3A2E" stroke="#3A1A10" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M70 24 L94 27.5" stroke="#D88A7A" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- ================= RUSTY STOVEPIPE BARREL (faces UP) ================= -->
+  <rect x="94" y="32" width="16" height="56" rx="4" fill="#160E04" opacity="0.35" filter="url(#sb_ao)"/>
+  <rect x="82" y="28" width="30" height="62" rx="6" fill="url(#sb_pipe)" stroke="#1A1008" stroke-width="3.5" stroke-linejoin="round"/>
+  <!-- crooked pipe joint bands -->
+  <rect x="78" y="46" width="38" height="9" rx="2" fill="#5A4226" stroke="#1A1008" stroke-width="2"/>
+  <rect x="80" y="66" width="34" height="8" rx="2" fill="#4A3420" stroke="#1A1008" stroke-width="2"/>
+  <!-- rust streaks -->
+  <path d="M100 36 L102 84" stroke="#7A3A18" stroke-width="2" opacity="0.5" stroke-linecap="round"/>
+  <path d="M90 40 L89 80" stroke="#8A4A22" stroke-width="1.5" opacity="0.4" stroke-linecap="round"/>
+  <!-- lit edge -->
+  <rect x="85" y="34" width="3.5" height="52" rx="1.7" fill="#C7A878" opacity="0.6"/>
+  <!-- dented muzzle ring -->
+  <ellipse cx="97" cy="28" rx="16" ry="6" fill="url(#sb_pipe)" stroke="#1A1008" stroke-width="3.5"/>
+  <ellipse cx="97" cy="27" rx="9" ry="3.4" fill="#120C06"/>
+  <ellipse cx="94" cy="26" rx="3" ry="1.2" fill="#5A4226" opacity="0.6"/>
+  <!-- a single sad patch of duct tape on the barrel -->
+  <rect x="86" y="56" width="14" height="10" rx="1.5" fill="url(#sb_tape)" stroke="#5A553E" stroke-width="1.5" transform="rotate(-9 93 61)"/>
+
+  <!-- ================= CARDBOARD BOX BODY ================= -->
+  <ellipse cx="96" cy="142" rx="52" ry="14" fill="#160E04" opacity="0.4" filter="url(#sb_ao)"/>
+  <!-- box: slightly trapezoidal, lopsided -->
+  <path d="M48 96 L144 92 L150 150 L42 154 Z" fill="url(#sb_box)" stroke="#2E1E0C" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- open box top flaps (lighter inner cardboard) -->
+  <path d="M48 96 L96 86 L144 92 L96 100 Z" fill="url(#sb_boxtop)" stroke="#2E1E0C" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M64 89 L96 96 L96 86 Z" fill="#C49A60" opacity="0.6"/>
+  <!-- deep AO lower-right -->
+  <path d="M150 150 L42 154 L42 138 Q96 148 150 134 Z" fill="#160E04" opacity="0.4" filter="url(#sb_ao)"/>
+  <!-- rim light upper-left -->
+  <path d="M48 96 L96 86 L92 92 L52 100 Z" fill="#EBCB92" opacity="0.55"/>
+  <!-- corrugated/scrawl lines -->
+  <path d="M58 118 L138 113" stroke="#5A3E1C" stroke-width="2" opacity="0.45"/>
+  <path d="M56 132 L140 127" stroke="#5A3E1C" stroke-width="2" opacity="0.4"/>
+  <!-- crossed-out "FREE" style scribble box -->
+  <rect x="58" y="122" width="24" height="14" rx="1" fill="none" stroke="#3E2A12" stroke-width="1.6" opacity="0.5"/>
+  <path d="M60 124 L80 134" stroke="#3E2A12" stroke-width="1.4" opacity="0.5"/>
+
+  <!-- patches of duct tape holding the box together -->
+  <rect x="118" y="118" width="22" height="11" rx="1.5" fill="url(#sb_tape)" stroke="#5A553E" stroke-width="1.8" transform="rotate(7 129 123)"/>
+  <rect x="44" y="134" width="20" height="10" rx="1.5" fill="url(#sb_tape)" stroke="#5A553E" stroke-width="1.8" transform="rotate(-11 54 139)"/>
+
+  <!-- ================= WEAK FLICKERING DIM CORE (ally read) ================= -->
+  <circle cx="96" cy="124" r="16" fill="#D9A93A" opacity="0.4" filter="url(#sb_glow)"/>
+  <circle cx="96" cy="124" r="12" fill="url(#sb_core)" stroke="#5A3E10" stroke-width="3"/>
+  <circle cx="96" cy="124" r="6" fill="#FFF3C0" opacity="0.45"/>
+  <circle cx="92" cy="120" r="3" fill="#FFFBE0" opacity="0.8"/>
+
+  <!-- ================= TIN BEGGING CUP w/ single coin ================= -->
+  <path d="M30 138 L42 138 L40 158 L34 158 Z" fill="url(#sb_tin)" stroke="#1E242A" stroke-width="2.5" stroke-linejoin="round"/>
+  <ellipse cx="36" cy="138" rx="6" ry="2.4" fill="#2A3036" stroke="#1E242A" stroke-width="1.5"/>
+  <path d="M42 142 C50 142 50 152 42 152" fill="none" stroke="#5A646E" stroke-width="2.5"/>
+  <!-- the single sad coin -->
+  <ellipse cx="36" cy="138" rx="3" ry="1.4" fill="#E8B844" stroke="#7A5A14" stroke-width="0.8"/>
+  <!-- rim light cup -->
+  <path d="M30.5 139 L34 157" stroke="#D6DDE4" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- ================= EMPTY WALLET w/ MOTH flying out ================= -->
+  <path d="M148 128 L168 132 L166 148 L146 144 Z" fill="#5A3A22" stroke="#2A1808" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M148 128 L168 132 L158 136 L150 134 Z" fill="#7A5230" stroke="#2A1808" stroke-width="2"/>
+  <path d="M148 130 L156 132" stroke="#A87A48" stroke-width="1.2" opacity="0.6"/>
+  <!-- moth -->
+  <g stroke="#3A3024" stroke-width="1.2">
+    <ellipse cx="156" cy="116" rx="5" ry="3.5" fill="#CFC6A8" transform="rotate(-20 156 116)"/>
+    <ellipse cx="164" cy="118" rx="5" ry="3.5" fill="#BCB394" transform="rotate(20 164 118)"/>
+  </g>
+  <ellipse cx="160" cy="117" rx="1.6" ry="3.5" fill="#5A4A30"/>
+  <path d="M160 113 L158 109 M160 113 L162 109" stroke="#3A3024" stroke-width="1" stroke-linecap="round"/>
+
+  <!-- rusty staples/rivets -->
+  <g fill="#7A5A2E" stroke="#2E1E0C" stroke-width="1">
+    <circle cx="54" cy="146" r="2.6"/>
+    <circle cx="138" cy="144" r="2.6"/>
+    <circle cx="96" cy="148" r="2.6"/>
+  </g>
+</svg>

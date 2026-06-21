@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Bouncy Boi" -->
+  <!-- High 3/4 top-down. Rubber ball-cannon launches UP (north, -Y). No baked rotation. -->
+  <!-- Rubbery pinball bumper turret. Glossy red/white rubber, springs, yellow bumper-light core. -->
+  <defs>
+    <radialGradient id="bb_ball" cx="38%" cy="28%" r="86%">
+      <stop offset="0%"  stop-color="#FFB3B0"/>
+      <stop offset="38%" stop-color="#E63A38"/>
+      <stop offset="80%" stop-color="#A21215"/>
+      <stop offset="100%" stop-color="#560508"/>
+    </radialGradient>
+    <radialGradient id="bb_white" cx="40%" cy="30%" r="85%">
+      <stop offset="0%"  stop-color="#FFFFFF"/>
+      <stop offset="55%" stop-color="#E8ECF2"/>
+      <stop offset="100%" stop-color="#A7B0BC"/>
+    </radialGradient>
+    <linearGradient id="bb_spring" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#5B6470"/>
+      <stop offset="40%" stop-color="#C3CCD8"/>
+      <stop offset="65%" stop-color="#79828E"/>
+      <stop offset="100%" stop-color="#2C333D"/>
+    </linearGradient>
+    <linearGradient id="bb_ring" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#FFE062"/>
+      <stop offset="45%" stop-color="#E89A1A"/>
+      <stop offset="100%" stop-color="#7A4A06"/>
+    </linearGradient>
+    <radialGradient id="bb_core" cx="50%" cy="40%" r="62%">
+      <stop offset="0%"  stop-color="#FFFCE0"/>
+      <stop offset="40%" stop-color="#FFD93B"/>
+      <stop offset="100%" stop-color="#A66B00"/>
+    </radialGradient>
+    <radialGradient id="bb_proj" cx="38%" cy="30%" r="82%">
+      <stop offset="0%"  stop-color="#FFFFFF"/>
+      <stop offset="45%" stop-color="#56C6FF"/>
+      <stop offset="100%" stop-color="#0C5C8C"/>
+    </radialGradient>
+    <filter id="bb_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+    <filter id="bb_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="96" cy="166" rx="60" ry="16" fill="#0A0410" opacity="0.5"/>
+  <ellipse cx="96" cy="166" rx="40" ry="10" fill="#0A0410" opacity="0.42"/>
+
+  <!-- ================= LAUNCHED BOUNCING BALL (faces UP) + ricochet arcs ================= -->
+  <!-- ricochet arc marks -->
+  <path d="M70 70 Q84 30 100 56" stroke="#56C6FF" stroke-width="3" fill="none" opacity="0.55" stroke-linecap="round" stroke-dasharray="2 7"/>
+  <path d="M104 52 Q120 16 138 40" stroke="#56C6FF" stroke-width="3" fill="none" opacity="0.45" stroke-linecap="round" stroke-dasharray="2 7"/>
+  <!-- motion swoosh -->
+  <path d="M126 44 q4 -6 9 -2" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.6" stroke-linecap="round"/>
+  <path d="M122 50 q4 -6 9 -2" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.45" stroke-linecap="round"/>
+  <!-- the launched ball -->
+  <circle cx="138" cy="34" r="13" fill="#0A0410" opacity="0.35" filter="url(#bb_ao)"/>
+  <circle cx="136" cy="32" r="13" fill="url(#bb_proj)" stroke="#0C2C44" stroke-width="3"/>
+  <circle cx="131" cy="27" r="4" fill="#FFFFFF" opacity="0.9"/>
+
+  <!-- ================= SPRING / COIL LEGS ================= -->
+  <g fill="none" stroke="url(#bb_spring)" stroke-width="7" stroke-linecap="round">
+    <path d="M54 150 q-12 -8 0 -16 q12 -8 0 -16 q-12 -8 0 -16"/>
+    <path d="M138 150 q12 -8 0 -16 q-12 -8 0 -16 q12 -8 0 -16"/>
+  </g>
+  <g fill="none" stroke="#1B2129" stroke-width="2" stroke-linecap="round" opacity="0.5">
+    <path d="M54 150 q-12 -8 0 -16 q12 -8 0 -16 q-12 -8 0 -16"/>
+    <path d="M138 150 q12 -8 0 -16 q-12 -8 0 -16 q12 -8 0 -16"/>
+  </g>
+  <!-- splayed rubber feet -->
+  <g fill="#2C333D" stroke="#080B0F" stroke-width="2.5" stroke-linejoin="round">
+    <ellipse cx="50" cy="154" rx="14" ry="7"/>
+    <ellipse cx="142" cy="154" rx="14" ry="7"/>
+  </g>
+  <ellipse cx="46" cy="151" rx="5" ry="2.4" fill="#79828E" opacity="0.7"/>
+  <ellipse cx="138" cy="151" rx="5" ry="2.4" fill="#79828E" opacity="0.7"/>
+
+  <!-- ================= GLOSSY RUBBER BALL-CANNON BODY ================= -->
+  <ellipse cx="96" cy="138" rx="52" ry="14" fill="#0A0410" opacity="0.4" filter="url(#bb_ao)"/>
+  <circle cx="96" cy="108" r="58" fill="url(#bb_ball)" stroke="#3E0608" stroke-width="4.5"/>
+  <!-- deep AO lower-right -->
+  <path d="M152 116 A58 58 0 0 1 60 152 A58 58 0 0 0 146 92 Z" fill="#3E0608" opacity="0.45" filter="url(#bb_ao)"/>
+  <!-- big white rubber belt stripe -->
+  <path d="M40 92 Q96 78 152 92 L150 116 Q96 102 42 116 Z" fill="url(#bb_white)" stroke="#3E0608" stroke-width="3.5"/>
+  <!-- white stripe top rim light -->
+  <path d="M44 92 Q96 80 148 92" stroke="#FFFFFF" stroke-width="2" fill="none" opacity="0.7"/>
+  <!-- rim light upper-left on the red ball -->
+  <path d="M96 50 C66 50 46 72 42 96 C54 70 72 60 96 60 Z" fill="#FFD0CE" opacity="0.6"/>
+  <!-- big squishy gloss highlight -->
+  <ellipse cx="74" cy="78" rx="17" ry="11" fill="#FFFFFF" opacity="0.6" transform="rotate(-28 74 78)"/>
+  <ellipse cx="118" cy="132" rx="9" ry="5" fill="#FF8B88" opacity="0.4"/>
+
+  <!-- ================= YELLOW BUMPER RINGS (around the launch mouth) ================= -->
+  <ellipse cx="96" cy="74" rx="34" ry="16" fill="#0A0410" opacity="0.35" filter="url(#bb_ao)"/>
+  <ellipse cx="96" cy="70" rx="33" ry="15" fill="none" stroke="url(#bb_ring)" stroke-width="9"/>
+  <ellipse cx="96" cy="70" rx="33" ry="15" fill="none" stroke="#5A3804" stroke-width="2" opacity="0.5"/>
+  <ellipse cx="96" cy="66" rx="22" ry="9" fill="none" stroke="url(#bb_ring)" stroke-width="7"/>
+  <!-- ring lit edges -->
+  <path d="M66 64 A33 15 0 0 1 110 58" stroke="#FFF0A0" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <!-- launch mouth -->
+  <ellipse cx="96" cy="64" rx="13" ry="6.5" fill="#1A0A02"/>
+  <ellipse cx="96" cy="63" rx="7" ry="3.4" fill="#3A1808"/>
+  <ellipse cx="92" cy="61" rx="3" ry="1.4" fill="#FFD93B" opacity="0.7"/>
+
+  <!-- ================= YELLOW BUMPER-LIGHT CORE (ally read) ================= -->
+  <circle cx="96" cy="112" r="22" fill="#FFD93B" opacity="0.6" filter="url(#bb_glow)"/>
+  <circle cx="96" cy="112" r="16" fill="url(#bb_core)" stroke="#7A4A06" stroke-width="3.5"/>
+  <circle cx="96" cy="112" r="9" fill="#FFF6C8" opacity="0.55"/>
+  <circle cx="91" cy="107" r="4" fill="#FFFFFF"/>
+
+  <!-- little bumper studs around body -->
+  <g fill="#FFE062" stroke="#7A4A06" stroke-width="1.5">
+    <circle cx="52" cy="120" r="4"/>
+    <circle cx="140" cy="120" r="4"/>
+    <circle cx="70" cy="142" r="3.5"/>
+    <circle cx="122" cy="142" r="3.5"/>
+  </g>
+</svg>

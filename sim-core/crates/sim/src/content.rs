@@ -256,6 +256,14 @@ impl ModEffect {
                 | ModEffect::TradeRegenForGold(..)
         )
     }
+    /// Income/gold-generation effects — what a "no economy" run abstains from.
+    /// Render-only telemetry; never feeds the checksum.
+    pub fn is_economy(self) -> bool {
+        matches!(
+            self,
+            ModEffect::IncomeFlat(..) | ModEffect::IncomePct(..) | ModEffect::GrantGold(..)
+        )
+    }
     /// Inverse of [`words`](Self::words).
     pub fn from_words(tag: u8, a: i64, b: i64, c: i64) -> Option<ModEffect> {
         Some(match tag {

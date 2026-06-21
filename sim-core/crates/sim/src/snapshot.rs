@@ -307,6 +307,9 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     }
     w.i64(s.total_damage_dealt);
     w.i64(s.total_gold_earned);
+    w.i64(s.bought_attack_mask as i64);
+    w.i64(s.weapons_bought as i64);
+    w.i64(s.economy_purchases as i64);
 
     // rng cursors
     w.rng(s.rng_spawn);
@@ -506,6 +509,9 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
     }
     let total_damage_dealt = r.i64()?;
     let total_gold_earned = r.i64()?;
+    let bought_attack_mask = r.i64()? as u16;
+    let weapons_bought = r.i64()? as u32;
+    let economy_purchases = r.i64()? as u32;
 
     let rng_spawn = r.rng()?;
     let rng_targeting = r.rng()?;
@@ -539,6 +545,9 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         pending_kills,
         total_damage_dealt,
         total_gold_earned,
+        bought_attack_mask,
+        weapons_bought,
+        economy_purchases,
         rng_spawn,
         rng_targeting,
         rng_shop,

@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Disco Doom" -->
+  <!-- High 3/4 top-down. Mirrored disco-ball turret on a stand, emitting a pulse ring outward. -->
+  <!-- Faceted mirror tiles, rainbow glints, white-pink pulse core. Party-meets-war. -->
+  <defs>
+    <radialGradient id="dd_ball" cx="40%" cy="30%" r="85%">
+      <stop offset="0%"  stop-color="#F2F6FF"/>
+      <stop offset="45%" stop-color="#A8B6D0"/>
+      <stop offset="100%" stop-color="#3A4660"/>
+    </radialGradient>
+    <radialGradient id="dd_pulse" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="62%" stop-color="#FF8AD8" stop-opacity="0"/>
+      <stop offset="80%" stop-color="#FFB0E6" stop-opacity="0.85"/>
+      <stop offset="90%" stop-color="#9FE0FF" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#C7A8FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="dd_core" cx="50%" cy="42%" r="62%">
+      <stop offset="0%"  stop-color="#FFFFFF"/>
+      <stop offset="45%" stop-color="#FFA8E0"/>
+      <stop offset="100%" stop-color="#B0307A"/>
+    </radialGradient>
+    <linearGradient id="dd_stand" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#9AA6B8"/>
+      <stop offset="45%" stop-color="#525E70"/>
+      <stop offset="100%" stop-color="#1C222C"/>
+    </linearGradient>
+    <linearGradient id="dd_emit" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#5A2E08"/>
+      <stop offset="40%" stop-color="#9AA6B8"/>
+      <stop offset="100%" stop-color="#E8F0FF"/>
+    </linearGradient>
+    <filter id="dd_glow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+    <filter id="dd_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="96" cy="168" rx="56" ry="16" fill="#0A0814" opacity="0.55"/>
+  <ellipse cx="96" cy="168" rx="36" ry="10" fill="#0A0814" opacity="0.45"/>
+
+  <!-- ================= OUTWARD PULSE AURA RING (the area pulse) ================= -->
+  <circle cx="96" cy="96" r="86" fill="url(#dd_pulse)" filter="url(#dd_glow)"/>
+  <circle cx="96" cy="96" r="80" fill="none" stroke="#FFB0E6" stroke-width="3" opacity="0.55"/>
+  <circle cx="96" cy="96" r="68" fill="none" stroke="#9FE0FF" stroke-width="2.5" opacity="0.45"/>
+  <!-- colored light beams shooting outward -->
+  <g opacity="0.5" stroke-linecap="round">
+    <path d="M96 96 L96 22" stroke="#FF6BC4" stroke-width="4"/>
+    <path d="M96 96 L160 60" stroke="#6BE0FF" stroke-width="4"/>
+    <path d="M96 96 L164 130" stroke="#FFE36B" stroke-width="4"/>
+    <path d="M96 96 L120 166" stroke="#9F6BFF" stroke-width="4"/>
+    <path d="M96 96 L60 162" stroke="#6BFFB0" stroke-width="4"/>
+    <path d="M96 96 L28 124" stroke="#FF9F6B" stroke-width="4"/>
+    <path d="M96 96 L30 58" stroke="#FFFFFF" stroke-width="4"/>
+  </g>
+
+  <!-- ================= STAND / TRIPOD ================= -->
+  <path d="M70 150 L62 168 L86 168 L88 138 Z" fill="url(#dd_stand)" stroke="#0C1117" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M122 150 L130 168 L106 168 L104 138 Z" fill="url(#dd_stand)" stroke="#0C1117" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="84" y="124" width="24" height="26" rx="5" fill="url(#dd_stand)" stroke="#0C1117" stroke-width="3"/>
+  <ellipse cx="96" cy="126" rx="34" ry="9" fill="#0A0814" opacity="0.5" filter="url(#dd_ao)"/>
+
+  <!-- ================= EMITTER NOZZLE (faces UP, fires the pulse) ================= -->
+  <ellipse cx="96" cy="20" rx="13" ry="9" fill="#FFB0E6" opacity="0.6" filter="url(#dd_glow)"/>
+  <rect x="86" y="14" width="20" height="34" rx="8" fill="url(#dd_emit)" stroke="#0C1117" stroke-width="3.5" stroke-linejoin="round"/>
+  <ellipse cx="96" cy="16" rx="9" ry="5" fill="#FFFFFF" opacity="0.9"/>
+  <ellipse cx="96" cy="16" rx="4.5" ry="2.5" fill="#FFA8E0"/>
+
+  <!-- ================= MIRRORED DISCO BALL ================= -->
+  <circle cx="96" cy="92" r="50" fill="url(#dd_ball)" stroke="#1C222C" stroke-width="4.5"/>
+  <!-- AO lower-right -->
+  <path d="M146 92 A50 50 0 0 1 96 142 A50 50 0 0 0 138 64 Z" fill="#222A3A" opacity="0.45" filter="url(#dd_ao)"/>
+  <!-- rim light upper-left -->
+  <path d="M96 42 A50 50 0 0 0 54 116 A50 50 0 0 1 88 48 Z" fill="#F2F6FF" opacity="0.5"/>
+
+  <!-- mirror tile grid (faceted) -->
+  <g stroke="#2A3344" stroke-width="1.4" opacity="0.7">
+    <path d="M50 76 H142 M48 92 H144 M50 108 H142 M58 124 H134 M62 60 H130"/>
+    <path d="M70 44 V140 M84 43 V141 M96 42 V142 M108 43 V141 M122 44 V140"/>
+  </g>
+  <!-- individual lit tiles (highlights) -->
+  <g opacity="0.85">
+    <rect x="72" y="60" width="11" height="13" rx="1.5" fill="#FFFFFF" opacity="0.7"/>
+    <rect x="98" y="62" width="11" height="13" rx="1.5" fill="#CFE0FF" opacity="0.6"/>
+    <rect x="84" y="78" width="11" height="13" rx="1.5" fill="#FFFFFF" opacity="0.55"/>
+    <rect x="110" y="80" width="11" height="13" rx="1.5" fill="#B8C8E8" opacity="0.55"/>
+    <rect x="62" y="94" width="11" height="13" rx="1.5" fill="#DCE8FF" opacity="0.5"/>
+  </g>
+  <!-- rainbow speckle glints scattered across the ball -->
+  <g>
+    <circle cx="78" cy="66" r="2.6" fill="#FF6BC4"/>
+    <circle cx="104" cy="58" r="2.4" fill="#6BE0FF"/>
+    <circle cx="118" cy="74" r="2.6" fill="#FFE36B"/>
+    <circle cx="68" cy="100" r="2.4" fill="#9F6BFF"/>
+    <circle cx="92" cy="86" r="3" fill="#FFFFFF"/>
+    <circle cx="122" cy="100" r="2.4" fill="#6BFFB0"/>
+    <circle cx="82" cy="112" r="2.4" fill="#FF9F6B"/>
+    <circle cx="108" cy="116" r="2.6" fill="#FF6BC4"/>
+    <circle cx="96" cy="124" r="2.2" fill="#6BE0FF"/>
+  </g>
+
+  <!-- ================= WHITE-PINK PULSE CORE (ally read) ================= -->
+  <circle cx="96" cy="92" r="22" fill="#FFA8E0" opacity="0.55" filter="url(#dd_glow)"/>
+  <circle cx="96" cy="92" r="14" fill="url(#dd_core)" stroke="#B0307A" stroke-width="2.5"/>
+  <circle cx="91" cy="87" r="4" fill="#FFFFFF"/>
+</svg>
