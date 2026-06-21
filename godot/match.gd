@@ -13,14 +13,24 @@ var enemy_tex := []           # by kind: 0 grunt, 1 steam, 2 boss
 func _ready() -> void:
 	randomize()
 	m = StMatch.new_match(N, randi())
+	_load_textures()
+
+func _load_textures() -> void:
 	tex = {
-		"ground": load("res://art/env/arena_ground.svg"),
-		"ring":   load("res://art/env/spawn_ring.svg"),
-		"tank":   load("res://art/tank/player_tank.svg"),
-		"coin":   load("res://art/ui/coin.svg"),
+		"ground": ArtTheme.tex("env/arena_ground.svg"),
+		"ring":   ArtTheme.tex("env/spawn_ring.svg"),
+		"tank":   ArtTheme.tex("tank/player_tank.svg"),
+		"coin":   ArtTheme.tex("ui/coin.svg"),
 	}
-	enemy_tex = [load("res://art/enemies/fel_orc_grunt.svg"),
-		load("res://art/enemies/steam_tank.svg"), load("res://art/enemies/samwise.svg")]
+	enemy_tex = [ArtTheme.tex("enemies/fel_orc_grunt.svg"),
+		ArtTheme.tex("enemies/steam_tank.svg"), ArtTheme.tex("enemies/samwise.svg")]
+
+func _unhandled_key_input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo:
+		if e.keycode == KEY_T:
+			ArtTheme.cycle(); _load_textures()
+		elif e.keycode == KEY_ESCAPE:
+			get_tree().quit()
 
 func _physics_process(_delta: float) -> void:
 	if m == null:

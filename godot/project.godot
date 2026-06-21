@@ -2,6 +2,10 @@
 ; Open this folder in Godot 4.3+ AFTER building the gdext lib (see README.md).
 config_version=5
 
+[autoload]
+
+ArtTheme="*res://theme.gd"
+
 [application]
 
 config/name="Standing Tank Defense (preview)"

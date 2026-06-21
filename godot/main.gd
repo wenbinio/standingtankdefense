@@ -24,24 +24,27 @@ var frame_tex := []           # by rarity 0..3
 func _ready() -> void:
 	randomize()
 	sim = StSim.new_match(randi())
+	_load_textures()
+
+func _load_textures() -> void:
 	tex = {
-		"ground": load("res://art/env/arena_ground.svg"),
-		"ring":   load("res://art/env/spawn_ring.svg"),
-		"tank":   load("res://art/tank/player_tank.svg"),
-		"proj":   load("res://art/projectiles/magic_orb.svg"),
-		"clear":  load("res://art/fx/clear_shockwave.svg"),
-		"muzzle": load("res://art/fx/muzzle_flash.svg"),
-		"poof":   load("res://art/fx/death_poof.svg"),
-		"coin":   load("res://art/ui/coin.svg"),
-		"heart":  load("res://art/ui/heart.svg"),
-		"weapon": load("res://art/ui/icon_weapon.svg"),
-		"mod":    load("res://art/ui/icon_modifier.svg"),
-		"panel":  load("res://art/ui/panel.svg"),
+		"ground": ArtTheme.tex("env/arena_ground.svg"),
+		"ring":   ArtTheme.tex("env/spawn_ring.svg"),
+		"tank":   ArtTheme.tex("tank/player_tank.svg"),
+		"proj":   ArtTheme.tex("projectiles/magic_orb.svg"),
+		"clear":  ArtTheme.tex("fx/clear_shockwave.svg"),
+		"muzzle": ArtTheme.tex("fx/muzzle_flash.svg"),
+		"poof":   ArtTheme.tex("fx/death_poof.svg"),
+		"coin":   ArtTheme.tex("ui/coin.svg"),
+		"heart":  ArtTheme.tex("ui/heart.svg"),
+		"weapon": ArtTheme.tex("ui/icon_weapon.svg"),
+		"mod":    ArtTheme.tex("ui/icon_modifier.svg"),
+		"panel":  ArtTheme.tex("ui/panel.svg"),
 	}
-	enemy_tex = [load("res://art/enemies/fel_orc_grunt.svg"),
-		load("res://art/enemies/steam_tank.svg"), load("res://art/enemies/samwise.svg")]
-	frame_tex = [load("res://art/ui/frame_common.svg"), load("res://art/ui/frame_uncommon.svg"),
-		load("res://art/ui/frame_rare.svg"), load("res://art/ui/frame_epic.svg")]
+	enemy_tex = [ArtTheme.tex("enemies/fel_orc_grunt.svg"),
+		ArtTheme.tex("enemies/steam_tank.svg"), ArtTheme.tex("enemies/samwise.svg")]
+	frame_tex = [ArtTheme.tex("ui/frame_common.svg"), ArtTheme.tex("ui/frame_uncommon.svg"),
+		ArtTheme.tex("ui/frame_rare.svg"), ArtTheme.tex("ui/frame_epic.svg")]
 
 func _unhandled_key_input(e: InputEvent) -> void:
 	if not (e is InputEventKey) or not e.pressed or e.echo:
@@ -52,6 +55,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		KEY_3: pending_code = 1; pending_slot = 2
 		KEY_R: pending_code = 2
 		KEY_SPACE: pending_code = 3
+		KEY_T: ArtTheme.cycle(); _load_textures()
 		KEY_ESCAPE: get_tree().quit()
 
 func _physics_process(_delta: float) -> void:
