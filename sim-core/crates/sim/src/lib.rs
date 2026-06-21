@@ -17,6 +17,7 @@ mod input;
 mod modifiers;
 mod shop;
 mod state;
+mod status;
 mod waves;
 
 pub use ids::*;
@@ -59,11 +60,13 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     combat::advance_projectiles(s);
     // 6. Enemies advance toward the tank; contact damage on arrival.
     combat::move_enemies(s);
-    // 7. Drain pending_kills → award bounty (scaled by bounty_mult).
+    // 7. Status effects: poison DoT, frost/stun decay (poison kills → pending_kills).
+    status::tick(s);
+    // 8. Drain pending_kills → award bounty (scaled by bounty_mult).
     economy::collect_bounties(s);
-    // 8. Passive income.
+    // 9. Passive income.
     economy::tick_income(s);
-    // 9. Death check (tank hp ≤ 0).
+    // 10. Death check (tank hp ≤ 0).
     economy::resolve_deaths(s);
 
     s.tick += 1;
@@ -145,6 +148,12 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_i64(x.hp);
         c.write_fixed(x.pos.x);
         c.write_fixed(x.pos.y);
+        c.write_i64(x.status.poison_dps);
+        c.write_u32(x.status.poison_ticks);
+        c.write_u32(x.status.frost_stacks as u32);
+        c.write_u32(x.status.frost_ticks);
+        c.write_u32(x.status.fire_stacks as u32);
+        c.write_u32(x.status.stun_ticks);
     }
 
     // Projectiles in id order.
@@ -160,6 +169,11 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.damage_type as u32);
         c.write_fixed(x.splash_radius);
         c.write_fixed(x.speed);
+        c.write_i64(x.on_hit.poison_dps);
+        c.write_u32(x.on_hit.poison_ticks);
+        c.write_u32(x.on_hit.frost_stacks as u32);
+        c.write_u32(x.on_hit.fire_stacks as u32);
+        c.write_u32(x.on_hit.stun_ticks);
     }
 
     c.finish()

@@ -87,12 +87,7 @@ mod tests {
     }
 
     fn mk_enemy(id: u32, def: u16, hp: i64) -> Enemy {
-        Enemy {
-            id: crate::ids::EntityId(id),
-            def,
-            hp,
-            pos: Vec2::ZERO,
-        }
+        Enemy::new(crate::ids::EntityId(id), def, hp, Vec2::ZERO)
     }
 
     #[test]

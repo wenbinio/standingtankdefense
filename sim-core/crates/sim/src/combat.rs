@@ -8,6 +8,26 @@ use crate::ids::EntityId;
 use crate::state::*;
 use determinism::Fixed;
 
+/// Apply one weapon hit to an enemy: `base × armor-matrix × modifier-stack ×
+/// fire-vulnerability` damage, then the weapon's on-hit status. Bosses are
+/// immune to weapon fire — only `Clear` damages them.
+fn apply_weapon_hit(
+    e: &mut Enemy,
+    base: i64,
+    damage_type: u8,
+    mod_mult: Fixed,
+    on_hit: &content::StatusOnHit,
+) {
+    let edef = &content::ENEMIES[e.def as usize];
+    if edef.boss {
+        return;
+    }
+    let armor = content::damage_multiplier(damage_type, edef.armor_class);
+    let vuln = crate::status::vulnerability_mult(e);
+    e.hp -= armor.mul(mod_mult).mul(vuln).scale_i64(base);
+    crate::status::apply_on_hit(e, on_hit);
+}
+
 /// Phase 4: each ready weapon (`s.tick >= next_fire_tick`) picks a target —
 /// RANDOM among enemies within `range` (via `s.rng_targeting.below(n)`, matching
 /// the source's "attack at random") — and emits a `Projectile` toward it
@@ -60,6 +80,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
             damage_type: wdef.damage_type,
             splash_radius,
             speed: Fixed::from_int(wdef.proj_speed),
+            on_hit: wdef.on_hit,
         });
 
         // Effective cooldown is reduced by the attack-speed modifier.
@@ -96,6 +117,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
         damage: i64,
         damage_type: u8,
         splash_radius: Fixed,
+        on_hit: crate::content::StatusOnHit,
     }
 
     let mut impacts: Vec<Impact> = Vec::new();
@@ -123,6 +145,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                         damage: p.damage,
                         damage_type: p.damage_type,
                         splash_radius: p.splash_radius,
+                        on_hit: p.on_hit,
                     });
                 } else {
                     p.pos = moved;
@@ -139,6 +162,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                         damage: p.damage,
                         damage_type: p.damage_type,
                         splash_radius: p.splash_radius,
+                        on_hit: p.on_hit,
                     });
                 }
                 // either way, projectile is removed (not pushed to survivors).
@@ -149,24 +173,20 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     s.projectiles = survivors;
 
     // Apply impacts in order. Track kills to push their defs after. Final damage
-    // = base × armor-matrix × modifier-stack (`docs/05 §5.3`).
+    // = base × armor-matrix × modifier-stack × status-vulnerability
+    // (`docs/05 §5.3`). Bosses are immune to weapon fire (only `Clear` hurts
+    // them), and each hit also applies the weapon's on-hit status.
     for imp in impacts {
         let mod_mult = s.modifiers.damage_mult(imp.damage_type);
         if imp.splash_radius > Fixed::ZERO {
             let radius_sq = imp.splash_radius.mul(imp.splash_radius);
-            // Hit every enemy within the splash radius of the impact point,
-            // in stable id order.
             for e in s.enemies.iter_mut() {
                 if imp.point.dist_sq(e.pos) <= radius_sq {
-                    let edef = &content::ENEMIES[e.def as usize];
-                    let armor = content::damage_multiplier(imp.damage_type, edef.armor_class);
-                    e.hp -= armor.mul(mod_mult).scale_i64(imp.damage);
+                    apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, &imp.on_hit);
                 }
             }
         } else if let Some(e) = s.enemies.iter_mut().find(|e| e.id == imp.target) {
-            let edef = &content::ENEMIES[e.def as usize];
-            let armor = content::damage_multiplier(imp.damage_type, edef.armor_class);
-            e.hp -= armor.mul(mod_mult).scale_i64(imp.damage);
+            apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, &imp.on_hit);
         }
     }
 
@@ -191,8 +211,14 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
     let mut survivors: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
 
     for mut e in std::mem::take(&mut s.enemies) {
+        // Stunned enemies can't move this tick.
+        if crate::status::is_immobile(&e) {
+            survivors.push(e);
+            continue;
+        }
         let edef = &content::ENEMIES[e.def as usize];
-        let speed = Fixed::from_int(edef.move_speed);
+        // Movement is slowed by Frost stacks.
+        let speed = Fixed::from_int(edef.move_speed).mul(crate::status::move_speed_mult(&e));
         let moved = e.pos.step_toward(tank_pos, speed);
         if moved == tank_pos {
             // Contact: deal contact damage, remove enemy (no bounty for
@@ -221,7 +247,7 @@ mod tests {
 
     fn mk_enemy(s: &mut ArenaState, def: u16, hp: i64, pos: Vec2) -> EntityId {
         let id = s.alloc_entity_id();
-        s.enemies.push(Enemy { id, def, hp, pos });
+        s.enemies.push(Enemy::new(id, def, hp, pos));
         id
     }
 
@@ -285,6 +311,7 @@ mod tests {
                 damage_type: content::DMG_NORMAL, // armor matrix = 1.0 here
                 splash_radius: Fixed::ZERO,
                 speed: Fixed::from_int(1000),
+                on_hit: content::StatusOnHit::NONE,
             });
             advance_projectiles(&mut s);
             1_000_000 - s.enemies[0].hp // damage dealt
@@ -327,6 +354,7 @@ mod tests {
             damage_type: content::DMG_PIERCING,
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
         });
         advance_projectiles(&mut s);
         assert!(s.enemies.is_empty(), "enemy should be dead");
@@ -350,6 +378,7 @@ mod tests {
             damage_type: content::DMG_PIERCING,
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(10), // far from arriving
+            on_hit: content::StatusOnHit::NONE,
         });
         advance_projectiles(&mut s);
         assert_eq!(s.projectiles.len(), 1, "still in flight");
@@ -379,6 +408,7 @@ mod tests {
             damage_type: content::DMG_SIEGE,
             splash_radius: Fixed::from_int(300),
             speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
         });
         advance_projectiles(&mut s);
         // Two near enemies dead, far one survives.
@@ -404,6 +434,7 @@ mod tests {
             damage_type: content::DMG_SIEGE,
             splash_radius: Fixed::from_int(300),
             speed: Fixed::from_int(10),
+            on_hit: content::StatusOnHit::NONE,
         });
         advance_projectiles(&mut s);
         assert!(s.enemies.is_empty(), "bystander killed by detonation");
@@ -426,6 +457,7 @@ mod tests {
             damage_type: content::DMG_PIERCING,
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(10),
+            on_hit: content::StatusOnHit::NONE,
         });
         advance_projectiles(&mut s);
         assert_eq!(s.enemies.len(), 1, "bystander untouched by single-target miss");
@@ -480,5 +512,53 @@ mod tests {
         assert_eq!(a.projectiles, b.projectiles, "same seed → same target chosen");
         assert_eq!(a.rng_targeting.state(), b.rng_targeting.state());
         assert_eq!(a.projectiles.len(), 1);
+    }
+
+    #[test]
+    fn weapon_applies_on_hit_status() {
+        // Poison Bow (def 3) applies poison on hit through advance_projectiles.
+        let mut s = blank_state();
+        s.weapons.clear();
+        let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
+        let eid = mk_enemy(&mut s, 0, 100_000, pos); // survives the impact
+        let pid = s.alloc_entity_id();
+        let pb = &content::WEAPONS[3];
+        s.projectiles.push(Projectile {
+            id: pid,
+            pos: Vec2::ZERO,
+            target: eid,
+            last_target_pos: pos,
+            damage: pb.damage,
+            damage_type: pb.damage_type,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+            on_hit: pb.on_hit,
+        });
+        advance_projectiles(&mut s);
+        assert_eq!(s.enemies[0].status.poison_dps, 20, "poison applied on hit");
+        assert_eq!(s.enemies[0].status.poison_ticks, 90);
+    }
+
+    #[test]
+    fn boss_is_immune_to_weapon_fire() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
+        let bid = mk_enemy(&mut s, content::SAMWISE, 10_000_000, pos);
+        let _ = bid;
+        let pid = s.alloc_entity_id();
+        s.projectiles.push(Projectile {
+            id: pid,
+            pos: Vec2::ZERO,
+            target: s.enemies[0].id,
+            last_target_pos: pos,
+            damage: 1_000_000,
+            damage_type: content::DMG_PIERCING,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
+        });
+        advance_projectiles(&mut s);
+        assert_eq!(s.enemies[0].hp, 10_000_000, "boss takes zero weapon damage");
     }
 }

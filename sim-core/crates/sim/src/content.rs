@@ -21,6 +21,29 @@ pub enum Attack {
     Splash(i64),
 }
 
+/// Maximum frost stacks (each ~2% slow); referenced by the status system.
+pub const FROST_MAX_STACKS: u8 = 25;
+
+/// Status a weapon applies on hit. `NONE` = pure damage (most weapons).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct StatusOnHit {
+    pub poison_dps: i64,
+    pub poison_ticks: u32,
+    pub frost_stacks: u8,
+    pub fire_stacks: u16,
+    pub stun_ticks: u32,
+}
+
+impl StatusOnHit {
+    pub const NONE: StatusOnHit = StatusOnHit {
+        poison_dps: 0,
+        poison_ticks: 0,
+        frost_stacks: 0,
+        fire_stacks: 0,
+        stun_ticks: 0,
+    };
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct WeaponDef {
     pub name: &'static str,
@@ -32,6 +55,8 @@ pub struct WeaponDef {
     pub cooldown_ticks: u32,
     pub range: i64,      // integer units; compared via range*range
     pub proj_speed: i64, // units per tick
+    /// Status applied to whatever this weapon hits.
+    pub on_hit: StatusOnHit,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -42,6 +67,8 @@ pub struct EnemyDef {
     pub contact_damage: i64,
     pub bounty: i64,
     pub armor_class: u8,
+    /// A boss (e.g. Samwise) — immune to weapon fire; only `Clear` damages it.
+    pub boss: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -95,8 +122,10 @@ pub static MODIFIERS: &[ModifierDef] = &[
 /// The weapon the tank starts with (index into [`WEAPONS`]).
 pub const STARTING_WEAPON: u16 = 0;
 
-/// M0 weapon catalog (subset; stats adapted from Appendix A).
+/// Weapon catalog (subset; stats adapted from Appendix A). Indices are stable —
+/// `STARTING_WEAPON` and tests refer to them by position.
 pub static WEAPONS: &[WeaponDef] = &[
+    // 0 — Bow (the starting weapon): pure single-target piercing.
     WeaponDef {
         name: "Bow",
         rarity: 0,
@@ -107,7 +136,9 @@ pub static WEAPONS: &[WeaponDef] = &[
         cooldown_ticks: 30, // 1.0s
         range: 900,
         proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
     },
+    // 1 — Mortar Launcher: siege splash.
     WeaponDef {
         name: "Mortar Launcher",
         rarity: 0,
@@ -118,7 +149,9 @@ pub static WEAPONS: &[WeaponDef] = &[
         cooldown_ticks: 60, // 2.0s
         range: 1200,
         proj_speed: 30,
+        on_hit: StatusOnHit::NONE,
     },
+    // 2 — Frost Bow: applies Frost stacks (slow).
     WeaponDef {
         name: "Frost Bow",
         rarity: 1,
@@ -129,10 +162,50 @@ pub static WEAPONS: &[WeaponDef] = &[
         cooldown_ticks: 15, // 0.5s
         range: 900,
         proj_speed: 50,
+        on_hit: StatusOnHit { frost_stacks: 5, ..StatusOnHit::NONE },
+    },
+    // 3 — Poison Bow: light hit + a strong damage-over-time.
+    WeaponDef {
+        name: "Poison Bow",
+        rarity: 0,
+        cost: 500,
+        damage: 60,
+        damage_type: DMG_PIERCING,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 30,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit { poison_dps: 20, poison_ticks: 90, ..StatusOnHit::NONE },
+    },
+    // 4 — Flamecaster: applies Fire stacks (vulnerability + explode on death).
+    WeaponDef {
+        name: "Flamecaster",
+        rarity: 1,
+        cost: 1500,
+        damage: 100,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Splash(150),
+        cooldown_ticks: 20,
+        range: 600,
+        proj_speed: 40,
+        on_hit: StatusOnHit { fire_stacks: 5, ..StatusOnHit::NONE },
+    },
+    // 5 — Storm Hammer: hard single hit that Stuns.
+    WeaponDef {
+        name: "Storm Hammer",
+        rarity: 2,
+        cost: 3000,
+        damage: 400,
+        damage_type: DMG_MAGIC,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 45,
+        range: 600,
+        proj_speed: 40,
+        on_hit: StatusOnHit { stun_ticks: 45, ..StatusOnHit::NONE },
     },
 ];
 
-/// M0 enemy catalog.
+/// Enemy catalog. Index 2 is the end boss, Samwise.
 pub static ENEMIES: &[EnemyDef] = &[
     EnemyDef {
         name: "Fel Orc Grunt",
@@ -141,6 +214,7 @@ pub static ENEMIES: &[EnemyDef] = &[
         contact_damage: 500,
         bounty: 10,
         armor_class: 0,
+        boss: false,
     },
     EnemyDef {
         name: "Steam Tank",
@@ -149,8 +223,22 @@ pub static ENEMIES: &[EnemyDef] = &[
         contact_damage: 1500,
         bounty: 40,
         armor_class: 1,
+        boss: false,
+    },
+    // 2 — Samwise: fixed huge HP, immune to weapon fire; only `Clear` hurts it.
+    EnemyDef {
+        name: "Samwise",
+        base_hp: 10_000_000,
+        move_speed: 3,
+        contact_damage: 100_000,
+        bounty: 0,
+        armor_class: 0,
+        boss: true,
     },
 ];
+
+/// Index of the boss enemy def.
+pub const SAMWISE: u16 = 2;
 
 /// M0 wave: a steady mix, continuous (no scaling). Used every round.
 pub static WAVE_M0: &[WaveSpawn] = &[

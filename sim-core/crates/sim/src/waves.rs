@@ -19,12 +19,7 @@ pub(crate) fn spawn(s: &mut ArenaState) {
             let pos = content::SPAWN_RING[ring_idx];
             let edef = &content::ENEMIES[ws.enemy as usize];
             let id = s.alloc_entity_id();
-            s.enemies.push(Enemy {
-                id,
-                def: ws.enemy,
-                hp: edef.base_hp,
-                pos,
-            });
+            s.enemies.push(Enemy::new(id, ws.enemy, edef.base_hp, pos));
         }
     }
 }

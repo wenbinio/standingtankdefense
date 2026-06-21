@@ -65,6 +65,23 @@ pub struct WeaponInstance {
     pub next_fire_tick: Tick,
 }
 
+/// Per-enemy status effects (Poison / Frost / Fire / Stun). Pure integer
+/// counters (no floats) for determinism. Default = no status.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct EnemyStatus {
+    /// Poison damage per tick while `poison_ticks > 0` (a DoT).
+    pub poison_dps: i64,
+    pub poison_ticks: u32,
+    /// Frost stacks (each slows move/attack ~2%, capped at `FROST_MAX_STACKS`).
+    pub frost_stacks: u8,
+    /// Remaining frost duration; on expiry the stacks clear.
+    pub frost_ticks: u32,
+    /// Fire stacks (each adds +0.5% damage taken; enemy explodes on death).
+    pub fire_stacks: u16,
+    /// Immobile while `> 0` (from on-hit stuns).
+    pub stun_ticks: u32,
+}
+
 /// An active enemy.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Enemy {
@@ -72,6 +89,14 @@ pub struct Enemy {
     pub def: u16, // index into content::ENEMIES
     pub hp: i64,
     pub pos: Vec2,
+    pub status: EnemyStatus,
+}
+
+impl Enemy {
+    /// Construct an enemy with no status (the common case).
+    pub fn new(id: EntityId, def: u16, hp: i64, pos: Vec2) -> Enemy {
+        Enemy { id, def, hp, pos, status: EnemyStatus::default() }
+    }
 }
 
 /// An in-flight projectile (homes on `target`; applies splash at arrival).
@@ -85,6 +110,8 @@ pub struct Projectile {
     pub damage_type: u8,
     pub splash_radius: Fixed, // ZERO ⇒ single target
     pub speed: Fixed,
+    /// Status this projectile applies to whatever it hits.
+    pub on_hit: content::StatusOnHit,
 }
 
 /// Player economy state.

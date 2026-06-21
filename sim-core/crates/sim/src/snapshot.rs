@@ -9,11 +9,12 @@
 //! - Field order mirrors `checksum()` so the two are easy to keep in sync.
 
 use crate::ids::EntityId;
+use crate::content::StatusOnHit;
 use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 1;
+pub const SNAPSHOT_VERSION: u32 = 2;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -169,16 +170,22 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u32(wi.next_fire_tick);
     }
 
-    // enemies
+    // enemies (+ status)
     w.len(s.enemies.len());
     for e in &s.enemies {
         w.id(e.id);
         w.u16(e.def);
         w.i64(e.hp);
         w.vec2(e.pos);
+        w.i64(e.status.poison_dps);
+        w.u32(e.status.poison_ticks);
+        w.u8(e.status.frost_stacks);
+        w.u32(e.status.frost_ticks);
+        w.u16(e.status.fire_stacks);
+        w.u32(e.status.stun_ticks);
     }
 
-    // projectiles
+    // projectiles (+ on-hit status)
     w.len(s.projectiles.len());
     for p in &s.projectiles {
         w.id(p.id);
@@ -189,6 +196,11 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u8(p.damage_type);
         w.fixed(p.splash_radius);
         w.fixed(p.speed);
+        w.i64(p.on_hit.poison_dps);
+        w.u32(p.on_hit.poison_ticks);
+        w.u8(p.on_hit.frost_stacks);
+        w.u16(p.on_hit.fire_stacks);
+        w.u32(p.on_hit.stun_ticks);
     }
 
     // economy
@@ -275,6 +287,14 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
             def: r.u16()?,
             hp: r.i64()?,
             pos: r.vec2()?,
+            status: EnemyStatus {
+                poison_dps: r.i64()?,
+                poison_ticks: r.u32()?,
+                frost_stacks: r.u8()?,
+                frost_ticks: r.u32()?,
+                fire_stacks: r.u16()?,
+                stun_ticks: r.u32()?,
+            },
         });
     }
 
@@ -289,6 +309,13 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
             damage_type: r.u8()?,
             splash_radius: r.fixed()?,
             speed: r.fixed()?,
+            on_hit: StatusOnHit {
+                poison_dps: r.i64()?,
+                poison_ticks: r.u32()?,
+                frost_stacks: r.u8()?,
+                fire_stacks: r.u16()?,
+                stun_ticks: r.u32()?,
+            },
         });
     }
 
