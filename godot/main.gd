@@ -289,6 +289,28 @@ func _draw_shop(font, vp: Vector2) -> void:
 	draw_string(font, clear_rect.position + Vector2(12, clear_rect.size.y * 0.5 + 5), "[Space] CLEAR",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.96, 0.62, 0.52))
 
+	# Hover tooltip: flavor + mechanical tip for the card under the cursor.
+	var desc: PackedStringArray = sim.shop_desc()
+	var mp := get_viewport().get_mouse_position()
+	for i in shop_rects.size():
+		if shop_rects[i].has_point(mp):
+			draw_rect(shop_rects[i], Color(1, 1, 1, 0.06))
+			var fl := desc[i * 2] if i * 2 < desc.size() else ""
+			var tp := desc[i * 2 + 1] if i * 2 + 1 < desc.size() else ""
+			_draw_tooltip(font, vp, shop_rects[i], names[i], fl, tp)
+			break
+
+func _draw_tooltip(font, vp: Vector2, card: Rect2, nm: String, flavor: String, tip: String) -> void:
+	var w := 380.0
+	var h := 92.0
+	var x := clampf(card.position.x + card.size.x * 0.5 - w * 0.5, 8.0, vp.x - w - 8.0)
+	var y := card.position.y - h - 12.0
+	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07, 0.97))
+	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.32, 0.36, 0.44), false, 2.0)
+	draw_string(font, Vector2(x + 14, y + 26), nm, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 17, Color(0.96, 0.92, 0.8))
+	draw_multiline_string(font, Vector2(x + 14, y + 48), flavor, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, 2, Color(0.72, 0.76, 0.85))
+	draw_string(font, Vector2(x + 14, y + h - 12), tip, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, Color(0.6, 0.82, 0.62))
+
 func _rarity_color(r: int) -> Color:
 	match r:
 		1: return Color(0.40, 0.80, 0.45)   # uncommon

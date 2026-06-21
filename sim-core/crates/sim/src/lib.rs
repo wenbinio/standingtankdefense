@@ -10,6 +10,7 @@
 
 pub mod bot;
 pub mod content;
+pub mod descriptions;
 pub mod snapshot;
 pub mod view;
 mod combat;

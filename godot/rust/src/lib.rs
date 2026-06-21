@@ -184,6 +184,22 @@ impl StSim {
         a
     }
 
+    /// Flat `[flavor, tip, …]` per offer (slot order): the item's flavor blurb
+    /// and a terse mechanical tip, for shop tooltips.
+    #[func]
+    fn shop_desc(&self) -> PackedStringArray {
+        let mut a = PackedStringArray::new();
+        for off in &self.state.shop.offers {
+            let (flavor, tip) = match off.kind {
+                sim::OfferKind::Weapon => sim::descriptions::weapon_text(off.def),
+                sim::OfferKind::Modifier => sim::descriptions::modifier_text(off.def),
+            };
+            a.push(&GString::from(flavor));
+            a.push(&GString::from(tip));
+        }
+        a
+    }
+
     /// `"Name xN"` lines for the owned arsenal.
     #[func]
     fn arsenal_lines(&self) -> PackedStringArray {
