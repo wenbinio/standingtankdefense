@@ -193,6 +193,16 @@ impl StSim {
         }
         a
     }
+
+    /// `[damage_dealt, gold_earned]` — match scoreboard totals.
+    #[func]
+    fn stats(&self) -> PackedInt64Array {
+        let v = view::snapshot(&self.state);
+        let mut a = PackedInt64Array::new();
+        a.push(v.stats.damage_dealt);
+        a.push(v.stats.gold_earned);
+        a
+    }
 }
 
 // ===================== Multi-arena / net view =====================
@@ -361,5 +371,16 @@ impl StMatch {
     fn weapon_count(&self, i: i64) -> i64 {
         self.snap(i)
             .map_or(0, |v| v.arsenal.iter().map(|a| a.count as i64).sum())
+    }
+
+    /// `[damage_dealt, gold_earned]` scoreboard totals for player `i`.
+    #[func]
+    fn stats(&self, i: i64) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        if let Some(v) = self.snap(i) {
+            a.push(v.stats.damage_dealt);
+            a.push(v.stats.gold_earned);
+        }
+        a
     }
 }

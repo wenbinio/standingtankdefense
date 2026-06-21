@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 12;
+pub const SNAPSHOT_VERSION: u32 = 13;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -227,6 +227,8 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.fixed(s.economy.bounty_mult);
     w.i64(s.economy.bounty_proc_chance_pct);
     w.fixed(s.economy.bounty_proc_bonus);
+    w.fixed(s.economy.gold_per_damage);
+    w.fixed(s.economy.income_shield_pct);
     w.u32(s.economy.rerolls_remaining);
     w.i64(s.economy.reroll_cost);
 
@@ -303,6 +305,8 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     for k in &s.pending_kills {
         w.u16(*k);
     }
+    w.i64(s.total_damage_dealt);
+    w.i64(s.total_gold_earned);
 
     // rng cursors
     w.rng(s.rng_spawn);
@@ -408,6 +412,8 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         bounty_mult: r.fixed()?,
         bounty_proc_chance_pct: r.i64()?,
         bounty_proc_bonus: r.fixed()?,
+        gold_per_damage: r.fixed()?,
+        income_shield_pct: r.fixed()?,
         rerolls_remaining: r.u32()?,
         reroll_cost: r.i64()?,
     };
@@ -498,6 +504,8 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
     for _ in 0..r.len()? {
         pending_kills.push(r.u16()?);
     }
+    let total_damage_dealt = r.i64()?;
+    let total_gold_earned = r.i64()?;
 
     let rng_spawn = r.rng()?;
     let rng_targeting = r.rng()?;
@@ -529,6 +537,8 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         dead,
         death_tick,
         pending_kills,
+        total_damage_dealt,
+        total_gold_earned,
         rng_spawn,
         rng_targeting,
         rng_shop,

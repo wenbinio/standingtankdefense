@@ -105,6 +105,9 @@ func _draw_cell(font, i: int, r: Rect2) -> void:
 	draw_string(font, r.position + Vector2(10, 34), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.9, 0.93, 0.98))
 	draw_string(font, r.position + Vector2(46, 34), "R%d · %dg · %dw" % [arena[5], gold, m.weapon_count(i)],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.74, 0.66, 0.4))
+	# per-player damage score (log-compressed so it never runs into the thousands)
+	draw_string(font, Vector2(r.position.x + r.size.x - 104, r.position.y + 34), "SCORE %d" % _score(i),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.78, 0.35))
 
 	# cell border
 	draw_rect(r, Color(0.06, 0.07, 0.09, 1.0), false, 2.0)
@@ -115,3 +118,12 @@ func _draw_cell(font, i: int, r: Rect2) -> void:
 		var place: int = m.placement(i)
 		var txt := "OUT" if place == 0 else "#%d" % place
 		draw_string(font, center - Vector2(22, 6), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1.0, 0.4, 0.28))
+
+# Compressed damage score for the per-player tracker: log-scaled so it climbs
+# steadily but never runs into the thousands (raw damage reaches the millions).
+func _score(i: int) -> int:
+	var st: PackedInt64Array = m.stats(i)
+	var dmg: float = float(st[0]) if st.size() > 0 else 0.0
+	if dmg < 1.0:
+		return 0
+	return int(round(30.0 * log(1.0 + dmg) / log(10.0)))

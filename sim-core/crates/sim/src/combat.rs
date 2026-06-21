@@ -39,6 +39,8 @@ impl CondDamage {
 /// Apply one weapon hit to an enemy: `base × armor-matrix × modifier-stack ×
 /// fire-vulnerability × target-conditional` damage, then the weapon's on-hit
 /// status. Bosses are immune to weapon fire — only `Clear` damages them.
+/// Returns the integer damage subtracted from the enemy (0 for an immune boss),
+/// for the caller's damage/Bloodmoney accounting.
 fn apply_weapon_hit(
     e: &mut Enemy,
     base: i64,
@@ -46,15 +48,17 @@ fn apply_weapon_hit(
     mod_mult: Fixed,
     cond: CondDamage,
     on_hit: &content::StatusOnHit,
-) {
+) -> i64 {
     let edef = &content::ENEMIES[e.def as usize];
     if edef.boss {
-        return;
+        return 0;
     }
     let armor = content::damage_multiplier(damage_type, edef.armor_class);
     let vuln = crate::status::vulnerability_mult(e);
-    e.hp -= armor.mul(mod_mult).mul(vuln).mul(cond.mult(e)).scale_i64(base);
+    let dmg = armor.mul(mod_mult).mul(vuln).mul(cond.mult(e)).scale_i64(base);
+    e.hp -= dmg;
     crate::status::apply_on_hit(e, on_hit);
+    dmg
 }
 
 /// Phase 4: each ready weapon (`s.tick >= next_fire_tick`) picks a target —
@@ -69,6 +73,9 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
     // enemies are gathered in stable id order before any random pick.
     let mut new_projectiles: Vec<Projectile> = Vec::new();
     let mut any_instant_damage = false;
+    // Damage dealt by instant attacks this call (projectile damage is recorded
+    // on impact in `advance_projectiles`).
+    let mut instant_damage: i64 = 0;
     // Target-conditional bonuses are constant across this tick's fires.
     let cond = CondDamage::of(s);
 
@@ -142,7 +149,8 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 let r2 = Fixed::from_int(r).mul(Fixed::from_int(r));
                 for e in s.enemies.iter_mut() {
                     if s.tank.pos.dist_sq(e.pos) <= r2 {
-                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit);
+                        instant_damage +=
+                            apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit);
                     }
                 }
                 any_instant_damage = true;
@@ -153,7 +161,8 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 let r2 = reach.mul(reach);
                 for e in s.enemies.iter_mut() {
                     if s.tank.pos.dist_sq(e.pos) <= r2 {
-                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit);
+                        instant_damage +=
+                            apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit);
                     }
                 }
                 any_instant_damage = true;
@@ -170,7 +179,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 let mut targets = vec![first];
                 targets.extend(order.into_iter().take((n as usize).saturating_sub(1)));
                 for ti in targets {
-                    apply_weapon_hit(
+                    instant_damage += apply_weapon_hit(
                         &mut s.enemies[ti],
                         wdef.damage,
                         wdef.damage_type,
@@ -191,6 +200,10 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
             .max(1) as u32;
         s.weapons[wi].next_fire_tick = s.tick + cd;
     }
+
+    // Record instant-attack damage (scoreboard + Bloodmoney) now that no enemy
+    // borrow is held.
+    s.record_player_damage(instant_damage);
 
     for mut p in new_projectiles {
         p.id = s.alloc_entity_id();
@@ -292,19 +305,23 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     // them), and each hit also applies the weapon's on-hit status.
     // Conditional bonuses are evaluated live at impact against the target's status.
     let cond = CondDamage::of(s);
+    let mut impact_damage: i64 = 0;
     for imp in impacts {
         let mod_mult = Fixed::ONE; // weapon multiplier was baked into projectile damage at fire time
         if imp.splash_radius > Fixed::ZERO {
             let radius_sq = imp.splash_radius.mul(imp.splash_radius);
             for e in s.enemies.iter_mut() {
                 if imp.point.dist_sq(e.pos) <= radius_sq {
-                    apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit);
+                    impact_damage +=
+                        apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit);
                 }
             }
         } else if let Some(e) = s.enemies.iter_mut().find(|e| e.id == imp.target) {
-            apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit);
+            impact_damage +=
+                apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit);
         }
     }
+    s.record_player_damage(impact_damage);
 
     // Remove dead enemies, preserving id order, recording their defs.
     let mut survivors_e: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
@@ -745,6 +762,44 @@ mod tests {
         mk_enemy(&mut s2, 0, 1_000_000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
         fire_weapons(&mut s2);
         assert_eq!(s2.projectiles[0].damage, content::WEAPONS[0].damage, "no piercing scaling");
+    }
+
+    #[test]
+    fn projectile_damage_accumulates_on_scoreboard() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
+        let eid = mk_enemy(&mut s, 0, 100_000, pos); // survives
+        let pid = s.alloc_entity_id();
+        s.projectiles.push(Projectile {
+            id: pid,
+            pos: Vec2::ZERO,
+            target: eid,
+            last_target_pos: pos,
+            damage: 200, // piercing vs armor 0 → 2× = 400 actually dealt
+            damage_type: content::DMG_PIERCING,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
+        });
+        advance_projectiles(&mut s);
+        assert_eq!(s.total_damage_dealt, 400, "actual armor-scaled damage scored");
+    }
+
+    #[test]
+    fn instant_attack_damage_accumulates_and_pays_bloodmoney() {
+        // Immolation (def 7) = Area(300), 80 chaos. Two in-range enemies.
+        let mut s = blank_state();
+        s.weapons.clear();
+        s.economy.gold_per_damage = Fixed::from_ratio(1, 4); // exactly representable
+        give_weapon(&mut s, 7);
+        mk_enemy(&mut s, 0, 10_000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        mk_enemy(&mut s, 0, 10_000, Vec2::new(Fixed::from_int(250), Fixed::ZERO));
+        let gold0 = s.economy.gold;
+        fire_weapons(&mut s);
+        // Chaos vs armor 0 = 1×; 80 each × 2 enemies = 160 total.
+        assert_eq!(s.total_damage_dealt, 160);
+        assert_eq!(s.economy.gold, gold0 + 40, "160 × 1/4 = 40 gold");
     }
 
     #[test]

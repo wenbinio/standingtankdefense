@@ -72,8 +72,12 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
         Input::Clear => {
             if s.tick >= s.tank.clear_cooldown_end {
                 let mut survivors = Vec::with_capacity(s.enemies.len());
+                let mut cleared_damage: i64 = 0;
                 for mut e in s.enemies.drain(..) {
+                    let before = e.hp.max(0);
                     e.hp = e.hp.saturating_sub(CLEAR_DAMAGE);
+                    // Actual HP removed (clamped: no credit past the kill).
+                    cleared_damage += before - e.hp.max(0);
                     if e.hp <= 0 {
                         s.pending_kills.push(e.def);
                     } else {
@@ -81,6 +85,7 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
                     }
                 }
                 s.enemies = survivors;
+                s.record_player_damage(cleared_damage);
                 s.tank.clear_cooldown_end = s.tick + CLEAR_COOLDOWN_TICKS;
             }
         }

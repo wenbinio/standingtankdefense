@@ -51,10 +51,12 @@ pub(crate) fn spikes(s: &mut ArenaState) {
     let r2 = range.mul(range);
     let tank_pos = s.tank.pos;
     let mut survivors = Vec::with_capacity(s.enemies.len());
+    let mut spikes_dealt: i64 = 0;
     for mut e in std::mem::take(&mut s.enemies) {
         let boss = content::ENEMIES[e.def as usize].boss;
         if !boss && tank_pos.dist_sq(e.pos) <= r2 {
             e.hp -= dmg;
+            spikes_dealt += dmg;
         }
         if e.hp <= 0 {
             s.pending_kills.push(e.def);
@@ -63,6 +65,8 @@ pub(crate) fn spikes(s: &mut ArenaState) {
         }
     }
     s.enemies = survivors;
+    // Spikes retaliation counts as player damage (scoreboard + Bloodmoney).
+    s.record_player_damage(spikes_dealt);
 }
 
 /// Ticks per in-game second (30 Hz) — cadence of the Missing-HP pulse.
@@ -78,6 +82,11 @@ pub(crate) fn regen(s: &mut ArenaState) {
     }
     if s.tank.hp_regen_per_tick > 0 {
         s.tank.heal(s.tank.hp_regen_per_tick);
+    } else if s.tank.hp_regen_per_tick < 0 {
+        // Negative regen (from a regen→gold trade) is a drain: subtract its
+        // magnitude from HP each tick. It bypasses `Tank::heal`/`healing_mult`
+        // and CAN bring the tank to death via the normal death path.
+        s.tank.hp += s.tank.hp_regen_per_tick;
     }
     // Missing-HP heal: once per second, restore a fraction of the HP deficit.
     if s.tank.missing_hp_heal_pct > Fixed::ZERO && s.tick % TICKS_PER_SECOND == 0 {
@@ -224,6 +233,37 @@ mod tests {
         s.tick = 30;
         regen(&mut s);
         assert_eq!(s.tank.hp, 2500);
+    }
+
+    #[test]
+    fn negative_regen_drains_hp_each_tick() {
+        let mut s = fresh();
+        s.tank.hp = 1000;
+        s.tank.max_hp = 24_000;
+        s.tank.hp_regen_per_tick = -100; // a drain (from a regen→gold trade)
+        regen(&mut s);
+        assert_eq!(s.tank.hp, 900, "drain subtracts magnitude each tick");
+        regen(&mut s);
+        assert_eq!(s.tank.hp, 800);
+        // The drain bypasses healing_mult and can push HP below zero (death path).
+        s.tank.healing_mult = Fixed::from_int(5);
+        s.tank.hp = 50;
+        regen(&mut s);
+        assert_eq!(s.tank.hp, -50, "drain unaffected by healing_mult, can go fatal");
+    }
+
+    #[test]
+    fn spikes_damage_records_to_scoreboard_and_bloodmoney() {
+        let mut s = fresh();
+        s.tank.spikes_damage = 200;
+        s.economy.gold_per_damage = Fixed::from_ratio(1, 4); // exactly representable
+        let gold0 = s.economy.gold;
+        s.enemies = vec![enemy_at(1, 1000, 50)]; // survives, 200 spikes
+        hit_tank(&mut s, 100);
+        spikes(&mut s);
+        assert_eq!(s.total_damage_dealt, 200, "spikes counted as player damage");
+        assert_eq!(s.economy.gold, gold0 + 50, "200 × 1/4 = 50 gold");
+        assert_eq!(s.total_gold_earned, 50);
     }
 
     #[test]

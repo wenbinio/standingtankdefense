@@ -36,7 +36,7 @@ pub(crate) fn collect_bounties(s: &mut ArenaState) {
     }
     s.pending_kills = kills_vec;
     s.pending_kills.clear();
-    s.economy.gold += gained;
+    s.award_gold(gained);
     // On-kill trigger: heal the tank per enemy killed this tick.
     if s.tank.heal_on_kill > 0 && kills > 0 && !s.dead {
         s.tank.heal(kills * s.tank.heal_on_kill);
@@ -48,10 +48,18 @@ pub(crate) fn collect_bounties(s: &mut ArenaState) {
 /// If `income_regen_pct > 0`, also heal the tank that fraction of the award.
 pub(crate) fn tick_income(s: &mut ArenaState) {
     let amount = s.economy.income_mult.scale_i64(s.economy.income_per_tick);
-    s.economy.gold += amount;
+    s.award_gold(amount);
     // Income-as-HP-regen (the source's "% of Gold Income as instant HP Regen").
     if s.economy.income_regen_pct > Fixed::ZERO && !s.dead {
         s.tank.heal(s.economy.income_regen_pct.scale_i64(amount));
+    }
+    // Income-as-survival: route a fraction of the award into the Mana-Shield pool
+    // (capped at its max), mirroring the HP-regen path above.
+    if s.economy.income_shield_pct > Fixed::ZERO && !s.dead {
+        let add = s.economy.income_shield_pct.scale_i64(amount);
+        if add > 0 && s.tank.mana_shield < s.tank.mana_shield_max {
+            s.tank.mana_shield = (s.tank.mana_shield + add).min(s.tank.mana_shield_max);
+        }
     }
 }
 
@@ -179,6 +187,41 @@ mod tests {
         s.tank.hp = 0;
         tick_income(&mut s);
         assert_eq!(s.tank.hp, 0);
+    }
+
+    #[test]
+    fn income_and_bounty_feed_gold_scoreboard() {
+        let mut s = fresh();
+        s.economy.gold = 0;
+        s.total_gold_earned = 0;
+        s.economy.income_per_tick = 20;
+        s.economy.bounty_mult = Fixed::ONE;
+        tick_income(&mut s);
+        s.pending_kills = vec![1]; // bounty 40
+        collect_bounties(&mut s);
+        assert_eq!(s.economy.gold, 60);
+        assert_eq!(s.total_gold_earned, 60, "income + bounty both scored");
+    }
+
+    #[test]
+    fn income_shield_refills_mana_shield_capped() {
+        let mut s = fresh();
+        s.economy.gold = 0;
+        s.economy.income_per_tick = 100;
+        s.tank.mana_shield = 0;
+        s.tank.mana_shield_max = 30;
+        s.economy.income_shield_pct = Fixed::from_ratio(1, 4); // 25% of income → shield
+        tick_income(&mut s);
+        assert_eq!(s.economy.gold, 100);
+        assert_eq!(s.tank.mana_shield, 25, "25% of 100 income into shield");
+        // Capped at max.
+        tick_income(&mut s);
+        assert_eq!(s.tank.mana_shield, 30, "shield capped at max");
+        // Dead tank gains no shield.
+        s.dead = true;
+        s.tank.mana_shield = 0;
+        tick_income(&mut s);
+        assert_eq!(s.tank.mana_shield, 0);
     }
 
     #[test]

@@ -121,6 +121,8 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_fixed(s.economy.bounty_mult);
     c.write_i64(s.economy.bounty_proc_chance_pct);
     c.write_fixed(s.economy.bounty_proc_bonus);
+    c.write_fixed(s.economy.gold_per_damage);
+    c.write_fixed(s.economy.income_shield_pct);
     c.write_u32(s.economy.rerolls_remaining);
     c.write_i64(s.economy.reroll_cost);
 
@@ -131,6 +133,8 @@ pub fn checksum(s: &ArenaState) -> u64 {
     for k in &s.pending_kills {
         c.write_u32(*k as u32);
     }
+    c.write_i64(s.total_damage_dealt);
+    c.write_i64(s.total_gold_earned);
 
     c.write_u64(s.rng_spawn.state());
     c.write_u64(s.rng_targeting.state());

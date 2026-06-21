@@ -91,6 +91,7 @@ pub(crate) fn is_immobile(enemy: &Enemy) -> bool {
 pub(crate) fn tick(s: &mut ArenaState) {
     let mut survivors: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
     let mut poison_hits: i64 = 0;
+    let mut poison_damage: i64 = 0;
     for mut e in std::mem::take(&mut s.enemies) {
         let immune = content::ENEMIES[e.def as usize].boss;
 
@@ -99,6 +100,7 @@ pub(crate) fn tick(s: &mut ArenaState) {
             if !immune {
                 e.hp -= e.status.poison_dps;
                 poison_hits += 1;
+                poison_damage += e.status.poison_dps;
             }
             e.status.poison_ticks -= 1;
             if e.status.poison_ticks == 0 {
@@ -124,6 +126,8 @@ pub(crate) fn tick(s: &mut ArenaState) {
         }
     }
     s.enemies = survivors;
+    // Poison DoT counts toward the player's damage scoreboard / Bloodmoney.
+    s.record_player_damage(poison_damage);
     // On-poison trigger: heal the tank per enemy that took poison this tick.
     if s.tank.heal_on_poison > 0 && poison_hits > 0 && !s.dead {
         s.tank.heal(poison_hits * s.tank.heal_on_poison);
@@ -280,6 +284,30 @@ mod tests {
         s.tank.hp = 998;
         tick(&mut s);
         assert_eq!(s.tank.hp, 1000);
+    }
+
+    #[test]
+    fn poison_damage_accumulates_on_scoreboard() {
+        let mut s = arena_with(vec![
+            {
+                let mut e = enemy(0, 1000);
+                e.status.poison_dps = 30;
+                e.status.poison_ticks = 5;
+                e
+            },
+            {
+                let mut e = enemy(0, 1000);
+                e.status.poison_dps = 30;
+                e.status.poison_ticks = 5;
+                e
+            },
+        ]);
+        s.economy.gold_per_damage = Fixed::from_ratio(1, 4); // exactly representable
+        let gold0 = s.economy.gold;
+        tick(&mut s);
+        // 2 enemies × 30 dps = 60 poison damage this tick.
+        assert_eq!(s.total_damage_dealt, 60);
+        assert_eq!(s.economy.gold, gold0 + 15, "60 × 1/4 = 15 gold");
     }
 
     #[test]

@@ -285,6 +285,86 @@ mod tests {
         assert_eq!(s.ramps[0].next_apply, interval * 4);
     }
 
+    fn modifier_idx(pred: impl Fn(ModEffect) -> bool) -> u16 {
+        content::MODIFIERS.iter().position(|m| pred(m.effect)).expect("catalog item exists") as u16
+    }
+
+    #[test]
+    fn trade_maxhp_for_gold_reduces_maxhp_and_grants_scored_gold() {
+        let mut s = ArenaState::new(1, 0);
+        let idx = modifier_idx(|e| matches!(e, ModEffect::TradeMaxHpForGold(..)));
+        let (hp_cost, gold_gain) = match content::MODIFIERS[idx as usize].effect {
+            ModEffect::TradeMaxHpForGold(h, g) => (h, g),
+            _ => unreachable!(),
+        };
+        let max0 = s.tank.max_hp;
+        let gold0 = s.economy.gold;
+        // Clamp path: set HP near the post-trade max so the clamp is exercised.
+        s.tank.hp = max0;
+        s.buy_modifier(idx);
+        assert_eq!(s.tank.max_hp, max0 - hp_cost, "max hp reduced");
+        assert_eq!(s.tank.hp, max0 - hp_cost, "hp clamped to new max");
+        assert_eq!(s.economy.gold, gold0 + gold_gain);
+        assert_eq!(s.total_gold_earned, gold_gain, "trade gold scored");
+    }
+
+    #[test]
+    fn trade_regen_for_gold_can_go_negative() {
+        let mut s = ArenaState::new(1, 0);
+        let idx = modifier_idx(|e| matches!(e, ModEffect::TradeRegenForGold(..)));
+        let (regen_cost, gold_gain) = match content::MODIFIERS[idx as usize].effect {
+            ModEffect::TradeRegenForGold(r, g) => (r, g),
+            _ => unreachable!(),
+        };
+        s.tank.hp_regen_per_tick = 0;
+        let gold0 = s.economy.gold;
+        s.buy_modifier(idx);
+        assert_eq!(s.tank.hp_regen_per_tick, -regen_cost, "regen may go negative");
+        assert_eq!(s.economy.gold, gold0 + gold_gain);
+    }
+
+    #[test]
+    fn gold_per_damage_accrues_from_combat_damage() {
+        // Buy a Bloodmoney, then deal damage and confirm gold accrues + is scored.
+        let mut s = ArenaState::new(1, 0);
+        let idx = modifier_idx(|e| matches!(e, ModEffect::GoldPerDamagePct(..)));
+        s.buy_modifier(idx);
+        assert!(s.economy.gold_per_damage > Fixed::ZERO);
+        let gold0 = s.economy.gold;
+        // record 1000 player damage directly (same path all sites use).
+        s.record_player_damage(1000);
+        assert_eq!(s.total_damage_dealt, 1000);
+        let expected = s.economy.gold_per_damage.scale_i64(1000);
+        assert!(expected > 0);
+        assert_eq!(s.economy.gold, gold0 + expected);
+        assert_eq!(s.total_gold_earned, expected, "bloodmoney gold scored");
+    }
+
+    #[test]
+    fn overclocked_death_engine_scales_with_its_own_count() {
+        // Buying the generator modifier registers a self-scaling rule keyed to the
+        // Death Engine weapon; owning N Death Engines adds N × per to its damage.
+        let mut s = ArenaState::new(1, 0);
+        s.weapons.clear();
+        let idx = modifier_idx(|e| matches!(e, ModEffect::DamagePerWeapon(d, _, _) if d == content::DEATH_ENGINE as i64));
+        s.buy_modifier(idx);
+        for _ in 0..3 {
+            let id = s.alloc_entity_id();
+            s.weapons.push(crate::state::WeaponInstance {
+                instance_id: id,
+                def: content::DEATH_ENGINE,
+                next_fire_tick: s.tick,
+            });
+        }
+        // 3 engines × 10% = +~30% Chaos self-scaling (fixed-point floors slightly).
+        let add = s.modifiers.self_scaling_add(content::DMG_CHAOS, &s.weapons);
+        let v = add.scale_i64(1000);
+        assert!((299..=300).contains(&v), "≈3 × 10% = 30%, got {v}");
+        // A non-engine weapon of the same type is unaffected when count is 0.
+        let none = s.modifiers.self_scaling_add(content::DMG_CHAOS, &[]);
+        assert_eq!(none, Fixed::ZERO, "no engines ⇒ no self-scaling");
+    }
+
     #[test]
     fn ramp_apply_is_idempotent_between_intervals() {
         let idx = content::MODIFIERS.iter().position(|md| md.ramp.is_some()).unwrap() as u16;

@@ -26,6 +26,15 @@ pub struct RenderView {
     pub shop: Vec<RenderOffer>,
     /// Owned weapons collapsed to `(name, count)`, sorted by name.
     pub arsenal: Vec<RenderArsenalEntry>,
+    /// Match scoreboard totals.
+    pub stats: RenderStats,
+}
+
+/// Match-long scoreboard totals (damage dealt / gold earned).
+#[derive(Clone, Copy, Debug)]
+pub struct RenderStats {
+    pub damage_dealt: i64,
+    pub gold_earned: i64,
 }
 
 /// World-space integer point (units; tank sits at the origin).
@@ -173,6 +182,10 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         economy,
         shop,
         arsenal,
+        stats: RenderStats {
+            damage_dealt: s.total_damage_dealt,
+            gold_earned: s.total_gold_earned,
+        },
     }
 }
 
@@ -200,6 +213,16 @@ mod tests {
             assert!(!e.name.is_empty());
             assert!(e.base_hp > 0);
         }
+    }
+
+    #[test]
+    fn stats_reflect_scoreboard_totals() {
+        let mut s = ArenaState::new(0xBEEF, 0);
+        s.total_damage_dealt = 12_345;
+        s.total_gold_earned = 6_789;
+        let v = snapshot(&s);
+        assert_eq!(v.stats.damage_dealt, 12_345);
+        assert_eq!(v.stats.gold_earned, 6_789);
     }
 
     #[test]
