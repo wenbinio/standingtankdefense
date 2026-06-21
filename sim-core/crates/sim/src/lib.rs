@@ -57,6 +57,8 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     modifiers::apply_ramps(s);
     // 3. Spawn enemies for the current wave.
     waves::spawn(s);
+    // 3b. Vulnerability-Pulse auras stack a damage-taken debuff on enemies in range.
+    status::pulse(s);
     // 4. Weapons select targets and emit projectiles.
     combat::fire_weapons(s);
     // 5. Projectiles move; on arrival apply (splash) damage; kills → pending_kills.
@@ -157,6 +159,15 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(r.next_apply);
     }
 
+    // Active vulnerability pulses.
+    c.write_u32(s.vuln_pulses.len() as u32);
+    for p in &s.vuln_pulses {
+        c.write_u32(p.magnitude as u32);
+        c.write_i64(p.range);
+        c.write_u32(p.interval_ticks);
+        c.write_u32(p.next_tick);
+    }
+
     // Shop offers (slot order is meaningful).
     c.write_u32(s.shop.shop_seq);
     c.write_u32(s.shop.offers.len() as u32);
@@ -184,6 +195,7 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.status.frost_stacks as u32);
         c.write_u32(x.status.frost_ticks);
         c.write_u32(x.status.fire_stacks as u32);
+        c.write_u32(x.status.vuln_stacks as u32);
         c.write_u32(x.status.stun_ticks);
     }
 

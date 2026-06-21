@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 6;
+pub const SNAPSHOT_VERSION: u32 = 7;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -191,6 +191,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u8(e.status.frost_stacks);
         w.u32(e.status.frost_ticks);
         w.u16(e.status.fire_stacks);
+        w.u16(e.status.vuln_stacks);
         w.u32(e.status.stun_ticks);
     }
 
@@ -240,6 +241,15 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.i64(c);
         w.u32(r.interval_ticks);
         w.u32(r.next_apply);
+    }
+
+    // active vulnerability pulses
+    w.len(s.vuln_pulses.len());
+    for p in &s.vuln_pulses {
+        w.u16(p.magnitude);
+        w.i64(p.range);
+        w.u32(p.interval_ticks);
+        w.u32(p.next_tick);
     }
 
     // shop
@@ -326,6 +336,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
                 frost_stacks: r.u8()?,
                 frost_ticks: r.u32()?,
                 fire_stacks: r.u16()?,
+                vuln_stacks: r.u16()?,
                 stun_ticks: r.u32()?,
             },
         });
@@ -388,6 +399,16 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         });
     }
 
+    let mut vuln_pulses = Vec::new();
+    for _ in 0..r.len()? {
+        vuln_pulses.push(VulnPulse {
+            magnitude: r.u16()?,
+            range: r.i64()?,
+            interval_ticks: r.u32()?,
+            next_tick: r.u32()?,
+        });
+    }
+
     let shop_seq = r.u32()?;
     let mut offers = Vec::new();
     for _ in 0..r.len()? {
@@ -435,6 +456,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         shop,
         modifiers,
         ramps,
+        vuln_pulses,
         tank_hit_this_tick: false,
         next_entity_id,
         dead,

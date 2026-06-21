@@ -91,6 +91,8 @@ impl Modifiers {
             }
             ModEffect::SpikesFlat(n) => tank.spikes_damage += n,
             ModEffect::SpikesPct(n, d) => tank.spikes_mult += Fixed::from_ratio(n, d),
+            // Registered as per-arena trigger state in `buy_modifier`; no aggregate.
+            ModEffect::GrantVulnPulse(..) => {}
         }
     }
 

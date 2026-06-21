@@ -93,8 +93,22 @@ pub struct EnemyStatus {
     pub frost_ticks: u32,
     /// Fire stacks (each adds +0.5% damage taken; enemy explodes on death).
     pub fire_stacks: u16,
+    /// Generic vulnerability stacks (each adds +1% damage taken) — from
+    /// Vulnerability-Pulse auras.
+    pub vuln_stacks: u16,
     /// Immobile while `> 0` (from on-hit stuns).
     pub stun_ticks: u32,
+}
+
+/// A periodic aura the tank emits: every `interval_ticks` it adds `magnitude`
+/// vulnerability stacks to enemies within `range` (the source's Vulnerability
+/// Pulse). Registered when its modifier is bought.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct VulnPulse {
+    pub magnitude: u16,
+    pub range: i64,
+    pub interval_ticks: u32,
+    pub next_tick: Tick,
 }
 
 /// An active enemy.
@@ -212,6 +226,8 @@ pub struct ArenaState {
     pub modifiers: Modifiers,
     /// Active time-scaling growths (re-applied at their intervals).
     pub ramps: Vec<ActiveRamp>,
+    /// Active Vulnerability-Pulse auras.
+    pub vuln_pulses: Vec<VulnPulse>,
     /// Set when the tank takes damage this tick (drives Spikes retaliation).
     /// Transient: always `false` at a tick boundary, so it is excluded from the
     /// checksum/snapshot.
@@ -272,6 +288,7 @@ impl ArenaState {
             shop: ShopState::default(),
             modifiers: Modifiers::new(),
             ramps: Vec::new(),
+            vuln_pulses: Vec::new(),
             tank_hit_this_tick: false,
             next_entity_id: 1,
             dead: false,
@@ -311,7 +328,19 @@ impl ArenaState {
     pub fn buy_modifier(&mut self, def_idx: u16) {
         let def = &content::MODIFIERS[def_idx as usize];
         let ramp = def.ramp;
-        self.modifiers.apply(def, &mut self.economy, &mut self.tank);
+        // A few effects carry per-arena trigger state and are intercepted here;
+        // all others fold into the Modifiers/Tank/Economy aggregates.
+        match def.effect {
+            content::ModEffect::GrantVulnPulse(mag, range, interval) => {
+                self.vuln_pulses.push(VulnPulse {
+                    magnitude: mag as u16,
+                    range,
+                    interval_ticks: interval as u32,
+                    next_tick: self.tick + interval as u32,
+                });
+            }
+            other => self.modifiers.apply_effect(other, &mut self.economy, &mut self.tank),
+        }
         if let Some(r) = ramp {
             self.ramps.push(ActiveRamp {
                 effect: r.effect,

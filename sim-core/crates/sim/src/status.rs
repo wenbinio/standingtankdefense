@@ -35,10 +35,36 @@ pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) {
     }
 }
 
-/// Damage-taken multiplier from status (Fire vulnerability: +0.5% per stack).
+/// Damage-taken multiplier from status: Fire (+0.5% per stack) and generic
+/// Vulnerability stacks (+1% per stack, from Vulnerability-Pulse auras).
 pub(crate) fn vulnerability_mult(enemy: &Enemy) -> Fixed {
-    // +0.5% per fire stack = + fire_stacks * 5 / 1000.
-    Fixed::ONE + Fixed::from_ratio(enemy.status.fire_stacks as i64 * 5, 1000)
+    Fixed::ONE
+        + Fixed::from_ratio(enemy.status.fire_stacks as i64 * 5, 1000)
+        + Fixed::from_ratio(enemy.status.vuln_stacks as i64, 100)
+}
+
+/// Phase: Vulnerability-Pulse auras. For each active pulse whose interval has
+/// elapsed, add its magnitude in vuln stacks to every enemy within range.
+/// Deterministic (fixed ticks, append-only pulses, stable enemy order).
+pub(crate) fn pulse(s: &mut ArenaState) {
+    if s.vuln_pulses.is_empty() {
+        return;
+    }
+    let tank_pos = s.tank.pos;
+    let mut pulses = std::mem::take(&mut s.vuln_pulses);
+    for p in pulses.iter_mut() {
+        let range = Fixed::from_int(p.range);
+        let r2 = range.mul(range);
+        while s.tick >= p.next_tick {
+            for e in s.enemies.iter_mut() {
+                if tank_pos.dist_sq(e.pos) <= r2 {
+                    e.status.vuln_stacks = e.status.vuln_stacks.saturating_add(p.magnitude);
+                }
+            }
+            p.next_tick += p.interval_ticks;
+        }
+    }
+    s.vuln_pulses = pulses;
 }
 
 /// Movement-speed multiplier from status (Frost slow: -2% per stack, floored).
@@ -188,6 +214,37 @@ mod tests {
         assert!(is_immobile(&s.enemies[0]));
         tick(&mut s); // 1 → 0
         assert!(!is_immobile(&s.enemies[0]));
+    }
+
+    #[test]
+    fn vulnerability_pulse_stacks_and_raises_damage_taken() {
+        let mut s = ArenaState::new(7, 0);
+        let idx = content::MODIFIERS
+            .iter()
+            .position(|m| matches!(m.effect, content::ModEffect::GrantVulnPulse(..)))
+            .expect("a Vulnerability Pulse modifier exists") as u16;
+        s.buy_modifier(idx);
+        assert_eq!(s.vuln_pulses.len(), 1, "pulse registered");
+
+        // An enemy in range (≤1200), and one far outside.
+        s.enemies = vec![
+            Enemy::new(EntityId(1), 0, 1_000_000, Vec2::new(Fixed::from_int(500), Fixed::ZERO)),
+            Enemy::new(EntityId(2), 0, 1_000_000, Vec2::new(Fixed::from_int(5000), Fixed::ZERO)),
+        ];
+        assert_eq!(vulnerability_mult(&s.enemies[0]), Fixed::ONE);
+
+        // First pulse at tick 30 adds 5 stacks to the near enemy only.
+        s.tick = 30;
+        pulse(&mut s);
+        assert_eq!(s.enemies[0].status.vuln_stacks, 5);
+        assert_eq!(s.enemies[1].status.vuln_stacks, 0, "far enemy unaffected");
+        let v = vulnerability_mult(&s.enemies[0]).scale_i64(1000);
+        assert!((1049..=1050).contains(&v), "≈+5% damage taken, got {v}");
+
+        // Second pulse stacks further.
+        s.tick = 60;
+        pulse(&mut s);
+        assert_eq!(s.enemies[0].status.vuln_stacks, 10);
     }
 
     #[test]
