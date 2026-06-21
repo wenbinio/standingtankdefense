@@ -124,6 +124,10 @@ pub struct EnemyStatus {
     pub vuln_stacks: u16,
     /// Immobile while `> 0` (from on-hit stuns).
     pub stun_ticks: u32,
+    /// Freeze duration (from reaching `FROST_MAX_STACKS`, the Deep Freeze
+    /// payoff). While `> 0` the enemy is immobile AND takes +50% damage; decays
+    /// once per tick and clears with no residual effect.
+    pub freeze_ticks: u32,
 }
 
 /// A periodic aura the tank emits: every `interval_ticks` it adds `magnitude`

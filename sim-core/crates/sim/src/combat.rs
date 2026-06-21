@@ -211,17 +211,9 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
     }
 
     // Instant attacks (Area/Wave/Bounce) can kill: reap the dead now so bounty
-    // is awarded this tick, preserving id order.
+    // is awarded this tick, preserving id order. Fire-stacked deaths explode.
     if any_instant_damage {
-        let mut survivors = Vec::with_capacity(s.enemies.len());
-        for e in std::mem::take(&mut s.enemies) {
-            if e.hp <= 0 {
-                s.pending_kills.push(e.def);
-            } else {
-                survivors.push(e);
-            }
-        }
-        s.enemies = survivors;
+        crate::status::reap_dead(s);
     }
 }
 
@@ -323,16 +315,8 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     }
     s.record_player_damage(impact_damage);
 
-    // Remove dead enemies, preserving id order, recording their defs.
-    let mut survivors_e: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
-    for e in std::mem::take(&mut s.enemies) {
-        if e.hp <= 0 {
-            s.pending_kills.push(e.def);
-        } else {
-            survivors_e.push(e);
-        }
-    }
-    s.enemies = survivors_e;
+    // Remove dead enemies, preserving id order; Fire-stacked deaths explode.
+    crate::status::reap_dead(s);
 }
 
 /// Phase 6: move each enemy toward the tank (origin) by `EnemyDef::move_speed`
@@ -343,8 +327,13 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
     let tank_pos = s.tank.pos;
     let mut survivors: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
 
+    // Contact damage scales with match time on the SAME curve as enemy HP
+    // (`content::enemy_hp_mult`): late game gets deadlier, not just tankier
+    // (`docs/05`; mirrors the spawn-time HP scaling in `waves::spawn`).
+    let dmg_mult = content::enemy_hp_mult(s.tick);
+
     for mut e in std::mem::take(&mut s.enemies) {
-        // Stunned enemies can't move this tick.
+        // Stunned / frozen enemies can't move this tick.
         if crate::status::is_immobile(&e) {
             survivors.push(e);
             continue;
@@ -352,7 +341,7 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
         let edef = &content::ENEMIES[e.def as usize];
         // Movement is slowed by Frost stacks.
         let speed = Fixed::from_int(edef.move_speed).mul(crate::status::move_speed_mult(&e));
-        let contact = edef.contact_damage;
+        let contact = dmg_mult.scale_i64(edef.contact_damage);
         let moved = e.pos.step_toward(tank_pos, speed);
         if moved == tank_pos {
             // Contact: deal contact damage through the defensive layer, remove
@@ -627,6 +616,34 @@ mod tests {
         assert!(s.enemies.is_empty(), "enemy removed on contact");
         assert_eq!(s.tank.hp, hp0 - 500, "contact_damage applied");
         assert!(s.pending_kills.is_empty(), "self-destruct grants no bounty");
+    }
+
+    #[test]
+    fn contact_damage_scales_with_match_time() {
+        // Same enemy, two ticks: at tick 0 contact damage is the raw value; deep
+        // into the match it is multiplied by `enemy_hp_mult`.
+        let edef = &content::ENEMIES[0];
+        let base = edef.contact_damage;
+
+        let mut early = blank_state();
+        early.weapons.clear();
+        early.tick = 0;
+        let hp0 = early.tank.hp;
+        mk_enemy(&mut early, 0, 200, Vec2::new(Fixed::from_int(3), Fixed::ZERO));
+        move_enemies(&mut early);
+        assert_eq!(early.tank.hp, hp0 - base, "tick 0 deals raw contact damage");
+
+        // At the 2nd scaling step (×2 baseline) contact damage doubles.
+        let mut late = blank_state();
+        late.weapons.clear();
+        late.tick = content::SCALE_STEP_2_TICK;
+        let mult = content::enemy_hp_mult(late.tick);
+        let expected = mult.scale_i64(base);
+        assert!(expected > base, "scaling must increase contact damage");
+        let hp_late = late.tank.hp;
+        mk_enemy(&mut late, 0, 200, Vec2::new(Fixed::from_int(3), Fixed::ZERO));
+        move_enemies(&mut late);
+        assert_eq!(late.tank.hp, hp_late - expected, "late contact damage scaled");
     }
 
     #[test]

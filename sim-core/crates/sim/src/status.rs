@@ -10,6 +10,20 @@ use determinism::Fixed;
 /// Frost duration applied per application (ticks). Stacks clear on expiry.
 const FROST_DURATION: u32 = 150; // 5 s @ 30 Hz
 
+/// Freeze duration when an enemy reaches `FROST_MAX_STACKS` (the source's Deep
+/// Freeze: "1.5 seconds of Freeze when an enemy reaches 25 stacks of Frost,
+/// resetting stacks to 0", `docs/appendix-A §A.2`). 1.5 s @ 30 Hz.
+const FREEZE_DURATION: u32 = 45;
+
+/// Radius of a Fire death-explosion. The source says "surrounding enemies"
+/// without a fixed number; we use the catalog's common splash radius (300,
+/// `docs/appendix-A §A.2`).
+const FIRE_EXPLOSION_RADIUS: i64 = 300;
+
+/// Fire death-explosion damage: "1 damage per 5 Stacks" (`docs/appendix-A
+/// §A.2`) ⇒ `floor(fire_stacks / 5)`.
+const FIRE_STACKS_PER_DAMAGE: u16 = 5;
+
 /// Apply a weapon's on-hit status to an enemy. Poison refreshes to the stronger
 /// DoT; frost/fire add stacks (frost capped); stun takes the longer remaining.
 pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) {
@@ -24,8 +38,18 @@ pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) {
         }
     }
     if on_hit.frost_stacks > 0 {
-        st.frost_stacks = (st.frost_stacks.saturating_add(on_hit.frost_stacks)).min(FROST_MAX_STACKS);
+        st.frost_stacks = st.frost_stacks.saturating_add(on_hit.frost_stacks);
         st.frost_ticks = FROST_DURATION;
+        // Freeze payoff: reaching the cap immobilizes the enemy for a short
+        // window and resets the stacks (`docs/appendix-A §A.2`). While frozen it
+        // takes +50% damage (see `vulnerability_mult`).
+        if st.frost_stacks >= FROST_MAX_STACKS {
+            st.frost_stacks = 0;
+            st.frost_ticks = 0;
+            st.freeze_ticks = st.freeze_ticks.max(FREEZE_DURATION);
+        } else {
+            st.frost_stacks = st.frost_stacks.min(FROST_MAX_STACKS);
+        }
     }
     if on_hit.fire_stacks > 0 {
         st.fire_stacks = st.fire_stacks.saturating_add(on_hit.fire_stacks);
@@ -35,12 +59,17 @@ pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) {
     }
 }
 
-/// Damage-taken multiplier from status: Fire (+0.5% per stack) and generic
-/// Vulnerability stacks (+1% per stack, from Vulnerability-Pulse auras).
+/// Damage-taken multiplier from status: Fire (+0.5% per stack), generic
+/// Vulnerability stacks (+1% per stack, from Vulnerability-Pulse auras), and the
+/// Freeze payoff (+50% while frozen, `docs/appendix-A §A.2`).
 pub(crate) fn vulnerability_mult(enemy: &Enemy) -> Fixed {
-    Fixed::ONE
+    let mut m = Fixed::ONE
         + Fixed::from_ratio(enemy.status.fire_stacks as i64 * 5, 1000)
-        + Fixed::from_ratio(enemy.status.vuln_stacks as i64, 100)
+        + Fixed::from_ratio(enemy.status.vuln_stacks as i64, 100);
+    if enemy.status.freeze_ticks > 0 {
+        m += Fixed::from_ratio(1, 2); // +50% damage taken while frozen
+    }
+    m
 }
 
 /// Phase: Vulnerability-Pulse auras. For each active pulse whose interval has
@@ -80,9 +109,67 @@ pub(crate) fn move_speed_mult(enemy: &Enemy) -> Fixed {
     }
 }
 
-/// Whether the enemy cannot move this tick (stunned).
+/// Whether the enemy cannot move this tick (stunned or frozen).
 pub(crate) fn is_immobile(enemy: &Enemy) -> bool {
-    enemy.status.stun_ticks > 0
+    enemy.status.stun_ticks > 0 || enemy.status.freeze_ticks > 0
+}
+
+/// Reap every enemy at `hp <= 0`, pushing its `def` to `pending_kills` and
+/// triggering its Fire death-explosion. A Fire-stacked enemy that dies deals
+/// `floor(fire_stacks / 5)` damage to surrounding enemies within
+/// `FIRE_EXPLOSION_RADIUS` (`docs/appendix-A §A.2`); that damage can chain
+/// further deaths, which detonate in turn. Fully deterministic: dead enemies are
+/// processed in id-sorted order, and the loop fixes a stable point. The shared
+/// death-reaping chokepoint for every combat/status death site so Fire
+/// explosions fire wherever an enemy dies. Bosses neither explode nor take
+/// explosion damage (they are damaged only by `Clear`).
+pub(crate) fn reap_dead(s: &mut ArenaState) {
+    let radius = Fixed::from_int(FIRE_EXPLOSION_RADIUS);
+    let radius_sq = radius.mul(radius);
+    loop {
+        // Collect dead enemies (id-sorted) so explosions resolve deterministically.
+        let mut dead: Vec<usize> = (0..s.enemies.len())
+            .filter(|&i| s.enemies[i].hp <= 0)
+            .collect();
+        if dead.is_empty() {
+            return;
+        }
+        dead.sort_by_key(|&i| s.enemies[i].id.0);
+
+        // For each dead enemy: record the kill and, if it carried Fire, splash
+        // explosion damage onto living non-boss enemies in range.
+        let mut explosion_damage: i64 = 0;
+        for &di in &dead {
+            let (def, fire_stacks, pos) = {
+                let e = &s.enemies[di];
+                (e.def, e.status.fire_stacks, e.pos)
+            };
+            s.pending_kills.push(def);
+            // Mark reaped so it is not collected again next round.
+            s.enemies[di].hp = i64::MIN;
+            if fire_stacks == 0 || content::ENEMIES[def as usize].boss {
+                continue;
+            }
+            let dmg = (fire_stacks / FIRE_STACKS_PER_DAMAGE) as i64;
+            if dmg <= 0 {
+                continue;
+            }
+            for (i, e) in s.enemies.iter_mut().enumerate() {
+                if i == di || e.hp <= 0 || content::ENEMIES[e.def as usize].boss {
+                    continue;
+                }
+                if pos.dist_sq(e.pos) <= radius_sq {
+                    e.hp -= dmg;
+                    explosion_damage += dmg;
+                }
+            }
+        }
+        // Remove the enemies reaped this pass; survivors keep id order.
+        s.enemies.retain(|e| e.hp != i64::MIN);
+        // Explosion damage is a player source (scoreboard / Bloodmoney).
+        s.record_player_damage(explosion_damage);
+        // Loop: chained deaths from this pass's explosions detonate next pass.
+    }
 }
 
 /// Per-tick status processing: apply Poison DoT, decay timers, clear expired
@@ -118,14 +205,16 @@ pub(crate) fn tick(s: &mut ArenaState) {
         if e.status.stun_ticks > 0 {
             e.status.stun_ticks -= 1;
         }
-
-        if e.hp <= 0 {
-            s.pending_kills.push(e.def);
-        } else {
-            survivors.push(e);
+        // Freeze duration (clears cleanly; no residual effect).
+        if e.status.freeze_ticks > 0 {
+            e.status.freeze_ticks -= 1;
         }
+
+        survivors.push(e);
     }
     s.enemies = survivors;
+    // Reap poison kills (and their Fire death-explosions) in a stable pass.
+    reap_dead(s);
     // Poison DoT counts toward the player's damage scoreboard / Bloodmoney.
     s.record_player_damage(poison_damage);
     // On-poison trigger: heal the tank per enemy that took poison this tick.
@@ -190,17 +279,111 @@ mod tests {
     }
 
     #[test]
-    fn frost_caps_and_slows_then_expires() {
+    fn frost_slows_below_cap_then_expires() {
         let mut e = enemy(0, 1000);
-        apply_on_hit(&mut e, &StatusOnHit { frost_stacks: 30, ..StatusOnHit::NONE });
-        assert_eq!(e.status.frost_stacks, FROST_MAX_STACKS, "frost capped at 25");
-        // 25 stacks × 2% = 50% slow → ×0.5.
-        assert_eq!(move_speed_mult(&e).scale_i64(1000), 500);
+        // Stay strictly below the cap so no freeze triggers (24 stacks).
+        apply_on_hit(&mut e, &StatusOnHit { frost_stacks: 24, ..StatusOnHit::NONE });
+        assert_eq!(e.status.frost_stacks, 24, "frost stacks accumulate below cap");
+        assert_eq!(e.status.freeze_ticks, 0, "no freeze below cap");
+        // 24 stacks × 2% = 48% slow → ×0.52.
+        assert_eq!(move_speed_mult(&e).scale_i64(1000), 520);
 
         let mut s = arena_with(vec![e]);
         s.enemies[0].status.frost_ticks = 1;
         tick(&mut s);
         assert_eq!(s.enemies[0].status.frost_stacks, 0, "stacks clear on expiry");
+    }
+
+    #[test]
+    fn frost_freezes_at_max_resetting_stacks_and_boosting_damage() {
+        let mut e = enemy(0, 1000);
+        // Reaching the cap (25) freezes: stacks reset, freeze timer set.
+        apply_on_hit(&mut e, &StatusOnHit { frost_stacks: FROST_MAX_STACKS, ..StatusOnHit::NONE });
+        assert_eq!(e.status.frost_stacks, 0, "stacks reset on freeze");
+        assert_eq!(e.status.frost_ticks, 0, "frost slow cleared on freeze");
+        assert_eq!(e.status.freeze_ticks, FREEZE_DURATION, "freeze armed for 1.5 s");
+        assert!(is_immobile(&e), "frozen enemy is immobile");
+        // Frozen enemy takes +50% damage.
+        assert_eq!(vulnerability_mult(&e).scale_i64(1000), 1500, "+50% while frozen");
+
+        // Overshooting the cap in one application still freezes once.
+        let mut e2 = enemy(0, 1000);
+        apply_on_hit(&mut e2, &StatusOnHit { frost_stacks: 30, ..StatusOnHit::NONE });
+        assert_eq!(e2.status.frost_stacks, 0);
+        assert_eq!(e2.status.freeze_ticks, FREEZE_DURATION);
+
+        // Freeze decays to nothing and restores normal damage taken.
+        let mut s = arena_with(vec![e]);
+        for _ in 0..FREEZE_DURATION {
+            tick(&mut s);
+        }
+        assert_eq!(s.enemies[0].status.freeze_ticks, 0, "freeze wears off");
+        assert!(!is_immobile(&s.enemies[0]));
+        assert_eq!(vulnerability_mult(&s.enemies[0]), Fixed::ONE);
+    }
+
+    #[test]
+    fn fire_stacked_enemy_explodes_on_death_damaging_neighbors() {
+        // A 50-fire-stack enemy dies → explosion = floor(50/5) = 10 damage to
+        // each neighbor within FIRE_EXPLOSION_RADIUS; a far enemy is untouched.
+        let mut s = arena_with(vec![
+            {
+                let mut e = Enemy::new(EntityId(1), 0, -1, Vec2::ZERO); // already dead
+                e.status.fire_stacks = 50;
+                e
+            },
+            // Neighbor in range, low hp → the 10 explosion damage chains a kill.
+            Enemy::new(EntityId(2), 0, 8, Vec2::new(Fixed::from_int(100), Fixed::ZERO)),
+            // Neighbor in range, high hp → survives, takes 10.
+            Enemy::new(EntityId(3), 0, 1000, Vec2::new(Fixed::from_int(200), Fixed::ZERO)),
+            // Out of range (> 300) → untouched.
+            Enemy::new(EntityId(4), 0, 1000, Vec2::new(Fixed::from_int(1000), Fixed::ZERO)),
+        ]);
+        reap_dead(&mut s);
+        // Dead source + chained neighbor are reaped; both defs recorded.
+        assert_eq!(s.enemies.len(), 2, "two survivors remain");
+        assert_eq!(s.pending_kills, vec![0, 0], "source + chained kill recorded");
+        let near = s.enemies.iter().find(|e| e.id == EntityId(3)).unwrap();
+        assert_eq!(near.hp, 990, "in-range survivor took 10 explosion damage");
+        let far = s.enemies.iter().find(|e| e.id == EntityId(4)).unwrap();
+        assert_eq!(far.hp, 1000, "out-of-range enemy untouched");
+        // Explosion damage (10 to the chained kill + 10 to the survivor) scores.
+        assert_eq!(s.total_damage_dealt, 20);
+    }
+
+    #[test]
+    fn no_fire_no_explosion() {
+        // A plain (no-fire) death reaps without damaging neighbors.
+        let mut s = arena_with(vec![
+            Enemy::new(EntityId(1), 0, -1, Vec2::ZERO),
+            Enemy::new(EntityId(2), 0, 100, Vec2::new(Fixed::from_int(50), Fixed::ZERO)),
+        ]);
+        reap_dead(&mut s);
+        assert_eq!(s.enemies.len(), 1);
+        assert_eq!(s.enemies[0].hp, 100, "neighbor unharmed without Fire");
+        assert_eq!(s.pending_kills, vec![0]);
+    }
+
+    #[test]
+    fn fire_explosion_is_deterministic() {
+        let build = || {
+            arena_with(vec![
+                {
+                    let mut e = Enemy::new(EntityId(1), 0, -1, Vec2::ZERO);
+                    e.status.fire_stacks = 100;
+                    e
+                },
+                Enemy::new(EntityId(2), 0, 5, Vec2::new(Fixed::from_int(80), Fixed::ZERO)),
+                Enemy::new(EntityId(3), 0, 5, Vec2::new(Fixed::from_int(120), Fixed::ZERO)),
+            ])
+        };
+        let mut a = build();
+        let mut b = build();
+        reap_dead(&mut a);
+        reap_dead(&mut b);
+        assert_eq!(a.enemies, b.enemies);
+        assert_eq!(a.pending_kills, b.pending_kills);
+        assert_eq!(a.total_damage_dealt, b.total_damage_dealt);
     }
 
     #[test]

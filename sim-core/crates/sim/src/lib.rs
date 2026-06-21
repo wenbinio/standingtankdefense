@@ -234,6 +234,7 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.status.fire_stacks as u32);
         c.write_u32(x.status.vuln_stacks as u32);
         c.write_u32(x.status.stun_ticks);
+        c.write_u32(x.status.freeze_ticks);
     }
 
     // Projectiles in id order.

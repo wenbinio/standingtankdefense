@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 13;
+pub const SNAPSHOT_VERSION: u32 = 14;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -199,6 +199,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u16(e.status.fire_stacks);
         w.u16(e.status.vuln_stacks);
         w.u32(e.status.stun_ticks);
+        w.u32(e.status.freeze_ticks);
     }
 
     // projectiles (+ on-hit status)
@@ -382,6 +383,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
                 fire_stacks: r.u16()?,
                 vuln_stacks: r.u16()?,
                 stun_ticks: r.u32()?,
+                freeze_ticks: r.u32()?,
             },
         });
     }
