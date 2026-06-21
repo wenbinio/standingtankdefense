@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x45f6234e3bc8a259, // re-baselined: Fire explode-on-death + Frost freeze + enemy dmg scaling
+        0x9dc3cff68c074964, // re-baselined: spiky weapon/mod balance + 4 scaling passives
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

@@ -450,9 +450,9 @@ const MODIFIER_TEXT: [(&str, &str); 84] = [
     // 56 — Wartithe (25% of income as mana shield)
     ("Tithe to the shield. The shield keeps you solvent.",
      "Income tops up your mana shield, 25%."),
-    // 57 — +4000 Mana Shield (epic)
-    ("A thick coat of stolen math.",
-     "+4000 mana shield, faster regen."),
+    // 57 — Aegis Protocol (scaling mana shield)
+    ("Stolen math, and it learns more every round.",
+     "+2500 shield, +400 more each round."),
     // 58 — +500 Max HP
     ("A little more give before you break.",
      "+500 max HP."),
@@ -519,18 +519,18 @@ const MODIFIER_TEXT: [(&str, &str); 84] = [
     // 79 — +10% Dodge (gen dup)
     ("One in ten swings hits the air and stays mad.",
      "+10% chance to dodge a hit."),
-    // 80 — +200% Kill Bounty
-    ("Triple coin off every cooling body.",
-     "+200% gold per kill."),
-    // 81 — +5000 Max HP (epic)
-    ("A fortress of meat. Good luck chewing through it.",
-     "+5000 max HP."),
+    // 80 — Escalating Plunder (scaling bounty)
+    ("Greed with interest. The bodies pay more each round.",
+     "+100% kill gold, +15% more each round."),
+    // 81 — Living Fortress (scaling max HP)
+    ("Meat becomes wall becomes mountain. Keep chewing.",
+     "+2500 max HP, +500 more each round."),
     // 82 — +1000 Mana Shield
     ("A thin coat of borrowed math.",
      "+1000 mana shield, slow regen."),
-    // 83 — +200 HP Regen
-    ("Mend like the wound never happened.",
-     "+200 HP regen per tick."),
+    // 83 — Mending Engine (scaling regen)
+    ("It stitches faster the longer the war drags on.",
+     "+120 HP/tick regen, +30 more each round."),
 ];
 
 #[cfg(test)]
