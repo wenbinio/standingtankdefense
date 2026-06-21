@@ -19,7 +19,7 @@ A **Godot 4 front-end** over the same core (via a Rust GDExtension binding) is s
 
 ## The pitch in one paragraph
 
-Up to **8 players** each defend their **own** lane with a **single stationary tank**. You don't move and you don't aim — the tank auto‑fires. The entire game is **resource and build decisions**: as gold trickles in and random upgrade offers appear, you decide which weapons, modifiers, and economy upgrades to stack against an enemy tide that scales for ~20 minutes. Everyone fights their *own* swarm in parallel; the multiplayer layer is a **race to outlast everyone else**. Die in the first half of the lobby and you lose; finish in the surviving half and you win; be the last tank standing and you score a **Last Stand**.
+Up to **8 players** each defend their **own** lane with a **single stationary tank**. You don't move and you don't aim — the tank auto‑fires. The entire game is **resource and build decisions**: as gold trickles in and random upgrade offers appear, you decide which weapons, modifiers, and economy upgrades to stack against an enemy tide that scales for ~15 minutes, then the Samwise boss. Everyone fights their *own* swarm in parallel; the multiplayer layer is a **race to outlast everyone else**. Die in the first half of the lobby and you lose; finish in the surviving half and you win; be the last tank standing and you score a **Last Stand**.
 
 ## Why this design is interesting for networking
 
@@ -43,7 +43,7 @@ The key realization that drives this whole spec: **the arenas are independent.**
 | [`docs/06-roadmap-risks-testing.md`](docs/06-roadmap-risks-testing.md) | Milestones / vertical slices, the risk register (networking‑weighted), the determinism & netcode test plan, and open questions. |
 | [`docs/07-steamworks-integration.md`](docs/07-steamworks-integration.md) | **Steam deployment.** Host‑authoritative‑over‑SDR for a free game, the Steamworks API mapping (sockets, lobbies, auth, stats, cloud), host migration on Steam, and the honest anti‑cheat trade‑offs of free P2P. |
 | [`docs/08-engine-choice.md`](docs/08-engine-choice.md) | Engine decision: decouple the deterministic sim core from the renderer; recommended **Godot 4 + Rust sim core** (with the alternatives and the one factor that flips it). |
-| [`docs/appendix-A-map-extraction.md`](docs/appendix-A-map-extraction.md) | Evidence appendix: the full extracted catalog (118 units, 79 weapons, 87 upgrades) from `TowerSurvivors v1.58.w3x`. |
+| [`docs/appendix-A-map-extraction.md`](docs/appendix-A-map-extraction.md) | Evidence appendix: the full extracted catalog (118 units, 79 weapons, 87 upgrades in `catalog.json` — 89 counting two HP‑for‑gold trades the parser split off) from `TowerSurvivors v1.58.w3x`. |
 | [`research/tower-survivors-map/`](research/tower-survivors-map/) | The finalized map extraction: raw WC3 files, a re‑runnable `extract.py`, and `parsed/catalog.json`. |
 
 ## Status & scope of this spec

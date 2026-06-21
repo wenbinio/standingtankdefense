@@ -49,7 +49,7 @@ This is the part the `.wts` nails down precisely (see Appendix A for the full 79
 
 ## 1.4 Economy & roguelike systems — confirmed
 
-- **Rarity ladder with costs**: **Common = 500 gold**, then **Uncommon → Rare → Epic** (Epic ≈ 5000g). Offers are drawn by rarity weighting. Many upgrades scope themselves by rarity ("+100% Damage for 500 Gold (Common) Weapons", "+1 copy of next **Rare** Weapon").
+- **Rarity ladder with costs**: **Common = 500 gold**, then **Uncommon → Rare → Epic**. *(Inferred: the source confirms only the names Common/Uncommon/Rare plus an unnamed 4th purple‑colored tier — "Epic" is our name for it, and the ~5000g top cost is our estimate; only the 500g Common cost appears in the source strings.)* Offers are drawn by rarity weighting. Many upgrades scope themselves by rarity ("+100% Damage for 500 Gold (Common) Weapons", "+1 copy of next **Rare** Weapon").
 - **Two income channels, deliberately scoped**: flat **Gold Income** (+X/sec, sometimes +%) and **Kill Bounty** (+% bounty, plus a 5%-chance proc for bonus bounty — *"+200% Bounty Gold with 5% activation chance"*). Multipliers are scoped so they don't trivially compound.
 - **Reroll economy**: 5 free rerolls to start; cost escalates; Free Reroll sources exist. This is the core "pull the slot machine" loop.
 - **Meta-items**: **Magic Treasure** (gain gold, value grows +2/sec, scales with bounty), **Magic Coins/Treasures**, **Multiplication Gems** (+3 copies of the next Common upgrade), **Black Market** (pick a specific Uncommon weapon). These are *targeted* shop manipulations — important because they make the offer stream **stateful**, not just "reroll random."

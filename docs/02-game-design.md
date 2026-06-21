@@ -70,7 +70,7 @@ Each weapon = `{base damage types, attack type, damage, DPS, attack cooldown, ra
 - **Time/round modifiers** — "+X% every 30 s (each new shop)"; some sources "no longer stack after 15 minutes."
 
 ### Rarity ladder (offer weighting & cost)
-**Common (500g) → Uncommon → Rare → Epic (~5000g)**. Rarity sets draw weight, cost, and magnitude.
+**Common (500g) → Uncommon → Rare → Epic**. Rarity sets draw weight, cost, and magnitude. *("Epic" and its ~5000g top cost are inferred — see `docs/01` §1.4; only the 500g Common cost is source-confirmed.)*
 
 ### Meta / targeted shop items (make the offer stream *stateful*)
 - **Black Market** — buy one specific Uncommon weapon of your choice.
@@ -85,7 +85,7 @@ Each weapon = `{base damage types, attack type, damage, DPS, attack cooldown, ra
 - Enemy fields: `{HP, move speed, contact damage, bounty, armor class, archetype, abilities}`. Archetypes seen in the roster: melee swarmers (Fel Orc Peon/Grunt/Raider), casters (Warlock, Necromancer), ranged "breathers/spitters" (Fire/Ice/Poison/Lava breathers that attack in rotating arcs).
 - **Wave table per round** defines composition, counts, and cadence; shared across players for a given round, **per-player seeded** for individual spawn timing/position.
 - **Scaling**: enemy base HP/damage step up over time (notably at 10 and 15 min).
-- **Boss** (~15 min): **Samwise**, fixed stats, immune to normal weapons, killable only by `Clear`.
+- **Boss** (~15 min): **Samwise**, fixed stats. *(Inferred: source confirms Samwise has fixed/non-scaling stats and is the kill objective; the "immune to weapons, killable only by `Clear`" rule is a carried-over design assumption, not stated in the extracted strings.)*
 
 ## 2.7 Win / lose & placement (last man standing)
 
