@@ -212,6 +212,16 @@ def splice(marker, lines):
 
 
 def main():
+    # NOTE: this is a ONE-TIME bootstrap. The catalog in content.rs has since
+    # been hand-curated (weapon NAMES were assigned by review; some on_hit/cost
+    # values tuned). Re-running would regenerate generic names and overwrite that
+    # work, so it requires an explicit --force and you should reconcile names
+    # afterwards. Treat content.rs as canonical going forward.
+    import sys
+    if "--force" not in sys.argv:
+        print("refusing to run: content.rs is now hand-curated; pass --force to "
+              "regenerate (this OVERWRITES curated weapon names).")
+        return
     d = json.load(open(CATALOG))
     weapons = [p for p in (parse_weapon(w) for w in d["weapons"]) if p]
     seen, uniq = set(), []
