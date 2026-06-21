@@ -2,7 +2,14 @@
 
 > A multiplayer, last‑man‑standing, randomized tower‑defense / survival game built around **one tank you cannot move** — you only choose how to arm it. Inspired by the Warcraft III custom map **Tower Survivors** (itself inspired by *Vampire Survivors* / *Halls of Torment*), reimagined as a standalone title with a **network architecture designed for it from day one**.
 
-This repository currently holds the **planning / specification package**. No engine code yet — the goal of this pass is a buildable, opinionated spec with the multiplayer architecture nailed down first, because networking is the part that is expensive to retrofit.
+This repository holds both the **specification package** (`docs/`) and a working **deterministic simulation core** (`sim-core/`) with the netcode milestones and full content systems implemented, plus the first **front-end wiring**. The spec came first on purpose — networking is expensive to retrofit — and the core was then built netcode-first against it.
+
+**See it run now:** the whole game loop plays itself headlessly over the real sim —
+```bash
+cd sim-core && cargo run -p preview            # text preview (spaced frames + summary)
+cd sim-core && cargo run -p preview -- --watch # live at ~30 Hz
+```
+A **Godot 4 front-end** over the same core (via a Rust GDExtension binding) is scaffolded in [`godot/`](godot/) — built and run locally (see its README).
 
 **Shipping target:** a **free Steam app**, built on **Steamworks P2P / Steam Datagram Relay** — no server budget, the authority runs on a host player over Valve's relay backbone. See [`docs/07-steamworks-integration.md`](docs/07-steamworks-integration.md).
 
@@ -22,10 +29,12 @@ The key realization that drives this whole spec: **the arenas are independent.**
 
 ---
 
-## Document index
+## Code & document index
 
-| Doc | What's in it |
+| Path | What's in it |
 | --- | --- |
+| [`sim-core/`](sim-core/) | The **deterministic Rust simulation core** + harness + netcode (`crates/{determinism,sim,harness,net}`) and a self-playing **`preview`** crate. Engine-independent, fixed-point, checksum-gated. |
+| [`godot/`](godot/) | The **Godot 4 front-end** over the core via a Rust **GDExtension** binding (`rust/`). Built and run locally. |
 | [`docs/01-source-analysis.md`](docs/01-source-analysis.md) | Analysis of the WC3 **Tower Survivors** map, what the community said about it, and the networking lessons we're carrying forward. Includes a note on the download attempt. |
 | [`docs/02-game-design.md`](docs/02-game-design.md) | The game design itself: pillars, the single tank, rounds & waves, weapons/upgrades/synergies/rarities, economy, bosses, and the last‑man‑standing win logic. |
 | [`docs/03-network-architecture.md`](docs/03-network-architecture.md) | **The centerpiece.** Topology, authority model, the sharded‑simulation thesis, tick/determinism model, the explicit comparison vs WC3 lockstep, reconnection, host migration, anti‑cheat, and scaling/bandwidth budgets. |
