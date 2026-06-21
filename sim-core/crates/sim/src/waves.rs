@@ -30,6 +30,10 @@ pub(crate) fn spawn(s: &mut ArenaState) {
         if ws.cadence_ticks == 0 {
             continue;
         }
+        // Escalation gate: this entry is dormant until its start_tick.
+        if s.tick < ws.start_tick {
+            continue;
+        }
         if s.tick % ws.cadence_ticks == 0 {
             let ring_idx = s.rng_spawn.below(content::SPAWN_RING.len() as u32) as usize;
             let pos = content::SPAWN_RING[ring_idx];
@@ -155,6 +159,62 @@ mod tests {
         s.tick = content::BOSS_SPAWN_TICK + 15; // a former grunt-cadence tick
         spawn(&mut s);
         assert!(s.enemies.is_empty(), "no normal waves during the boss phase");
+    }
+
+    #[test]
+    fn every_roster_enemy_spawns_over_the_match() {
+        // Walk the whole pre-boss timeline; collect every enemy def that spawns.
+        // Every catalog enemy except the boss (Samwise, which arrives via the
+        // dedicated boss tick) must appear via the escalating WAVE_M0 schedule.
+        let mut s = blank_state();
+        let mut seen = std::collections::BTreeSet::new();
+        let mut t = 0u32;
+        while t < content::BOSS_SPAWN_TICK {
+            s.tick = t;
+            let before = s.enemies.len();
+            spawn(&mut s);
+            for e in &s.enemies[before..] {
+                seen.insert(e.def);
+            }
+            t += 1;
+        }
+        for (idx, def) in content::ENEMIES.iter().enumerate() {
+            if def.boss {
+                continue;
+            }
+            assert!(
+                seen.contains(&(idx as u16)),
+                "roster enemy {} (def {idx}) never spawned in WAVE_M0",
+                def.name
+            );
+        }
+        // Sanity: the boss itself spawns at the boss tick.
+        let mut bs = blank_state();
+        bs.tick = content::BOSS_SPAWN_TICK;
+        spawn(&mut bs);
+        assert_eq!(bs.enemies[0].def, content::SAMWISE);
+    }
+
+    #[test]
+    fn gated_entries_dormant_until_start_tick() {
+        // The Fel Orc Peon (def 3) is gated; before its start_tick it must not
+        // spawn even on a tick divisible by its cadence.
+        let peon = content::ENEMIES.iter().position(|e| e.name == "Fel Orc Peon").unwrap() as u16;
+        let ws = content::WAVE_M0.iter().find(|w| w.enemy == peon).unwrap();
+        assert!(ws.start_tick > 0, "peon entry is gated");
+        // Largest cadence-multiple strictly below the gate.
+        let mut pre = (ws.start_tick / ws.cadence_ticks) * ws.cadence_ticks;
+        if pre >= ws.start_tick {
+            pre -= ws.cadence_ticks;
+        }
+        let mut s = blank_state();
+        s.tick = pre;
+        assert!(s.tick < ws.start_tick);
+        assert_eq!(s.tick % ws.cadence_ticks, 0);
+        let before: usize = s.enemies.iter().filter(|e| e.def == peon).count();
+        spawn(&mut s);
+        let after: usize = s.enemies.iter().filter(|e| e.def == peon).count();
+        assert_eq!(after, before, "gated peon must not spawn before its start_tick");
     }
 
     #[test]

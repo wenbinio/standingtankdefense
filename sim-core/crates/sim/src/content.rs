@@ -68,6 +68,49 @@ pub struct WeaponDef {
     pub on_hit: StatusOnHit,
 }
 
+/// Coarse behavior class for an enemy (`docs/05 §5.4`). Drives flavor and a few
+/// movement/attack defaults; render reads `EnemyDef::archetype` for telemetry but
+/// maps SPRITES by the def index (`view::RenderEnemy::kind`), so adding rows here
+/// does not change existing kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Archetype {
+    /// Cheap, fast-spawning chaff (Peon / Grunt).
+    Swarm,
+    /// Slow, high-HP, often armored (Steam Tank / Mountain Giant).
+    Tank,
+    /// Fast melee rusher (Raider / Bandit Rider).
+    Fast,
+    /// Stationary-ish ranged caster (Warlock).
+    Caster,
+    /// Approaches to a standoff range then attacks the tank at range
+    /// (the breather / spitter family).
+    Ranged,
+    /// The end boss (Samwise) — immune to weapon fire.
+    Boss,
+    /// Inert practice dummy (Target Dummy) — never moves, no contact.
+    Inert,
+}
+
+/// An enemy's special ability (`docs/05 §5.4` `abilities[]`). Kept deliberately
+/// small and ENEMY-only — this is NOT the weapon ability path. Static content,
+/// so it lives entirely on `EnemyDef` and never feeds the snapshot/checksum.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum EnemyAbility {
+    /// No special ability (plain melee contact-only enemy).
+    None,
+    /// The breather/spitter standoff attack: once the enemy is within `range`
+    /// units of the tank it fires every `cooldown_ticks`, dealing `damage` of
+    /// `damage_type` to the tank (run through the tank's defensive layer). The
+    /// firing phase is derived deterministically from `(tick, enemy id)` so it
+    /// needs no per-enemy runtime state.
+    RangedAttack {
+        range: i64,
+        cooldown_ticks: u32,
+        damage: i64,
+        damage_type: u8,
+    },
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct EnemyDef {
     pub name: &'static str,
@@ -76,14 +119,26 @@ pub struct EnemyDef {
     pub contact_damage: i64,
     pub bounty: i64,
     pub armor_class: u8,
+    /// Coarse behavior class (flavor + render telemetry).
+    pub archetype: Archetype,
+    /// Special ability (enemy-side); `EnemyAbility::None` for plain melee.
+    pub ability: EnemyAbility,
     /// A boss (e.g. Samwise) — immune to weapon fire; only `Clear` damages it.
     pub boss: bool,
 }
+
+/// Armor classes (columns of [`damage_multiplier`]'s matrix).
+pub const ARMOR_LIGHT: u8 = 0; // most chaff (full piercing, neutral else)
+pub const ARMOR_MEDIUM: u8 = 1; // Steam Tank (magic-weak, siege-resistant)
+pub const ARMOR_FORTIFIED: u8 = 2; // Mountain Giant — tanky vs everything but Siege
 
 #[derive(Clone, Copy, Debug)]
 pub struct WaveSpawn {
     pub enemy: u16,
     pub cadence_ticks: u32, // spawn one every N ticks
+    /// Gate: this entry only spawns once `tick >= start_tick` (escalating roster).
+    /// `0` means active from the start. The mix gets richer/deadlier as gates open.
+    pub start_tick: u32,
 }
 
 /// A stacking modifier's effect. Ratios are `(num, den)` → `Fixed::from_ratio`.
@@ -742,24 +797,32 @@ pub static WEAPONS: &[WeaponDef] = &[
     // GEN-WEAPONS-END
 ];
 
-/// Enemy catalog. Index 2 is the end boss, Samwise.
+/// Enemy catalog. Indices 0/1/2 are STABLE (render maps sprites by index, the
+/// boss is index 2 via `SAMWISE`); new roster rows are appended at 3+.
+/// Stats adapted from the source map (`docs/appendix-A-map-extraction.md §A.1`).
 pub static ENEMIES: &[EnemyDef] = &[
+    // 0 — Fel Orc Grunt: the baseline swarm melee.
     EnemyDef {
         name: "Fel Orc Grunt",
         base_hp: 200,
         move_speed: 8,
         contact_damage: 500,
         bounty: 10,
-        armor_class: 0,
+        armor_class: ARMOR_LIGHT,
+        archetype: Archetype::Swarm,
+        ability: EnemyAbility::None,
         boss: false,
     },
+    // 1 — Steam Tank: slow, medium-armored bruiser.
     EnemyDef {
         name: "Steam Tank",
         base_hp: 1200,
         move_speed: 4,
         contact_damage: 1500,
         bounty: 40,
-        armor_class: 1,
+        armor_class: ARMOR_MEDIUM,
+        archetype: Archetype::Tank,
+        ability: EnemyAbility::None,
         boss: false,
     },
     // 2 — Samwise: fixed huge HP, immune to weapon fire; only `Clear` hurts it.
@@ -769,8 +832,119 @@ pub static ENEMIES: &[EnemyDef] = &[
         move_speed: 3,
         contact_damage: 100_000,
         bounty: 0,
-        armor_class: 0,
+        armor_class: ARMOR_LIGHT,
+        archetype: Archetype::Boss,
+        ability: EnemyAbility::None,
         boss: true,
+    },
+    // 3 — Fel Orc Peon: cheapest, weakest chaff — early swarm filler.
+    EnemyDef {
+        name: "Fel Orc Peon",
+        base_hp: 120,
+        move_speed: 8,
+        contact_damage: 350,
+        bounty: 6,
+        armor_class: ARMOR_LIGHT,
+        archetype: Archetype::Swarm,
+        ability: EnemyAbility::None,
+        boss: false,
+    },
+    // 4 — Fel Orc Raider: fast melee rusher (reaches the tank quickly).
+    EnemyDef {
+        name: "Fel Orc Raider",
+        base_hp: 260,
+        move_speed: 16,
+        contact_damage: 700,
+        bounty: 16,
+        armor_class: ARMOR_LIGHT,
+        archetype: Archetype::Fast,
+        ability: EnemyAbility::None,
+        boss: false,
+    },
+    // 5 — Bandit Rider: even faster, glassier melee.
+    EnemyDef {
+        name: "Bandit Rider",
+        base_hp: 180,
+        move_speed: 22,
+        contact_damage: 600,
+        bounty: 18,
+        armor_class: ARMOR_LIGHT,
+        archetype: Archetype::Fast,
+        ability: EnemyAbility::None,
+        boss: false,
+    },
+    // 6 — Mountain Giant: very tanky, Fortified armor (only Siege bites hard).
+    EnemyDef {
+        name: "Mountain Giant",
+        base_hp: 4000,
+        move_speed: 3,
+        contact_damage: 2200,
+        bounty: 80,
+        armor_class: ARMOR_FORTIFIED,
+        archetype: Archetype::Tank,
+        ability: EnemyAbility::None,
+        boss: false,
+    },
+    // 7 — Fel Orc Warlock: a caster that stands off at long range and pelts the
+    // tank with magic bolts.
+    EnemyDef {
+        name: "Fel Orc Warlock",
+        base_hp: 320,
+        move_speed: 6,
+        contact_damage: 200,
+        bounty: 30,
+        armor_class: ARMOR_LIGHT,
+        archetype: Archetype::Caster,
+        ability: EnemyAbility::RangedAttack { range: 900, cooldown_ticks: 45, damage: 250, damage_type: DMG_MAGIC },
+        boss: false,
+    },
+    // 8 — Poisonspitter: ranged spitter; light, frequent piercing spit.
+    EnemyDef {
+        name: "Poisonspitter",
+        base_hp: 300,
+        move_speed: 6,
+        contact_damage: 200,
+        bounty: 22,
+        armor_class: ARMOR_LIGHT,
+        archetype: Archetype::Ranged,
+        ability: EnemyAbility::RangedAttack { range: 700, cooldown_ticks: 30, damage: 180, damage_type: DMG_PIERCING },
+        boss: false,
+    },
+    // 9 — Firebreather: ranged breather; harder-hitting chaos breath at standoff.
+    EnemyDef {
+        name: "Firebreather",
+        base_hp: 600,
+        move_speed: 5,
+        contact_damage: 300,
+        bounty: 34,
+        armor_class: ARMOR_LIGHT,
+        archetype: Archetype::Ranged,
+        ability: EnemyAbility::RangedAttack { range: 600, cooldown_ticks: 36, damage: 420, damage_type: DMG_CHAOS },
+        boss: false,
+    },
+    // 10 — Icebreather: slow, durable ranged breather with siege breath.
+    EnemyDef {
+        name: "Icebreather",
+        base_hp: 900,
+        move_speed: 4,
+        contact_damage: 350,
+        bounty: 40,
+        armor_class: ARMOR_MEDIUM,
+        archetype: Archetype::Ranged,
+        ability: EnemyAbility::RangedAttack { range: 650, cooldown_ticks: 48, damage: 500, damage_type: DMG_SIEGE },
+        boss: false,
+    },
+    // 11 — Target Dummy: inert practice target — never moves, no contact, easy bounty.
+    EnemyDef {
+        name: "Target Dummy",
+        base_hp: 800,
+        move_speed: 0,
+        contact_damage: 0,
+        bounty: 12,
+        armor_class: ARMOR_LIGHT,
+        archetype: Archetype::Inert,
+        ability: EnemyAbility::None,
+        boss: false,
     },
 ];
 
@@ -799,16 +973,32 @@ pub fn enemy_hp_mult(tick: u32) -> Fixed {
     }
 }
 
-/// M0 wave: a steady mix, continuous (no scaling). Used every round.
+/// Ticks per in-game minute at 30 Hz (gate-time helper for the schedule).
+const MIN: u32 = 60 * 30;
+
+/// Match wave schedule: an ESCALATING mix. Early ticks are the original Grunt +
+/// Steam-Tank baseline (entries 0/1, ungated); progressively richer/deadlier
+/// roster entries gate in over the match via `start_tick`. Entries are processed
+/// in catalog order every tick (stable `rng_spawn` draw sequence). The boss tick
+/// stops all of this (handled in `waves::spawn`). HP scales via `enemy_hp_mult`.
 pub static WAVE_M0: &[WaveSpawn] = &[
-    WaveSpawn {
-        enemy: 0,
-        cadence_ticks: 15,
-    },
-    WaveSpawn {
-        enemy: 1,
-        cadence_ticks: 120,
-    },
+    // --- baseline (from the start) ---
+    WaveSpawn { enemy: 0, cadence_ticks: 15, start_tick: 0 }, // Fel Orc Grunt — swarm floor
+    WaveSpawn { enemy: 1, cadence_ticks: 120, start_tick: 0 }, // Steam Tank — periodic bruiser
+    // --- early escalation (≈30s+): cheap peons + a target dummy for practice ---
+    WaveSpawn { enemy: 3, cadence_ticks: 40, start_tick: MIN / 2 }, // Fel Orc Peon
+    WaveSpawn { enemy: 11, cadence_ticks: 600, start_tick: MIN / 2 }, // Target Dummy (rare, inert)
+    // --- ≈1.5 min: fast melee rushers ---
+    WaveSpawn { enemy: 4, cadence_ticks: 90, start_tick: 3 * MIN / 2 }, // Fel Orc Raider (fast)
+    // --- ≈2.5 min: ranged spitters start pelting from standoff ---
+    WaveSpawn { enemy: 8, cadence_ticks: 150, start_tick: 5 * MIN / 2 }, // Poisonspitter (ranged)
+    WaveSpawn { enemy: 5, cadence_ticks: 120, start_tick: 5 * MIN / 2 }, // Bandit Rider (very fast)
+    // --- ≈4 min: casters + heavier ranged breath ---
+    WaveSpawn { enemy: 7, cadence_ticks: 180, start_tick: 4 * MIN }, // Fel Orc Warlock (caster)
+    WaveSpawn { enemy: 9, cadence_ticks: 200, start_tick: 4 * MIN }, // Firebreather (ranged)
+    // --- ≈6 min: fortified giants + slow ice breath, the late-game wall ---
+    WaveSpawn { enemy: 6, cadence_ticks: 300, start_tick: 6 * MIN }, // Mountain Giant (Fortified)
+    WaveSpawn { enemy: 10, cadence_ticks: 240, start_tick: 6 * MIN }, // Icebreather (ranged)
 ];
 
 /// Enemies spawn on this ring (radius ~1500) and march toward the tank.
@@ -831,19 +1021,24 @@ const fn v(x: i64, y: i64) -> Vec2 {
     }
 }
 
+/// Number of armor classes (columns in [`damage_multiplier`]'s matrix).
+pub const NUM_ARMOR_CLASSES: usize = 3;
+
 /// Armor/damage matrix: `DAMAGE_MATRIX[damage_type][armor_class]` as a Fixed
-/// multiplier (adapted from `war3mapMisc.txt`). M0 uses two armor classes.
+/// multiplier (adapted from `war3mapMisc.txt`). Three armor classes:
+/// 0 Light, 1 Medium, 2 Fortified. Fortified shrugs off everything except Siege
+/// (classic WC3): Siege bites HARD, Piercing/Magic/Normal/Chaos are reduced.
 pub fn damage_multiplier(damage_type: u8, armor_class: u8) -> Fixed {
-    // rows = Normal, Piercing, Magic, Siege, Chaos ; cols = armor class 0, 1
-    const M: [[(i64, i64); 2]; 5] = [
-        [(1, 1), (1, 1)], // Normal
-        [(2, 1), (1, 1)], // Piercing: 2x vs class 0
-        [(1, 1), (2, 1)], // Magic:    2x vs class 1
-        [(1, 1), (1, 2)], // Siege:    0.5x vs class 1
-        [(1, 1), (1, 1)], // Chaos
+    // rows = Normal, Piercing, Magic, Siege, Chaos ; cols = Light, Medium, Fortified
+    const M: [[(i64, i64); NUM_ARMOR_CLASSES]; 5] = [
+        [(1, 1), (1, 1), (1, 2)], // Normal:   0.5x vs Fortified
+        [(2, 1), (1, 1), (7, 20)], // Piercing: 2x vs Light, 0.35x vs Fortified
+        [(1, 1), (2, 1), (1, 2)], // Magic:    2x vs Medium, 0.5x vs Fortified
+        [(1, 1), (1, 2), (3, 2)], // Siege:    0.5x vs Medium, 1.5x vs Fortified
+        [(1, 1), (1, 1), (1, 1)], // Chaos:    ignores armor (1x everywhere)
     ];
     let dt = damage_type as usize % 5;
-    let ac = (armor_class as usize).min(1);
+    let ac = (armor_class as usize).min(NUM_ARMOR_CLASSES - 1);
     let (n, d) = M[dt][ac];
     Fixed::from_ratio(n, d)
 }
