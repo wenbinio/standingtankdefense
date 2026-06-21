@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x8992_b69a_1659_e9b7, // re-baselined in M4 (modifier engine + status effects)
+        0xe797_89e3_e8d9_2d74, // re-baselined in M4 (modifiers + status + attack types)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

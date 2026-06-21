@@ -36,52 +36,108 @@ fn apply_weapon_hit(
 /// cooldown_ticks`. No enemy in range ⇒ do not fire (do not advance cooldown).
 pub(crate) fn fire_weapons(s: &mut ArenaState) {
     // Collect new projectiles first so we don't borrow `s` mutably while
-    // iterating its weapons/enemies. Weapons are processed in their existing
-    // (instance_id) order; for each, candidate enemies are gathered in the
-    // existing enemy (id) order before a random one is picked.
+    // iterating. Weapons fire in their existing (instance_id) order; candidate
+    // enemies are gathered in stable id order before any random pick.
     let mut new_projectiles: Vec<Projectile> = Vec::new();
+    let mut any_instant_damage = false;
 
     for wi in 0..s.weapons.len() {
         let def = s.weapons[wi].def;
         if s.tick < s.weapons[wi].next_fire_tick {
             continue;
         }
-        let wdef = &content::WEAPONS[def as usize];
+        let wdef = content::WEAPONS[def as usize];
         let range = Fixed::from_int(wdef.range);
         let range_sq = range.mul(range);
 
         // Candidates: enemies within range, in stable id order.
-        let mut candidates: Vec<usize> = Vec::new();
-        for (ei, e) in s.enemies.iter().enumerate() {
-            // Range is measured from the tank (weapon mount = origin).
-            if s.tank.pos.dist_sq(e.pos) <= range_sq {
-                candidates.push(ei);
-            }
-        }
+        let candidates: Vec<usize> = (0..s.enemies.len())
+            .filter(|&ei| s.tank.pos.dist_sq(s.enemies[ei].pos) <= range_sq)
+            .collect();
         if candidates.is_empty() {
             // No enemy in range: do not fire, do not advance cooldown.
             continue;
         }
 
-        let pick = s.rng_targeting.below(candidates.len() as u32) as usize;
-        let enemy = &s.enemies[candidates[pick]];
-
-        let splash_radius = match wdef.attack {
-            Attack::SingleTarget => Fixed::ZERO,
-            Attack::Splash(r) => Fixed::from_int(r),
+        let mod_mult = s.modifiers.damage_mult(wdef.damage_type);
+        let mut new_proj = |s: &mut ArenaState, target_idx: usize, splash: Fixed| {
+            let e = &s.enemies[target_idx];
+            new_projectiles.push(Projectile {
+                id: EntityId(0), // assigned after the loop
+                pos: s.tank.pos,
+                target: e.id,
+                last_target_pos: e.pos,
+                damage: wdef.damage,
+                damage_type: wdef.damage_type,
+                splash_radius: splash,
+                speed: Fixed::from_int(wdef.proj_speed),
+                on_hit: wdef.on_hit,
+            });
         };
 
-        new_projectiles.push(Projectile {
-            id: EntityId(0), // assigned below once we can borrow `s` mutably
-            pos: s.tank.pos,
-            target: enemy.id,
-            last_target_pos: enemy.pos,
-            damage: wdef.damage,
-            damage_type: wdef.damage_type,
-            splash_radius,
-            speed: Fixed::from_int(wdef.proj_speed),
-            on_hit: wdef.on_hit,
-        });
+        match wdef.attack {
+            Attack::SingleTarget => {
+                let pick = candidates[s.rng_targeting.below(candidates.len() as u32) as usize];
+                new_proj(s, pick, Fixed::ZERO);
+            }
+            Attack::Splash(r) => {
+                let pick = candidates[s.rng_targeting.below(candidates.len() as u32) as usize];
+                new_proj(s, pick, Fixed::from_int(r));
+            }
+            Attack::Barrage(n) => {
+                // N distinct random in-range targets (partial Fisher–Yates).
+                let mut pool = candidates.clone();
+                let shots = (n as usize).min(pool.len());
+                for k in 0..shots {
+                    let j = k + s.rng_targeting.below((pool.len() - k) as u32) as usize;
+                    pool.swap(k, j);
+                    new_proj(s, pool[k], Fixed::ZERO);
+                }
+            }
+            Attack::Area(r) => {
+                // Instant pulse around the tank.
+                let r2 = Fixed::from_int(r).mul(Fixed::from_int(r));
+                for e in s.enemies.iter_mut() {
+                    if s.tank.pos.dist_sq(e.pos) <= r2 {
+                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, mod_mult, &wdef.on_hit);
+                    }
+                }
+                any_instant_damage = true;
+            }
+            Attack::Wave(extra) => {
+                // Instant sweep out to range + extra around the tank.
+                let reach = range + Fixed::from_int(extra);
+                let r2 = reach.mul(reach);
+                for e in s.enemies.iter_mut() {
+                    if s.tank.pos.dist_sq(e.pos) <= r2 {
+                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, mod_mult, &wdef.on_hit);
+                    }
+                }
+                any_instant_damage = true;
+            }
+            Attack::Bounce(n) => {
+                // Random first target, then the N-1 nearest OTHER enemies to it.
+                let first = candidates[s.rng_targeting.below(candidates.len() as u32) as usize];
+                let origin = s.enemies[first].pos;
+                let mut order: Vec<usize> = (0..s.enemies.len()).filter(|&i| i != first).collect();
+                // Sort by (distance to origin, id) for a deterministic chain.
+                order.sort_by_key(|&i| {
+                    (s.enemies[i].pos.dist_sq(origin).raw(), s.enemies[i].id.0)
+                });
+                let mut targets = vec![first];
+                targets.extend(order.into_iter().take((n as usize).saturating_sub(1)));
+                for ti in targets {
+                    apply_weapon_hit(
+                        &mut s.enemies[ti],
+                        wdef.damage,
+                        wdef.damage_type,
+                        mod_mult,
+                        &wdef.on_hit,
+                    );
+                }
+                any_instant_damage = true;
+            }
+        }
 
         // Effective cooldown is reduced by the attack-speed modifier.
         let asm = s.modifiers.attack_speed_mult();
@@ -95,6 +151,20 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
     for mut p in new_projectiles {
         p.id = s.alloc_entity_id();
         s.projectiles.push(p);
+    }
+
+    // Instant attacks (Area/Wave/Bounce) can kill: reap the dead now so bounty
+    // is awarded this tick, preserving id order.
+    if any_instant_damage {
+        let mut survivors = Vec::with_capacity(s.enemies.len());
+        for e in std::mem::take(&mut s.enemies) {
+            if e.hp <= 0 {
+                s.pending_kills.push(e.def);
+            } else {
+                survivors.push(e);
+            }
+        }
+        s.enemies = survivors;
     }
 }
 
@@ -560,5 +630,100 @@ mod tests {
         });
         advance_projectiles(&mut s);
         assert_eq!(s.enemies[0].hp, 10_000_000, "boss takes zero weapon damage");
+    }
+
+    fn give_weapon(s: &mut ArenaState, def: u16) {
+        let id = s.alloc_entity_id();
+        s.weapons.push(WeaponInstance { instance_id: id, def, next_fire_tick: 0 });
+    }
+
+    #[test]
+    fn barrage_fires_one_projectile_per_target_capped() {
+        // Ballista (def 6) = Barrage(4), range 1200.
+        let mut s = blank_state();
+        s.weapons.clear();
+        give_weapon(&mut s, 6);
+        for i in 0..6 {
+            mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(100 + i * 10), Fixed::ZERO));
+        }
+        fire_weapons(&mut s);
+        assert_eq!(s.projectiles.len(), 4, "barrage of 4 emits 4 projectiles");
+        let distinct: std::collections::BTreeSet<u32> =
+            s.projectiles.iter().map(|p| p.target.0).collect();
+        assert_eq!(distinct.len(), 4, "barrage targets are distinct");
+
+        // With fewer enemies than N, barrage caps at the available count.
+        let mut s2 = blank_state();
+        s2.weapons.clear();
+        give_weapon(&mut s2, 6);
+        mk_enemy(&mut s2, 0, 200, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        mk_enemy(&mut s2, 0, 200, Vec2::new(Fixed::from_int(150), Fixed::ZERO));
+        fire_weapons(&mut s2);
+        assert_eq!(s2.projectiles.len(), 2);
+    }
+
+    #[test]
+    fn area_hits_all_in_radius_instantly() {
+        // Immolation (def 7) = Area(300), range 300, 80 chaos, +2 fire.
+        let mut s = blank_state();
+        s.weapons.clear();
+        give_weapon(&mut s, 7);
+        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(100), Fixed::ZERO)); // in
+        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(250), Fixed::ZERO)); // in
+        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(1000), Fixed::ZERO)); // out
+        fire_weapons(&mut s);
+        assert!(s.projectiles.is_empty(), "area is instant — no projectiles");
+        assert_eq!(s.enemies.len(), 3, "200 hp survives 80 dmg");
+        assert_eq!(s.enemies[0].hp, 120, "near enemy took 80");
+        assert_eq!(s.enemies[0].status.fire_stacks, 2, "area applied fire");
+        assert_eq!(s.enemies[2].hp, 200, "far enemy untouched");
+    }
+
+    #[test]
+    fn wave_sweeps_out_to_extended_range() {
+        // Shockwave Axe (def 8) = Wave(300), range 300 ⇒ reach 600, 500 normal.
+        let mut s = blank_state();
+        s.weapons.clear();
+        give_weapon(&mut s, 8);
+        let trigger = mk_enemy(&mut s, 0, 500, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        let _far_in_reach = mk_enemy(&mut s, 0, 500, Vec2::new(Fixed::from_int(500), Fixed::ZERO));
+        let _out = mk_enemy(&mut s, 0, 500, Vec2::new(Fixed::from_int(1000), Fixed::ZERO));
+        let _ = trigger;
+        fire_weapons(&mut s);
+        // Two within reach 600 die (500 dmg); the one at 1000 survives.
+        assert_eq!(s.enemies.len(), 1);
+        assert_eq!(s.pending_kills.len(), 2);
+    }
+
+    #[test]
+    fn bounce_chains_to_nearest_targets() {
+        // Moon Glaive (def 9) = Bounce(4), range 600, 150 piercing (2× vs armor0).
+        let mut s = blank_state();
+        s.weapons.clear();
+        give_weapon(&mut s, 9);
+        for i in 0..4 {
+            mk_enemy(&mut s, 0, 100, Vec2::new(Fixed::from_int(100 + i * 30), Fixed::ZERO));
+        }
+        fire_weapons(&mut s);
+        assert!(s.projectiles.is_empty(), "bounce is instant");
+        // 4 enemies, Bounce(4) = target + 3 nearest = all 4, each takes 300 ⇒ dead.
+        assert!(s.enemies.is_empty(), "all four chained and died");
+        assert_eq!(s.pending_kills.len(), 4);
+    }
+
+    #[test]
+    fn instant_attacks_are_deterministic() {
+        let mut a = blank_state();
+        a.weapons.clear();
+        give_weapon(&mut a, 9); // bounce uses rng for the first target
+        for i in 0..6 {
+            mk_enemy(&mut a, 0, 100, Vec2::new(Fixed::from_int(100 + i * 20), Fixed::from_int(i)));
+        }
+        let mut b = a.clone();
+        fire_weapons(&mut a);
+        fire_weapons(&mut b);
+        assert_eq!(a.enemies, b.enemies);
+        assert_eq!(a.pending_kills, b.pending_kills);
+        assert_eq!(a.rng_targeting.state(), b.rng_targeting.state());
     }
 }

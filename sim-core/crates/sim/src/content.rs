@@ -13,12 +13,21 @@ pub const DMG_MAGIC: u8 = 2;
 pub const DMG_SIEGE: u8 = 3;
 pub const DMG_CHAOS: u8 = 4;
 
-/// Attack behavior for a weapon.
+/// Attack behavior for a weapon (`docs/05 §5.2.1`, adapted from the source map).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Attack {
+    /// One traveling projectile to a single target.
     SingleTarget,
-    /// Area splash of the given radius (in Fixed integer units) at impact.
+    /// One traveling projectile; splashes the given radius at impact.
     Splash(i64),
+    /// `N` traveling projectiles, each to a distinct random in-range target.
+    Barrage(u8),
+    /// Instant area pulse: hits every enemy within the radius of the tank.
+    Area(i64),
+    /// Instant sweeping wave: hits every enemy within `range + extra` of the tank.
+    Wave(i64),
+    /// Instant chain: the random target plus the `N-1` nearest other enemies.
+    Bounce(u8),
 }
 
 /// Maximum frost stacks (each ~2% slow); referenced by the status system.
@@ -202,6 +211,58 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 40,
         on_hit: StatusOnHit { stun_ticks: 45, ..StatusOnHit::NONE },
+    },
+    // 6 — Ballista: a Barrage hitting several targets at once.
+    WeaponDef {
+        name: "Ballista",
+        rarity: 1,
+        cost: 1500,
+        damage: 100,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Barrage(4),
+        cooldown_ticks: 30,
+        range: 1200,
+        proj_speed: 50,
+        on_hit: StatusOnHit::NONE,
+    },
+    // 7 — Immolation: an instant Area pulse around the tank that burns.
+    WeaponDef {
+        name: "Immolation",
+        rarity: 1,
+        cost: 1500,
+        damage: 80,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Area(300),
+        cooldown_ticks: 30,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit { fire_stacks: 2, ..StatusOnHit::NONE },
+    },
+    // 8 — Shockwave Axe: an instant sweeping Wave.
+    WeaponDef {
+        name: "Shockwave Axe",
+        rarity: 2,
+        cost: 3000,
+        damage: 500,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Wave(300),
+        cooldown_ticks: 60,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit::NONE,
+    },
+    // 9 — Moon Glaive: an instant Bounce chaining to nearby enemies.
+    WeaponDef {
+        name: "Moon Glaive",
+        rarity: 1,
+        cost: 1500,
+        damage: 150,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Bounce(4),
+        cooldown_ticks: 30,
+        range: 600,
+        proj_speed: 0,
+        on_hit: StatusOnHit::NONE,
     },
 ];
 
