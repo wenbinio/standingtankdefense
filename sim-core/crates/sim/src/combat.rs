@@ -59,7 +59,11 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
             continue;
         }
 
-        let mod_mult = s.modifiers.damage_mult(wdef.damage_type);
+        // Full per-weapon multiplier (global + type + scope) is resolved HERE,
+        // at fire time. For projectiles we bake it into the carried damage; for
+        // instant attacks we pass it to apply_weapon_hit.
+        let wmult = s.modifiers.weapon_damage_mult(&wdef);
+        let baked = wmult.scale_i64(wdef.damage);
         let mut new_proj = |s: &mut ArenaState, target_idx: usize, splash: Fixed| {
             let e = &s.enemies[target_idx];
             new_projectiles.push(Projectile {
@@ -67,7 +71,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 pos: s.tank.pos,
                 target: e.id,
                 last_target_pos: e.pos,
-                damage: wdef.damage,
+                damage: baked,
                 damage_type: wdef.damage_type,
                 splash_radius: splash,
                 speed: Fixed::from_int(wdef.proj_speed),
@@ -99,7 +103,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 let r2 = Fixed::from_int(r).mul(Fixed::from_int(r));
                 for e in s.enemies.iter_mut() {
                     if s.tank.pos.dist_sq(e.pos) <= r2 {
-                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, mod_mult, &wdef.on_hit);
+                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, &wdef.on_hit);
                     }
                 }
                 any_instant_damage = true;
@@ -110,7 +114,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 let r2 = reach.mul(reach);
                 for e in s.enemies.iter_mut() {
                     if s.tank.pos.dist_sq(e.pos) <= r2 {
-                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, mod_mult, &wdef.on_hit);
+                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, &wdef.on_hit);
                     }
                 }
                 any_instant_damage = true;
@@ -131,7 +135,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                         &mut s.enemies[ti],
                         wdef.damage,
                         wdef.damage_type,
-                        mod_mult,
+                        wmult,
                         &wdef.on_hit,
                     );
                 }
@@ -247,7 +251,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     // (`docs/05 §5.3`). Bosses are immune to weapon fire (only `Clear` hurts
     // them), and each hit also applies the weapon's on-hit status.
     for imp in impacts {
-        let mod_mult = s.modifiers.damage_mult(imp.damage_type);
+        let mod_mult = Fixed::ONE; // weapon multiplier was baked into projectile damage at fire time
         if imp.splash_radius > Fixed::ZERO {
             let radius_sq = imp.splash_radius.mul(imp.splash_radius);
             for e in s.enemies.iter_mut() {
@@ -364,33 +368,48 @@ mod tests {
 
     #[test]
     fn modifiers_scale_dealt_damage() {
-        // Same impact with and without a +100% global damage modifier: the
-        // modified hit deals exactly double the base (modifier wiring works).
-        let setup = |add_global: Fixed| {
+        // The full weapon multiplier is resolved at FIRE time and baked into the
+        // projectile's carried damage. With +100% global damage the Bow's baked
+        // damage is exactly 2× its base.
+        let fire_baked = |add_global: Fixed| {
             let mut s = blank_state();
             s.weapons.clear();
             s.modifiers.add_global = add_global;
-            let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
-            let eid = mk_enemy(&mut s, 0, 1_000_000, pos); // huge hp, survives
-            let pid = s.alloc_entity_id();
-            s.projectiles.push(Projectile {
-                id: pid,
-                pos: Vec2::ZERO,
-                target: eid,
-                last_target_pos: pos,
-                damage: 1000,
-                damage_type: content::DMG_NORMAL, // armor matrix = 1.0 here
-                splash_radius: Fixed::ZERO,
-                speed: Fixed::from_int(1000),
-                on_hit: content::StatusOnHit::NONE,
-            });
-            advance_projectiles(&mut s);
-            1_000_000 - s.enemies[0].hp // damage dealt
+            let wid = s.alloc_entity_id();
+            s.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 0 });
+            mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+            fire_weapons(&mut s);
+            s.projectiles[0].damage
         };
-        let base = setup(Fixed::ZERO);
-        let doubled = setup(Fixed::from_ratio(1, 1)); // +100%
-        assert_eq!(base, 1000);
-        assert_eq!(doubled, 2000, "modifier did not scale combat damage");
+        let base = fire_baked(Fixed::ZERO); // Bow base = 75
+        let doubled = fire_baked(Fixed::from_ratio(1, 1)); // +100%
+        assert_eq!(base, content::WEAPONS[0].damage);
+        assert_eq!(doubled, base * 2, "modifier did not scale combat damage");
+    }
+
+    #[test]
+    fn per_scope_damage_only_affects_matching_weapons() {
+        use content::{attack_scope_id, range_scope_id, rarity_scope_id, Attack};
+        // Bow (def 0): SingleTarget, range 900 (long), rarity 0 (common).
+        let bow = &content::WEAPONS[0];
+        assert_eq!(attack_scope_id(bow.attack), 0);
+        assert_eq!(range_scope_id(bow.range), 7); // 900 → long
+        assert_eq!(rarity_scope_id(bow.rarity), 8);
+
+        let mut s = blank_state();
+        // +100% to SINGLE-TARGET weapons → applies to the Bow.
+        s.modifiers.add_by_scope[0] = Fixed::from_ratio(1, 1);
+        assert_eq!(s.modifiers.weapon_damage_mult(bow).scale_i64(1000), 2000);
+
+        // +100% to SPLASH weapons (scope 1) → does NOT apply to the Bow.
+        let mut s2 = blank_state();
+        s2.modifiers.add_by_scope[1] = Fixed::from_ratio(1, 1);
+        assert_eq!(s2.modifiers.weapon_damage_mult(bow), Fixed::ONE);
+        // …but DOES apply to the Mortar (def 1, Splash).
+        let mortar = &content::WEAPONS[1];
+        assert_eq!(attack_scope_id(mortar.attack), 1);
+        assert!(matches!(mortar.attack, Attack::Splash(_)));
+        assert_eq!(s2.modifiers.weapon_damage_mult(mortar).scale_i64(1000), 2000);
     }
 
     #[test]

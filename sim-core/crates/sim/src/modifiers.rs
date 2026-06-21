@@ -8,7 +8,7 @@
 //! across distinct multiplicative sources**. So all `+%` of the same additive
 //! flavor sum, then the result is multiplied by each independent `×` source.
 
-use crate::content::{ModEffect, ModifierDef};
+use crate::content::{self, ModEffect, ModifierDef, WeaponDef};
 use crate::state::{ArenaState, Economy, Modifiers, Tank};
 use determinism::Fixed;
 
@@ -34,9 +34,21 @@ impl Modifiers {
         Modifiers {
             add_global: Fixed::ZERO,
             add_by_type: [Fixed::ZERO; 5],
+            add_by_scope: [Fixed::ZERO; content::NUM_SCOPES],
             mul_global: Fixed::ONE,
             attack_speed: Fixed::ZERO,
         }
+    }
+
+    /// Full damage multiplier for a specific weapon: global + its damage type +
+    /// each scope it matches (attack class, range bucket, rarity), times the
+    /// multiplicative product. Consulted at fire time (`docs/05 §5.3`).
+    pub fn weapon_damage_mult(&self, w: &WeaponDef) -> Fixed {
+        let mut add = self.add_global + self.add_by_type[w.damage_type as usize % 5];
+        add += self.add_by_scope[content::attack_scope_id(w.attack) as usize];
+        add += self.add_by_scope[content::range_scope_id(w.range) as usize];
+        add += self.add_by_scope[content::rarity_scope_id(w.rarity) as usize];
+        (Fixed::ONE + add).mul(self.mul_global)
     }
 
     /// Fold a purchased modifier in (applies its base `effect`).
@@ -73,6 +85,9 @@ impl Modifiers {
             ModEffect::Dodge(n) => {
                 // Additive, capped just below 100% so a hit can always land.
                 tank.dodge_num = (tank.dodge_num + n).min(tank.dodge_den.saturating_sub(1));
+            }
+            ModEffect::DamageScopePct(sid, n, d) => {
+                self.add_by_scope[sid as usize % content::NUM_SCOPES] += Fixed::from_ratio(n, d)
             }
         }
     }

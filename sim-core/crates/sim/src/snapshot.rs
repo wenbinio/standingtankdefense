@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 4;
+pub const SNAPSHOT_VERSION: u32 = 5;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -222,6 +222,9 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     for a in &s.modifiers.add_by_type {
         w.fixed(*a);
     }
+    for a in &s.modifiers.add_by_scope {
+        w.fixed(*a);
+    }
     w.fixed(s.modifiers.mul_global);
     w.fixed(s.modifiers.attack_speed);
 
@@ -353,9 +356,16 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         reroll_cost: r.i64()?,
     };
 
+    let add_global = r.fixed()?;
+    let add_by_type = [r.fixed()?, r.fixed()?, r.fixed()?, r.fixed()?, r.fixed()?];
+    let mut add_by_scope = [Fixed::ZERO; 12];
+    for x in add_by_scope.iter_mut() {
+        *x = r.fixed()?;
+    }
     let modifiers = Modifiers {
-        add_global: r.fixed()?,
-        add_by_type: [r.fixed()?, r.fixed()?, r.fixed()?, r.fixed()?, r.fixed()?],
+        add_global,
+        add_by_type,
+        add_by_scope,
         mul_global: r.fixed()?,
         attack_speed: r.fixed()?,
     };

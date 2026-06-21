@@ -135,6 +135,9 @@ pub fn checksum(s: &ArenaState) -> u64 {
     for a in &s.modifiers.add_by_type {
         c.write_fixed(*a);
     }
+    for a in &s.modifiers.add_by_scope {
+        c.write_fixed(*a);
+    }
     c.write_fixed(s.modifiers.mul_global);
     c.write_fixed(s.modifiers.attack_speed);
 

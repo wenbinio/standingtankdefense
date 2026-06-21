@@ -173,6 +173,9 @@ pub struct Modifiers {
     pub add_global: Fixed,
     /// Additive % per damage type (Normal, Piercing, Magic, Siege, Chaos).
     pub add_by_type: [Fixed; 5],
+    /// Additive % per weapon scope (attack class / range bucket / rarity);
+    /// indexed by `content::*_scope_id`. Length `content::NUM_SCOPES`.
+    pub add_by_scope: [Fixed; 12],
     /// Product of multiplicative damage factors (starts at `ONE`).
     pub mul_global: Fixed,
     /// Additive % attack speed (reduces effective weapon cooldown).
