@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - GRIMDARK ENEMY "Target Dummy" (inert practice dummy) -->
+  <!-- High 3/4 top-down. Facing UP (north, -Y). No baked rotation. Centered, ~8% margin. -->
+  <!-- Harmless & a bit comic: straw-stuffed sackcloth on a wooden post; painted target rings. -->
+  <!-- Same painterly contract (gradients/AO/rim) but NO glow menace — a derpy stitched face. -->
+  <defs>
+    <!-- grimy sackcloth body volume -->
+    <radialGradient id="td_sack" cx="44%" cy="28%" r="88%">
+      <stop offset="0%"  stop-color="#C9B98C"/>
+      <stop offset="50%" stop-color="#8A7A52"/>
+      <stop offset="100%" stop-color="#3A3120"/>
+    </radialGradient>
+    <!-- wooden post / crossbar -->
+    <linearGradient id="td_wood" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#7A5A34"/>
+      <stop offset="55%" stop-color="#4A3320"/>
+      <stop offset="100%" stop-color="#1C120A"/>
+    </linearGradient>
+    <!-- straw tuft -->
+    <linearGradient id="td_straw" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%"  stop-color="#8A7A3A"/>
+      <stop offset="100%" stop-color="#D8C870"/>
+    </linearGradient>
+    <filter id="td_ao" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.8"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow under the post base -->
+  <ellipse cx="48" cy="84" rx="24" ry="7.5" fill="#06070A" opacity="0.55"/>
+  <ellipse cx="48" cy="85" rx="15" ry="4.5" fill="#06070A" opacity="0.45"/>
+
+  <!-- ================= WOODEN POST + STRAW PEG-LEG BASE (south, behind body) ================= -->
+  <rect x="44" y="58" width="8" height="26" rx="2" fill="url(#td_wood)" stroke="#0E1117" stroke-width="2.4"/>
+  <path d="M45 60 L45 82" stroke="#1C120A" stroke-width="1.4" opacity="0.6"/>
+  <!-- splayed post feet (tripod) -->
+  <g stroke="url(#td_wood)" stroke-width="4" stroke-linecap="round">
+    <path d="M48 80 L36 88"/>
+    <path d="M48 80 L60 88"/>
+  </g>
+
+  <!-- ================= CROSSBAR ARMS (sackcloth-wrapped stick, both flanks) ================= -->
+  <rect x="16" y="46" width="64" height="9" rx="4.5" fill="url(#td_wood)" stroke="#0E1117" stroke-width="2.6"/>
+  <!-- straw bursting from the cuffs -->
+  <g fill="url(#td_straw)" stroke="#5A4A1A" stroke-width="0.8" stroke-linejoin="round">
+    <path d="M16 50 L8 44 L14 52 L7 54 Z"/>
+    <path d="M80 50 L88 44 L82 52 L89 54 Z"/>
+  </g>
+  <!-- twine binding the arms to the post -->
+  <path d="M40 48 L56 53 M56 48 L40 53" stroke="#3A3120" stroke-width="1.6" opacity="0.7"/>
+
+  <!-- ================= STUFFED SACKCLOTH BODY (round, lumpy, centered) ================= -->
+  <path d="M48 78
+           C30 78 24 66 24 52
+           C24 38 34 30 48 30
+           C62 30 72 38 72 52
+           C72 66 66 78 48 78 Z"
+        fill="url(#td_sack)" stroke="#0A0B0F" stroke-width="3" stroke-linejoin="round"/>
+  <ellipse cx="48" cy="60" rx="20" ry="8" fill="#06070A" opacity="0.4" filter="url(#td_ao)"/>
+  <!-- burlap stitch seam down the middle + cinch -->
+  <path d="M48 32 L48 76" stroke="#3A3120" stroke-width="1.4" opacity="0.6" stroke-dasharray="2 3"/>
+  <path d="M30 62 C40 66 56 66 66 62" fill="none" stroke="#3A3120" stroke-width="2.2" opacity="0.55" stroke-linecap="round"/>
+  <!-- straw poking from a torn seam -->
+  <g fill="url(#td_straw)" stroke="#5A4A1A" stroke-width="0.7" stroke-linejoin="round">
+    <path d="M58 70 L66 74 L60 75 L65 78 Z"/>
+  </g>
+
+  <!-- ================= PAINTED TARGET RINGS (faded, on the body front) ================= -->
+  <circle cx="48" cy="50" r="17" fill="none" stroke="#7A201C" stroke-width="3" opacity="0.8"/>
+  <circle cx="48" cy="50" r="11.5" fill="none" stroke="#C9B98C" stroke-width="2.6" opacity="0.7"/>
+  <circle cx="48" cy="50" r="6.5" fill="none" stroke="#7A201C" stroke-width="2.6" opacity="0.8"/>
+  <circle cx="48" cy="50" r="3" fill="#7A201C" opacity="0.85"/>
+  <!-- arrows already stuck in it (comic, harmless) -->
+  <g stroke="#1C120A" stroke-width="1.8" stroke-linecap="round">
+    <path d="M62 40 L52 47"/>
+    <path d="M37 64 L45 55"/>
+  </g>
+  <path d="M62 40 L66 36 M62 40 L66 42 M62 40 L65 38" stroke="#8A7A3A" stroke-width="1.2"/>
+  <path d="M37 64 L33 68 M37 64 L33 62 M37 64 L34 66" stroke="#8A7A3A" stroke-width="1.2"/>
+
+  <!-- ================= DERPY STITCHED FACE (upper body, north) — harmless ================= -->
+  <!-- crossed-stitch X eyes -->
+  <g stroke="#2A1C10" stroke-width="2" stroke-linecap="round">
+    <path d="M40 40 L44 44 M44 40 L40 44"/>
+    <path d="M52 40 L56 44 M56 40 L52 44"/>
+  </g>
+  <!-- stitched lopsided grin -->
+  <path d="M42 47 C46 51 50 51 54 47" fill="none" stroke="#2A1C10" stroke-width="2" stroke-linecap="round"/>
+  <path d="M44 48 L44 50 M48 49 L48 51 M52 48 L52 50" stroke="#2A1C10" stroke-width="1.2"/>
+
+  <!-- straw tuft sprouting from the top of the head -->
+  <g fill="url(#td_straw)" stroke="#5A4A1A" stroke-width="0.8" stroke-linejoin="round">
+    <path d="M44 32 L42 22 L47 31 Z"/>
+    <path d="M48 31 L48 20 L51 31 Z"/>
+    <path d="M52 32 L56 23 L55 32 Z"/>
+  </g>
+
+  <!-- soft warm rim on lit sackcloth shoulder -->
+  <path d="M26 48 C30 38 40 34 48 34" fill="none" stroke="#C9B98C" stroke-width="2" opacity="0.45" stroke-linecap="round"/>
+</svg>

@@ -48,8 +48,20 @@ func _load_textures() -> void:
 		"mod":    ArtTheme.tex("ui/icon_modifier.svg"),
 		"panel":  ArtTheme.tex("ui/panel.svg"),
 	}
-	enemy_tex = [ArtTheme.tex("enemies/fel_orc_grunt.svg"),
-		ArtTheme.tex("enemies/steam_tank.svg"), ArtTheme.tex("enemies/samwise.svg")]
+	enemy_tex = [
+		ArtTheme.tex("enemies/fel_orc_grunt.svg"),    # 0 grunt
+		ArtTheme.tex("enemies/steam_tank.svg"),       # 1 steam tank
+		ArtTheme.tex("enemies/samwise.svg"),          # 2 boss
+		ArtTheme.tex("enemies/fel_orc_peon.svg"),     # 3 peon
+		ArtTheme.tex("enemies/fel_orc_raider.svg"),   # 4 raider
+		ArtTheme.tex("enemies/bandit_rider.svg"),     # 5 bandit rider
+		ArtTheme.tex("enemies/mountain_giant.svg"),   # 6 mountain giant
+		ArtTheme.tex("enemies/fel_orc_warlock.svg"),  # 7 warlock
+		ArtTheme.tex("enemies/poisonspitter.svg"),    # 8 poisonspitter
+		ArtTheme.tex("enemies/firebreather.svg"),     # 9 firebreather
+		ArtTheme.tex("enemies/icebreather.svg"),      # 10 icebreather
+		ArtTheme.tex("enemies/target_dummy.svg"),     # 11 target dummy
+	]
 	frame_tex = [ArtTheme.tex("ui/frame_common.svg"), ArtTheme.tex("ui/frame_uncommon.svg"),
 		ArtTheme.tex("ui/frame_rare.svg"), ArtTheme.tex("ui/frame_epic.svg")]
 
@@ -183,7 +195,9 @@ func _draw() -> void:
 		var id: int = eid[i] if i < eid.size() else 0
 		var bob := sin(t * 0.18 + float(id % 997) * 0.7) * 3.0
 		var tx: Texture2D = enemy_tex[kind] if kind < enemy_tex.size() else enemy_tex[0]
-		var size := 230.0 if kind == 2 else 74.0
+		if tx == null:
+			continue
+		var size := 230.0 if kind == 2 else (118.0 if kind == 6 else 74.0)
 		var mod := Color(2.4, 2.4, 2.4) if _flash.has(id) else Color.WHITE
 		_blit(tx, _to_screen(ep[i].x, ep[i].y) + Vector2(0, bob), size, mod)
 

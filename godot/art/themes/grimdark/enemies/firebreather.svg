@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - GRIMDARK ENEMY "Firebreather" (ranged fire beast) -->
+  <!-- High 3/4 top-down. Facing UP (north, -Y). No baked rotation. Centered, ~8% margin. -->
+  <!-- BREATHER SET (matched form, 3 elements): squat maw-beast breathing from front maw. -->
+  <!-- Element = FIRE: reptilian/draconic, orange-red molten glow, smoke, charred scale. -->
+  <defs>
+    <!-- charred dragon-scale flesh volume -->
+    <radialGradient id="fb_flesh" cx="44%" cy="26%" r="90%">
+      <stop offset="0%"  stop-color="#7A3A22"/>
+      <stop offset="50%" stop-color="#451E12"/>
+      <stop offset="100%" stop-color="#160A06"/>
+    </radialGradient>
+    <radialGradient id="fb_back" cx="50%" cy="34%" r="84%">
+      <stop offset="0%"  stop-color="#5A2A18"/>
+      <stop offset="60%" stop-color="#301410"/>
+      <stop offset="100%" stop-color="#0E0706"/>
+    </radialGradient>
+    <!-- molten maw / fire-breath core (element glow) -->
+    <radialGradient id="fb_fire" cx="50%" cy="42%" r="64%">
+      <stop offset="0%"  stop-color="#FFF1C0"/>
+      <stop offset="30%" stop-color="#FFB23A"/>
+      <stop offset="70%" stop-color="#E0461C"/>
+      <stop offset="100%" stop-color="#5A1206"/>
+    </radialGradient>
+    <linearGradient id="fb_bone" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#E6E0CC"/>
+      <stop offset="50%" stop-color="#C9C1A8"/>
+      <stop offset="100%" stop-color="#74705C"/>
+    </linearGradient>
+    <!-- smoke plume (dark, drifting south) -->
+    <radialGradient id="fb_smoke" cx="50%" cy="100%" r="100%">
+      <stop offset="0%"  stop-color="#3A3430" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#3A3430" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="fb_glow" x="-130%" y="-130%" width="360%" height="360%">
+      <feGaussianBlur stdDeviation="2.8"/>
+    </filter>
+    <filter id="fb_smoke_b" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="3.4"/>
+    </filter>
+    <filter id="fb_ao" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.8"/>
+    </filter>
+  </defs>
+
+  <!-- smoke plume rising off the back (drifts up & out) -->
+  <ellipse cx="48" cy="20" rx="16" ry="13" fill="url(#fb_smoke)" filter="url(#fb_smoke_b)" opacity="0.6"/>
+  <ellipse cx="38" cy="14" rx="8" ry="7" fill="url(#fb_smoke)" filter="url(#fb_smoke_b)" opacity="0.45"/>
+
+  <!-- ground shadow under the squat bulk -->
+  <ellipse cx="48" cy="84" rx="32" ry="8.5" fill="#06070A" opacity="0.58"/>
+  <ellipse cx="48" cy="85" rx="21" ry="5" fill="#06070A" opacity="0.46"/>
+
+  <!-- ================= SPLAYED CLAWED LEGS (4, flank corners) ================= -->
+  <g fill="url(#fb_back)" stroke="#0A0B0F" stroke-width="2.6" stroke-linejoin="round">
+    <ellipse cx="24" cy="44" rx="9" ry="6" transform="rotate(-30 24 44)"/>
+    <ellipse cx="72" cy="44" rx="9" ry="6" transform="rotate(30 72 44)"/>
+    <ellipse cx="22" cy="74" rx="9" ry="6" transform="rotate(30 22 74)"/>
+    <ellipse cx="74" cy="74" rx="9" ry="6" transform="rotate(-30 74 74)"/>
+  </g>
+
+  <!-- ================= BODY / SCALED BACK (away/south) ================= -->
+  <path d="M48 84
+           C26 84 18 70 18 54
+           C18 38 30 30 48 30
+           C66 30 78 38 78 54
+           C78 70 70 84 48 84 Z"
+        fill="url(#fb_back)" stroke="#0A0B0F" stroke-width="3.2" stroke-linejoin="round"/>
+  <path d="M18 54 C18 70 26 84 48 84 C70 84 78 70 78 54
+           C78 66 66 72 48 72 C30 72 18 66 18 54 Z"
+        fill="#06070A" opacity="0.5" filter="url(#fb_ao)"/>
+
+  <!-- glowing molten cracks between scales (element read) -->
+  <g stroke="#FFB23A" stroke-linecap="round" opacity="0.6">
+    <path d="M34 50 C33 60 36 68 34 78" stroke-width="2.2"/>
+    <path d="M48 56 L48 80" stroke-width="2"/>
+    <path d="M62 50 C63 60 60 68 62 78" stroke-width="2"/>
+  </g>
+  <circle cx="40" cy="64" r="4" fill="#E0461C" opacity="0.5" filter="url(#fb_glow)"/>
+  <circle cx="58" cy="62" r="3.6" fill="#E0461C" opacity="0.5" filter="url(#fb_glow)"/>
+  <!-- raised dorsal scale-spikes (north line) -->
+  <g fill="url(#fb_flesh)" stroke="#0A0B0F" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M42 48 L40 38 L46 47 Z"/>
+    <path d="M54 48 L56 38 L50 47 Z"/>
+  </g>
+  <!-- warm rim on lit back -->
+  <path d="M24 50 C28 38 40 34 50 36" fill="none" stroke="#7A3A22" stroke-width="2.4" opacity="0.5" stroke-linecap="round"/>
+
+  <!-- ================= HEAD / DRACONIC MAW (front, north) ================= -->
+  <path d="M48 26
+           C60 26 66 36 66 46
+           C66 56 58 62 48 62
+           C38 62 30 56 30 46
+           C30 36 36 26 48 26 Z"
+        fill="url(#fb_flesh)" stroke="#0A0B0F" stroke-width="3.2" stroke-linejoin="round"/>
+  <!-- horns swept back -->
+  <g fill="url(#fb_bone)" stroke="#5A5848" stroke-width="1">
+    <path d="M34 38 L26 30 L38 40 Z"/>
+    <path d="M62 38 L70 30 L58 40 Z"/>
+  </g>
+
+  <!-- the breathing maw (gaping, molten, aimed north) -->
+  <circle cx="48" cy="34" r="17" fill="#E0461C" opacity="0.55" filter="url(#fb_glow)"/>
+  <path d="M36 38 C40 24 56 24 60 38 C56 46 40 46 36 38 Z"
+        fill="#5A1206" stroke="#0A0B0F" stroke-width="2.4"/>
+  <path d="M40 36 C44 28 52 28 56 36 C52 41 44 41 40 36 Z"
+        fill="url(#fb_fire)"/>
+  <!-- draconic fang ring -->
+  <g fill="url(#fb_bone)" stroke="#5A5848" stroke-width="0.7">
+    <path d="M42 30 L44 24 L47 30 Z"/>
+    <path d="M49 30 L52 24 L54 30 Z"/>
+    <path d="M40 38 L43 44 L46 38 Z"/>
+    <path d="M50 38 L53 44 L56 38 Z"/>
+  </g>
+  <circle cx="46" cy="33" r="1.4" fill="#FFF1C0"/>
+
+  <!-- licking flame curls escaping the maw (upward/north) -->
+  <g fill="none" stroke="#FFB23A" stroke-linecap="round" opacity="0.85">
+    <path d="M44 24 C42 18 46 14 44 10" stroke-width="2"/>
+    <path d="M52 24 C54 18 50 14 52 10" stroke-width="1.8"/>
+  </g>
+  <circle cx="44" cy="10" r="1.8" fill="#FFB23A" filter="url(#fb_glow)"/>
+  <circle cx="52" cy="10" r="1.6" fill="#FFB23A" filter="url(#fb_glow)"/>
+
+  <!-- molten slit eyes either side of the maw -->
+  <circle cx="34" cy="44" r="3.2" fill="#FFB23A" opacity="0.7" filter="url(#fb_glow)"/>
+  <circle cx="62" cy="44" r="3.2" fill="#FFB23A" opacity="0.7" filter="url(#fb_glow)"/>
+  <path d="M32 42 L36 44 L32 46 Z" fill="#5A1206"/>
+  <path d="M64 42 L60 44 L64 46 Z" fill="#5A1206"/>
+</svg>

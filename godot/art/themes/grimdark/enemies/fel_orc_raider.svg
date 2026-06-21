@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - GRIMDARK ENEMY "Fel-Orc Raider" (fast twin-blade skirmisher) -->
+  <!-- High 3/4 top-down. Facing UP (north, -Y). No baked rotation. Centered, ~8% margin. -->
+  <!-- Same fel-orc family as the Grunt: lean, low crouch, light armor, twin blades, motion blur. -->
+  <!-- Painterly: gradient flesh volume, AO seams, rim catch, crisp dark rim, ember eyes. -->
+  <defs>
+    <radialGradient id="ra_flesh" cx="42%" cy="30%" r="88%">
+      <stop offset="0%"  stop-color="#8A9468"/>
+      <stop offset="48%" stop-color="#5C6B4A"/>
+      <stop offset="100%" stop-color="#222A1A"/>
+    </radialGradient>
+    <radialGradient id="ra_back" cx="50%" cy="34%" r="82%">
+      <stop offset="0%"  stop-color="#6E7B52"/>
+      <stop offset="60%" stop-color="#3D472D"/>
+      <stop offset="100%" stop-color="#181E10"/>
+    </radialGradient>
+    <!-- twin steel blades (cool, keen) -->
+    <linearGradient id="ra_blade" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%"  stop-color="#2A2E38"/>
+      <stop offset="55%" stop-color="#6E7C8C"/>
+      <stop offset="100%" stop-color="#C7D2DC"/>
+    </linearGradient>
+    <linearGradient id="ra_bone" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#E6E0CC"/>
+      <stop offset="50%" stop-color="#C9C1A8"/>
+      <stop offset="100%" stop-color="#74705C"/>
+    </linearGradient>
+    <!-- light leather strap armor -->
+    <linearGradient id="ra_leather" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"  stop-color="#5A3A22"/>
+      <stop offset="100%" stop-color="#1C140A"/>
+    </linearGradient>
+    <radialGradient id="ra_ember" cx="50%" cy="45%" r="60%">
+      <stop offset="0%"  stop-color="#FFE7B0"/>
+      <stop offset="35%" stop-color="#FF7A2E"/>
+      <stop offset="100%" stop-color="#5A1D06"/>
+    </radialGradient>
+    <!-- speed-trail (cool motion smear, south = behind) -->
+    <radialGradient id="ra_trail" cx="50%" cy="0%" r="100%">
+      <stop offset="0%"  stop-color="#8A9468" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#8A9468" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="ra_ember_glow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="1.9"/>
+    </filter>
+    <filter id="ra_motion" x="-40%" y="-40%" width="180%" height="200%">
+      <feGaussianBlur stdDeviation="3.2"/>
+    </filter>
+    <filter id="ra_ao" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.6"/>
+    </filter>
+  </defs>
+
+  <!-- motion speed-trail behind (south), reads "quick" -->
+  <path d="M30 92 C34 78 38 70 48 64 C58 70 62 78 66 92 Z"
+        fill="url(#ra_trail)" filter="url(#ra_motion)" opacity="0.7"/>
+
+  <!-- ground shadow (lean, streaked forward by motion) -->
+  <ellipse cx="48" cy="82" rx="24" ry="7" fill="#06070A" opacity="0.5"/>
+  <ellipse cx="48" cy="83" rx="15" ry="4" fill="#06070A" opacity="0.42"/>
+
+  <!-- ================= TWIN BLADES (both fists, lunging forward = north) ================= -->
+  <!-- left blade -->
+  <path d="M22 30 L26 26 L42 56 L37 60 Z"
+        fill="url(#ra_blade)" stroke="#0E1117" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M25 30 L40 56" fill="none" stroke="#E6F0F7" stroke-width="1.1" opacity="0.7" stroke-linecap="round"/>
+  <!-- right blade -->
+  <path d="M74 30 L70 26 L54 56 L59 60 Z"
+        fill="url(#ra_blade)" stroke="#0E1117" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M71 30 L56 56" fill="none" stroke="#E6F0F7" stroke-width="1.1" opacity="0.7" stroke-linecap="round"/>
+  <!-- wrapped grips -->
+  <rect x="34" y="56" width="8" height="8" rx="2" fill="#3D472D" stroke="#0E1117" stroke-width="1.6" transform="rotate(28 38 60)"/>
+  <rect x="54" y="56" width="8" height="8" rx="2" fill="#3D472D" stroke="#0E1117" stroke-width="1.6" transform="rotate(-28 58 60)"/>
+
+  <!-- ================= LEAN CROUCHED BODY (narrow, low) ================= -->
+  <path d="M48 78
+           C32 78 27 66 27 54
+           C27 43 36 37 48 37
+           C60 37 69 43 69 54
+           C69 66 64 78 48 78 Z"
+        fill="url(#ra_back)" stroke="#0A0B0F" stroke-width="2.8" stroke-linejoin="round"/>
+  <path d="M27 54 C27 66 32 78 48 78 C64 78 69 66 69 54
+           C69 62 59 68 48 68 C37 68 27 62 27 54 Z"
+        fill="#06070A" opacity="0.5" filter="url(#ra_ao)"/>
+
+  <!-- lean angled shoulders (forward lunge) -->
+  <ellipse cx="36" cy="50" rx="12" ry="13" fill="url(#ra_flesh)" stroke="#0A0B0F" stroke-width="2.8" transform="rotate(-12 36 50)"/>
+  <ellipse cx="60" cy="50" rx="12" ry="13" fill="url(#ra_flesh)" stroke="#0A0B0F" stroke-width="2.8" transform="rotate(12 60 50)"/>
+  <ellipse cx="42" cy="54" rx="5" ry="9" fill="#06070A" opacity="0.4" filter="url(#ra_ao)"/>
+  <ellipse cx="54" cy="54" rx="5" ry="9" fill="#06070A" opacity="0.4" filter="url(#ra_ao)"/>
+
+  <!-- crossed leather straps over chest -->
+  <path d="M38 46 L58 70" stroke="url(#ra_leather)" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M58 46 L38 70" stroke="url(#ra_leather)" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+
+  <!-- ================= HEAD (center, forward = north) — lean, sharp ================= -->
+  <path d="M48 41
+           C58 41 64 50 64 60
+           C64 71 57 77 48 77
+           C39 77 32 71 32 60
+           C32 50 38 41 48 41 Z"
+        fill="url(#ra_flesh)" stroke="#0A0B0F" stroke-width="2.8" stroke-linejoin="round"/>
+  <ellipse cx="48" cy="56" rx="13" ry="5" fill="#06070A" opacity="0.45" filter="url(#ra_ao)"/>
+  <!-- low keen brow -->
+  <path d="M36 53 C42 45 54 45 60 53 C54 49 42 49 36 53 Z"
+        fill="url(#ra_bone)" stroke="#5A5848" stroke-width="1.3" stroke-linejoin="round"/>
+
+  <!-- narrowed ember eyes (focused, fast) -->
+  <g>
+    <circle cx="43" cy="58" r="4.6" fill="#FF7A2E" opacity="0.7" filter="url(#ra_ember_glow)"/>
+    <circle cx="53" cy="58" r="4.6" fill="#FF7A2E" opacity="0.7" filter="url(#ra_ember_glow)"/>
+    <path d="M39 57 L47 56 L47 60 L39 59 Z" fill="#0A0B0F"/>
+    <path d="M57 57 L49 56 L49 60 L57 59 Z" fill="#0A0B0F"/>
+    <circle cx="43.5" cy="58" r="2" fill="url(#ra_ember)"/>
+    <circle cx="52.5" cy="58" r="2" fill="url(#ra_ember)"/>
+    <circle cx="43" cy="57.4" r="0.7" fill="#FFE7B0"/>
+    <circle cx="52" cy="57.4" r="0.7" fill="#FFE7B0"/>
+  </g>
+
+  <!-- bared-fang grin + twin tusks -->
+  <path d="M41 66 C46 64 50 64 55 66 C51 72 45 72 41 66 Z"
+        fill="#350C0B" stroke="#0A0B0F" stroke-width="1.4"/>
+  <g stroke="#5A5848" stroke-width="0.8" stroke-linejoin="round">
+    <path d="M42 67 L39 60 L45 66 Z" fill="url(#ra_bone)"/>
+    <path d="M54 67 L57 60 L51 66 Z" fill="url(#ra_bone)"/>
+  </g>
+
+  <!-- warm rim on lit cheek -->
+  <path d="M34 56 C36 48 41 44 47 44" fill="none" stroke="#8A9468" stroke-width="1.7" opacity="0.45" stroke-linecap="round"/>
+</svg>

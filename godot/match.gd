@@ -25,8 +25,14 @@ func _load_textures() -> void:
 		"tank":   ArtTheme.tank_tex(),
 		"coin":   ArtTheme.tex("ui/coin.svg"),
 	}
-	enemy_tex = [ArtTheme.tex("enemies/fel_orc_grunt.svg"),
-		ArtTheme.tex("enemies/steam_tank.svg"), ArtTheme.tex("enemies/samwise.svg")]
+	enemy_tex = [
+		ArtTheme.tex("enemies/fel_orc_grunt.svg"), ArtTheme.tex("enemies/steam_tank.svg"),
+		ArtTheme.tex("enemies/samwise.svg"), ArtTheme.tex("enemies/fel_orc_peon.svg"),
+		ArtTheme.tex("enemies/fel_orc_raider.svg"), ArtTheme.tex("enemies/bandit_rider.svg"),
+		ArtTheme.tex("enemies/mountain_giant.svg"), ArtTheme.tex("enemies/fel_orc_warlock.svg"),
+		ArtTheme.tex("enemies/poisonspitter.svg"), ArtTheme.tex("enemies/firebreather.svg"),
+		ArtTheme.tex("enemies/icebreather.svg"), ArtTheme.tex("enemies/target_dummy.svg"),
+	]
 
 var _recorded := false        # match-end achievements credited once
 var _toast: Array = []        # newly-unlocked achievement names to flash
@@ -121,8 +127,10 @@ func _draw_cell(font, i: int, r: Rect2) -> void:
 	var ek: PackedByteArray = m.enemies_kind(i)
 	for j in ep.size():
 		var kind: int = ek[j] if j < ek.size() else 0
-		var sz := 56.0 if kind == 2 else 20.0
-		_blit(enemy_tex[kind], center + Vector2(ep[j].x * scl, -ep[j].y * scl), sz)
+		var sz := 56.0 if kind == 2 else (30.0 if kind == 6 else 20.0)
+		var tx: Texture2D = enemy_tex[kind] if kind < enemy_tex.size() else null
+		if tx:
+			_blit(tx, center + Vector2(ep[j].x * scl, -ep[j].y * scl), sz)
 
 	# tank
 	_blit(tex["tank"], center, 40.0, Color(1, 1, 1, 0.5) if dead else Color.WHITE)
