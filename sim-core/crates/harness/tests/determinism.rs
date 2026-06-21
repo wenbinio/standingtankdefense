@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x9dc3cff68c074964, // re-baselined: spiky weapon/mod balance + 4 scaling passives
+        0xd0073004a5632cef, // re-baselined: weapon abilities + hazards + 12-enemy roster + ranged breathers
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

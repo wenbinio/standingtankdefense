@@ -68,6 +68,8 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     combat::advance_projectiles(s);
     // 6. Enemies advance toward the tank; contact damage on arrival.
     combat::move_enemies(s);
+    // 6c. Ranged enemies (breathers/spitters/casters) attack the tank at standoff.
+    combat::enemy_ranged_attacks(s);
     // 6b. Spikes: if the tank was hit, retaliate against nearby enemies.
     defense::spikes(s);
     // 6c. Hazards (land mines / burning oil) pulse damage to enemies in range.

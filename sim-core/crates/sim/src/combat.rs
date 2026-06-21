@@ -516,6 +516,59 @@ pub(crate) fn tick_hazards(s: &mut ArenaState) {
     }
 }
 
+/// Phase 6c: ENEMY-side ranged attacks. Each enemy whose def carries
+/// `EnemyAbility::RangedAttack` and is within its `range` of the tank fires on a
+/// deterministic per-enemy phase — `(tick + enemy id) % cooldown == 0` — dealing
+/// `damage` of `damage_type` to the tank through the defensive layer
+/// (`defense::hit_tank`, which honors dodge / mana-shield / armor). The phase is
+/// derived from existing deterministic quantities (tick + stable id), so it needs
+/// NO per-enemy runtime state and never touches the snapshot/checksum. Enemies are
+/// visited in stable id order. Damage scales with match time on the same curve as
+/// contact damage / HP (`content::enemy_hp_mult`).
+pub(crate) fn enemy_ranged_attacks(s: &mut ArenaState) {
+    let tank_pos = s.tank.pos;
+    let dmg_mult = content::enemy_hp_mult(s.tick);
+
+    // Resolve which enemies fire (and for how much) without holding an enemy
+    // borrow across the `defense::hit_tank` mutation. Stable id order.
+    let mut hits: Vec<i64> = Vec::new();
+    for e in s.enemies.iter() {
+        // Stunned / frozen enemies can't attack this tick.
+        if crate::status::is_immobile(e) {
+            continue;
+        }
+        let edef = &content::ENEMIES[e.def as usize];
+        if let content::EnemyAbility::RangedAttack {
+            range,
+            cooldown_ticks,
+            damage,
+            damage_type: _,
+        } = edef.ability
+        {
+            if cooldown_ticks == 0 {
+                continue;
+            }
+            let reach = Fixed::from_int(range);
+            if tank_pos.dist_sq(e.pos) > reach.mul(reach) {
+                continue; // not yet within standoff range
+            }
+            // Deterministic per-enemy firing phase.
+            if (s.tick.wrapping_add(e.id.0)) % cooldown_ticks != 0 {
+                continue;
+            }
+            // Time-scaled raw damage; the tank's flat armor / dodge / mana-shield
+            // are applied inside `defense::hit_tank`. `damage_type` is reserved
+            // for future tank armor-class matrixing and render telemetry.
+            let raw = dmg_mult.scale_i64(damage);
+            hits.push(raw);
+        }
+    }
+
+    for raw in hits {
+        crate::defense::hit_tank(s, raw);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1013,6 +1066,114 @@ mod tests {
     fn give_weapon(s: &mut ArenaState, def: u16) {
         let id = s.alloc_entity_id();
         s.weapons.push(WeaponInstance { instance_id: id, def, next_fire_tick: 0 });
+    }
+
+    // ---- enemy roster: ranged attacks & Fortified armor ---------------------
+
+    /// Find a roster def by name (so tests don't hardcode catalog indices).
+    fn enemy_def_idx(name: &str) -> u16 {
+        content::ENEMIES
+            .iter()
+            .position(|e| e.name == name)
+            .expect("enemy in roster") as u16
+    }
+
+    #[test]
+    fn ranged_enemy_damages_tank_at_range() {
+        // A Firebreather (ranged) sitting within its standoff range should pelt
+        // the tank without ever reaching it.
+        let mut s = blank_state();
+        s.weapons.clear();
+        let fb = enemy_def_idx("Firebreather");
+        let edef = &content::ENEMIES[fb as usize];
+        let (range, cd, dmg) = match edef.ability {
+            content::EnemyAbility::RangedAttack { range, cooldown_ticks, damage, .. } => {
+                (range, cooldown_ticks, damage)
+            }
+            _ => panic!("Firebreather must be a ranged attacker"),
+        };
+        // Place it well inside range but not at the origin.
+        let pos = Vec2::new(Fixed::from_int(range - 50), Fixed::ZERO);
+        let id = mk_enemy(&mut s, fb, edef.base_hp, pos);
+        // Pick a tick on this enemy's firing phase: (tick + id) % cd == 0.
+        s.tick = (cd - (id.0 % cd)) % cd;
+        let hp0 = s.tank.hp;
+        enemy_ranged_attacks(&mut s);
+        // Damage applied through the defensive layer (no dodge/armor in blank state).
+        assert_eq!(s.tank.hp, hp0 - dmg, "ranged enemy hit the tank at standoff range");
+        // The enemy is still alive and has not moved (ranged path doesn't move it).
+        assert_eq!(s.enemies.len(), 1);
+        assert_eq!(s.enemies[0].pos, pos, "ranged enemy attacks without closing");
+    }
+
+    #[test]
+    fn ranged_enemy_out_of_range_does_not_fire() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let fb = enemy_def_idx("Firebreather");
+        let edef = &content::ENEMIES[fb as usize];
+        let range = match edef.ability {
+            content::EnemyAbility::RangedAttack { range, .. } => range,
+            _ => unreachable!(),
+        };
+        // Just outside range.
+        let pos = Vec2::new(Fixed::from_int(range + 100), Fixed::ZERO);
+        mk_enemy(&mut s, fb, edef.base_hp, pos);
+        let hp0 = s.tank.hp;
+        // Sweep a full cooldown window of ticks: still no hit while out of range.
+        for t in 0..60u32 {
+            s.tick = t;
+            enemy_ranged_attacks(&mut s);
+        }
+        assert_eq!(s.tank.hp, hp0, "out-of-range ranged enemy never fires");
+    }
+
+    #[test]
+    fn ranged_attack_is_deterministic_same_seed() {
+        let build = || {
+            let mut s = blank_state();
+            s.weapons.clear();
+            let fb = enemy_def_idx("Poisonspitter");
+            mk_enemy(&mut s, fb, 1000, Vec2::new(Fixed::from_int(200), Fixed::ZERO));
+            s
+        };
+        let mut a = build();
+        let mut b = build();
+        for t in 0..120u32 {
+            a.tick = t;
+            b.tick = t;
+            enemy_ranged_attacks(&mut a);
+            enemy_ranged_attacks(&mut b);
+        }
+        assert_eq!(a.tank.hp, b.tank.hp, "same seed/ids → identical ranged damage");
+        assert!(a.tank.hp < build().tank.hp, "the spitter did damage over the window");
+    }
+
+    #[test]
+    fn fortified_armor_reduces_damage() {
+        // Mountain Giant is Fortified (armor class 2). Piercing is heavily
+        // resisted; Siege is amplified — relative to a Light-armored grunt.
+        let giant = enemy_def_idx("Mountain Giant");
+        let gdef = &content::ENEMIES[giant as usize];
+        assert_eq!(gdef.armor_class, content::ARMOR_FORTIFIED);
+
+        let cond = CondDamage::of(&blank_state());
+        let base = 1000;
+
+        // Piercing vs Fortified must be far less than piercing vs Light (2× there).
+        let mut g_pierce = Enemy::new(EntityId(1), giant, 1_000_000, Vec2::ZERO);
+        let mut accum = AbilityAccum::default();
+        let dealt_pierce =
+            apply_weapon_hit(&mut g_pierce, base, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE, content::WeaponAbility::None, Vec2::ZERO, &mut accum);
+        let light_pierce = content::damage_multiplier(content::DMG_PIERCING, content::ARMOR_LIGHT).scale_i64(base);
+        assert!(dealt_pierce < base, "Fortified resists Piercing (<1×)");
+        assert!(dealt_pierce < light_pierce, "Fortified takes far less Piercing than Light armor");
+
+        // Siege vs Fortified should be amplified (>1×) — siege is the counter.
+        let mut g_siege = Enemy::new(EntityId(2), giant, 1_000_000, Vec2::ZERO);
+        let dealt_siege =
+            apply_weapon_hit(&mut g_siege, base, content::DMG_SIEGE, Fixed::ONE, cond, &content::StatusOnHit::NONE, content::WeaponAbility::None, Vec2::ZERO, &mut accum);
+        assert!(dealt_siege > base, "Siege bites Fortified harder (>1×)");
     }
 
     #[test]
