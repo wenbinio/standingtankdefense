@@ -178,6 +178,17 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(p.next_tick);
     }
 
+    // Pending meta perk (duplicator/voucher) armed for the next purchase.
+    match s.pending_perk {
+        Some(p) => {
+            c.write_u32(1);
+            c.write_u32(p.rarity as u32);
+            c.write_u32(p.extra_copies);
+            c.write_u32(p.free as u32);
+        }
+        None => c.write_u32(0),
+    }
+
     // Shop offers (slot order is meaningful).
     c.write_u32(s.shop.shop_seq);
     c.write_u32(s.shop.offers.len() as u32);

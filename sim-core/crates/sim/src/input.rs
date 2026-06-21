@@ -31,18 +31,28 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
         Input::BuyOffer { slot } => {
             let idx = slot as usize;
             if let Some(offer) = s.shop.offers.get(idx).copied() {
-                if s.economy.gold >= offer.cost {
-                    s.economy.gold -= offer.cost;
-                    match offer.kind {
-                        OfferKind::Weapon => {
-                            let id = s.alloc_entity_id();
-                            s.weapons.push(WeaponInstance {
-                                instance_id: id,
-                                def: offer.def,
-                                next_fire_tick: s.tick,
-                            });
+                // A pending meta perk (`docs/06` #5) may apply to this purchase,
+                // but never to another META item (no self-duplication / chaining).
+                let perk = if ArenaState::offer_is_meta(offer) {
+                    None
+                } else {
+                    let rarity = ArenaState::offer_rarity(offer);
+                    s.pending_perk.filter(|p| p.matches(rarity))
+                };
+                // Black Market voucher makes the matching purchase free.
+                let cost = match perk {
+                    Some(p) if p.free => 0,
+                    _ => offer.cost,
+                };
+                if s.economy.gold >= cost {
+                    s.economy.gold -= cost;
+                    s.grant_offer(offer);
+                    // Duplicator: grant the extra free copies, then consume the perk.
+                    if let Some(p) = perk {
+                        for _ in 0..p.extra_copies {
+                            s.grant_offer(offer);
                         }
-                        OfferKind::Modifier => s.buy_modifier(offer.def),
+                        s.pending_perk = None;
                     }
                 }
             }
@@ -177,6 +187,96 @@ mod tests {
         assert_eq!(s.economy.gold, 50);
         assert_eq!(s.shop.shop_seq, seq_before, "no regeneration when ignored");
         assert_eq!(s.shop.offers[0].def, 7);
+    }
+
+    // ---- meta / shop items (`docs/06` #5) ----------------------------------
+
+    /// Find a catalog modifier index whose effect matches a predicate.
+    fn modifier_idx(pred: impl Fn(&content::ModEffect) -> bool) -> u16 {
+        content::MODIFIERS.iter().position(|m| pred(&m.effect)).expect("modifier exists") as u16
+    }
+
+    #[test]
+    fn duplicator_grants_extra_copies_of_next_matching_purchase() {
+        let mut s = fresh();
+        // Arm "+N copies of next Common (rarity 0)".
+        let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(0, _)));
+        let copies = match content::MODIFIERS[dup as usize].effect {
+            content::ModEffect::GrantDuplicator(_, c) => c as usize,
+            _ => unreachable!(),
+        };
+        s.buy_modifier(dup);
+        assert!(s.pending_perk.is_some(), "perk armed");
+
+        // Buy a rarity-0 WEAPON; should yield 1 + copies instances.
+        let common_weapon = content::WEAPONS.iter().position(|w| w.rarity == 0).unwrap() as u16;
+        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: common_weapon, cost: 100 }];
+        s.economy.gold = 100;
+        let before = s.weapons.len();
+        apply(&mut s, Input::BuyOffer { slot: 0 });
+        assert_eq!(s.weapons.len(), before + 1 + copies, "duplicated copies granted");
+        assert!(s.pending_perk.is_none(), "perk consumed");
+        assert_eq!(s.economy.gold, 0, "only the base copy costs gold");
+    }
+
+    #[test]
+    fn duplicator_ignores_non_matching_rarity() {
+        let mut s = fresh();
+        let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(0, _)));
+        s.buy_modifier(dup);
+        // Buy a rarity-2 weapon: perk (rarity 0) must NOT apply and must remain armed.
+        let rare_weapon = content::WEAPONS.iter().position(|w| w.rarity == 2).unwrap() as u16;
+        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: rare_weapon, cost: 0 }];
+        let before = s.weapons.len();
+        apply(&mut s, Input::BuyOffer { slot: 0 });
+        assert_eq!(s.weapons.len(), before + 1, "no extra copies for wrong rarity");
+        assert!(s.pending_perk.is_some(), "perk still armed");
+    }
+
+    #[test]
+    fn voucher_makes_next_matching_purchase_free() {
+        let mut s = fresh();
+        let voucher = modifier_idx(|e| matches!(e, content::ModEffect::GrantVoucher(1)));
+        s.buy_modifier(voucher);
+        // A rarity-1 weapon costs more gold than we hold, but the voucher zeroes it.
+        let unc_weapon = content::WEAPONS.iter().position(|w| w.rarity == 1).unwrap() as u16;
+        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: unc_weapon, cost: 9999 }];
+        s.economy.gold = 0;
+        let before = s.weapons.len();
+        apply(&mut s, Input::BuyOffer { slot: 0 });
+        assert_eq!(s.weapons.len(), before + 1, "free purchase happened");
+        assert_eq!(s.economy.gold, 0, "voucher charged no gold");
+        assert!(s.pending_perk.is_none(), "voucher consumed");
+    }
+
+    #[test]
+    fn meta_items_do_not_consume_or_chain_perks() {
+        let mut s = fresh();
+        let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(0, _)));
+        s.buy_modifier(dup);
+        let armed = s.pending_perk;
+        // Buying ANOTHER meta item (a rarity-1 voucher) must not consume the
+        // duplicator perk — it replaces it with its own (no self-duplication).
+        let voucher = modifier_idx(|e| matches!(e, content::ModEffect::GrantVoucher(1)));
+        s.shop.offers = vec![Offer { kind: OfferKind::Modifier, def: voucher, cost: 0 }];
+        s.economy.gold = 0;
+        apply(&mut s, Input::BuyOffer { slot: 0 });
+        // The duplicator did not duplicate the voucher; the perk is now the voucher.
+        assert_ne!(s.pending_perk, armed);
+        assert_eq!(s.pending_perk.map(|p| p.free), Some(true), "perk is the voucher");
+    }
+
+    #[test]
+    fn magic_treasure_grants_instant_gold() {
+        let mut s = fresh();
+        let treasure = modifier_idx(|e| matches!(e, content::ModEffect::GrantGold(_)));
+        let gold = match content::MODIFIERS[treasure as usize].effect {
+            content::ModEffect::GrantGold(g) => g,
+            _ => unreachable!(),
+        };
+        let before = s.economy.gold;
+        s.buy_modifier(treasure);
+        assert_eq!(s.economy.gold, before + gold, "instant gold granted");
     }
 
     #[test]

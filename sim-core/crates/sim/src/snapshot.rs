@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 10;
+pub const SNAPSHOT_VERSION: u32 = 11;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -262,6 +262,17 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u32(p.next_tick);
     }
 
+    // pending meta perk (duplicator/voucher)
+    match s.pending_perk {
+        Some(p) => {
+            w.u8(1);
+            w.u8(p.rarity);
+            w.u32(p.extra_copies);
+            w.u8(p.free as u8);
+        }
+        None => w.u8(0),
+    }
+
     // shop
     w.u32(s.shop.shop_seq);
     w.len(s.shop.offers.len());
@@ -429,6 +440,16 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         });
     }
 
+    let pending_perk = match r.u8()? {
+        0 => None,
+        1 => Some(PendingPerk {
+            rarity: r.u8()?,
+            extra_copies: r.u32()?,
+            free: r.u8()? != 0,
+        }),
+        t => return Err(SnapshotError::BadTag(t)),
+    };
+
     let shop_seq = r.u32()?;
     let mut offers = Vec::new();
     for _ in 0..r.len()? {
@@ -477,6 +498,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         modifiers,
         ramps,
         vuln_pulses,
+        pending_perk,
         tank_hit_this_tick: false,
         next_entity_id,
         dead,

@@ -184,6 +184,25 @@ pub struct Offer {
     pub cost: i64,
 }
 
+/// A one-shot meta perk armed by a meta item (Magic Coin / Duplicator / Black
+/// Market), consumed by the next matching non-meta purchase (`docs/06` #5).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct PendingPerk {
+    /// Only purchases of this rarity qualify (`255` = any rarity).
+    pub rarity: u8,
+    /// Extra free copies granted to the matching purchase (duplicator).
+    pub extra_copies: u32,
+    /// Whether the matching purchase is free (Black Market voucher).
+    pub free: bool,
+}
+
+impl PendingPerk {
+    /// Whether a purchase at `rarity` qualifies for this perk.
+    pub fn matches(&self, rarity: u8) -> bool {
+        self.rarity == 255 || self.rarity == rarity
+    }
+}
+
 /// An active time-scaling growth: re-applies `effect` every `interval_ticks`
 /// (the source's "+X every 30 seconds"). Registered when a ramping modifier is
 /// purchased; lives for the rest of the match.
@@ -251,6 +270,8 @@ pub struct ArenaState {
     pub ramps: Vec<ActiveRamp>,
     /// Active Vulnerability-Pulse auras.
     pub vuln_pulses: Vec<VulnPulse>,
+    /// A meta perk (duplicator/voucher) armed for the next matching purchase.
+    pub pending_perk: Option<PendingPerk>,
     /// Set when the tank takes damage this tick (drives Spikes retaliation).
     /// Transient: always `false` at a tick boundary, so it is excluded from the
     /// checksum/snapshot.
@@ -318,6 +339,7 @@ impl ArenaState {
             modifiers: Modifiers::new(),
             ramps: Vec::new(),
             vuln_pulses: Vec::new(),
+            pending_perk: None,
             tank_hit_this_tick: false,
             next_entity_id: 1,
             dead: false,
@@ -368,6 +390,22 @@ impl ArenaState {
                     next_tick: self.tick + interval as u32,
                 });
             }
+            // META items (`docs/06` #5) arm the purchase flow / grant gold.
+            content::ModEffect::GrantDuplicator(rarity, copies) => {
+                self.pending_perk = Some(PendingPerk {
+                    rarity: rarity as u8,
+                    extra_copies: copies as u32,
+                    free: false,
+                });
+            }
+            content::ModEffect::GrantVoucher(rarity) => {
+                self.pending_perk = Some(PendingPerk {
+                    rarity: rarity as u8,
+                    extra_copies: 0,
+                    free: true,
+                });
+            }
+            content::ModEffect::GrantGold(g) => self.economy.gold += g,
             other => self.modifiers.apply_effect(other, &mut self.economy, &mut self.tank),
         }
         if let Some(r) = ramp {
@@ -377,5 +415,36 @@ impl ArenaState {
                 next_apply: self.tick + r.interval_ticks,
             });
         }
+    }
+
+    /// Grant one unit of an offer (a weapon instance or a modifier application),
+    /// independent of gold/perk handling. Used by `input` for the base purchase
+    /// and for each extra duplicator copy.
+    pub fn grant_offer(&mut self, offer: Offer) {
+        match offer.kind {
+            OfferKind::Weapon => {
+                let id = self.alloc_entity_id();
+                self.weapons.push(WeaponInstance {
+                    instance_id: id,
+                    def: offer.def,
+                    next_fire_tick: self.tick,
+                });
+            }
+            OfferKind::Modifier => self.buy_modifier(offer.def),
+        }
+    }
+
+    /// A purchase's rarity (for perk matching).
+    pub fn offer_rarity(offer: Offer) -> u8 {
+        match offer.kind {
+            OfferKind::Weapon => content::WEAPONS[offer.def as usize].rarity,
+            OfferKind::Modifier => content::MODIFIERS[offer.def as usize].rarity,
+        }
+    }
+
+    /// Whether an offer is a META item (must not trigger or be duplicated).
+    pub fn offer_is_meta(offer: Offer) -> bool {
+        matches!(offer.kind, OfferKind::Modifier)
+            && content::MODIFIERS[offer.def as usize].effect.is_meta()
     }
 }

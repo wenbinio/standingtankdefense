@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0xe938e2f39adbcf54, // re-baselined (status-conditional & flavor damage)
+        0xaf8f6613b6a35602, // re-baselined (meta/shop items: duplicator/voucher/treasure)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

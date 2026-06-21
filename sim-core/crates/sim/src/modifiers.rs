@@ -121,8 +121,12 @@ impl Modifiers {
             ModEffect::DamageVsPoisonedPct(n, d) => self.vs_poisoned += Fixed::from_ratio(n, d),
             ModEffect::PoisonDamagePct(n, d) => self.poison_dmg_mult += Fixed::from_ratio(n, d),
             ModEffect::StunDurationPct(n, d) => self.stun_dur_mult += Fixed::from_ratio(n, d),
-            // Registered as per-arena trigger state in `buy_modifier`; no aggregate.
-            ModEffect::GrantVulnPulse(..) => {}
+            // Registered as per-arena trigger / purchase-flow state in
+            // `buy_modifier`; they have no aggregate contribution here.
+            ModEffect::GrantVulnPulse(..)
+            | ModEffect::GrantDuplicator(..)
+            | ModEffect::GrantVoucher(..)
+            | ModEffect::GrantGold(..) => {}
         }
     }
 
