@@ -12,8 +12,9 @@ license = "MIT"
 crate-type = ["cdylib"]
 
 [dependencies]
-# godot-rust (gdext). Pinned to a 0.3 line (Godot 4.3+). If your gdext differs,
-# a couple of Packed*Array `push`/`from` signatures may need trivial tweaks.
-godot = "0.3"
+# godot-rust (gdext). 0.5 line. `api-4-3` builds against the Godot 4.3 API so the
+# extension loads on Godot 4.3 and every newer 4.x (forward-compatible). Without
+# it, gdext targets its newest known Godot and refuses to load on older editors.
+godot = { version = "0.5", features = ["api-4-3"] }
 # The deterministic core, by path — the binding never duplicates game logic.
 sim = { path = "../../sim-core/crates/sim" }

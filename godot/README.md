@@ -46,7 +46,9 @@ Because the sim is deterministic, the same seed (set in `main.gd`'s
 `new_match`) always produces the same match — the foundation the netcode
 (`sim-core/crates/net`) builds on.
 
-## gdext version note
-The binding targets **godot-rust 0.3** (Godot 4.3+). If you use a different
-gdext, a couple of `Packed*Array` `push`/`from` call sites may need trivial
-signature tweaks — the logic is unaffected.
+## Versions (verified)
+Built and run headlessly against **Godot 4.4.1** with **godot-rust 0.5.3**.
+The binding pins the `api-4-3` feature, so the compiled extension loads on
+**Godot 4.3 and every newer 4.x** (forward-compatible). If you target an even
+older editor, lower the feature and `compatibility_minimum` to match; if your
+toolchain is older, gdext 0.5 still applies.

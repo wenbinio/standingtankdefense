@@ -159,7 +159,7 @@ impl StSim {
     fn arsenal_lines(&self) -> PackedStringArray {
         let mut a = PackedStringArray::new();
         for e in &view::snapshot(&self.state).arsenal {
-            a.push(&GString::from(format!("{} x{}", e.name, e.count)));
+            a.push(&GString::from(format!("{} x{}", e.name, e.count).as_str()));
         }
         a
     }
