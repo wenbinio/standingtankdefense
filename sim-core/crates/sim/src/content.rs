@@ -103,6 +103,14 @@ pub enum ModEffect {
     IncomeFlat(i64),
     /// +flat max HP (and current HP).
     MaxHp(i64),
+    /// +flat armor (flat damage reduction).
+    Armor(i64),
+    /// +Mana Shield pool (and regen/tick): `(pool, regen_per_tick)`.
+    ManaShield(i64, i64),
+    /// +flat HP regeneration per tick.
+    HpRegen(i64),
+    /// +dodge chance numerator (out of `Tank::dodge_den`, capped).
+    Dodge(u32),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -126,6 +134,10 @@ pub static MODIFIERS: &[ModifierDef] = &[
     ModifierDef { name: "+50% Kill Bounty", rarity: 1, cost: 1500, effect: ModEffect::BountyPct(1, 2) },
     ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(20) },
     ModifierDef { name: "+2000 Max HP", rarity: 1, cost: 1500, effect: ModEffect::MaxHp(2000) },
+    ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effect: ModEffect::Armor(10) },
+    ModifierDef { name: "+2000 Mana Shield", rarity: 1, cost: 1500, effect: ModEffect::ManaShield(2000, 10) },
+    ModifierDef { name: "+50 HP Regen", rarity: 0, cost: 500, effect: ModEffect::HpRegen(50) },
+    ModifierDef { name: "+10% Dodge", rarity: 1, cost: 1500, effect: ModEffect::Dodge(10) },
 ];
 
 /// The weapon the tank starts with (index into [`WEAPONS`]).

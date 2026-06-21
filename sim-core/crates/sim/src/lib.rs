@@ -11,6 +11,7 @@
 pub mod content;
 pub mod snapshot;
 mod combat;
+mod defense;
 mod economy;
 mod ids;
 mod input;
@@ -66,7 +67,9 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     economy::collect_bounties(s);
     // 9. Passive income.
     economy::tick_income(s);
-    // 10. Death check (tank hp ≤ 0).
+    // 10. Tank regeneration (mana shield + HP).
+    defense::regen(s);
+    // 11. Death check (tank hp ≤ 0).
     economy::resolve_deaths(s);
 
     s.tick += 1;
@@ -87,6 +90,13 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_fixed(s.tank.pos.x);
     c.write_fixed(s.tank.pos.y);
     c.write_u32(s.tank.clear_cooldown_end);
+    c.write_i64(s.tank.armor);
+    c.write_u32(s.tank.dodge_num);
+    c.write_u32(s.tank.dodge_den);
+    c.write_i64(s.tank.mana_shield);
+    c.write_i64(s.tank.mana_shield_max);
+    c.write_i64(s.tank.mana_regen_per_tick);
+    c.write_i64(s.tank.hp_regen_per_tick);
 
     c.write_i64(s.economy.gold);
     c.write_i64(s.economy.income_per_tick);

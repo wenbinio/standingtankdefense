@@ -289,11 +289,12 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
         let edef = &content::ENEMIES[e.def as usize];
         // Movement is slowed by Frost stacks.
         let speed = Fixed::from_int(edef.move_speed).mul(crate::status::move_speed_mult(&e));
+        let contact = edef.contact_damage;
         let moved = e.pos.step_toward(tank_pos, speed);
         if moved == tank_pos {
-            // Contact: deal contact damage, remove enemy (no bounty for
-            // self-destruct, so do NOT push to pending_kills).
-            s.tank.hp -= edef.contact_damage;
+            // Contact: deal contact damage through the defensive layer, remove
+            // the enemy (no bounty for self-destruct).
+            crate::defense::hit_tank(s, contact);
         } else {
             e.pos = moved;
             survivors.push(e);

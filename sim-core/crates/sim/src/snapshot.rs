@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 2;
+pub const SNAPSHOT_VERSION: u32 = 3;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -161,6 +161,13 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.i64(s.tank.max_hp);
     w.vec2(s.tank.pos);
     w.u32(s.tank.clear_cooldown_end);
+    w.i64(s.tank.armor);
+    w.u32(s.tank.dodge_num);
+    w.u32(s.tank.dodge_den);
+    w.i64(s.tank.mana_shield);
+    w.i64(s.tank.mana_shield_max);
+    w.i64(s.tank.mana_regen_per_tick);
+    w.i64(s.tank.hp_regen_per_tick);
 
     // weapons
     w.len(s.weapons.len());
@@ -269,6 +276,13 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         max_hp: r.i64()?,
         pos: r.vec2()?,
         clear_cooldown_end: r.u32()?,
+        armor: r.i64()?,
+        dodge_num: r.u32()?,
+        dodge_den: r.u32()?,
+        mana_shield: r.i64()?,
+        mana_shield_max: r.i64()?,
+        mana_regen_per_tick: r.i64()?,
+        hp_regen_per_tick: r.i64()?,
     };
 
     let mut weapons = Vec::new();

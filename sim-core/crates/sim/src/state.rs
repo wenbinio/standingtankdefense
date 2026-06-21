@@ -54,6 +54,17 @@ pub struct Tank {
     pub max_hp: i64,
     pub pos: Vec2,
     pub clear_cooldown_end: Tick,
+    /// Flat damage reduction applied before the shield/HP (min 1 gets through).
+    pub armor: i64,
+    /// Dodge chance = `dodge_num / dodge_den` (avoids a hit entirely).
+    pub dodge_num: u32,
+    pub dodge_den: u32,
+    /// Mana Shield absorb pool; damage hits it before HP.
+    pub mana_shield: i64,
+    pub mana_shield_max: i64,
+    pub mana_regen_per_tick: i64,
+    /// Passive HP regeneration per tick.
+    pub hp_regen_per_tick: i64,
 }
 
 /// An owned weapon instance (multiple copies of one def stack as separate
@@ -215,6 +226,13 @@ impl ArenaState {
                 max_hp: 24_000,
                 pos: Vec2::ZERO,
                 clear_cooldown_end: 0,
+                armor: 0,
+                dodge_num: 0,
+                dodge_den: 100,
+                mana_shield: 0,
+                mana_shield_max: 0,
+                mana_regen_per_tick: 0,
+                hp_regen_per_tick: 0,
             },
             weapons: Vec::new(),
             enemies: Vec::new(),

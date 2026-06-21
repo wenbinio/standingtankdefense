@@ -41,6 +41,17 @@ impl Modifiers {
                 tank.max_hp += f;
                 tank.hp += f;
             }
+            ModEffect::Armor(a) => tank.armor += a,
+            ModEffect::ManaShield(pool, regen) => {
+                tank.mana_shield_max += pool;
+                tank.mana_shield += pool;
+                tank.mana_regen_per_tick += regen;
+            }
+            ModEffect::HpRegen(r) => tank.hp_regen_per_tick += r,
+            ModEffect::Dodge(n) => {
+                // Additive, capped just below 100% so a hit can always land.
+                tank.dodge_num = (tank.dodge_num + n).min(tank.dodge_den.saturating_sub(1));
+            }
         }
     }
 
