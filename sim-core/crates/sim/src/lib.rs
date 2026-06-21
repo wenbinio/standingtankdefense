@@ -105,6 +105,8 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_i64(s.tank.hp_regen_per_tick);
     c.write_i64(s.tank.spikes_damage);
     c.write_fixed(s.tank.spikes_mult);
+    c.write_i64(s.tank.heal_on_kill);
+    c.write_i64(s.tank.heal_on_poison);
 
     c.write_i64(s.economy.gold);
     c.write_i64(s.economy.income_per_tick);

@@ -69,6 +69,10 @@ pub struct Tank {
     pub spikes_damage: i64,
     /// Multiplier on spikes damage (starts at `ONE`).
     pub spikes_mult: Fixed,
+    /// Heal the tank this much when an enemy dies (on-kill trigger).
+    pub heal_on_kill: i64,
+    /// Heal the tank this much each tick an enemy takes poison damage.
+    pub heal_on_poison: i64,
 }
 
 /// An owned weapon instance (multiple copies of one def stack as separate
@@ -274,6 +278,8 @@ impl ArenaState {
                 hp_regen_per_tick: 0,
                 spikes_damage: 0,
                 spikes_mult: Fixed::ONE,
+                heal_on_kill: 0,
+                heal_on_poison: 0,
             },
             weapons: Vec::new(),
             enemies: Vec::new(),

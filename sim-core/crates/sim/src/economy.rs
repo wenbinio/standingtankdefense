@@ -16,11 +16,17 @@ pub(crate) fn on_round_start(s: &mut ArenaState) {
 pub(crate) fn collect_bounties(s: &mut ArenaState) {
     let mult = s.economy.bounty_mult;
     let mut gained: i64 = 0;
+    let mut kills: i64 = 0;
     for def in s.pending_kills.drain(..) {
         let bounty = content::ENEMIES[def as usize].bounty;
         gained += mult.scale_i64(bounty);
+        kills += 1;
     }
     s.economy.gold += gained;
+    // On-kill trigger: heal the tank per enemy killed this tick, capped at max HP.
+    if s.tank.heal_on_kill > 0 && kills > 0 && !s.dead {
+        s.tank.hp = (s.tank.hp + kills * s.tank.heal_on_kill).min(s.tank.max_hp);
+    }
 }
 
 /// Phase 8: add `s.economy.income_per_tick` to gold (no multiplier).
@@ -96,6 +102,33 @@ mod tests {
         s.pending_kills.clear();
         collect_bounties(&mut s);
         assert_eq!(s.economy.gold, 123);
+    }
+
+    #[test]
+    fn heal_on_kill_heals_per_kill_capped_at_max_hp() {
+        let mut s = fresh();
+        s.tank.max_hp = 1000;
+        s.tank.hp = 500;
+        s.tank.heal_on_kill = 15;
+        s.economy.bounty_mult = Fixed::ONE;
+        // 3 kills → +45 HP.
+        s.pending_kills = vec![0, 1, 0];
+        collect_bounties(&mut s);
+        assert_eq!(s.tank.hp, 545);
+
+        // Cap at max_hp.
+        s.tank.hp = 990;
+        s.pending_kills = vec![0, 1, 0];
+        collect_bounties(&mut s);
+        assert_eq!(s.tank.hp, 1000, "heal cannot exceed max_hp");
+
+        // No heal stat ⇒ HP unchanged.
+        let mut s2 = fresh();
+        s2.tank.max_hp = 1000;
+        s2.tank.hp = 500;
+        s2.pending_kills = vec![0];
+        collect_bounties(&mut s2);
+        assert_eq!(s2.tank.hp, 500);
     }
 
     #[test]

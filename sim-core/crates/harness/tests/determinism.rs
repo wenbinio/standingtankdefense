@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x177228e3f85d0027, // re-baselined (Spikes + Vulnerability Pulse)
+        0x0d9c58900278df43, // re-baselined (on-event heal triggers)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

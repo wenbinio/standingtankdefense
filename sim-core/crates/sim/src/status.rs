@@ -90,6 +90,7 @@ pub(crate) fn is_immobile(enemy: &Enemy) -> bool {
 /// bounty). Boss enemies are immune to Poison (only `Clear` hurts the boss).
 pub(crate) fn tick(s: &mut ArenaState) {
     let mut survivors: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
+    let mut poison_hits: i64 = 0;
     for mut e in std::mem::take(&mut s.enemies) {
         let immune = content::ENEMIES[e.def as usize].boss;
 
@@ -97,6 +98,7 @@ pub(crate) fn tick(s: &mut ArenaState) {
         if e.status.poison_ticks > 0 {
             if !immune {
                 e.hp -= e.status.poison_dps;
+                poison_hits += 1;
             }
             e.status.poison_ticks -= 1;
             if e.status.poison_ticks == 0 {
@@ -122,6 +124,10 @@ pub(crate) fn tick(s: &mut ArenaState) {
         }
     }
     s.enemies = survivors;
+    // On-poison trigger: heal the tank per enemy that took poison this tick, capped at max HP.
+    if s.tank.heal_on_poison > 0 && poison_hits > 0 && !s.dead {
+        s.tank.hp = (s.tank.hp + poison_hits * s.tank.heal_on_poison).min(s.tank.max_hp);
+    }
 }
 
 #[cfg(test)]
@@ -245,6 +251,35 @@ mod tests {
         s.tick = 60;
         pulse(&mut s);
         assert_eq!(s.enemies[0].status.vuln_stacks, 10);
+    }
+
+    #[test]
+    fn heal_on_poison_heals_per_poisoned_enemy_capped() {
+        let mut s = arena_with(vec![
+            {
+                let mut e = enemy(0, 1000);
+                e.status.poison_dps = 10;
+                e.status.poison_ticks = 5;
+                e
+            },
+            {
+                let mut e = enemy(0, 1000);
+                e.status.poison_dps = 10;
+                e.status.poison_ticks = 5;
+                e
+            },
+        ]);
+        s.tank.max_hp = 1000;
+        s.tank.hp = 500;
+        s.tank.heal_on_poison = 5;
+        tick(&mut s);
+        // 2 enemies took poison ⇒ +10 HP.
+        assert_eq!(s.tank.hp, 510);
+
+        // Cap at max_hp.
+        s.tank.hp = 998;
+        tick(&mut s);
+        assert_eq!(s.tank.hp, 1000);
     }
 
     #[test]
