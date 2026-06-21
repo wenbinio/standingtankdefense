@@ -45,6 +45,23 @@ impl Vec2 {
             y: self.y + dy.mul(max_step).div(dist),
         }
     }
+
+    /// Move `self` directly AWAY from `from` by `step` units (Knockback). If
+    /// `self == from` (degenerate, e.g. enemy exactly on the tank) the point is
+    /// unchanged. Fully deterministic (integer sqrt).
+    pub fn step_away(self, from: Vec2, step: Fixed) -> Vec2 {
+        let dx = self.x - from.x;
+        let dy = self.y - from.y;
+        let d2 = dx.mul(dx) + dy.mul(dy);
+        if d2 == Fixed::ZERO {
+            return self;
+        }
+        let dist = d2.sqrt();
+        Vec2 {
+            x: self.x + dx.mul(step).div(dist),
+            y: self.y + dy.mul(step).div(dist),
+        }
+    }
 }
 
 /// The player's stationary tank.
@@ -94,6 +111,16 @@ impl Tank {
         }
         let scaled = self.healing_mult.scale_i64(amount);
         self.hp = (self.hp + scaled).min(self.max_hp);
+    }
+
+    /// Restore `amount` to the Mana-Shield pool, capped at its max (the source's
+    /// mana-drain weapons "restore N Mana Shield per enemy hit"). A no-op if the
+    /// tank has no shield pool. Not scaled by `healing_mult` (it is shield, not HP).
+    pub fn restore_mana(&mut self, amount: i64) {
+        if amount <= 0 || self.mana_shield_max <= 0 {
+            return;
+        }
+        self.mana_shield = (self.mana_shield + amount).min(self.mana_shield_max);
     }
 }
 
@@ -158,6 +185,24 @@ impl Enemy {
     }
 }
 
+/// A persistent damaging area dropped by a weapon ability (the source's Goblin
+/// Land Mines / burning oil). Each tick it pulses `dmg` to every non-boss enemy
+/// within `radius`, for `ticks_left` ticks, then expires. Fully deterministic:
+/// fixed integer fields, stable id order, no RNG. Damage routes through the
+/// shared death path so kills award bounty and Fire deaths still explode.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Hazard {
+    pub id: EntityId,
+    pub pos: Vec2,
+    /// Damage dealt to each enemy in range per tick.
+    pub dmg: i64,
+    /// Damage type (matches the placing weapon — drives the armor matrix).
+    pub damage_type: u8,
+    pub radius: i64,
+    /// Remaining ticks before the hazard expires.
+    pub ticks_left: u32,
+}
+
 /// An in-flight projectile (homes on `target`; applies splash at arrival).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Projectile {
@@ -171,6 +216,9 @@ pub struct Projectile {
     pub speed: Fixed,
     /// Status this projectile applies to whatever it hits.
     pub on_hit: content::StatusOnHit,
+    /// Signature ability executed at impact (life/mana drain, knockback, root,
+    /// vulnerability stacks, hazard placement). `None` for most projectiles.
+    pub ability: content::WeaponAbility,
 }
 
 /// Player economy state.
@@ -310,6 +358,9 @@ pub struct ArenaState {
     pub weapons: Vec<WeaponInstance>,
     pub enemies: Vec<Enemy>,
     pub projectiles: Vec<Projectile>,
+    /// Persistent damaging areas (land mines / burning oil) from weapon
+    /// abilities. Stored in id order; ticked in `combat::tick_hazards`.
+    pub hazards: Vec<Hazard>,
     pub economy: Economy,
     pub shop: ShopState,
     /// Aggregated damage/attack-speed modifiers consulted during combat.
@@ -391,6 +442,7 @@ impl ArenaState {
             weapons: Vec::new(),
             enemies: Vec::new(),
             projectiles: Vec::new(),
+            hazards: Vec::new(),
             economy: Economy {
                 gold: 500,
                 income_per_tick: 20, // 600 gold/s baseline (tuning)

@@ -3,10 +3,45 @@
 //! integer/Fixed (no floats), and iterate in a stable order (by `instance_id` /
 //! `id`); never iterate a HashMap. No cross-module calls: record kills by pushing
 //! the dead enemy's `def` onto `s.pending_kills` (economy drains it later).
-use crate::content::{self, Attack};
+use crate::content::{self, Attack, WeaponAbility};
 use crate::ids::EntityId;
 use crate::state::*;
 use determinism::Fixed;
+
+/// Accumulates the TANK-side / world-side effects of a weapon's signature
+/// ability across all the enemies one attack damages, so they can be applied
+/// once after the (tank-read-only) enemy loop ends. Enemy-LOCAL ability effects
+/// (vuln stacks, knockback displacement, root) are applied directly to the
+/// enemy inside [`apply_weapon_hit`]; only effects that touch the tank or spawn
+/// world entities are deferred here.
+#[derive(Clone, Copy, Default)]
+struct AbilityAccum {
+    /// Total HP to heal the tank (life-drain), summed per damaged enemy.
+    heal: i64,
+    /// Total Mana-Shield to restore (mana-drain), summed per damaged enemy.
+    mana: i64,
+    /// Where to drop a hazard (the first enemy this attack damaged), if any.
+    hazard_at: Option<Vec2>,
+}
+
+impl AbilityAccum {
+    /// Apply the deferred tank/world effects of `ability` (placed at
+    /// `damage_type` for hazards). Called once after a damage site, while `s` is
+    /// fully borrowable again.
+    fn flush(self, s: &mut ArenaState, ability: WeaponAbility, damage_type: u8) {
+        if self.heal > 0 && !s.dead {
+            s.tank.heal(self.heal);
+        }
+        if self.mana > 0 {
+            s.tank.restore_mana(self.mana);
+        }
+        if let (WeaponAbility::Hazard { dmg, radius, ticks }, Some(pos)) = (ability, self.hazard_at)
+        {
+            let id = s.alloc_entity_id();
+            s.hazards.push(Hazard { id, pos, dmg, damage_type, radius, ticks_left: ticks });
+        }
+    }
+}
 
 /// Player's target-conditional damage bonuses, captured once per tick (they don't
 /// change mid-tick) and applied at impact against each enemy's live status.
@@ -48,9 +83,13 @@ fn apply_weapon_hit(
     mod_mult: Fixed,
     cond: CondDamage,
     on_hit: &content::StatusOnHit,
+    ability: WeaponAbility,
+    tank_pos: Vec2,
+    accum: &mut AbilityAccum,
 ) -> i64 {
     let edef = &content::ENEMIES[e.def as usize];
     if edef.boss {
+        // Bosses are immune to weapon fire AND to its abilities.
         return 0;
     }
     let armor = content::damage_multiplier(damage_type, edef.armor_class);
@@ -58,7 +97,54 @@ fn apply_weapon_hit(
     let dmg = armor.mul(mod_mult).mul(vuln).mul(cond.mult(e)).scale_i64(base);
     e.hp -= dmg;
     crate::status::apply_on_hit(e, on_hit);
+    apply_ability_on_hit(e, ability, tank_pos, accum);
     dmg
+}
+
+/// Execute a weapon's signature ability against one enemy it just damaged.
+/// Enemy-LOCAL effects (vulnerability stacks, knockback, root) mutate the enemy
+/// here; tank/world effects accumulate into `accum` for a single post-loop
+/// flush. Deterministic: integer/Fixed math, no RNG.
+fn apply_ability_on_hit(
+    e: &mut Enemy,
+    ability: WeaponAbility,
+    tank_pos: Vec2,
+    accum: &mut AbilityAccum,
+) {
+    match ability {
+        WeaponAbility::None | WeaponAbility::Summon => {}
+        WeaponAbility::LifeDrain { per_hit } => accum.heal += per_hit,
+        WeaponAbility::ManaDrain { per_hit } => accum.mana += per_hit,
+        WeaponAbility::VulnOnHit { stacks } => {
+            e.status.vuln_stacks = e.status.vuln_stacks.saturating_add(stacks);
+        }
+        WeaponAbility::Root { ticks } => {
+            // Root = immobilize + poisoned flag, applied directly (does NOT scale
+            // with +% Stun Duration, per the source). We reuse `stun_ticks` for
+            // the immobilize and ensure a poison marker so "Rooted enemies are
+            // considered Stunned & Poisoned".
+            e.status.stun_ticks = e.status.stun_ticks.max(ticks);
+            if e.status.poison_ticks < ticks {
+                e.status.poison_ticks = e.status.poison_ticks.max(ticks);
+                // A token DoT so the poisoned condition holds without overwriting
+                // a stronger existing poison.
+                if e.status.poison_dps == 0 {
+                    e.status.poison_dps = 1;
+                }
+            }
+        }
+        WeaponAbility::Knockback { dist } => {
+            // Shove the enemy directly away from the tank by `dist` units.
+            let away = e.pos.step_away(tank_pos, Fixed::from_int(dist));
+            e.pos = away;
+        }
+        WeaponAbility::Hazard { .. } => {
+            // Record the FIRST damaged enemy's position as the drop point.
+            if accum.hazard_at.is_none() {
+                accum.hazard_at = Some(e.pos);
+            }
+        }
+    }
 }
 
 /// Phase 4: each ready weapon (`s.tick >= next_fire_tick`) picks a target —
@@ -110,6 +196,11 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // Poison-damage / stun-duration scalers depend only on the player's
         // modifiers, so (like base damage) they bake into the hit at fire time.
         let on_hit = s.modifiers.scale_on_hit(wdef.on_hit);
+        let ability = wdef.ability;
+        let tank_pos = s.tank.pos;
+        // Instant-attack abilities (Area/Wave/Bounce) accumulate here, flushed
+        // once after this weapon's instant hits resolve.
+        let mut accum = AbilityAccum::default();
         let mut new_proj = |s: &mut ArenaState, target_idx: usize, splash: Fixed| {
             let e = &s.enemies[target_idx];
             new_projectiles.push(Projectile {
@@ -122,6 +213,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 splash_radius: splash,
                 speed: Fixed::from_int(wdef.proj_speed),
                 on_hit,
+                ability,
             });
         };
 
@@ -148,9 +240,11 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 // Instant pulse around the tank.
                 let r2 = Fixed::from_int(r).mul(Fixed::from_int(r));
                 for e in s.enemies.iter_mut() {
-                    if s.tank.pos.dist_sq(e.pos) <= r2 {
-                        instant_damage +=
-                            apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit);
+                    if tank_pos.dist_sq(e.pos) <= r2 {
+                        instant_damage += apply_weapon_hit(
+                            e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit, ability,
+                            tank_pos, &mut accum,
+                        );
                     }
                 }
                 any_instant_damage = true;
@@ -160,9 +254,11 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 let reach = range + Fixed::from_int(extra);
                 let r2 = reach.mul(reach);
                 for e in s.enemies.iter_mut() {
-                    if s.tank.pos.dist_sq(e.pos) <= r2 {
-                        instant_damage +=
-                            apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit);
+                    if tank_pos.dist_sq(e.pos) <= r2 {
+                        instant_damage += apply_weapon_hit(
+                            e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit, ability,
+                            tank_pos, &mut accum,
+                        );
                     }
                 }
                 any_instant_damage = true;
@@ -186,11 +282,19 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                         wmult,
                         cond,
                         &on_hit,
+                        ability,
+                        tank_pos,
+                        &mut accum,
                     );
                 }
                 any_instant_damage = true;
             }
         }
+
+        // Apply this weapon's deferred ability effects (life/mana drain heal,
+        // hazard placement). A no-op for projectile attacks (their abilities
+        // resolve at impact) and for ability-less weapons.
+        accum.flush(s, ability, wdef.damage_type);
 
         // Effective cooldown is reduced by the attack-speed modifier.
         let asm = s.modifiers.attack_speed_mult();
@@ -237,6 +341,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
         damage_type: u8,
         splash_radius: Fixed,
         on_hit: crate::content::StatusOnHit,
+        ability: WeaponAbility,
     }
 
     let mut impacts: Vec<Impact> = Vec::new();
@@ -265,6 +370,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                         damage_type: p.damage_type,
                         splash_radius: p.splash_radius,
                         on_hit: p.on_hit,
+                        ability: p.ability,
                     });
                 } else {
                     p.pos = moved;
@@ -282,6 +388,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                         damage_type: p.damage_type,
                         splash_radius: p.splash_radius,
                         on_hit: p.on_hit,
+                        ability: p.ability,
                     });
                 }
                 // either way, projectile is removed (not pushed to survivors).
@@ -297,21 +404,30 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     // them), and each hit also applies the weapon's on-hit status.
     // Conditional bonuses are evaluated live at impact against the target's status.
     let cond = CondDamage::of(s);
+    let tank_pos = s.tank.pos;
     let mut impact_damage: i64 = 0;
     for imp in impacts {
         let mod_mult = Fixed::ONE; // weapon multiplier was baked into projectile damage at fire time
+        // Each impact's signature ability accumulates over the enemies it hits,
+        // then flushes (tank heal / mana / hazard) once.
+        let mut accum = AbilityAccum::default();
         if imp.splash_radius > Fixed::ZERO {
             let radius_sq = imp.splash_radius.mul(imp.splash_radius);
             for e in s.enemies.iter_mut() {
                 if imp.point.dist_sq(e.pos) <= radius_sq {
-                    impact_damage +=
-                        apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit);
+                    impact_damage += apply_weapon_hit(
+                        e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit, imp.ability,
+                        tank_pos, &mut accum,
+                    );
                 }
             }
         } else if let Some(e) = s.enemies.iter_mut().find(|e| e.id == imp.target) {
-            impact_damage +=
-                apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit);
+            impact_damage += apply_weapon_hit(
+                e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit, imp.ability, tank_pos,
+                &mut accum,
+            );
         }
+        accum.flush(s, imp.ability, imp.damage_type);
     }
     s.record_player_damage(impact_damage);
 
@@ -354,6 +470,50 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
     }
 
     s.enemies = survivors;
+}
+
+/// Phase: tick persistent hazards (land mines / burning oil). Each hazard pulses
+/// `dmg` (× armor matrix × status vulnerability) to every non-boss enemy within
+/// its radius, decrements its lifetime, and expires at zero. Hazards are
+/// processed in id order and enemies in id order, so the pass is deterministic.
+/// Hazard damage is a player source (scoreboard / Bloodmoney) and kills route
+/// through the shared death path (`reap_dead`), so bounty and Fire explosions
+/// still fire.
+pub(crate) fn tick_hazards(s: &mut ArenaState) {
+    if s.hazards.is_empty() {
+        return;
+    }
+    let cond = CondDamage::of(s);
+    let tank_pos = s.tank.pos;
+    let mut total: i64 = 0;
+    let mut any = false;
+    let mut hazards = std::mem::take(&mut s.hazards);
+    for h in hazards.iter_mut() {
+        if h.ticks_left == 0 {
+            continue;
+        }
+        let radius = Fixed::from_int(h.radius);
+        let r2 = radius.mul(radius);
+        // A hazard carries no on-hit status and no chained ability.
+        let mut accum = AbilityAccum::default();
+        for e in s.enemies.iter_mut() {
+            if h.pos.dist_sq(e.pos) <= r2 {
+                total += apply_weapon_hit(
+                    e, h.dmg, h.damage_type, Fixed::ONE, cond, &content::StatusOnHit::NONE,
+                    WeaponAbility::None, tank_pos, &mut accum,
+                );
+                any = true;
+            }
+        }
+        h.ticks_left -= 1;
+    }
+    // Drop expired hazards, preserving id order.
+    hazards.retain(|h| h.ticks_left > 0);
+    s.hazards = hazards;
+    s.record_player_damage(total);
+    if any {
+        crate::status::reap_dead(s);
+    }
 }
 
 #[cfg(test)]
@@ -493,6 +653,7 @@ mod tests {
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(1000),
             on_hit: content::StatusOnHit::NONE,
+            ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
         assert!(s.enemies.is_empty(), "enemy should be dead");
@@ -517,6 +678,7 @@ mod tests {
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(10), // far from arriving
             on_hit: content::StatusOnHit::NONE,
+            ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
         assert_eq!(s.projectiles.len(), 1, "still in flight");
@@ -547,6 +709,7 @@ mod tests {
             splash_radius: Fixed::from_int(300),
             speed: Fixed::from_int(1000),
             on_hit: content::StatusOnHit::NONE,
+            ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
         // Two near enemies dead, far one survives.
@@ -573,6 +736,7 @@ mod tests {
             splash_radius: Fixed::from_int(300),
             speed: Fixed::from_int(10),
             on_hit: content::StatusOnHit::NONE,
+            ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
         assert!(s.enemies.is_empty(), "bystander killed by detonation");
@@ -596,6 +760,7 @@ mod tests {
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(10),
             on_hit: content::StatusOnHit::NONE,
+            ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
         assert_eq!(s.enemies.len(), 1, "bystander untouched by single-target miss");
@@ -699,6 +864,7 @@ mod tests {
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(1000),
             on_hit: pb.on_hit,
+            ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
         assert_eq!(s.enemies[0].status.poison_dps, 20, "poison applied on hit");
@@ -715,8 +881,8 @@ mod tests {
         let mut stunned = Enemy::new(EntityId(1), 0, 1_000_000, Vec2::ZERO);
         stunned.status.stun_ticks = 10;
         // Piercing vs armor 0 = 2× matrix; base 100 ⇒ plain takes 200.
-        apply_weapon_hit(&mut plain, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE);
-        apply_weapon_hit(&mut stunned, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE);
+        apply_weapon_hit(&mut plain, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE, WeaponAbility::None, Vec2::ZERO, &mut AbilityAccum::default());
+        apply_weapon_hit(&mut stunned, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE, WeaponAbility::None, Vec2::ZERO, &mut AbilityAccum::default());
         assert_eq!(1_000_000 - plain.hp, 200, "no conditional bonus on un-stunned");
         assert_eq!(1_000_000 - stunned.hp, 400, "+100% vs stunned doubles it");
     }
@@ -798,6 +964,7 @@ mod tests {
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(1000),
             on_hit: content::StatusOnHit::NONE,
+            ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
         assert_eq!(s.total_damage_dealt, 400, "actual armor-scaled damage scored");
@@ -837,6 +1004,7 @@ mod tests {
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(1000),
             on_hit: content::StatusOnHit::NONE,
+            ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
         assert_eq!(s.enemies[0].hp, 10_000_000, "boss takes zero weapon damage");
@@ -935,5 +1103,247 @@ mod tests {
         assert_eq!(a.enemies, b.enemies);
         assert_eq!(a.pending_kills, b.pending_kills);
         assert_eq!(a.rng_targeting.state(), b.rng_targeting.state());
+    }
+
+    // ---- weapon abilities ---------------------------------------------------
+
+    /// Catalog index of the weapon named `name` (so ability tests don't hardcode
+    /// positions; the framework attaches abilities by index in `content`).
+    fn weapon_idx(name: &str) -> u16 {
+        content::WEAPONS
+            .iter()
+            .position(|w| w.name == name)
+            .unwrap_or_else(|| panic!("weapon {name} not found")) as u16
+    }
+
+    /// Give the tank a single instance of the named weapon, clearing the Bow.
+    fn only_weapon(s: &mut ArenaState, name: &str) {
+        s.weapons.clear();
+        give_weapon(s, weapon_idx(name));
+    }
+
+    #[test]
+    fn life_drain_heals_tank_per_enemy_damaged() {
+        // Soulstealer: Bounce(4) Heal 200/hit. Four enemies in range → 4×200 heal.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Soulstealer");
+        assert!(matches!(
+            content::WEAPONS[weapon_idx("Soulstealer") as usize].ability,
+            content::WeaponAbility::LifeDrain { per_hit: 200 }
+        ));
+        s.tank.max_hp = 1_000_000;
+        s.tank.hp = 1000;
+        for i in 0..4 {
+            mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(100 + i * 20), Fixed::ZERO));
+        }
+        fire_weapons(&mut s); // instant Bounce → heals immediately
+        assert_eq!(s.tank.hp, 1000 + 4 * 200, "life-drain healed 200 per enemy hit");
+    }
+
+    #[test]
+    fn life_drain_is_capped_at_max_hp_and_scaled_by_healing() {
+        // Single-projectile life drainer (Lifeleecher, Heal 40) heals on impact,
+        // routed through Tank::heal so the cap and +% Healing apply.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Lifeleecher");
+        s.tank.max_hp = 1_000_000;
+        s.tank.hp = 999_990;
+        let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
+        let eid = mk_enemy(&mut s, 0, 1_000_000, pos);
+        let pid = s.alloc_entity_id();
+        let wd = &content::WEAPONS[weapon_idx("Lifeleecher") as usize];
+        s.projectiles.push(Projectile {
+            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
+            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+        });
+        advance_projectiles(&mut s);
+        assert_eq!(s.tank.hp, 1_000_000, "life-drain heal capped at max hp");
+    }
+
+    #[test]
+    fn mana_drain_refills_shield_capped() {
+        // Manabolt: SingleTarget, ManaDrain 80. Restores shield on impact, capped.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Manabolt");
+        s.tank.mana_shield = 0;
+        s.tank.mana_shield_max = 100;
+        let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
+        let eid = mk_enemy(&mut s, 0, 1_000_000, pos);
+        let pid = s.alloc_entity_id();
+        let wd = &content::WEAPONS[weapon_idx("Manabolt") as usize];
+        s.projectiles.push(Projectile {
+            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
+            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+        });
+        advance_projectiles(&mut s);
+        assert_eq!(s.tank.mana_shield, 80, "mana-drain restored 80 to the shield");
+        // A second hit caps at max (100), not 160.
+        let eid2 = mk_enemy(&mut s, 0, 1_000_000, pos);
+        let pid2 = s.alloc_entity_id();
+        s.projectiles.push(Projectile {
+            id: pid2, pos: Vec2::ZERO, target: eid2, last_target_pos: pos,
+            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+        });
+        advance_projectiles(&mut s);
+        assert_eq!(s.tank.mana_shield, 100, "mana-drain shield capped at max");
+    }
+
+    #[test]
+    fn mana_drain_noop_without_shield_pool() {
+        let mut s = blank_state();
+        s.tank.mana_shield_max = 0;
+        s.tank.mana_shield = 0;
+        let mut accum = AbilityAccum::default();
+        accum.mana = 80;
+        accum.flush(&mut s, content::WeaponAbility::ManaDrain { per_hit: 80 }, 0);
+        assert_eq!(s.tank.mana_shield, 0, "no shield pool → mana-drain is a no-op");
+    }
+
+    #[test]
+    fn knockback_pushes_enemy_away_from_tank() {
+        // Wind Spear: SingleTarget Knockback(300). Enemy on +x axis is pushed out.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Wind Spear");
+        let pos = Vec2::new(Fixed::from_int(400), Fixed::ZERO);
+        let eid = mk_enemy(&mut s, 0, 100_000_000, pos); // survives the hit
+        let pid = s.alloc_entity_id();
+        let wd = &content::WEAPONS[weapon_idx("Wind Spear") as usize];
+        s.projectiles.push(Projectile {
+            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
+            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(2000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+        });
+        advance_projectiles(&mut s);
+        let e = &s.enemies[0];
+        // Pushed 300 directly away (along +x): 400 → 700.
+        assert_eq!(e.pos.x, Fixed::from_int(700), "enemy knocked back 300 along +x");
+        assert_eq!(e.pos.y, Fixed::ZERO);
+    }
+
+    #[test]
+    fn root_immobilizes_the_enemy() {
+        // Entangler: SingleTarget Root(30). Rooted enemy is immobile (and poisoned).
+        let mut s = blank_state();
+        only_weapon(&mut s, "Entangler");
+        let pos = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
+        let eid = mk_enemy(&mut s, 0, 100_000_000, pos);
+        let pid = s.alloc_entity_id();
+        let wd = &content::WEAPONS[weapon_idx("Entangler") as usize];
+        s.projectiles.push(Projectile {
+            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
+            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+        });
+        advance_projectiles(&mut s);
+        let e = &s.enemies[0];
+        assert!(crate::status::is_immobile(e), "rooted enemy is immobile");
+        assert!(e.status.poison_ticks > 0, "rooted enemy counts as poisoned");
+        // It does not move while rooted.
+        let before = s.enemies[0].pos;
+        move_enemies(&mut s);
+        assert_eq!(s.enemies[0].pos, before, "rooted enemy holds position");
+    }
+
+    #[test]
+    fn vuln_on_hit_raises_damage_taken() {
+        // Demon Eye: SingleTarget VulnOnHit(10). Adds 10 vuln stacks (+10% taken).
+        let mut s = blank_state();
+        only_weapon(&mut s, "Demon Eye");
+        let pos = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
+        let eid = mk_enemy(&mut s, 0, 100_000_000, pos);
+        let pid = s.alloc_entity_id();
+        let wd = &content::WEAPONS[weapon_idx("Demon Eye") as usize];
+        s.projectiles.push(Projectile {
+            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
+            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+        });
+        advance_projectiles(&mut s);
+        let e = &s.enemies[0];
+        assert_eq!(e.status.vuln_stacks, 10, "10 vulnerability stacks applied");
+        // +10% damage taken (10 stacks × 1%); fixed-point floors ≈1099/1000.
+        let v = crate::status::vulnerability_mult(e).scale_i64(1000);
+        assert!((1099..=1100).contains(&v), "vuln stacks raise damage taken ≈+10%, got {v}");
+    }
+
+    #[test]
+    fn hazard_is_placed_and_damages_over_time() {
+        // Goblin Land Mines: Wave Hazard(dmg 1000, radius 200, 90 ticks). Firing
+        // drops a hazard at the first damaged enemy; it then pulses each tick.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Goblin Land Mines");
+        let pos = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
+        // A high-hp enemy so it survives the wave and the hazard can keep hitting.
+        mk_enemy(&mut s, 0, 1_000_000_000, pos);
+        fire_weapons(&mut s); // Wave hits the enemy and drops a hazard at its pos
+        assert_eq!(s.hazards.len(), 1, "a hazard was placed");
+        assert_eq!(s.hazards[0].dmg, 1000);
+        assert_eq!(s.hazards[0].ticks_left, 90);
+
+        // A separate enemy standing on the hazard takes its pulse each tick.
+        let victim = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
+        let vid = mk_enemy(&mut s, 0, 1_000_000_000, victim);
+        let hp0 = s.enemies.iter().find(|e| e.id == vid).unwrap().hp;
+        tick_hazards(&mut s);
+        let hp1 = s.enemies.iter().find(|e| e.id == vid).unwrap().hp;
+        // Siege vs armor class 0 = 1× → exactly 1000 damage this tick.
+        assert_eq!(hp0 - hp1, 1000, "hazard pulsed 1000 damage in range");
+        assert_eq!(s.hazards[0].ticks_left, 89, "hazard lifetime decremented");
+    }
+
+    #[test]
+    fn hazard_expires_after_its_lifetime() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let id = s.alloc_entity_id();
+        s.hazards.push(Hazard {
+            id, pos: Vec2::ZERO, dmg: 100, damage_type: content::DMG_SIEGE, radius: 200,
+            ticks_left: 2,
+        });
+        mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(50), Fixed::ZERO));
+        tick_hazards(&mut s);
+        assert_eq!(s.hazards.len(), 1, "still active after 1 tick");
+        tick_hazards(&mut s);
+        assert!(s.hazards.is_empty(), "hazard expired after its lifetime");
+    }
+
+    #[test]
+    fn summon_ability_is_inert_for_now() {
+        // Inferno Stone carries the deferred Summon variant; it must not crash and
+        // behaves as pure damage (no extra entities spawned).
+        let mut s = blank_state();
+        only_weapon(&mut s, "Inferno Stone");
+        for i in 0..3 {
+            mk_enemy(&mut s, 0, 100_000_000, Vec2::new(Fixed::from_int(100 + i * 20), Fixed::ZERO));
+        }
+        let before = s.enemies.len();
+        fire_weapons(&mut s);
+        assert_eq!(s.hazards.len(), 0, "summon places no hazard");
+        assert_eq!(s.enemies.len(), before, "summon spawns no entities yet");
+    }
+
+    #[test]
+    fn ability_effects_are_deterministic() {
+        let build = || {
+            let mut s = blank_state();
+            only_weapon(&mut s, "Wind Spear");
+            for i in 0..4 {
+                mk_enemy(&mut s, 0, 100_000_000, Vec2::new(Fixed::from_int(120 + i * 7), Fixed::from_int(i)));
+            }
+            s
+        };
+        let mut a = build();
+        let mut b = a.clone();
+        for _ in 0..5 {
+            fire_weapons(&mut a);
+            advance_projectiles(&mut a);
+            fire_weapons(&mut b);
+            advance_projectiles(&mut b);
+        }
+        assert_eq!(a.enemies, b.enemies, "knockback ability is deterministic");
+        assert_eq!(crate::checksum(&a), crate::checksum(&b));
     }
 }

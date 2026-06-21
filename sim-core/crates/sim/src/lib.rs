@@ -70,6 +70,8 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     combat::move_enemies(s);
     // 6b. Spikes: if the tank was hit, retaliate against nearby enemies.
     defense::spikes(s);
+    // 6c. Hazards (land mines / burning oil) pulse damage to enemies in range.
+    combat::tick_hazards(s);
     // 7. Status effects: poison DoT, frost/stun decay (poison kills → pending_kills).
     status::tick(s);
     // 8. Drain pending_kills → award bounty (scaled by bounty_mult).
@@ -256,6 +258,25 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.on_hit.frost_stacks as u32);
         c.write_u32(x.on_hit.fire_stacks as u32);
         c.write_u32(x.on_hit.stun_ticks);
+        let (atag, a, b, d) = x.ability.words();
+        c.write_u32(atag as u32);
+        c.write_i64(a);
+        c.write_i64(b);
+        c.write_i64(d);
+    }
+
+    // Hazards in id order (land mines / burning oil).
+    let mut hz: Vec<&Hazard> = s.hazards.iter().collect();
+    hz.sort_by_key(|x| x.id);
+    c.write_u32(hz.len() as u32);
+    for x in hz {
+        c.write_u32(x.id.0);
+        c.write_fixed(x.pos.x);
+        c.write_fixed(x.pos.y);
+        c.write_i64(x.dmg);
+        c.write_u32(x.damage_type as u32);
+        c.write_i64(x.radius);
+        c.write_u32(x.ticks_left);
     }
 
     c.finish()

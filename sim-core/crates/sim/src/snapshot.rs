@@ -9,12 +9,12 @@
 //! - Field order mirrors `checksum()` so the two are easy to keep in sync.
 
 use crate::ids::EntityId;
-use crate::content::{ModEffect, StatusOnHit};
+use crate::content::{ModEffect, StatusOnHit, WeaponAbility};
 use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 14;
+pub const SNAPSHOT_VERSION: u32 = 15;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -218,6 +218,22 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u8(p.on_hit.frost_stacks);
         w.u16(p.on_hit.fire_stacks);
         w.u32(p.on_hit.stun_ticks);
+        let (atag, a, b, c) = p.ability.words();
+        w.u8(atag);
+        w.i64(a);
+        w.i64(b);
+        w.i64(c);
+    }
+
+    // hazards (land mines / burning oil)
+    w.len(s.hazards.len());
+    for h in &s.hazards {
+        w.id(h.id);
+        w.vec2(h.pos);
+        w.i64(h.dmg);
+        w.u8(h.damage_type);
+        w.i64(h.radius);
+        w.u32(h.ticks_left);
     }
 
     // economy
@@ -406,6 +422,25 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
                 fire_stacks: r.u16()?,
                 stun_ticks: r.u32()?,
             },
+            ability: {
+                let tag = r.u8()?;
+                let a = r.i64()?;
+                let b = r.i64()?;
+                let c = r.i64()?;
+                WeaponAbility::from_words(tag, a, b, c).ok_or(SnapshotError::BadTag(tag))?
+            },
+        });
+    }
+
+    let mut hazards = Vec::new();
+    for _ in 0..r.len()? {
+        hazards.push(Hazard {
+            id: r.id()?,
+            pos: r.vec2()?,
+            dmg: r.i64()?,
+            damage_type: r.u8()?,
+            radius: r.i64()?,
+            ticks_left: r.u32()?,
         });
     }
 
@@ -534,6 +569,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         weapons,
         enemies,
         projectiles,
+        hazards,
         economy,
         shop,
         modifiers,
