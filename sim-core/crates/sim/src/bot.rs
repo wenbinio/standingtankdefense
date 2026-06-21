@@ -122,6 +122,20 @@ impl Bot {
         s.economy.rerolls_remaining > 0 || s.economy.gold >= s.economy.reroll_cost
     }
 
+    /// Cheapest affordable slot whose offer matches `pred`, if any.
+    fn cheapest_where(&self, s: &ArenaState, pred: impl Fn(&Offer) -> bool) -> Option<usize> {
+        let mut best: Option<(usize, i64)> = None;
+        for (i, off) in s.shop.offers.iter().enumerate() {
+            if off.cost > s.economy.gold || !pred(off) {
+                continue;
+            }
+            if best.map_or(true, |(_, c)| off.cost < c) {
+                best = Some((i, off.cost));
+            }
+        }
+        best.map(|(i, _)| i)
+    }
+
     /// Choose this tick's action from the current state.
     pub fn decide(&mut self, s: &ArenaState) -> Input {
         if s.dead {
@@ -156,6 +170,29 @@ impl Bot {
             if !jack_complete && self.can_reroll(s) {
                 self.cooldown = 8;
                 return Input::Reroll;
+            }
+        }
+
+        // Default survivor minmaxes income: hold a defensive weapon floor that
+        // grows with the round, then snowball income while early rounds still
+        // pay it back (compounding) — before pivoting to raw power below. The
+        // floor keeps it from going all-economy and dying.
+        if self.challenge == Challenge::None {
+            let round = if s.round == u32::MAX { 0 } else { s.round };
+            let floor = (SURVIVAL_FLOOR + round as usize).min(WEAPON_FLOOR_CAP);
+            if s.weapons.len() < floor {
+                if let Some(slot) = self.cheapest_where(s, |o| matches!(o.kind, OfferKind::Weapon)) {
+                    self.cooldown = 6;
+                    return Input::BuyOffer { slot: slot as u8 };
+                }
+            } else if round <= ECON_LAST_ROUND {
+                if let Some(slot) = self.cheapest_where(s, |o| {
+                    matches!(o.kind, OfferKind::Modifier)
+                        && content::MODIFIERS[o.def as usize].effect.is_economy()
+                }) {
+                    self.cooldown = 6;
+                    return Input::BuyOffer { slot: slot as u8 };
+                }
             }
         }
 
@@ -199,3 +236,9 @@ impl Bot {
 
 /// Mask of all six attack-classes (JackOfAll completion target).
 const ALL_CLASSES: u16 = 0b111111;
+/// Default bot's base defensive weapon count before it invests in income.
+const SURVIVAL_FLOOR: usize = 3;
+/// The weapon floor grows with the round but never exceeds this.
+const WEAPON_FLOOR_CAP: usize = 10;
+/// Income only compounds with rounds left to run — stop investing after this.
+const ECON_LAST_ROUND: u32 = 6;

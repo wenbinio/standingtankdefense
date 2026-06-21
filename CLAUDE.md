@@ -38,6 +38,7 @@ Prefer **several small, independent agents over one broad one.** When tasks are 
 - Define shared types/messages **before** fanning out work that depends on them.
 - After agents return, reconcile their public interfaces against the spec, build/test the combined result, and resolve conflicts myself rather than redelegating blindly.
 - Relay only what matters from an agent's result; an agent's final message is for me, not the user.
+- **Isolate agents that touch shared files in their own git worktree** (`isolation: "worktree"`). An agent editing a shared file (e.g. `content.rs`) in the live tree mixes its in-progress, unreviewed edits into my working set — which blocks committing unrelated finished work and entangles me with a still-running agent. Only use the shared tree when the agent's file scope is provably disjoint from all concurrent work. Pull a worktree agent's result in deliberately (review/diff) rather than having it land live — this also makes "review before commit" gates (e.g. balance) clean.
 
 ## Locked decisions — do not silently revisit (flag if you must)
 

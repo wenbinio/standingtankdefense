@@ -1,7 +1,8 @@
 # Standing Tank Defense — single-arena view. Drives the Rust `StSim` (one
 # deterministic tick per 30 Hz physics frame) and renders the "Gaslamp Bulwark"
 # chibi set with juice: idle bob, hit flash, death poofs, muzzle flash, Clear FX.
-# Controls: 1/2/3 buy slot · R reroll · Space clear.
+# Controls: click a shop card or press 1-8 to buy · R reroll · Space clear ·
+# Esc back to skin select · M multi-arena net demo.
 extends Node2D
 
 var sim
@@ -20,6 +21,12 @@ var _prev_proj := 0
 var tex := {}
 var enemy_tex := []           # by kind: 0 grunt, 1 steam, 2 boss
 var frame_tex := []           # by rarity 0..3
+
+# interactive shop hit-targets (recomputed each draw)
+var shop_rects: Array[Rect2] = []
+var reroll_rect := Rect2()
+var clear_rect := Rect2()
+var _recorded := false        # match-end achievements credited once
 
 func _ready() -> void:
 	randomize()
@@ -49,14 +56,28 @@ func _load_textures() -> void:
 func _unhandled_key_input(e: InputEvent) -> void:
 	if not (e is InputEventKey) or not e.pressed or e.echo:
 		return
+	# Number row 1..8 buys the matching shop slot.
+	if e.keycode >= KEY_1 and e.keycode <= KEY_8:
+		pending_code = 1
+		pending_slot = e.keycode - KEY_1
+		return
 	match e.keycode:
-		KEY_1: pending_code = 1; pending_slot = 0
-		KEY_2: pending_code = 1; pending_slot = 1
-		KEY_3: pending_code = 1; pending_slot = 2
 		KEY_R: pending_code = 2
 		KEY_SPACE: pending_code = 3
 		KEY_T: ArtTheme.cycle(); _load_textures()
-		KEY_ESCAPE: get_tree().quit()
+		KEY_M: get_tree().change_scene_to_file("res://Match.tscn")   # multi-arena net demo
+		KEY_ESCAPE: get_tree().change_scene_to_file("res://SkinSelect.tscn")
+
+func _unhandled_input(e: InputEvent) -> void:
+	if not (e is InputEventMouseButton) or not e.pressed or e.button_index != MOUSE_BUTTON_LEFT:
+		return
+	for i in shop_rects.size():
+		if shop_rects[i].has_point(e.position):
+			pending_code = 1; pending_slot = i; return
+	if reroll_rect.has_point(e.position):
+		pending_code = 2; return
+	if clear_rect.has_point(e.position):
+		pending_code = 3
 
 func _physics_process(_delta: float) -> void:
 	if sim == null:
@@ -66,6 +87,20 @@ func _physics_process(_delta: float) -> void:
 		sim.step(pending_code, pending_slot)
 		if pending_code == 3:
 			clear_fx = 18
+	elif not _recorded:
+		# Credit your own run's achievements from how you actually played.
+		_recorded = true
+		var st: PackedInt64Array = sim.stats()
+		for id in Profile.record_match({
+			"damage": st[0] if st.size() > 0 else 0,
+			"gold": st[1] if st.size() > 1 else 0,
+			"round": sim.round(),
+			"won": false,                                   # single-arena: no opponents
+			"attack_mask": st[2] if st.size() > 2 else 0,
+			"weapons_bought": st[3] if st.size() > 3 else 0,
+			"economy_buys": st[4] if st.size() > 4 else 0,
+		}):
+			print("Achievement unlocked: ", Profile.ach_def(id).get("name", id))
 	_update_juice()
 	if clear_fx > 0:
 		clear_fx -= 1
@@ -173,25 +208,90 @@ func _draw_hud(font, vp: Vector2) -> void:
 	if sim.is_dead():
 		draw_string(font, Vector2(vp.x * 0.5 - 150, vp.y * 0.5 - 220), "*** TANK DESTROYED ***", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color(1.0, 0.35, 0.23))
 
-	var names: PackedStringArray = sim.shop_names()
-	var meta: PackedInt64Array = sim.shop_meta()
-	draw_string(font, Vector2(16, 134), "SHOP   1/2/3 buy · R reroll · Space clear", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.8, 0.8, 0.8))
-	for i in names.size():
-		var cost := meta[i * 3]
-		var flags := meta[i * 3 + 1]
-		var rarity := int(meta[i * 3 + 2])
-		var is_weapon := (flags & 1) != 0
-		var affordable := (flags & 2) != 0
-		var y := 146 + i * 64
-		var row := Color.WHITE if affordable else Color(0.45, 0.45, 0.5)
-		_blit(frame_tex[clampi(rarity, 0, 3)], Vector2(42, y + 28), 56, row)
-		_blit(tex["weapon"] if is_weapon else tex["mod"], Vector2(42, y + 28), 36, row)
-		draw_string(font, Vector2(80, y + 22), "[%d] %s" % [i + 1, names[i]], HORIZONTAL_ALIGNMENT_LEFT, 250, 15, row)
-		draw_string(font, Vector2(80, y + 44), "%dg" % cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.79, 0.64, 0.29) if affordable else row)
-
 	var ay := 26
 	var ax := vp.x - 250
 	draw_string(font, Vector2(ax, ay - 4), "ARSENAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.7, 0.9, 0.7))
 	for line in sim.arsenal_lines():
 		ay += 20
 		draw_string(font, Vector2(ax, ay), line, HORIZONTAL_ALIGNMENT_LEFT, 240, 14, Color(0.7, 0.9, 0.7))
+
+	_draw_shop(font, vp)
+
+# Bottom shop bar: every offer this round as a clickable card, plus reroll and
+# clear. Slots persist until rerolled or the round refreshes (every 30s), so you
+# can keep buying from them. Click a card or press its number to buy.
+func _draw_shop(font, vp: Vector2) -> void:
+	var names: PackedStringArray = sim.shop_names()
+	var meta: PackedInt64Array = sim.shop_meta()
+	var eco: PackedInt64Array = sim.economy()
+	var gold: int = eco[0] if eco.size() > 0 else 0
+	var free_rr: int = eco[2] if eco.size() > 2 else 0
+	var rr_cost: int = eco[3] if eco.size() > 3 else 0
+
+	var bar_h := 152.0
+	var y0 := vp.y - bar_h
+	draw_rect(Rect2(Vector2(0, y0), Vector2(vp.x, bar_h)), Color(0.06, 0.07, 0.09, 0.93))
+	draw_rect(Rect2(Vector2(0, y0), Vector2(vp.x, 2)), Color(0.22, 0.26, 0.32))
+	draw_string(font, Vector2(16, y0 + 20),
+		"SHOP — click a card or press [1-8] to buy  ·  refreshes every round (30s)  ·  buy as many as you can afford",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.78, 0.82, 0.9))
+
+	var n := names.size()
+	var split := 4              # slots 0-3 are weapons, 4-7 are economy/passives/spikes
+	var btn_w := 156.0
+	var left := 14.0
+	var top := y0 + 52.0
+	var ch := bar_h - 62.0
+	var gap := 8.0
+	var group_gap := 30.0
+	var area := vp.x - left - btn_w - 16.0
+	var cw := (area - group_gap - gap * (n - 2)) / maxf(n, 1)
+
+	shop_rects.clear()
+	var x := left
+	for i in n:
+		if i == split:
+			# divider between the two groups
+			draw_rect(Rect2(Vector2(x - group_gap * 0.5 - gap * 0.5, top - 18), Vector2(2, ch + 18)), Color(0.2, 0.23, 0.29))
+			x += group_gap - gap
+		var r := Rect2(x, top, cw, ch)
+		shop_rects.append(r)
+		var cost: int = meta[i * 3]
+		var flags: int = meta[i * 3 + 1]
+		var rarity := int(meta[i * 3 + 2])
+		var is_weapon := (flags & 1) != 0
+		var affordable := (flags & 2) != 0
+		var fg := Color.WHITE if affordable else Color(0.42, 0.42, 0.48)
+		draw_rect(r, Color(0.11, 0.12, 0.15) if affordable else Color(0.075, 0.08, 0.10))
+		var rc := _rarity_color(rarity)
+		draw_rect(Rect2(r.position, Vector2(r.size.x, 3)), rc if affordable else rc.darkened(0.55))
+		var icx := r.position + Vector2(cw * 0.5, 30)
+		_blit(frame_tex[clampi(rarity, 0, 3)], icx, 50, fg)
+		_blit(tex["weapon"] if is_weapon else tex["mod"], icx, 32, fg)
+		draw_string(font, r.position + Vector2(6, 16), "%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.5, 0.55, 0.62))
+		draw_string(font, r.position + Vector2(6, ch - 24), names[i], HORIZONTAL_ALIGNMENT_LEFT, cw - 12, 12, fg)
+		draw_string(font, r.position + Vector2(6, ch - 6), "%dg" % cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.86, 0.71, 0.33) if affordable else Color(0.6, 0.4, 0.4))
+		if i == 0:
+			draw_string(font, Vector2(x, top - 6), "WEAPONS", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.62, 0.72, 0.86))
+		elif i == split:
+			draw_string(font, Vector2(x, top - 6), "ECONOMY · PASSIVES · SPIKES", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.78, 0.7, 0.5))
+		x += cw + gap
+
+	var bx := vp.x - btn_w - 8.0
+	reroll_rect = Rect2(bx, top, btn_w, ch * 0.5 - 4.0)
+	clear_rect = Rect2(bx, top + ch * 0.5 + 4.0, btn_w, ch * 0.5 - 4.0)
+	var rr_ok := free_rr > 0 or gold >= rr_cost
+	var rr_label := "REROLL  free x%d" % free_rr if free_rr > 0 else "REROLL  %dg" % rr_cost
+	draw_rect(reroll_rect, Color(0.13, 0.16, 0.2) if rr_ok else Color(0.09, 0.1, 0.12))
+	draw_string(font, reroll_rect.position + Vector2(12, reroll_rect.size.y * 0.5 + 5), "[R] " + rr_label,
+		HORIZONTAL_ALIGNMENT_LEFT, btn_w - 18, 14, Color(0.72, 0.86, 0.96) if rr_ok else Color(0.5, 0.5, 0.55))
+	draw_rect(clear_rect, Color(0.2, 0.13, 0.13))
+	draw_string(font, clear_rect.position + Vector2(12, clear_rect.size.y * 0.5 + 5), "[Space] CLEAR",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.96, 0.62, 0.52))
+
+func _rarity_color(r: int) -> Color:
+	match r:
+		1: return Color(0.40, 0.80, 0.45)   # uncommon
+		2: return Color(0.35, 0.60, 1.00)   # rare
+		3: return Color(0.78, 0.46, 0.96)   # epic
+		_: return Color(0.60, 0.60, 0.66)   # common

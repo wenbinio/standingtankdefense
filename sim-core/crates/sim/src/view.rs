@@ -238,7 +238,9 @@ mod tests {
         step(&mut s, Input::Noop); // generate offers (round 0 boundary at tick 0)
         s.economy.gold = 0;
         let v = snapshot(&s);
-        assert!(v.shop.iter().all(|o| !o.affordable), "broke ⇒ nothing affordable");
+        // Only free items (cost 0) are affordable when broke; the flag must
+        // track cost regardless of which offers were drawn.
+        assert!(v.shop.iter().all(|o| o.affordable == (o.cost <= 0)));
         s.economy.gold = i64::MAX / 2;
         let v = snapshot(&s);
         assert!(v.shop.iter().all(|o| o.affordable), "rich ⇒ all affordable");

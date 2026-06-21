@@ -161,7 +161,7 @@ mod tests {
         assert_eq!(s.economy.rerolls_remaining, 1);
         assert_eq!(s.economy.gold, 1000, "free reroll must not charge gold");
         assert_eq!(s.economy.reroll_cost, cost_before, "cost unchanged on free reroll");
-        assert_eq!(s.shop.offers.len(), 3);
+        assert_eq!(s.shop.offers.len(), 8);
     }
 
     #[test]

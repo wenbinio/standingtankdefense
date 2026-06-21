@@ -3,23 +3,26 @@ use crate::content;
 use crate::state::*;
 
 /// Number of purchasable slots presented each round / reroll.
-const OFFER_SLOTS: usize = 3;
+const OFFER_SLOTS: usize = 8;
+/// Of those, the first `WEAPON_SLOTS` are always weapons; the remainder are
+/// always modifiers (economy / passives / spikes). A fixed layout so every
+/// round offers a steady spread of both, never all-of-one-kind.
+const WEAPON_SLOTS: usize = 4;
 
-/// Generate a fresh set of offers by drawing from the combined pool of weapons
-/// and modifiers via `s.rng_shop`. Replace `s.shop.offers`, increment
-/// `s.shop.shop_seq`. Called at each round boundary and on reroll.
+/// Generate a fresh set of offers: the first `WEAPON_SLOTS` drawn uniformly from
+/// the weapon pool, the rest from the modifier pool, via `s.rng_shop`. Replace
+/// `s.shop.offers`, increment `s.shop.shop_seq`. Called at round boundary / reroll.
 pub(crate) fn generate_offers(s: &mut ArenaState) {
-    let nw = content::WEAPONS.len();
-    let nm = content::MODIFIERS.len();
-    let total = (nw + nm) as u32;
+    let nw = content::WEAPONS.len() as u32;
+    let nm = content::MODIFIERS.len() as u32;
     let mut offers = Vec::with_capacity(OFFER_SLOTS);
-    for _ in 0..OFFER_SLOTS {
-        let r = s.rng_shop.below(total) as usize;
-        let offer = if r < nw {
+    for slot in 0..OFFER_SLOTS {
+        let offer = if slot < WEAPON_SLOTS {
+            let r = s.rng_shop.below(nw) as usize;
             Offer { kind: OfferKind::Weapon, def: r as u16, cost: content::WEAPONS[r].cost }
         } else {
-            let mi = r - nw;
-            Offer { kind: OfferKind::Modifier, def: mi as u16, cost: content::MODIFIERS[mi].cost }
+            let r = s.rng_shop.below(nm) as usize;
+            Offer { kind: OfferKind::Modifier, def: r as u16, cost: content::MODIFIERS[r].cost }
         };
         offers.push(offer);
     }

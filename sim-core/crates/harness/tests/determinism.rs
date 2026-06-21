@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0xd4857eccd390eecb, // re-baselined (damage/gold scoreboard + trades/Bloodmoney)
+        0x21f248f96f6593f9, // re-baselined: shop = 8 offers, fixed 4 weapons + 4 modifiers
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }
