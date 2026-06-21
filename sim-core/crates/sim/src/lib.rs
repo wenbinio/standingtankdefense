@@ -110,7 +110,11 @@ pub fn checksum(s: &ArenaState) -> u64 {
 
     c.write_i64(s.economy.gold);
     c.write_i64(s.economy.income_per_tick);
+    c.write_fixed(s.economy.income_mult);
+    c.write_fixed(s.economy.income_regen_pct);
     c.write_fixed(s.economy.bounty_mult);
+    c.write_i64(s.economy.bounty_proc_chance_pct);
+    c.write_fixed(s.economy.bounty_proc_bonus);
     c.write_u32(s.economy.rerolls_remaining);
     c.write_i64(s.economy.reroll_cost);
 

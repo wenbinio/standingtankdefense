@@ -93,6 +93,12 @@ impl Modifiers {
             ModEffect::SpikesPct(n, d) => tank.spikes_mult += Fixed::from_ratio(n, d),
             ModEffect::HealOnKill(n) => tank.heal_on_kill += n,
             ModEffect::HealOnPoison(n) => tank.heal_on_poison += n,
+            ModEffect::IncomePct(n, d) => economy.income_mult += Fixed::from_ratio(n, d),
+            ModEffect::IncomeRegenPct(n, d) => economy.income_regen_pct += Fixed::from_ratio(n, d),
+            ModEffect::BountyProc(c, b) => {
+                economy.bounty_proc_chance_pct += c;
+                economy.bounty_proc_bonus += Fixed::from_ratio(b, 100);
+            }
             // Registered as per-arena trigger state in `buy_modifier`; no aggregate.
             ModEffect::GrantVulnPulse(..) => {}
         }

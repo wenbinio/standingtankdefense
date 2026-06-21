@@ -152,7 +152,17 @@ pub struct Projectile {
 pub struct Economy {
     pub gold: i64,
     pub income_per_tick: i64, // base passive income (no multiplier — source rule)
+    /// Multiplier on passive income (starts at `ONE`). Distinct from `bounty_mult`,
+    /// which by the source rule never touches passive income.
+    pub income_mult: Fixed,
+    /// Fraction of each income award also granted to the tank as instant HP
+    /// (the source's "% of Gold Income as instant HP Regen"; starts `ZERO`).
+    pub income_regen_pct: Fixed,
     pub bounty_mult: Fixed,   // applies to kill bounty only
+    /// Chance (in percent, 0–100) that a kill pays a bonus bounty; `0` ⇒ no roll.
+    pub bounty_proc_chance_pct: i64,
+    /// Bonus fraction of the base bounty paid when a proc fires (e.g. `2.0` ⇒ +200%).
+    pub bounty_proc_bonus: Fixed,
     pub rerolls_remaining: u32,
     pub reroll_cost: i64,
 }
@@ -287,7 +297,11 @@ impl ArenaState {
             economy: Economy {
                 gold: 500,
                 income_per_tick: 20, // 600 gold/s baseline (tuning)
+                income_mult: Fixed::ONE,
+                income_regen_pct: Fixed::ZERO,
                 bounty_mult: Fixed::ONE,
+                bounty_proc_chance_pct: 0,
+                bounty_proc_bonus: Fixed::ZERO,
                 rerolls_remaining: 5,
                 reroll_cost: 100,
             },

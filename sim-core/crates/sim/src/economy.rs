@@ -2,6 +2,7 @@
 //! passive income does NOT (source rule, `docs/02 §2.4`).
 use crate::content;
 use crate::state::*;
+use determinism::Fixed;
 
 /// Called once when a new round begins (before input). M0: keep simple
 /// (no-op, or a small flat per-round bonus). Deterministic.
@@ -15,13 +16,26 @@ pub(crate) fn on_round_start(s: &mut ArenaState) {
 /// `s.economy.bounty_mult.scale_i64(bounty)`). Leave `pending_kills` empty.
 pub(crate) fn collect_bounties(s: &mut ArenaState) {
     let mult = s.economy.bounty_mult;
+    let chance = s.economy.bounty_proc_chance_pct;
+    let bonus = s.economy.bounty_proc_bonus;
     let mut gained: i64 = 0;
     let mut kills: i64 = 0;
-    for def in s.pending_kills.drain(..) {
-        let bounty = content::ENEMIES[def as usize].bounty;
-        gained += mult.scale_i64(bounty);
+    // Take the kill list out so we can also borrow `rng_proc` for proc rolls.
+    let kills_vec = std::mem::take(&mut s.pending_kills);
+    for def in &kills_vec {
+        let bounty = content::ENEMIES[*def as usize].bounty;
+        let base = mult.scale_i64(bounty);
+        gained += base;
+        // Chance-based bonus bounty (the source's "+X% Bounty with Y% chance").
+        // Only draw RNG when the player actually owns a proc, so the baseline
+        // RNG cursor is untouched for everyone else.
+        if chance > 0 && (s.rng_proc.below(100) as i64) < chance {
+            gained += bonus.scale_i64(base);
+        }
         kills += 1;
     }
+    s.pending_kills = kills_vec;
+    s.pending_kills.clear();
     s.economy.gold += gained;
     // On-kill trigger: heal the tank per enemy killed this tick, capped at max HP.
     if s.tank.heal_on_kill > 0 && kills > 0 && !s.dead {
@@ -29,9 +43,19 @@ pub(crate) fn collect_bounties(s: &mut ArenaState) {
     }
 }
 
-/// Phase 8: add `s.economy.income_per_tick` to gold (no multiplier).
+/// Phase 8: add `floor(income_per_tick × income_mult)` to gold. `bounty_mult`
+/// still never touches income (source rule); `income_mult` is its own lever.
+/// If `income_regen_pct > 0`, also heal the tank that fraction of the award.
 pub(crate) fn tick_income(s: &mut ArenaState) {
-    s.economy.gold += s.economy.income_per_tick;
+    let amount = s.economy.income_mult.scale_i64(s.economy.income_per_tick);
+    s.economy.gold += amount;
+    // Income-as-HP-regen (the source's "% of Gold Income as instant HP Regen").
+    if s.economy.income_regen_pct > Fixed::ZERO && !s.dead {
+        let heal = s.economy.income_regen_pct.scale_i64(amount);
+        if heal > 0 {
+            s.tank.hp = (s.tank.hp + heal).min(s.tank.max_hp);
+        }
+    }
 }
 
 /// Phase 9: if `s.tank.hp <= 0` and not already dead, set `dead = true` and
@@ -102,6 +126,95 @@ mod tests {
         s.pending_kills.clear();
         collect_bounties(&mut s);
         assert_eq!(s.economy.gold, 123);
+    }
+
+    #[test]
+    fn income_mult_scales_passive_income_floored() {
+        let mut s = fresh();
+        s.economy.gold = 0;
+        s.economy.income_per_tick = 20;
+        s.economy.income_mult = Fixed::ONE; // identity baseline
+        tick_income(&mut s);
+        assert_eq!(s.economy.gold, 20);
+        // +25% income ⇒ 25/tick.
+        s.economy.income_mult = Fixed::ONE + Fixed::from_ratio(1, 4);
+        tick_income(&mut s);
+        assert_eq!(s.economy.gold, 45);
+    }
+
+    #[test]
+    fn income_does_not_use_bounty_mult() {
+        // Source rule: passive income is untouched by the bounty multiplier.
+        let mut s = fresh();
+        s.economy.gold = 0;
+        s.economy.income_per_tick = 20;
+        s.economy.bounty_mult = Fixed::from_int(10);
+        tick_income(&mut s);
+        assert_eq!(s.economy.gold, 20);
+    }
+
+    #[test]
+    fn income_regen_heals_a_fraction_of_income_capped() {
+        let mut s = fresh();
+        s.economy.gold = 0;
+        s.economy.income_per_tick = 100;
+        s.tank.max_hp = 1000;
+        s.tank.hp = 500;
+        s.economy.income_regen_pct = Fixed::from_ratio(1, 4); // 25%
+        tick_income(&mut s);
+        assert_eq!(s.economy.gold, 100);
+        assert_eq!(s.tank.hp, 525, "25% of 100 income healed");
+
+        // Cap at max_hp.
+        s.tank.hp = 990;
+        tick_income(&mut s);
+        assert_eq!(s.tank.hp, 1000);
+
+        // Dead tank does not heal.
+        s.dead = true;
+        s.tank.hp = 0;
+        tick_income(&mut s);
+        assert_eq!(s.tank.hp, 0);
+    }
+
+    #[test]
+    fn bounty_proc_pays_bonus_and_is_deterministic() {
+        // A 100% chance proc always pays the bonus.
+        let mut s = fresh();
+        s.economy.gold = 0;
+        s.economy.bounty_mult = Fixed::ONE;
+        s.economy.bounty_proc_chance_pct = 100;
+        s.economy.bounty_proc_bonus = Fixed::from_int(2); // +200%
+        s.pending_kills = vec![1]; // bounty 40 → 40 + 80 = 120
+        collect_bounties(&mut s);
+        assert_eq!(s.economy.gold, 120);
+
+        // No proc owned ⇒ no RNG draw, no bonus, cursor untouched.
+        let mut a = fresh();
+        let mut b = fresh();
+        let cursor = a.rng_proc.state();
+        a.economy.bounty_mult = Fixed::ONE;
+        b.economy.bounty_mult = Fixed::ONE;
+        a.pending_kills = vec![1];
+        b.pending_kills = vec![1];
+        collect_bounties(&mut a);
+        assert_eq!(a.economy.gold, 540, "base bounty only");
+        assert_eq!(a.rng_proc.state(), cursor, "no RNG drawn without a proc");
+
+        // Same seed + same proc ⇒ identical outcome (determinism).
+        let mut c = ArenaState::new(999, 0);
+        let mut d = ArenaState::new(999, 0);
+        for s in [&mut c, &mut d] {
+            s.economy.gold = 0;
+            s.economy.bounty_mult = Fixed::ONE;
+            s.economy.bounty_proc_chance_pct = 50;
+            s.economy.bounty_proc_bonus = Fixed::from_int(2);
+            s.pending_kills = vec![1, 1, 1, 1, 1];
+        }
+        collect_bounties(&mut c);
+        collect_bounties(&mut d);
+        assert_eq!(c.economy.gold, d.economy.gold);
+        assert_eq!(c.rng_proc.state(), d.rng_proc.state());
     }
 
     #[test]

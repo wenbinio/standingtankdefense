@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 8;
+pub const SNAPSHOT_VERSION: u32 = 9;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -218,7 +218,11 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     // economy
     w.i64(s.economy.gold);
     w.i64(s.economy.income_per_tick);
+    w.fixed(s.economy.income_mult);
+    w.fixed(s.economy.income_regen_pct);
     w.fixed(s.economy.bounty_mult);
+    w.i64(s.economy.bounty_proc_chance_pct);
+    w.fixed(s.economy.bounty_proc_bonus);
     w.u32(s.economy.rerolls_remaining);
     w.i64(s.economy.reroll_cost);
 
@@ -370,7 +374,11 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
     let economy = Economy {
         gold: r.i64()?,
         income_per_tick: r.i64()?,
+        income_mult: r.fixed()?,
+        income_regen_pct: r.fixed()?,
         bounty_mult: r.fixed()?,
+        bounty_proc_chance_pct: r.i64()?,
+        bounty_proc_bonus: r.fixed()?,
         rerolls_remaining: r.u32()?,
         reroll_cost: r.i64()?,
     };

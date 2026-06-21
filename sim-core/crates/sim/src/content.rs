@@ -126,6 +126,13 @@ pub enum ModEffect {
     HealOnKill(i64),
     /// +flat HP healed to the tank each tick an enemy takes poison damage.
     HealOnPoison(i64),
+    /// +% multiplier on passive gold income (additive into `income_mult`).
+    IncomePct(i64, i64),
+    /// +% of each income award also healed to the tank ("income as HP regen").
+    IncomeRegenPct(i64, i64),
+    /// Chance-based bonus bounty: `(chance_pct, bonus_pct)` — with `chance_pct%`
+    /// probability per kill, pay an extra `bonus_pct%` of the base bounty.
+    BountyProc(i64, i64),
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
@@ -177,6 +184,9 @@ impl ModEffect {
             ModEffect::GrantVulnPulse(m, r, i) => (14, m, r, i),
             ModEffect::HealOnKill(n) => (15, n, 0, 0),
             ModEffect::HealOnPoison(n) => (16, n, 0, 0),
+            ModEffect::IncomePct(n, d) => (17, n, d, 0),
+            ModEffect::IncomeRegenPct(n, d) => (18, n, d, 0),
+            ModEffect::BountyProc(c, b) => (19, c, b, 0),
         }
     }
     /// Inverse of [`words`](Self::words).
@@ -199,6 +209,9 @@ impl ModEffect {
             14 => ModEffect::GrantVulnPulse(a, b, c),
             15 => ModEffect::HealOnKill(a),
             16 => ModEffect::HealOnPoison(a),
+            17 => ModEffect::IncomePct(a, b),
+            18 => ModEffect::IncomeRegenPct(a, b),
+            19 => ModEffect::BountyProc(a, b),
             _ => return None,
         })
     }
@@ -238,6 +251,13 @@ pub static MODIFIERS: &[ModifierDef] = &[
     ModifierDef { name: "+10% Attack Speed", rarity: 0, cost: 500, effect: ModEffect::AttackSpeedPct(1, 10), ramp: None },
     ModifierDef { name: "+50% Kill Bounty", rarity: 1, cost: 1500, effect: ModEffect::BountyPct(1, 2), ramp: None },
     ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effect: ModEffect::IncomeFlat(20), ramp: None },
+    // Economy depth (`docs/06` #5/source): income multiplier, income→HP-regen,
+    // and a gambling bounty proc. `income_mult` is its own lever — `bounty_mult`
+    // still never touches passive income (source rule).
+    ModifierDef { name: "+10% Gold Income", rarity: 1, cost: 1500, effect: ModEffect::IncomePct(10, 100), ramp: None },
+    ModifierDef { name: "+25% Gold Income", rarity: 2, cost: 3000, effect: ModEffect::IncomePct(25, 100), ramp: None },
+    ModifierDef { name: "Golden Vitality (25% of Income as HP Regen)", rarity: 2, cost: 3000, effect: ModEffect::IncomeRegenPct(25, 100), ramp: None },
+    ModifierDef { name: "Lucky Strikes (5% chance: +200% Bounty)", rarity: 2, cost: 3000, effect: ModEffect::BountyProc(5, 200), ramp: None },
     ModifierDef { name: "+2000 Max HP", rarity: 1, cost: 1500, effect: ModEffect::MaxHp(2000), ramp: None },
     ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effect: ModEffect::Armor(10), ramp: None },
     ModifierDef { name: "+2000 Mana Shield", rarity: 1, cost: 1500, effect: ModEffect::ManaShield(2000, 10), ramp: None },

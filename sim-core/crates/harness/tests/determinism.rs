@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x0d9c58900278df43, // re-baselined (on-event heal triggers)
+        0x2d3a8d06c6d9c720, // re-baselined (economy depth: income mult/regen, bounty proc)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }
