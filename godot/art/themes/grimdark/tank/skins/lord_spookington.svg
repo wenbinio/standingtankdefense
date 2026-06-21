@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Lord Spookington" -->
+  <!-- High 3/4 top-down. Big pupil looks UP (north, -Y); eye IS the glow core. -->
+  <!-- Floating eldritch eyeball, obsidian shards, violet arcane glow. Cartoon-ominous. -->
+  <defs>
+    <radialGradient id="ls_eye" cx="48%" cy="38%" r="68%">
+      <stop offset="0%"  stop-color="#FBF3FF"/>
+      <stop offset="55%" stop-color="#D9C6E8"/>
+      <stop offset="100%" stop-color="#6E5288"/>
+    </radialGradient>
+    <radialGradient id="ls_iris" cx="50%" cy="42%" r="62%">
+      <stop offset="0%"  stop-color="#E9A6FF"/>
+      <stop offset="42%" stop-color="#A02FE0"/>
+      <stop offset="100%" stop-color="#3A0A66"/>
+    </radialGradient>
+    <linearGradient id="ls_shard" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"  stop-color="#3A2A52"/>
+      <stop offset="45%" stop-color="#18101F"/>
+      <stop offset="100%" stop-color="#060409"/>
+    </linearGradient>
+    <radialGradient id="ls_arcane" cx="50%" cy="50%" r="60%">
+      <stop offset="0%"  stop-color="#E89AFF"/>
+      <stop offset="45%" stop-color="#9A2EE0"/>
+      <stop offset="100%" stop-color="#2A0650"/>
+    </radialGradient>
+    <filter id="ls_glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+    <filter id="ls_ao" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground levitation shadow (dark, pulled down to show hover) -->
+  <ellipse cx="96" cy="172" rx="48" ry="12" fill="#0A0414" opacity="0.6"/>
+  <ellipse cx="96" cy="172" rx="30" ry="7" fill="#1A0633" opacity="0.5" filter="url(#ls_ao)"/>
+
+  <!-- wispy violet tendrils dangling toward shadow -->
+  <g stroke="#7A28C0" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.75">
+    <path d="M74 130 C68 146 76 154 70 164"/>
+    <path d="M96 136 C92 152 100 158 96 168"/>
+    <path d="M118 130 C124 146 116 154 122 164"/>
+    <path d="M86 134 C82 148 86 156 84 166"/>
+    <path d="M108 134 C112 148 108 156 110 166"/>
+  </g>
+  <g stroke="#C66BFF" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.7">
+    <path d="M96 136 C92 152 100 158 96 168"/>
+    <path d="M74 130 C68 146 76 154 70 164"/>
+  </g>
+
+  <!-- arcane levitation glow under the eye -->
+  <ellipse cx="96" cy="118" rx="44" ry="22" fill="#9A2EE0" opacity="0.4" filter="url(#ls_glow)"/>
+
+  <!-- ================= OBSIDIAN / ARCANE SHARDS (jagged ring) ================= -->
+  <g fill="url(#ls_shard)" stroke="#040207" stroke-width="3" stroke-linejoin="round">
+    <path d="M30 90 L52 96 L46 116 L24 106 Z"/>
+    <path d="M162 90 L140 96 L146 116 L168 106 Z"/>
+    <path d="M48 58 L66 66 L56 82 L40 70 Z"/>
+    <path d="M144 58 L126 66 L136 82 L152 70 Z"/>
+    <path d="M70 122 L88 124 L82 144 L62 138 Z"/>
+    <path d="M122 122 L104 124 L110 144 L130 138 Z"/>
+    <path d="M96 28 L86 46 L106 46 Z"/>
+  </g>
+  <!-- shard rim lights (upper-left lit) -->
+  <g fill="#5A4078" opacity="0.7">
+    <path d="M30 90 L52 96 L48 102 L30 96 Z"/>
+    <path d="M48 58 L66 66 L62 72 L48 64 Z"/>
+    <path d="M70 122 L88 124 L84 130 L70 128 Z"/>
+  </g>
+  <!-- arcane glow seams in cracks -->
+  <g stroke="#C66BFF" stroke-width="2" stroke-linecap="round" opacity="0.85">
+    <path d="M38 98 L48 104"/>
+    <path d="M154 98 L144 104"/>
+    <path d="M54 66 L60 74"/>
+    <path d="M138 66 L132 74"/>
+    <path d="M76 132 L80 138"/>
+    <path d="M116 132 L112 138"/>
+  </g>
+
+  <!-- ================= GIANT EYEBALL (the glowing core) ================= -->
+  <!-- big ambient eye glow -->
+  <circle cx="96" cy="98" r="50" fill="#9A2EE0" opacity="0.45" filter="url(#ls_glow)"/>
+  <!-- AO under sclera -->
+  <ellipse cx="96" cy="138" rx="42" ry="13" fill="#0A0414" opacity="0.5" filter="url(#ls_ao)"/>
+  <!-- sclera sphere -->
+  <circle cx="96" cy="98" r="46" fill="url(#ls_eye)" stroke="#2A1840" stroke-width="4.5"/>
+  <!-- AO lower-right shadow on sphere -->
+  <path d="M142 98 A46 46 0 0 1 96 144 A46 46 0 0 0 134 62 Z" fill="#3A2452" opacity="0.45" filter="url(#ls_ao)"/>
+  <!-- rim light upper-left -->
+  <path d="M96 52 A46 46 0 0 0 54 122 A46 46 0 0 1 88 56 Z" fill="#FBF3FF" opacity="0.55"/>
+
+  <!-- veiny red-violet bloodshot streaks -->
+  <g stroke="#B83A8A" stroke-width="1.6" fill="none" opacity="0.6" stroke-linecap="round">
+    <path d="M58 110 C66 104 70 112 78 108"/>
+    <path d="M132 116 C124 110 120 118 112 114"/>
+    <path d="M70 130 C78 124 82 130 90 126"/>
+  </g>
+
+  <!-- ================= IRIS + PUPIL (looks UP = "barrel") ================= -->
+  <!-- iris glow -->
+  <circle cx="96" cy="82" r="30" fill="#A02FE0" opacity="0.5" filter="url(#ls_glow)"/>
+  <!-- iris -->
+  <circle cx="96" cy="82" r="26" fill="url(#ls_iris)" stroke="#2A0650" stroke-width="3"/>
+  <!-- iris striations -->
+  <g stroke="#3A0A66" stroke-width="1.4" opacity="0.6">
+    <path d="M96 60 L96 70"/><path d="M78 70 L84 76"/><path d="M114 70 L108 76"/>
+    <path d="M74 90 L82 90"/><path d="M118 90 L110 90"/>
+  </g>
+  <!-- big goofy pupil, looking up (offset toward -Y) -->
+  <ellipse cx="96" cy="74" rx="13" ry="15" fill="#0A0414" stroke="#2A0650" stroke-width="2"/>
+  <!-- inner pupil arcane spark -->
+  <ellipse cx="96" cy="72" rx="5" ry="6" fill="#3A0A66"/>
+  <!-- goofy big highlight glints -->
+  <circle cx="89" cy="66" r="5" fill="#FBF3FF"/>
+  <circle cx="103" cy="78" r="2.5" fill="#E9A6FF" opacity="0.9"/>
+
+  <!-- floating arcane motes -->
+  <g fill="#C66BFF" opacity="0.85">
+    <circle cx="40" cy="76" r="2.5"/>
+    <circle cx="152" cy="80" r="2.5"/>
+    <circle cx="60" cy="44" r="2"/>
+    <circle cx="132" cy="42" r="2"/>
+  </g>
+</svg>

@@ -30,7 +30,7 @@ func _load_textures() -> void:
 	tex = {
 		"ground": ArtTheme.tex("env/arena_ground.svg"),
 		"ring":   ArtTheme.tex("env/spawn_ring.svg"),
-		"tank":   ArtTheme.tex("tank/player_tank.svg"),
+		"tank":   ArtTheme.tank_tex(),
 		"proj":   ArtTheme.tex("projectiles/magic_orb.svg"),
 		"clear":  ArtTheme.tex("fx/clear_shockwave.svg"),
 		"muzzle": ArtTheme.tex("fx/muzzle_flash.svg"),

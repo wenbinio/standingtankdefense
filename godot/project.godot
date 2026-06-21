@@ -5,11 +5,12 @@ config_version=5
 [autoload]
 
 ArtTheme="*res://theme.gd"
+Profile="*res://profile.gd"
 
 [application]
 
 config/name="Standing Tank Defense (preview)"
-run/main_scene="res://Match.tscn"
+run/main_scene="res://SkinSelect.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 
 [physics]

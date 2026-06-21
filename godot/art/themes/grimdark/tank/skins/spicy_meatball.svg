@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Spicy Meatball" -->
+  <!-- High 3/4 top-down. Mouth-crater BELCHES fire UP (north, -Y). No baked rotation. -->
+  <!-- Fat molten lava-meatball orb in a sauce-pan base. Marinara-red + charred crust. -->
+  <defs>
+    <radialGradient id="sm_body" cx="40%" cy="32%" r="80%">
+      <stop offset="0%"  stop-color="#E8623A"/>
+      <stop offset="42%" stop-color="#A12618"/>
+      <stop offset="100%" stop-color="#3E0E0A"/>
+    </radialGradient>
+    <radialGradient id="sm_core" cx="50%" cy="45%" r="62%">
+      <stop offset="0%"  stop-color="#FFF6C2"/>
+      <stop offset="40%" stop-color="#FFC024"/>
+      <stop offset="100%" stop-color="#B33A05"/>
+    </radialGradient>
+    <linearGradient id="sm_pan" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#5A5E66"/>
+      <stop offset="45%" stop-color="#2E3138"/>
+      <stop offset="100%" stop-color="#101216"/>
+    </linearGradient>
+    <linearGradient id="sm_handle" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#4A4D54"/>
+      <stop offset="50%" stop-color="#1E2025"/>
+      <stop offset="100%" stop-color="#0B0C0F"/>
+    </linearGradient>
+    <radialGradient id="sm_flame" cx="50%" cy="80%" r="70%">
+      <stop offset="0%"  stop-color="#FFF3B0"/>
+      <stop offset="45%" stop-color="#FF8A1E"/>
+      <stop offset="100%" stop-color="#C81E06"/>
+    </radialGradient>
+    <filter id="sm_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+    <filter id="sm_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="96" cy="166" rx="66" ry="18" fill="#06040A" opacity="0.55"/>
+  <ellipse cx="96" cy="166" rx="44" ry="11" fill="#06040A" opacity="0.45"/>
+
+  <!-- ================= SAUCE-PAN BASE ================= -->
+  <!-- pan handle (juts to lower-right, comedic) -->
+  <rect x="148" y="142" width="40" height="11" rx="5" fill="url(#sm_handle)" stroke="#06070A" stroke-width="3" stroke-linejoin="round"/>
+  <ellipse cx="184" cy="147" rx="4" ry="4" fill="#0B0C0F" stroke="#06070A" stroke-width="2"/>
+  <!-- pan body -->
+  <path d="M44 132 C44 158 70 168 96 168 C122 168 148 158 148 132 Z"
+        fill="url(#sm_pan)" stroke="#06070A" stroke-width="4" stroke-linejoin="round"/>
+  <!-- pan rim -->
+  <ellipse cx="96" cy="132" rx="52" ry="16" fill="#3A3E46" stroke="#06070A" stroke-width="4"/>
+  <ellipse cx="96" cy="132" rx="52" ry="16" fill="#06040A" opacity="0.4" filter="url(#sm_ao)"/>
+  <!-- pan rim lit edge -->
+  <path d="M52 128 C66 120 126 120 140 128" stroke="#7E828C" stroke-width="3.5" fill="none" opacity="0.6" stroke-linecap="round"/>
+
+  <!-- ================= MEATBALL ORB ================= -->
+  <!-- AO between ball and pan -->
+  <ellipse cx="96" cy="124" rx="50" ry="14" fill="#06040A" opacity="0.5" filter="url(#sm_ao)"/>
+  <!-- bumpy meatball silhouette -->
+  <path d="M96 44
+           C124 42 148 60 152 86
+           C155 104 150 116 138 124
+           C122 134 70 134 54 124
+           C42 116 37 104 40 86
+           C44 60 68 46 96 44 Z"
+        fill="url(#sm_body)" stroke="#2A0805" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- bumps along edge for lumpy texture -->
+  <g fill="url(#sm_body)" stroke="#2A0805" stroke-width="3">
+    <circle cx="58" cy="78" r="11"/>
+    <circle cx="138" cy="82" r="12"/>
+    <circle cx="50" cy="106" r="10"/>
+    <circle cx="146" cy="104" r="9"/>
+    <circle cx="118" cy="58" r="10"/>
+  </g>
+  <!-- deep AO on lower-right shadow half -->
+  <path d="M152 86 C155 104 150 116 138 124 C122 134 96 134 96 130
+           C124 128 144 110 148 88 Z"
+        fill="#06040A" opacity="0.5" filter="url(#sm_ao)"/>
+  <!-- rim light on upper-left -->
+  <path d="M96 44 C70 46 50 60 44 84 C56 64 74 56 96 55 Z"
+        fill="#FF9E5A" opacity="0.55"/>
+
+  <!-- oozing lava cracks -->
+  <g stroke="#FF7A12" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.9">
+    <path d="M62 92 C70 98 68 110 78 116"/>
+    <path d="M128 78 C124 90 134 96 130 110"/>
+    <path d="M96 100 C92 108 102 112 100 122"/>
+  </g>
+  <g stroke="#FFD24A" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.9">
+    <path d="M62 92 C70 98 68 110 78 116"/>
+    <path d="M128 78 C124 90 134 96 130 110"/>
+  </g>
+
+  <!-- charred crust speckles -->
+  <g fill="#2A0805" opacity="0.7">
+    <circle cx="80" cy="70" r="3"/>
+    <circle cx="110" cy="74" r="2.5"/>
+    <circle cx="72" cy="100" r="2.5"/>
+    <circle cx="120" cy="100" r="3"/>
+  </g>
+
+  <!-- ================= MOUTH-CRATER + FIRE BELCH (faces UP) ================= -->
+  <!-- fire glow halo -->
+  <ellipse cx="96" cy="40" rx="26" ry="34" fill="#FF8A1E" opacity="0.5" filter="url(#sm_glow)"/>
+  <!-- flame tongues licking up -->
+  <path d="M96 8 C90 22 88 30 96 40 C104 30 102 22 96 8 Z" fill="url(#sm_flame)"/>
+  <path d="M78 20 C76 34 80 40 90 44 C84 32 82 26 78 20 Z" fill="url(#sm_flame)" opacity="0.92"/>
+  <path d="M114 18 C116 32 112 40 102 44 C108 32 110 26 114 18 Z" fill="url(#sm_flame)" opacity="0.92"/>
+  <path d="M96 16 C92 26 92 34 96 40 C100 34 100 26 96 16 Z" fill="#FFF3B0"/>
+  <!-- lumpy mouth-crater rim (the "barrel") -->
+  <path d="M70 54 C74 44 118 44 122 54 C118 64 74 64 70 54 Z"
+        fill="#5A1006" stroke="#2A0805" stroke-width="4" stroke-linejoin="round"/>
+  <!-- glowing molten core mouth -->
+  <ellipse cx="96" cy="54" rx="20" ry="11" fill="url(#sm_core)"/>
+  <ellipse cx="96" cy="53" rx="11" ry="6" fill="#FFF6C2"/>
+  <ellipse cx="92" cy="51" rx="4" ry="2.5" fill="#FFFFFF"/>
+</svg>

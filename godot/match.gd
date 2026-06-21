@@ -19,16 +19,21 @@ func _load_textures() -> void:
 	tex = {
 		"ground": ArtTheme.tex("env/arena_ground.svg"),
 		"ring":   ArtTheme.tex("env/spawn_ring.svg"),
-		"tank":   ArtTheme.tex("tank/player_tank.svg"),
+		"tank":   ArtTheme.tank_tex(),
 		"coin":   ArtTheme.tex("ui/coin.svg"),
 	}
 	enemy_tex = [ArtTheme.tex("enemies/fel_orc_grunt.svg"),
 		ArtTheme.tex("enemies/steam_tank.svg"), ArtTheme.tex("enemies/samwise.svg")]
 
+var _recorded := false        # match-end achievements credited once
+var _toast: Array = []        # newly-unlocked achievement names to flash
+
 func _unhandled_key_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
 		if e.keycode == KEY_T:
 			ArtTheme.cycle(); _load_textures()
+		elif e.keycode == KEY_S:
+			get_tree().change_scene_to_file("res://SkinSelect.tscn")
 		elif e.keycode == KEY_ESCAPE:
 			get_tree().quit()
 
@@ -36,6 +41,19 @@ func _physics_process(_delta: float) -> void:
 	if m == null:
 		return
 	m.step()
+	# Credit "you" (player 0) once the match is decided. Cosmetic only.
+	if not _recorded and m.match_over():
+		_recorded = true
+		var st: PackedInt64Array = m.stats(0)
+		var arena: PackedInt64Array = m.arena(0)
+		var rec := {
+			"damage": st[0] if st.size() > 0 else 0,
+			"gold": st[1] if st.size() > 1 else 0,
+			"round": arena[5] if arena.size() > 5 else 0,
+			"won": m.placement(0) == 1,
+		}
+		for id in Profile.record_match(rec):
+			_toast.append(Profile.ach_def(id).get("name", id))
 	queue_redraw()
 
 func _blit(tx: Texture2D, center: Vector2, size: float, mod := Color.WHITE) -> void:
@@ -54,6 +72,13 @@ func _draw() -> void:
 		"MULTI-ARENA NET VIEW  —  %d sharded sims · 1 authoritative director · server tick %d · alive %d/%d  [%s]"
 		% [n, m.server_tick(), m.alive_count(), n, status],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.82, 0.88, 0.96))
+	draw_string(font, Vector2(vp.x - 250, 26),
+		"YOU: %s  ·  [S] skins" % Profile.skin_def(Profile.selected).name,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.62, 0.66, 0.74))
+	if not _toast.is_empty():
+		draw_string(font, Vector2(16, vp.y - 16),
+			"ACHIEVEMENT UNLOCKED:  " + ", ".join(_toast),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1.0, 0.82, 0.4))
 
 	# grid
 	var cols: int = mini(n, 4)

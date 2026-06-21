@@ -14,6 +14,17 @@ func base() -> String:
 func tex(rel: String) -> Texture2D:
 	return load(base() + rel)
 
+# The player tank, honoring the profile's selected skin. Skins live at
+# tank/skins/<id>.svg per theme; "" (and any skin missing from the current
+# theme) falls back to the theme's default player_tank.svg.
+func tank_tex() -> Texture2D:
+	var f: String = Profile.skin_def(Profile.selected).file
+	if f != "":
+		var p := base() + "tank/" + f
+		if ResourceLoader.exists(p):
+			return load(p)
+	return tex("tank/player_tank.svg")
+
 func theme_name() -> String:
 	return themes[active]
 

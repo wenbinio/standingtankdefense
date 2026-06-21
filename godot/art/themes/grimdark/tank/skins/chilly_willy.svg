@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Chilly Willy" -->
+  <!-- High 3/4 top-down. Carrot-nose barrel points UP (north, -Y). No baked rotation. -->
+  <!-- Snowman turret: two stacked snow-spheres. Snow-white/ice-blue, cyan frost core. -->
+  <defs>
+    <radialGradient id="cw_snow" cx="38%" cy="30%" r="85%">
+      <stop offset="0%"  stop-color="#FFFFFF"/>
+      <stop offset="50%" stop-color="#D2E4F2"/>
+      <stop offset="100%" stop-color="#7E9DB8"/>
+    </radialGradient>
+    <radialGradient id="cw_snow2" cx="38%" cy="28%" r="85%">
+      <stop offset="0%"  stop-color="#FFFFFF"/>
+      <stop offset="50%" stop-color="#CFE2F0"/>
+      <stop offset="100%" stop-color="#6E8FAC"/>
+    </radialGradient>
+    <linearGradient id="cw_carrot" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#7A2E08"/>
+      <stop offset="35%" stop-color="#E5751C"/>
+      <stop offset="70%" stop-color="#FF9E33"/>
+      <stop offset="100%" stop-color="#FFC56B"/>
+    </linearGradient>
+    <radialGradient id="cw_core" cx="50%" cy="42%" r="62%">
+      <stop offset="0%"  stop-color="#E8FCFF"/>
+      <stop offset="40%" stop-color="#7FE6FF"/>
+      <stop offset="100%" stop-color="#1A6E8C"/>
+    </radialGradient>
+    <linearGradient id="cw_scarf" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#E85C6A"/>
+      <stop offset="55%" stop-color="#B0303E"/>
+      <stop offset="100%" stop-color="#5E121B"/>
+    </linearGradient>
+    <filter id="cw_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <filter id="cw_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="96" cy="168" rx="58" ry="16" fill="#0A1620" opacity="0.5"/>
+  <ellipse cx="96" cy="168" rx="38" ry="10" fill="#0A1620" opacity="0.4"/>
+
+  <!-- ================= TWIG ARMS ================= -->
+  <g stroke="#5A3A1E" stroke-width="4" stroke-linecap="round" fill="none">
+    <path d="M50 120 L24 104 M30 110 L20 102 M28 114 L18 116"/>
+    <path d="M142 118 L168 100 M162 106 L172 98 M164 110 L174 112"/>
+  </g>
+
+  <!-- ================= LOWER SNOW SPHERE ================= -->
+  <!-- AO under base -->
+  <ellipse cx="96" cy="158" rx="50" ry="13" fill="#0A1620" opacity="0.45" filter="url(#cw_ao)"/>
+  <circle cx="96" cy="126" r="50" fill="url(#cw_snow2)" stroke="#3E5A72" stroke-width="4"/>
+  <!-- AO lower-right shadow -->
+  <path d="M146 126 A50 50 0 0 1 96 176 A50 50 0 0 0 138 100 Z" fill="#3E5A72" opacity="0.4" filter="url(#cw_ao)"/>
+  <!-- rim light upper-left -->
+  <path d="M96 76 A50 50 0 0 0 52 152 A50 50 0 0 1 88 80 Z" fill="#FFFFFF" opacity="0.5"/>
+
+  <!-- icicle drips at base -->
+  <g fill="#CFE9F5" stroke="#7FB5D0" stroke-width="1.5">
+    <path d="M62 158 L66 158 L64 174 Z"/>
+    <path d="M86 162 L90 162 L88 180 Z"/>
+    <path d="M112 161 L116 161 L114 178 Z"/>
+    <path d="M132 154 L136 154 L134 168 Z"/>
+  </g>
+
+  <!-- ================= UPPER SNOW SPHERE (head) ================= -->
+  <!-- AO seam between spheres -->
+  <ellipse cx="96" cy="90" rx="40" ry="11" fill="#3E5A72" opacity="0.45" filter="url(#cw_ao)"/>
+  <circle cx="96" cy="74" r="40" fill="url(#cw_snow)" stroke="#3E5A72" stroke-width="4"/>
+  <path d="M136 74 A40 40 0 0 1 96 114 A40 40 0 0 0 130 54 Z" fill="#3E5A72" opacity="0.38" filter="url(#cw_ao)"/>
+  <path d="M96 34 A40 40 0 0 0 60 96 A40 40 0 0 1 90 38 Z" fill="#FFFFFF" opacity="0.55"/>
+
+  <!-- ================= SCARF ================= -->
+  <path d="M58 96 C76 108 116 108 134 96 L132 108 C114 118 78 118 60 108 Z"
+        fill="url(#cw_scarf)" stroke="#3A0C12" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M124 106 L142 130 L130 134 L116 110 Z"
+        fill="url(#cw_scarf)" stroke="#3A0C12" stroke-width="3" stroke-linejoin="round"/>
+  <g stroke="#3A0C12" stroke-width="1.5" opacity="0.5">
+    <path d="M70 100 L72 112"/><path d="M96 104 L96 116"/><path d="M122 100 L120 112"/>
+  </g>
+
+  <!-- ================= COAL-BUTTON EYES ================= -->
+  <circle cx="82" cy="66" r="5" fill="#16181C" stroke="#000000" stroke-width="1"/>
+  <circle cx="110" cy="66" r="5" fill="#16181C" stroke="#000000" stroke-width="1"/>
+  <circle cx="80.5" cy="64" r="1.6" fill="#FFFFFF" opacity="0.85"/>
+  <circle cx="108.5" cy="64" r="1.6" fill="#FFFFFF" opacity="0.85"/>
+  <!-- coal-button smile -->
+  <g fill="#16181C">
+    <circle cx="84" cy="84" r="2.4"/>
+    <circle cx="93" cy="87" r="2.4"/>
+    <circle cx="103" cy="86" r="2.4"/>
+    <circle cx="111" cy="83" r="2.4"/>
+  </g>
+
+  <!-- ================= FROST-GLOW CORE (chest, ally read) ================= -->
+  <circle cx="96" cy="126" r="20" fill="#7FE6FF" opacity="0.5" filter="url(#cw_glow)"/>
+  <circle cx="96" cy="126" r="13" fill="url(#cw_core)" stroke="#2B6F8C" stroke-width="2.5"/>
+  <circle cx="91" cy="121" r="4" fill="#E8FCFF"/>
+  <!-- coal buttons on belly -->
+  <g fill="#16181C">
+    <circle cx="96" cy="146" r="3"/>
+    <circle cx="96" cy="108" r="3"/>
+  </g>
+
+  <!-- ================= CARROT NOSE = BARREL (faces UP) ================= -->
+  <!-- frosty muzzle glow -->
+  <ellipse cx="96" cy="20" rx="12" ry="14" fill="#9FF0FF" opacity="0.4" filter="url(#cw_glow)"/>
+  <!-- carrot, fat at face, point UP -->
+  <path d="M88 70 L104 70 L99 14 L96 10 L93 14 Z"
+        fill="url(#cw_carrot)" stroke="#5A2206" stroke-width="3.5" stroke-linejoin="round"/>
+  <!-- carrot ridges -->
+  <g stroke="#7A2E08" stroke-width="1.6" opacity="0.6">
+    <path d="M90 58 L102 58"/><path d="M91 46 L101 46"/><path d="M92 34 L100 34"/>
+  </g>
+  <!-- carrot lit edge -->
+  <path d="M95 68 L98 16" stroke="#FFD89A" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+  <!-- frost on the tip -->
+  <circle cx="96" cy="14" r="3" fill="#E8FCFF" opacity="0.85"/>
+</svg>

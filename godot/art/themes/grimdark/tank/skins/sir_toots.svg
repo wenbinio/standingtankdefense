@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Sir Toots-a-Lot" -->
+  <!-- High 3/4 top-down. Curvy spout barrel points UP (north, -Y). No baked rotation. -->
+  <!-- Pompous brass steam-teapot war-machine. Polished brass/copper, amber gaslight core. -->
+  <defs>
+    <radialGradient id="st_brass" cx="38%" cy="28%" r="88%">
+      <stop offset="0%"  stop-color="#FFE9A8"/>
+      <stop offset="40%" stop-color="#C79232"/>
+      <stop offset="78%" stop-color="#8A5E1C"/>
+      <stop offset="100%" stop-color="#3E2A0A"/>
+    </radialGradient>
+    <linearGradient id="st_copper" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#F0A65E"/>
+      <stop offset="45%" stop-color="#B5641F"/>
+      <stop offset="100%" stop-color="#5A2A08"/>
+    </linearGradient>
+    <linearGradient id="st_spout" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#3E2A0A"/>
+      <stop offset="35%" stop-color="#E8C76C"/>
+      <stop offset="60%" stop-color="#A87826"/>
+      <stop offset="100%" stop-color="#2E1E06"/>
+    </linearGradient>
+    <radialGradient id="st_core" cx="50%" cy="42%" r="62%">
+      <stop offset="0%"  stop-color="#FFF4C8"/>
+      <stop offset="40%" stop-color="#FFBB3C"/>
+      <stop offset="100%" stop-color="#9A4E06"/>
+    </radialGradient>
+    <radialGradient id="st_steam" cx="50%" cy="80%" r="70%">
+      <stop offset="0%"  stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#D7DEE6"/>
+    </radialGradient>
+    <filter id="st_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <filter id="st_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="96" cy="168" rx="62" ry="16" fill="#1A1206" opacity="0.5"/>
+  <ellipse cx="96" cy="168" rx="42" ry="10" fill="#1A1206" opacity="0.42"/>
+
+  <!-- ================= DAINTY CLAWED FEET ================= -->
+  <g fill="url(#st_copper)" stroke="#2E1A06" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M52 148 C46 158 44 166 52 168 C58 166 56 158 62 150 Z"/>
+    <path d="M140 148 C146 158 148 166 140 168 C134 166 136 158 130 150 Z"/>
+    <path d="M82 156 C78 166 78 172 86 172 C92 170 90 162 92 156 Z"/>
+    <path d="M110 156 C114 166 114 172 106 172 C100 170 102 162 100 156 Z"/>
+  </g>
+
+  <!-- ================= HANDLE (loops to the left, ornate) ================= -->
+  <path d="M40 72 C8 80 8 132 42 138" fill="none" stroke="url(#st_copper)" stroke-width="11" stroke-linecap="round"/>
+  <path d="M40 72 C8 80 8 132 42 138" fill="none" stroke="#2E1A06" stroke-width="3" opacity="0.5"/>
+
+  <!-- ================= TEAPOT BODY (rotund) ================= -->
+  <!-- AO base -->
+  <ellipse cx="96" cy="150" rx="56" ry="16" fill="#1A1206" opacity="0.45" filter="url(#st_ao)"/>
+  <path d="M96 56
+           C146 56 162 92 162 116
+           C162 144 132 158 96 158
+           C60 158 30 144 30 116
+           C30 92 46 56 96 56 Z"
+        fill="url(#st_brass)" stroke="#2E1A06" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- deep AO lower-right -->
+  <path d="M162 116 C162 144 132 158 96 158 C124 152 148 138 150 112
+           C151 96 144 78 130 68 C150 80 162 96 162 116 Z"
+        fill="#1A1206" opacity="0.5" filter="url(#st_ao)"/>
+  <!-- rim light upper-left -->
+  <path d="M96 56 C62 56 42 80 34 104 C46 76 66 66 96 66 Z" fill="#FFE9A8" opacity="0.6"/>
+  <!-- big polished highlight blob -->
+  <ellipse cx="70" cy="86" rx="16" ry="10" fill="#FFF6D2" opacity="0.55" transform="rotate(-25 70 86)"/>
+
+  <!-- decorative banding -->
+  <path d="M40 100 C66 90 126 90 152 100" stroke="#5A3A0E" stroke-width="3" fill="none" opacity="0.6"/>
+  <path d="M40 100 C66 90 126 90 152 100" stroke="#FFE0A0" stroke-width="1.4" fill="none" opacity="0.5"/>
+
+  <!-- rivets -->
+  <g fill="#7A5212" stroke="#2E1A06" stroke-width="1.2">
+    <circle cx="54" cy="116" r="3"/>
+    <circle cx="138" cy="116" r="3"/>
+    <circle cx="72" cy="138" r="3"/>
+    <circle cx="120" cy="138" r="3"/>
+    <circle cx="96" cy="142" r="3"/>
+  </g>
+
+  <!-- ================= PRESSURE GAUGE ================= -->
+  <circle cx="64" cy="126" r="11" fill="#1C140A" stroke="#7A5212" stroke-width="3"/>
+  <circle cx="64" cy="126" r="7.5" fill="#F4ECCE"/>
+  <path d="M64 126 L70 120" stroke="#B0303E" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="64" cy="126" r="1.5" fill="#2E1A06"/>
+
+  <!-- ================= MONOCLE (over the core, pompous) ================= -->
+  <circle cx="118" cy="120" r="13" fill="none" stroke="#FFD66A" stroke-width="3" opacity="0.85"/>
+  <path d="M128 128 C134 138 134 150 130 158" stroke="#3E2A0A" stroke-width="2" fill="none" opacity="0.7"/>
+
+  <!-- ================= AMBER GASLIGHT CORE (ally read) ================= -->
+  <circle cx="96" cy="116" r="20" fill="#FFBB3C" opacity="0.55" filter="url(#st_glow)"/>
+  <circle cx="96" cy="116" r="14" fill="url(#st_core)" stroke="#7A4E0E" stroke-width="3"/>
+  <circle cx="91" cy="111" r="4" fill="#FFF4C8"/>
+
+  <!-- ================= WHISTLE (atop, little nub) ================= -->
+  <rect x="56" y="58" width="16" height="14" rx="4" fill="url(#st_copper)" stroke="#2E1A06" stroke-width="2.5"/>
+  <circle cx="64" cy="56" r="4" fill="#7A5212" stroke="#2E1A06" stroke-width="2"/>
+
+  <!-- ================= CURVY SPOUT = BARREL (faces UP) ================= -->
+  <!-- steam puff glow -->
+  <ellipse cx="118" cy="22" rx="14" ry="16" fill="#FFFFFF" opacity="0.45" filter="url(#st_glow)"/>
+  <!-- little steam clouds -->
+  <g fill="url(#st_steam)" opacity="0.85">
+    <circle cx="116" cy="20" r="7"/>
+    <circle cx="124" cy="14" r="5"/>
+    <circle cx="110" cy="12" r="4.5"/>
+  </g>
+  <!-- spout sweeping up from body to muzzle -->
+  <path d="M120 78
+           C150 72 138 36 116 24
+           C124 40 130 58 108 70 Z"
+        fill="url(#st_spout)" stroke="#2E1A06" stroke-width="4" stroke-linejoin="round"/>
+  <!-- spout lit edge -->
+  <path d="M124 74 C146 66 138 42 120 30" stroke="#FFE9A8" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <!-- muzzle ring / spout mouth -->
+  <ellipse cx="116" cy="24" rx="8" ry="5" fill="#2E1A06" transform="rotate(-30 116 24)"/>
+  <ellipse cx="116" cy="24" rx="4" ry="2.5" fill="#1A1206" transform="rotate(-30 116 24)"/>
+</svg>
