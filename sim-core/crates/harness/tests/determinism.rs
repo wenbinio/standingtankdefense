@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x1ea4_8190_98d3_18e2, // re-baselined in M4 (+ defensive subsystems)
+        0xd8236835eed352f6, // re-baselined in M4 (full catalog data import)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }
