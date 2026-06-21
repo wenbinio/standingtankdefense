@@ -108,6 +108,17 @@ impl StSim {
         a
     }
 
+    /// Per-enemy catalog kind index (0 grunt · 1 steam tank · 2 samwise),
+    /// parallel to `enemies_pos()` — selects the sprite.
+    #[func]
+    fn enemies_kind(&self) -> PackedByteArray {
+        let mut a = PackedByteArray::new();
+        for e in &view::snapshot(&self.state).enemies {
+            a.push(e.kind as u8);
+        }
+        a
+    }
+
     /// Per-enemy HP as a permille of catalog base HP (for a health bar).
     #[func]
     fn enemies_hp_permille(&self) -> PackedInt32Array {
@@ -143,13 +154,15 @@ impl StSim {
         a
     }
 
-    /// Flat `[cost, flags, cost, flags, …]`; flags bit0 = is_weapon, bit1 = affordable.
+    /// Flat `[cost, flags, rarity, …]` per offer; flags bit0 = is_weapon,
+    /// bit1 = affordable; rarity 0 common · 1 uncommon · 2 rare · 3 epic.
     #[func]
     fn shop_meta(&self) -> PackedInt64Array {
         let mut a = PackedInt64Array::new();
         for o in &view::snapshot(&self.state).shop {
             a.push(o.cost);
             a.push((o.is_weapon as i64) | ((o.affordable as i64) << 1));
+            a.push(o.rarity as i64);
         }
         a
     }

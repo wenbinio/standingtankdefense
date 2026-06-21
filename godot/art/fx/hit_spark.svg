@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Standing Tank Defense - FX "Hit Spark" -->
+  <!-- Radial impact burst, centered, NO facing. Menace + bone sharp shards. -->
+  <defs>
+    <filter id="hs_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- hot flash halo -->
+  <circle cx="64" cy="64" r="20" fill="#ff5a3c" opacity="0.45" filter="url(#hs_glow)"/>
+
+  <!-- sharp radiating shards (menace), irregular for impact feel -->
+  <g fill="#ff5a3c" stroke="#101218" stroke-width="2" stroke-linejoin="round">
+    <path d="M64 64 L66 22 L70 60 Z"/>
+    <path d="M64 64 L98 30 L70 62 Z"/>
+    <path d="M64 64 L106 70 L68 68 Z"/>
+    <path d="M64 64 L90 102 L66 70 Z"/>
+    <path d="M64 64 L58 104 L60 68 Z"/>
+    <path d="M64 64 L26 92 L60 68 Z"/>
+    <path d="M64 64 L22 60 L60 62 Z"/>
+    <path d="M64 64 L34 28 L62 60 Z"/>
+  </g>
+
+  <!-- bone secondary shards (shorter, lighter) -->
+  <g fill="#d9d2b0">
+    <path d="M64 64 L80 40 L67 61 Z"/>
+    <path d="M64 64 L48 42 L61 61 Z"/>
+    <path d="M64 64 L84 80 L67 67 Z"/>
+    <path d="M64 64 L44 82 L61 67 Z"/>
+  </g>
+
+  <!-- hot core -->
+  <circle cx="64" cy="64" r="8" fill="#ff5a3c"/>
+  <circle cx="64" cy="64" r="4.5" fill="#d9d2b0"/>
+  <circle cx="64" cy="64" r="2" fill="#ffffff"/>
+</svg>

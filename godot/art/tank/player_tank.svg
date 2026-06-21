@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - PLAYER TANK "Bulwark Cannon" (CHIBI) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- Chibi: big fat steel-blue body ~65% of canvas, ONE short stubby cannon UP, -->
+  <!-- one big aether eye, brass trim, tiny stubby feet. Centered, ~8% margin. -->
+  <defs>
+    <filter id="ally_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ground shadow: planted on the field -->
+  <ellipse cx="96" cy="160" rx="60" ry="22" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- ======================= STUBBY FEET (peeking under big body) ======================= -->
+  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <rect x="50" y="148" width="34" height="22" rx="9" fill="#3a4a63"/>
+    <rect x="108" y="148" width="34" height="22" rx="9" fill="#3a4a63"/>
+  </g>
+  <!-- foot rim light -->
+  <rect x="54" y="151" width="26" height="5" rx="2.5" fill="#6f8db3" opacity="0.8"/>
+  <rect x="112" y="151" width="26" height="5" rx="2.5" fill="#6f8db3" opacity="0.8"/>
+
+  <!-- ======================= STUBBY CANNON (faces UP, short & fat) ======================= -->
+  <!-- barrel cast shadow toward away side -->
+  <rect x="84" y="22" width="30" height="56" rx="13" fill="#0b0d14" opacity="0.35"/>
+  <!-- short fat barrel body -->
+  <rect x="78" y="16" width="36" height="58" rx="16" fill="#3a4a63" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- barrel rim light (camera-facing left edge) -->
+  <rect x="83" y="22" width="9" height="46" rx="4.5" fill="#6f8db3"/>
+  <!-- fat brass reinforcing band -->
+  <rect x="73" y="40" width="46" height="13" rx="6" fill="#caa24a" stroke="#101218" stroke-width="3.5"/>
+  <!-- chunky muzzle ring + aether bore glow -->
+  <rect x="70" y="10" width="52" height="18" rx="9" fill="#3a4a63" stroke="#101218" stroke-width="4.5"/>
+  <circle cx="96" cy="19" r="8" fill="#3fa9ff" filter="url(#ally_glow)"/>
+  <circle cx="96" cy="19" r="5" fill="#bcd6f2"/>
+
+  <!-- ======================= BIG FAT BODY (~65% of canvas) ======================= -->
+  <!-- main bulbous turret body -->
+  <path d="M96 56
+           C140 56 158 84 158 116
+           C158 148 132 162 96 162
+           C60 162 34 148 34 116
+           C34 84 52 56 96 56 Z"
+        fill="#6f8db3" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- inner shadow on the away (lower) half -->
+  <path d="M158 116 C158 148 132 162 96 162 C60 162 34 148 34 116
+           C34 132 64 142 96 142 C128 142 158 132 158 116 Z"
+        fill="#3a4a63" opacity="0.9"/>
+  <!-- top rim light (camera-facing forward edge) -->
+  <path d="M96 56 C140 56 158 84 158 116 C144 86 124 76 96 76
+           C68 76 48 86 34 116 C34 84 52 56 96 56 Z"
+        fill="#bcd6f2" opacity="0.7"/>
+
+  <!-- fat brass brow plate over the eye -->
+  <path d="M62 72 C76 62 116 62 130 72 L124 88 C110 80 82 80 68 88 Z"
+        fill="#caa24a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M62 72 C76 62 116 62 130 72 L127 78 C112 70 80 70 65 78 Z" fill="#bcd6f2" opacity="0.5"/>
+
+  <!-- ======================= BIG AETHER EYE ======================= -->
+  <circle cx="96" cy="112" r="26" fill="#3fa9ff" filter="url(#ally_glow)"/>
+  <circle cx="96" cy="112" r="23" fill="#101218" stroke="#caa24a" stroke-width="4.5"/>
+  <circle cx="96" cy="112" r="13" fill="#3fa9ff"/>
+  <circle cx="91" cy="106" r="5" fill="#bcd6f2"/>
+
+  <!-- side rivet pods (steampunk read) -->
+  <circle cx="48" cy="116" r="7" fill="#3a4a63" stroke="#101218" stroke-width="3.5"/>
+  <circle cx="144" cy="116" r="7" fill="#3a4a63" stroke="#101218" stroke-width="3.5"/>
+
+  <!-- rivets for steampunk read -->
+  <g fill="#bcd6f2" opacity="0.85">
+    <circle cx="72" cy="68" r="2.6"/>
+    <circle cx="120" cy="68" r="2.6"/>
+    <circle cx="54" cy="98" r="2.6"/>
+    <circle cx="138" cy="98" r="2.6"/>
+  </g>
+</svg>

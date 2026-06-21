@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- Standing Tank Defense - PROJECTILE "Arcane Orb" -->
+  <!-- Player projectile. Faces UP (north, -Y) - comet wisp trails below. -->
+  <!-- Ally-glow emissive core + soft blurred halo, steel-light highlight. Centered, ~8% margin. -->
+  <defs>
+    <filter id="orb_glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+    <filter id="orb_softtrail" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.6"/>
+    </filter>
+  </defs>
+
+  <!-- comet wisp trailing down (direction of travel is up) -->
+  <path d="M24 22 L20 42 L24 34 L28 42 Z" fill="#3fa9ff" opacity="0.35" filter="url(#orb_softtrail)"/>
+
+  <!-- soft outer halo -->
+  <circle cx="24" cy="20" r="11" fill="#3fa9ff" opacity="0.55" filter="url(#orb_glow)"/>
+
+  <!-- crisp core -->
+  <circle cx="24" cy="20" r="8" fill="#3fa9ff" stroke="#101218" stroke-width="2"/>
+  <!-- inner bright body -->
+  <circle cx="24" cy="20" r="5" fill="#bcd6f2" opacity="0.55"/>
+  <!-- hot center -->
+  <circle cx="24" cy="20" r="2.4" fill="#bcd6f2"/>
+  <!-- specular highlight (top-left, camera facing) -->
+  <circle cx="21" cy="16.5" r="1.8" fill="#ffffff" opacity="0.85"/>
+
+  <!-- small orbiting motes -->
+  <circle cx="33" cy="15" r="1.5" fill="#bcd6f2" filter="url(#orb_glow)"/>
+  <circle cx="15" cy="24" r="1.2" fill="#bcd6f2" filter="url(#orb_glow)"/>
+</svg>

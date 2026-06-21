@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Standing Tank Defense - ARENA GROUND "Ash Soil Bulwark Floor" -->
+  <!-- Gaslamp Bulwark style. Full-bleed battlefield floor. -->
+  <!-- Intentionally dark + non-distracting so bright entities pop on top. -->
+  <defs>
+    <!-- center-bright -> edge-dark vignette, keeps focus toward the middle -->
+    <radialGradient id="floor_vignette" cx="50%" cy="50%" r="72%">
+      <stop offset="0%"  stop-color="#262b3a"/>
+      <stop offset="55%" stop-color="#1d2230"/>
+      <stop offset="82%" stop-color="#171a24"/>
+      <stop offset="100%" stop-color="#0b0d14"/>
+    </radialGradient>
+    <!-- very soft blur for faint scorch blooms -->
+    <filter id="scorch_blur" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+  </defs>
+
+  <!-- base floor fill -->
+  <rect x="0" y="0" width="1024" height="1024" fill="#171a24"/>
+  <!-- vignette: lifts the center to Ash Soil, sinks the edges to Cast Shadow -->
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#floor_vignette)"/>
+
+  <!-- ============ faint scattered scorch blooms (very low opacity) ============ -->
+  <g fill="#0b0d14" opacity="0.18" filter="url(#scorch_blur)">
+    <ellipse cx="320" cy="380" rx="120" ry="86"/>
+    <ellipse cx="720" cy="300" rx="96" ry="120"/>
+    <ellipse cx="640" cy="720" rx="140" ry="100"/>
+    <ellipse cx="280" cy="680" rx="100" ry="92"/>
+    <ellipse cx="512" cy="540" rx="80" ry="70"/>
+  </g>
+
+  <!-- ============ faint cobble / tile divisions (low opacity dark grid) ============ -->
+  <g stroke="#101218" stroke-width="2" opacity="0.10" fill="none">
+    <path d="M170 200 H854"/>
+    <path d="M150 400 H874"/>
+    <path d="M150 624 H874"/>
+    <path d="M170 824 H854"/>
+    <path d="M200 170 V854"/>
+    <path d="M400 150 V874"/>
+    <path d="M624 150 V874"/>
+    <path d="M824 170 V854"/>
+  </g>
+
+  <!-- ============ very faint hairline cracks scattered around ============ -->
+  <g stroke="#0b0d14" stroke-width="3" stroke-linecap="round" opacity="0.22" fill="none">
+    <path d="M180 300 L260 340 L300 320 L380 372"/>
+    <path d="M820 240 L760 300 L780 360 L720 400"/>
+    <path d="M860 640 L780 660 L760 720 L820 770"/>
+    <path d="M200 760 L280 740 L320 790 L260 840"/>
+    <path d="M470 200 L520 280 L500 340"/>
+    <path d="M560 800 L540 720 L600 690"/>
+  </g>
+
+  <!-- ============ very faint lighter pavement flecks (Ash Soil) ============ -->
+  <g fill="#262b3a" opacity="0.16">
+    <circle cx="430" cy="320" r="5"/>
+    <circle cx="610" cy="430" r="4"/>
+    <circle cx="380" cy="560" r="5"/>
+    <circle cx="690" cy="610" r="4"/>
+    <circle cx="540" cy="700" r="5"/>
+    <circle cx="470" cy="470" r="3"/>
+    <circle cx="650" cy="520" r="3"/>
+  </g>
+
+  <!-- final edge darkening pass for a clean planted border -->
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#floor_vignette)" opacity="0.35"/>
+</svg>

@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="256" viewBox="0 0 768 256">
+  <!-- Standing Tank Defense - Gaslamp Bulwark palette swatch sheet -->
+  <rect x="0" y="0" width="768" height="256" fill="#171a24"/>
+  <text x="16" y="26" font-family="monospace" font-size="16" font-weight="bold" fill="#e8e3d2">GASLAMP BULWARK — PALETTE</text>
+
+  <!-- Row 1: backgrounds + player faction -->
+  <g font-family="monospace" font-size="9" fill="#e8e3d2">
+    <g>
+      <rect x="16"  y="40" width="68" height="64" fill="#171a24" stroke="#101218" stroke-width="2"/>
+      <text x="18" y="118">ground-deep</text><text x="18" y="130">#171a24</text>
+    </g>
+    <g>
+      <rect x="92"  y="40" width="68" height="64" fill="#262b3a" stroke="#101218" stroke-width="2"/>
+      <text x="94" y="118">ground</text><text x="94" y="130">#262b3a</text>
+    </g>
+    <g>
+      <rect x="168" y="40" width="68" height="64" fill="#0b0d14" stroke="#101218" stroke-width="2"/>
+      <text x="170" y="118">shadow</text><text x="170" y="130">#0b0d14</text>
+    </g>
+    <g>
+      <rect x="244" y="40" width="68" height="64" fill="#3a4a63" stroke="#101218" stroke-width="2"/>
+      <text x="246" y="118">steel-dark</text><text x="246" y="130">#3a4a63</text>
+    </g>
+    <g>
+      <rect x="320" y="40" width="68" height="64" fill="#6f8db3" stroke="#101218" stroke-width="2"/>
+      <text x="322" y="118">steel</text><text x="322" y="130">#6f8db3</text>
+    </g>
+    <g>
+      <rect x="396" y="40" width="68" height="64" fill="#bcd6f2" stroke="#101218" stroke-width="2"/>
+      <text x="398" y="118" fill="#101218">steel-light</text><text x="398" y="130" fill="#101218">#bcd6f2</text>
+    </g>
+    <g>
+      <rect x="472" y="40" width="68" height="64" fill="#caa24a" stroke="#101218" stroke-width="2"/>
+      <text x="474" y="118" fill="#101218">brass</text><text x="474" y="130" fill="#101218">#caa24a</text>
+    </g>
+    <g>
+      <rect x="548" y="40" width="68" height="64" fill="#3fa9ff" stroke="#101218" stroke-width="2"/>
+      <text x="550" y="118" fill="#101218">ally-glow</text><text x="550" y="130" fill="#101218">#3fa9ff</text>
+    </g>
+    <g>
+      <rect x="624" y="40" width="68" height="64" fill="#1f3322" stroke="#101218" stroke-width="2"/>
+      <text x="626" y="118">rot-dark</text><text x="626" y="130">#1f3322</text>
+    </g>
+  </g>
+
+  <!-- Row 2: enemy faction + UI + rarity -->
+  <g font-family="monospace" font-size="9" fill="#e8e3d2">
+    <g>
+      <rect x="16"  y="150" width="68" height="64" fill="#5e8c3a" stroke="#101218" stroke-width="2"/>
+      <text x="18" y="228">rot</text><text x="18" y="240">#5e8c3a</text>
+    </g>
+    <g>
+      <rect x="92"  y="150" width="68" height="64" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
+      <text x="94" y="228" fill="#101218">rot-bright</text><text x="94" y="240" fill="#101218">#a6d65e</text>
+    </g>
+    <g>
+      <rect x="168" y="150" width="68" height="64" fill="#d9d2b0" stroke="#101218" stroke-width="2"/>
+      <text x="170" y="228" fill="#101218">bone</text><text x="170" y="240" fill="#101218">#d9d2b0</text>
+    </g>
+    <g>
+      <rect x="244" y="150" width="68" height="64" fill="#ff5a3c" stroke="#101218" stroke-width="2"/>
+      <text x="246" y="228" fill="#101218">menace</text><text x="246" y="240" fill="#101218">#ff5a3c</text>
+    </g>
+    <g>
+      <rect x="320" y="150" width="68" height="64" fill="#101218" stroke="#6f8db3" stroke-width="2"/>
+      <text x="322" y="228">ui-line</text><text x="322" y="240">#101218</text>
+    </g>
+    <g>
+      <rect x="396" y="150" width="68" height="64" fill="#e8e3d2" stroke="#101218" stroke-width="2"/>
+      <text x="398" y="228" fill="#101218">ui-text</text><text x="398" y="240" fill="#101218">#e8e3d2</text>
+    </g>
+    <g>
+      <rect x="472" y="150" width="68" height="64" fill="#9aa3ad" stroke="#101218" stroke-width="2"/>
+      <text x="474" y="228" fill="#101218">r-common</text><text x="474" y="240" fill="#101218">#9aa3ad</text>
+    </g>
+    <g>
+      <rect x="548" y="150" width="68" height="64" fill="#4fc36a" stroke="#101218" stroke-width="2"/>
+      <text x="550" y="228" fill="#101218">r-uncommon</text><text x="550" y="240" fill="#101218">#4fc36a</text>
+    </g>
+    <g>
+      <rect x="624" y="150" width="68" height="64" fill="#3f8cff" stroke="#101218" stroke-width="2"/>
+      <text x="626" y="228" fill="#101218">r-rare</text><text x="626" y="240" fill="#101218">#3f8cff</text>
+    </g>
+    <g>
+      <rect x="700" y="150" width="52" height="64" fill="#b04dff" stroke="#101218" stroke-width="2"/>
+      <text x="702" y="228" fill="#101218">r-epic</text><text x="702" y="240" fill="#101218">#b04dff</text>
+    </g>
+  </g>
+</svg>

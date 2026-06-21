@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- Standing Tank Defense - PROJECTILE "Piercing Bolt" -->
+  <!-- Player projectile. Faces UP (north, -Y). Centered, ~8% margin. -->
+  <!-- Steel arrowhead, brass fletching. Sharp, fast-reading. -->
+  <defs>
+    <filter id="bolt_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- shaft -->
+  <rect x="22" y="14" width="4" height="24" rx="1.6" fill="#3a4a63" stroke="#101218" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="22.6" y="16" width="1.4" height="20" fill="#6f8db3"/>
+
+  <!-- brass fletching (tail, points down) -->
+  <g stroke="#101218" stroke-width="2" stroke-linejoin="round">
+    <path d="M24 30 L17 42 L24 38 Z" fill="#caa24a"/>
+    <path d="M24 30 L31 42 L24 38 Z" fill="#caa24a"/>
+  </g>
+  <path d="M24 31 L20.5 39 L24 37 Z" fill="#bcd6f2" opacity="0.45"/>
+
+  <!-- steel arrowhead (tip up) -->
+  <path d="M24 4 L33 20 L24 16 L15 20 Z" fill="#6f8db3" stroke="#101218" stroke-width="2.4" stroke-linejoin="round"/>
+  <!-- inner shadow (right/away side) -->
+  <path d="M24 4 L33 20 L24 16 Z" fill="#3a4a63"/>
+  <!-- rim light (left/camera edge) -->
+  <path d="M24 5 L17.5 18 L24 15 Z" fill="#bcd6f2" opacity="0.85"/>
+  <!-- aether spark at the very tip -->
+  <circle cx="24" cy="6" r="2.4" fill="#3fa9ff" filter="url(#bolt_glow)"/>
+  <circle cx="24" cy="6" r="1.2" fill="#bcd6f2"/>
+</svg>

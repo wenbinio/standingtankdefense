@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+  <!-- Standing Tank Defense - END BOSS "SAMWISE" (CHIBI MENACE) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- Chibi: one enormous fat round rot-green body, ONE huge angry hellfire eye, -->
+  <!-- fat cheeks, stubby blunt bone spikes, tiny feet. Biggest, cute-scary. -->
+  <defs>
+    <filter id="hell_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+    <filter id="rot_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- massive ground shadow: screen-dominating footprint -->
+  <ellipse cx="160" cy="270" rx="132" ry="46" fill="#0b0d14" opacity="0.5"/>
+
+  <!-- =================== TINY STUBBY FEET (peeking under big body) =================== -->
+  <g stroke="#101218" stroke-width="5" stroke-linejoin="round" fill="#1f3322">
+    <rect x="92" y="252" width="50" height="30" rx="13"/>
+    <rect x="178" y="252" width="50" height="30" rx="13"/>
+  </g>
+  <!-- bone claw nubs on feet -->
+  <g fill="#d9d2b0" stroke="#101218" stroke-width="3.5" stroke-linejoin="round">
+    <circle cx="100" cy="280" r="6"/>
+    <circle cx="118" cy="282" r="6"/>
+    <circle cx="136" cy="280" r="6"/>
+    <circle cx="184" cy="280" r="6"/>
+    <circle cx="202" cy="282" r="6"/>
+    <circle cx="220" cy="280" r="6"/>
+  </g>
+
+  <!-- =================== STUBBY BLUNT BONE SPIKES (accents around round form) =================== -->
+  <g stroke="#101218" stroke-width="5" stroke-linejoin="round" fill="#d9d2b0">
+    <!-- top crown nubs -->
+    <path d="M122 78 C118 56 142 50 146 72 C140 70 128 72 122 78 Z"/>
+    <path d="M150 66 C148 42 174 42 172 66 C166 60 156 60 150 66 Z"/>
+    <path d="M178 72 C184 50 206 60 198 80 C192 72 184 70 178 72 Z"/>
+    <!-- left shoulder nubs -->
+    <path d="M68 144 C44 142 44 168 68 166 C62 158 62 152 68 144 Z"/>
+    <path d="M58 190 C34 194 40 220 62 210 C56 204 54 196 58 190 Z"/>
+    <!-- right shoulder nubs -->
+    <path d="M252 144 C276 142 276 168 252 166 C258 158 258 152 252 144 Z"/>
+    <path d="M262 190 C286 194 280 220 258 210 C264 204 266 196 262 190 Z"/>
+  </g>
+  <!-- spike rim light -->
+  <g fill="#e8e3d2" opacity="0.4">
+    <circle cx="146" cy="58" r="4"/>
+    <circle cx="160" cy="54" r="4"/>
+    <circle cx="54" cy="156" r="4"/>
+    <circle cx="266" cy="156" r="4"/>
+  </g>
+
+  <!-- =================== HUGE FAT ROUND BODY (one bulbous mass) =================== -->
+  <!-- back hump shadow -->
+  <path d="M160 84
+           C246 84 276 150 276 200
+           C276 256 232 286 160 286
+           C88 286 44 256 44 200
+           C44 150 74 84 160 84 Z"
+        fill="#1f3322" stroke="#101218" stroke-width="7" stroke-linejoin="round"/>
+  <!-- main flesh fill on top -->
+  <path d="M160 78
+           C242 78 270 144 270 196
+           C270 250 228 280 160 280
+           C92 280 50 250 50 196
+           C50 144 78 78 160 78 Z"
+        fill="#5e8c3a" stroke="#101218" stroke-width="7" stroke-linejoin="round"/>
+  <!-- inner shadow on the away (lower) half -->
+  <path d="M270 196 C270 250 228 280 160 280 C92 280 50 250 50 196
+           C50 224 104 246 160 246 C216 246 270 224 270 196 Z"
+        fill="#1f3322" opacity="0.85"/>
+  <!-- forward rim light (camera-facing top edge) -->
+  <path d="M160 78 C242 78 270 144 270 196 C246 144 210 116 160 116
+           C110 116 74 144 50 196 C50 144 78 78 160 78 Z"
+        fill="#a6d65e" opacity="0.55"/>
+
+  <!-- fat cheeks (round bulges flanking the eye) -->
+  <g stroke="#101218" stroke-width="5" stroke-linejoin="round">
+    <ellipse cx="92" cy="206" rx="34" ry="28" fill="#5e8c3a"/>
+    <ellipse cx="228" cy="206" rx="34" ry="28" fill="#5e8c3a"/>
+  </g>
+  <ellipse cx="84" cy="198" rx="14" ry="9" fill="#a6d65e" opacity="0.45"/>
+  <ellipse cx="220" cy="198" rx="14" ry="9" fill="#a6d65e" opacity="0.45"/>
+
+  <!-- pulsing bile pustules (rot accent glow) -->
+  <g>
+    <circle cx="108" cy="138" r="11" fill="#a6d65e" filter="url(#rot_glow)"/>
+    <circle cx="108" cy="138" r="6" fill="#a6d65e" stroke="#101218" stroke-width="2.5"/>
+    <circle cx="214" cy="142" r="13" fill="#a6d65e" filter="url(#rot_glow)"/>
+    <circle cx="214" cy="142" r="7" fill="#a6d65e" stroke="#101218" stroke-width="2.5"/>
+  </g>
+
+  <!-- =================== HUGE ANGRY HELLFIRE EYE (one, dominant) =================== -->
+  <!-- angry bone brow ridge (asymmetric tilt = menace) -->
+  <path d="M104 150 C128 132 192 132 216 152 L208 170 C186 156 134 156 112 168 Z"
+        fill="#d9d2b0" stroke="#101218" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M104 150 C128 132 192 132 216 152 L212 159 C188 144 132 144 110 160 Z"
+        fill="#e8e3d2" opacity="0.45"/>
+  <!-- the giant eye socket + hellfire -->
+  <circle cx="160" cy="196" r="56" fill="#ff5a3c" filter="url(#hell_glow)"/>
+  <circle cx="160" cy="196" r="50" fill="#101218" stroke="#ff5a3c" stroke-width="6"/>
+  <!-- angry slit / pissed-off lower lid -->
+  <path d="M110 200 C130 178 190 178 210 200 C190 214 130 214 110 200 Z"
+        fill="#ff5a3c"/>
+  <circle cx="160" cy="194" r="22" fill="#101218"/>
+  <circle cx="160" cy="194" r="14" fill="#ff5a3c"/>
+  <circle cx="153" cy="187" r="5" fill="#caa24a"/>
+  <circle cx="150" cy="184" r="2.4" fill="#d9d2b0"/>
+
+  <!-- stubby blunt fangs under the eye (forward/up) -->
+  <g fill="#d9d2b0" stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <path d="M132 244 C130 262 146 264 148 246 C142 248 136 248 132 244 Z"/>
+    <path d="M160 248 C158 268 174 268 174 248 C170 252 164 252 160 248 Z"/>
+    <path d="M188 244 C190 262 174 264 172 246 C178 248 184 248 188 244 Z"/>
+  </g>
+</svg>

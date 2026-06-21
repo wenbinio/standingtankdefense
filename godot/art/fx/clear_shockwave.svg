@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Standing Tank Defense - FX "Clear Shockwave" -->
+  <!-- Player CLEAR ability: large expanding ally-glow ring. Radial, centered, NO facing. -->
+  <!-- Epic screen-clear / boss-damage move. Bright ring + soft glow, transparent center. -->
+  <defs>
+    <filter id="cs_glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+    <filter id="cs_soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
+  </defs>
+
+  <!-- broad soft glow under the leading ring -->
+  <circle cx="64" cy="64" r="52" fill="none" stroke="#3fa9ff" stroke-width="14" opacity="0.4" filter="url(#cs_glow)"/>
+
+  <!-- main bright leading ring -->
+  <circle cx="64" cy="64" r="52" fill="none" stroke="#3fa9ff" stroke-width="7"/>
+  <!-- crisp inner highlight ring -->
+  <circle cx="64" cy="64" r="52" fill="none" stroke="#bcd6f2" stroke-width="2.6"/>
+
+  <!-- trailing secondary ring (the wake) -->
+  <circle cx="64" cy="64" r="36" fill="none" stroke="#3fa9ff" stroke-width="3.5" opacity="0.6" filter="url(#cs_soft)"/>
+
+  <!-- inner faint pulse ring -->
+  <circle cx="64" cy="64" r="22" fill="none" stroke="#bcd6f2" stroke-width="2" opacity="0.35"/>
+
+  <!-- radial energy darts riding the leading edge (4 cardinal, bright) -->
+  <g fill="#bcd6f2">
+    <path d="M64 4 L60 16 L64 12 L68 16 Z"/>
+    <path d="M64 124 L60 112 L64 116 L68 112 Z"/>
+    <path d="M4 64 L16 60 L12 64 L16 68 Z"/>
+    <path d="M124 64 L112 60 L116 64 L112 68 Z"/>
+  </g>
+
+  <!-- bright spark nodes where darts meet the ring -->
+  <g fill="#bcd6f2" filter="url(#cs_glow)">
+    <circle cx="64" cy="12" r="3"/>
+    <circle cx="64" cy="116" r="3"/>
+    <circle cx="12" cy="64" r="3"/>
+    <circle cx="116" cy="64" r="3"/>
+  </g>
+</svg>

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Standing Tank Defense - SPAWN RING decal "Hellfire Spawn Perimeter" -->
+  <!-- Gaslamp Bulwark style. Centered glowing menace ring at ~90% radius. -->
+  <!-- Fully transparent inside and outside the ring band. Subtle, not overpowering. -->
+  <defs>
+    <!-- soft hellfire glow around the ring band only -->
+    <filter id="menace_glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ring radius ~ 90% of half-canvas (461 of 512). cx/cy = 512 -->
+
+  <!-- ================= soft glow halo (blurred, low opacity) ================= -->
+  <g filter="url(#menace_glow)" fill="none">
+    <circle cx="512" cy="512" r="461" stroke="#ff5a3c" stroke-width="10" opacity="0.45"/>
+  </g>
+
+  <!-- ================= dashed runic perimeter band ================= -->
+  <!-- outer thin guide line -->
+  <circle cx="512" cy="512" r="475" fill="none" stroke="#ff5a3c"
+          stroke-width="3" opacity="0.30"/>
+  <!-- inner thin guide line -->
+  <circle cx="512" cy="512" r="447" fill="none" stroke="#ff5a3c"
+          stroke-width="3" opacity="0.30"/>
+
+  <!-- main dashed menace ring (crisp core over the glow) -->
+  <circle cx="512" cy="512" r="461" fill="none" stroke="#ff5a3c"
+          stroke-width="9" stroke-linecap="round"
+          stroke-dasharray="46 30" opacity="0.85"/>
+
+  <!-- bright hellfire highlight dashes, offset to feel runic/etched -->
+  <circle cx="512" cy="512" r="461" fill="none" stroke="#ff5a3c"
+          stroke-width="4" stroke-linecap="round"
+          stroke-dasharray="8 68" opacity="0.95"/>
+
+  <!-- ================= rune nodes at the cardinal + diagonal points ================= -->
+  <g stroke="#101218" stroke-width="3" stroke-linejoin="round">
+    <!-- N -->
+    <path d="M512 38 l16 18 -16 18 -16 -18 Z" fill="#ff5a3c"/>
+    <!-- S -->
+    <path d="M512 950 l16 18 -16 18 -16 -18 Z" fill="#ff5a3c"/>
+    <!-- E -->
+    <path d="M974 512 l18 16 -18 16 -18 -16 Z" fill="#ff5a3c"/>
+    <!-- W -->
+    <path d="M50 512 l18 16 -18 16 -18 -16 Z" fill="#ff5a3c"/>
+    <!-- NE -->
+    <path d="M838 186 l15 17 -15 17 -15 -17 Z" fill="#ff5a3c"/>
+    <!-- NW -->
+    <path d="M186 186 l15 17 -15 17 -15 -17 Z" fill="#ff5a3c"/>
+    <!-- SE -->
+    <path d="M838 838 l15 17 -15 17 -15 -17 Z" fill="#ff5a3c"/>
+    <!-- SW -->
+    <path d="M186 838 l15 17 -15 17 -15 -17 Z" fill="#ff5a3c"/>
+  </g>
+</svg>

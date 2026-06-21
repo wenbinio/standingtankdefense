@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- Standing Tank Defense - PROJECTILE "Thrown Axe" -->
+  <!-- Player projectile. Faces UP (north, -Y). Spinning read, bold silhouette. -->
+  <!-- Steel blade, brass haft. Centered, ~8% margin. -->
+  <defs>
+    <filter id="axe_spin" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+  </defs>
+
+  <!-- faint spin-blur arc to sell rotation -->
+  <path d="M9 24 A15 15 0 0 1 39 24" fill="none" stroke="#6f8db3" stroke-width="2.4" stroke-linecap="round" opacity="0.18" filter="url(#axe_spin)"/>
+
+  <!-- brass haft (vertical, tip up) -->
+  <rect x="22" y="20" width="4" height="22" rx="2" fill="#caa24a" stroke="#101218" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="22.6" y="22" width="1.4" height="18" fill="#bcd6f2" opacity="0.55"/>
+  <!-- pommel -->
+  <circle cx="24" cy="41" r="3" fill="#caa24a" stroke="#101218" stroke-width="2"/>
+
+  <!-- double-bit axe head (broad blade up) -->
+  <path d="M24 6
+           C 14 6 9 11 8 18 C 13 16 19 16 24 18
+           C 29 16 35 16 40 18 C 39 11 34 6 24 6 Z"
+        fill="#6f8db3" stroke="#101218" stroke-width="2.6" stroke-linejoin="round"/>
+  <!-- inner shadow (lower/away half of head) -->
+  <path d="M8 18 C 13 16 19 16 24 18 C 29 16 35 16 40 18 C 35 21 29 21 24 19 C 19 21 13 21 8 18 Z"
+        fill="#3a4a63" opacity="0.9"/>
+  <!-- top rim light along the cutting edges -->
+  <path d="M24 7 C 15 7 11 11 9.5 16.5 C 14 14.5 19 14.5 24 16 C 29 14.5 34 14.5 38.5 16.5 C 37 11 33 7 24 7 Z"
+        fill="#bcd6f2" opacity="0.7"/>
+
+  <!-- central eye / collar (brass) -->
+  <circle cx="24" cy="15" r="4.5" fill="#caa24a" stroke="#101218" stroke-width="2.4"/>
+  <circle cx="24" cy="15" r="1.8" fill="#101218"/>
+</svg>

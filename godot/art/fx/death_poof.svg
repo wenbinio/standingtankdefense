@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Standing Tank Defense - FX "Death Poof" -->
+  <!-- Radial enemy death puff, centered, NO facing. Rot-green / bone soft smoke. -->
+  <defs>
+    <filter id="dp_soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5"/>
+    </filter>
+  </defs>
+
+  <!-- soft outer smoke cloud (rot-green), blurred lobes -->
+  <g filter="url(#dp_soft)" opacity="0.6">
+    <circle cx="64" cy="62" r="26" fill="#5e8c3a"/>
+    <circle cx="44" cy="56" r="16" fill="#5e8c3a"/>
+    <circle cx="84" cy="58" r="17" fill="#5e8c3a"/>
+    <circle cx="52" cy="80" r="15" fill="#5e8c3a"/>
+    <circle cx="78" cy="80" r="14" fill="#5e8c3a"/>
+  </g>
+
+  <!-- mid puff lobes (brighter bile) -->
+  <g opacity="0.7">
+    <circle cx="64" cy="60" r="17" fill="#a6d65e" opacity="0.45"/>
+    <circle cx="48" cy="58" r="10" fill="#a6d65e" opacity="0.4"/>
+    <circle cx="80" cy="62" r="11" fill="#a6d65e" opacity="0.4"/>
+  </g>
+
+  <!-- pale bone dust motes scattered outward -->
+  <g fill="#d9d2b0">
+    <circle cx="64" cy="40" r="3" opacity="0.85"/>
+    <circle cx="38" cy="50" r="2.4" opacity="0.75"/>
+    <circle cx="92" cy="52" r="2.6" opacity="0.8"/>
+    <circle cx="34" cy="76" r="2.2" opacity="0.65"/>
+    <circle cx="96" cy="80" r="2.4" opacity="0.7"/>
+    <circle cx="56" cy="92" r="2.6" opacity="0.7"/>
+    <circle cx="78" cy="94" r="2.2" opacity="0.6"/>
+  </g>
+
+  <!-- soft core glow -->
+  <circle cx="64" cy="62" r="9" fill="#a6d65e" opacity="0.5" filter="url(#dp_soft)"/>
+</svg>

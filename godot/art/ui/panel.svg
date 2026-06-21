@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 96" width="320" height="96">
+  <defs>
+    <linearGradient id="panelFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#262b3a"/>
+      <stop offset="1" stop-color="#171a24"/>
+    </linearGradient>
+  </defs>
+  <!-- panel body -->
+  <rect x="4" y="4" width="312" height="88" rx="10"
+        fill="url(#panelFill)" stroke="#101218" stroke-width="3" stroke-linejoin="round"/>
+  <!-- top rim light -->
+  <path d="M16 9 H304" fill="none" stroke="#bcd6f2" stroke-width="2" stroke-linecap="round" stroke-opacity="0.22"/>
+  <!-- bottom inner shadow -->
+  <path d="M14 88 H306" fill="none" stroke="#0b0d14" stroke-width="3" stroke-linecap="round" stroke-opacity="0.4"/>
+</svg>

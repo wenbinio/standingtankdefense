@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Standing Tank Defense - FX "Muzzle Flash" -->
+  <!-- Radial firing burst, centered, NO facing. Brass + steel-light + ally-glow. -->
+  <defs>
+    <filter id="mf_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- soft warm halo -->
+  <circle cx="64" cy="64" r="26" fill="#caa24a" opacity="0.45" filter="url(#mf_glow)"/>
+  <circle cx="64" cy="64" r="18" fill="#3fa9ff" opacity="0.35" filter="url(#mf_glow)"/>
+
+  <!-- long radial spikes (8-point star) -->
+  <g fill="#caa24a">
+    <path d="M64 64 L64 14 L70 60 Z"/>
+    <path d="M64 64 L64 114 L58 68 Z"/>
+    <path d="M64 64 L14 64 L60 58 Z"/>
+    <path d="M64 64 L114 64 L68 70 Z"/>
+  </g>
+  <!-- short diagonal spikes -->
+  <g fill="#caa24a" opacity="0.9">
+    <path d="M64 64 L34 34 L62 60 Z"/>
+    <path d="M64 64 L94 34 L66 60 Z"/>
+    <path d="M64 64 L34 94 L60 66 Z"/>
+    <path d="M64 64 L94 94 L66 68 Z"/>
+  </g>
+
+  <!-- bright steel-light inner spikes -->
+  <g fill="#bcd6f2">
+    <path d="M64 64 L64 30 L68 62 Z"/>
+    <path d="M64 64 L64 98 L60 66 Z"/>
+    <path d="M64 64 L30 64 L62 60 Z"/>
+    <path d="M64 64 L98 64 L66 68 Z"/>
+  </g>
+
+  <!-- hot core -->
+  <circle cx="64" cy="64" r="11" fill="#3fa9ff"/>
+  <circle cx="64" cy="64" r="6.5" fill="#bcd6f2"/>
+  <circle cx="64" cy="64" r="3" fill="#ffffff"/>
+</svg>

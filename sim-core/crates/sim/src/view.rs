@@ -73,6 +73,8 @@ pub struct RenderOffer {
     pub cost: i64,
     pub is_weapon: bool,
     pub affordable: bool,
+    /// 0 common · 1 uncommon · 2 rare · 3 epic (drives the shop frame colour).
+    pub rarity: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -131,9 +133,15 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         .iter()
         .enumerate()
         .map(|(i, off)| {
-            let (name, is_weapon) = match off.kind {
-                crate::state::OfferKind::Weapon => (content::WEAPONS[off.def as usize].name, true),
-                crate::state::OfferKind::Modifier => (content::MODIFIERS[off.def as usize].name, false),
+            let (name, is_weapon, rarity) = match off.kind {
+                crate::state::OfferKind::Weapon => {
+                    let w = &content::WEAPONS[off.def as usize];
+                    (w.name, true, w.rarity)
+                }
+                crate::state::OfferKind::Modifier => {
+                    let m = &content::MODIFIERS[off.def as usize];
+                    (m.name, false, m.rarity)
+                }
             };
             RenderOffer {
                 slot: i as u8,
@@ -141,6 +149,7 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
                 cost: off.cost,
                 is_weapon,
                 affordable: off.cost <= s.economy.gold,
+                rarity,
             }
         })
         .collect();
