@@ -73,6 +73,28 @@ pub struct Tank {
     pub heal_on_kill: i64,
     /// Heal the tank this much each tick an enemy takes poison damage.
     pub heal_on_poison: i64,
+    /// Multiplier on all healing the tank receives (the source's "+% Healing";
+    /// starts at `ONE`).
+    pub healing_mult: Fixed,
+    /// Fraction of missing HP healed once per second (the source's "% Missing HP
+    /// Heal every second"; starts `ZERO`).
+    pub missing_hp_heal_pct: Fixed,
+    /// Remaining one-shot revives (Ankh): a fatal hit is survived instead of dying.
+    pub revives: u32,
+    /// Max-HP granted (and HP repaired to) when a revive is consumed.
+    pub revive_bonus_hp: i64,
+}
+
+impl Tank {
+    /// Apply healing, scaled by `healing_mult` and capped at `max_hp`. The single
+    /// chokepoint for every heal so "+% Healing" and the cap live in one place.
+    pub fn heal(&mut self, amount: i64) {
+        if amount <= 0 {
+            return;
+        }
+        let scaled = self.healing_mult.scale_i64(amount);
+        self.hp = (self.hp + scaled).min(self.max_hp);
+    }
 }
 
 /// An owned weapon instance (multiple copies of one def stack as separate
@@ -240,6 +262,21 @@ pub struct Modifiers {
     pub poison_dmg_mult: Fixed,
     /// Multiplier on applied Stun duration (starts at `ONE`).
     pub stun_dur_mult: Fixed,
+    /// Self-scaling damage: `+per` additive % to weapons of `dmg_type` for each
+    /// owned weapon of `weapon_def` (the source's "+1% Piercing Damage per Bow").
+    /// Append-only; resolved live at fire time. Length grows with purchases.
+    pub weapon_count_scaling: Vec<WeaponCountScale>,
+}
+
+/// One self-scaling damage rule (see [`Modifiers::weapon_count_scaling`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct WeaponCountScale {
+    /// Weapon def whose owned count drives the bonus.
+    pub weapon_def: u16,
+    /// Damage type the bonus applies to (matches the firing weapon's type).
+    pub dmg_type: u8,
+    /// Additive % per owned copy of `weapon_def`.
+    pub per: Fixed,
 }
 
 /// The per-round shop. M0 offers weapons only.
@@ -320,6 +357,10 @@ impl ArenaState {
                 spikes_mult: Fixed::ONE,
                 heal_on_kill: 0,
                 heal_on_poison: 0,
+                healing_mult: Fixed::ONE,
+                missing_hp_heal_pct: Fixed::ZERO,
+                revives: 0,
+                revive_bonus_hp: 0,
             },
             weapons: Vec::new(),
             enemies: Vec::new(),

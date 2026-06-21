@@ -124,9 +124,9 @@ pub(crate) fn tick(s: &mut ArenaState) {
         }
     }
     s.enemies = survivors;
-    // On-poison trigger: heal the tank per enemy that took poison this tick, capped at max HP.
+    // On-poison trigger: heal the tank per enemy that took poison this tick.
     if s.tank.heal_on_poison > 0 && poison_hits > 0 && !s.dead {
-        s.tank.hp = (s.tank.hp + poison_hits * s.tank.heal_on_poison).min(s.tank.max_hp);
+        s.tank.heal(poison_hits * s.tank.heal_on_poison);
     }
 }
 

@@ -41,6 +41,7 @@ impl Modifiers {
             vs_poisoned: Fixed::ZERO,
             poison_dmg_mult: Fixed::ONE,
             stun_dur_mult: Fixed::ONE,
+            weapon_count_scaling: Vec::new(),
         }
     }
 
@@ -53,6 +54,23 @@ impl Modifiers {
         add += self.add_by_scope[content::range_scope_id(w.range) as usize];
         add += self.add_by_scope[content::rarity_scope_id(w.rarity) as usize];
         (Fixed::ONE + add).mul(self.mul_global)
+    }
+
+    /// Additive self-scaling % for a weapon of `dmg_type`, given the owned
+    /// weapons: `Σ rule.per × (count of rule.weapon_def)` over rules matching the
+    /// type. Resolved live at fire time (it depends on the current arsenal).
+    pub fn self_scaling_add(&self, dmg_type: u8, weapons: &[crate::state::WeaponInstance]) -> Fixed {
+        let mut add = Fixed::ZERO;
+        for rule in &self.weapon_count_scaling {
+            if rule.dmg_type != dmg_type {
+                continue;
+            }
+            let count = weapons.iter().filter(|w| w.def == rule.weapon_def).count() as i64;
+            if count > 0 {
+                add += rule.per.mul(Fixed::from_int(count));
+            }
+        }
+        add
     }
 
     /// Scale a weapon's on-hit status by the player's flavor modifiers
@@ -121,6 +139,19 @@ impl Modifiers {
             ModEffect::DamageVsPoisonedPct(n, d) => self.vs_poisoned += Fixed::from_ratio(n, d),
             ModEffect::PoisonDamagePct(n, d) => self.poison_dmg_mult += Fixed::from_ratio(n, d),
             ModEffect::StunDurationPct(n, d) => self.stun_dur_mult += Fixed::from_ratio(n, d),
+            ModEffect::HealingPct(n, d) => tank.healing_mult += Fixed::from_ratio(n, d),
+            ModEffect::MissingHpHealPct(n, d) => tank.missing_hp_heal_pct += Fixed::from_ratio(n, d),
+            ModEffect::GrantRevive(bonus) => {
+                tank.revives += 1;
+                tank.revive_bonus_hp = tank.revive_bonus_hp.max(bonus);
+            }
+            ModEffect::DamagePerWeapon(def, ty, num) => {
+                self.weapon_count_scaling.push(crate::state::WeaponCountScale {
+                    weapon_def: def as u16,
+                    dmg_type: ty as u8,
+                    per: Fixed::from_ratio(num, 100),
+                });
+            }
             // Registered as per-arena trigger / purchase-flow state in
             // `buy_modifier`; they have no aggregate contribution here.
             ModEffect::GrantVulnPulse(..)

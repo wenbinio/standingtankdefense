@@ -107,6 +107,10 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_fixed(s.tank.spikes_mult);
     c.write_i64(s.tank.heal_on_kill);
     c.write_i64(s.tank.heal_on_poison);
+    c.write_fixed(s.tank.healing_mult);
+    c.write_fixed(s.tank.missing_hp_heal_pct);
+    c.write_u32(s.tank.revives);
+    c.write_i64(s.tank.revive_bonus_hp);
 
     c.write_i64(s.economy.gold);
     c.write_i64(s.economy.income_per_tick);
@@ -156,6 +160,12 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_fixed(s.modifiers.vs_poisoned);
     c.write_fixed(s.modifiers.poison_dmg_mult);
     c.write_fixed(s.modifiers.stun_dur_mult);
+    c.write_u32(s.modifiers.weapon_count_scaling.len() as u32);
+    for r in &s.modifiers.weapon_count_scaling {
+        c.write_u32(r.weapon_def as u32);
+        c.write_u32(r.dmg_type as u32);
+        c.write_fixed(r.per);
+    }
 
     // Active time-scaling ramps (append-only order).
     c.write_u32(s.ramps.len() as u32);

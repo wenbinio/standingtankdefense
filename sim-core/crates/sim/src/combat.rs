@@ -93,7 +93,12 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // Full per-weapon multiplier (global + type + scope) is resolved HERE,
         // at fire time. For projectiles we bake it into the carried damage; for
         // instant attacks we pass it to apply_weapon_hit.
-        let wmult = s.modifiers.weapon_damage_mult(&wdef);
+        // Static multiplier (global + type + scope) plus live self-scaling
+        // ("+% per owned weapon"). Folding identity:
+        // (1 + add_static + add_self)×mul = weapon_damage_mult + add_self×mul.
+        let static_mult = s.modifiers.weapon_damage_mult(&wdef);
+        let add_self = s.modifiers.self_scaling_add(wdef.damage_type, &s.weapons);
+        let wmult = static_mult + add_self.mul(s.modifiers.mul_global);
         let baked = wmult.scale_i64(wdef.damage);
         // Poison-damage / stun-duration scalers depend only on the player's
         // modifiers, so (like base damage) they bake into the hit at fire time.
@@ -707,6 +712,39 @@ mod tests {
         // Identity multiplier leaves it untouched.
         let s2 = blank_state();
         assert_eq!(s2.modifiers.scale_on_hit(on_hit).stun_ticks, 30);
+    }
+
+    #[test]
+    fn self_scaling_damage_grows_with_weapon_count() {
+        // "+1% Piercing Damage per Bow" (def 0, piercing). Own 3 Bows.
+        let mut s = blank_state();
+        s.weapons.clear();
+        s.modifiers.weapon_count_scaling.push(crate::state::WeaponCountScale {
+            weapon_def: 0,
+            dmg_type: content::DMG_PIERCING,
+            per: Fixed::from_ratio(1, 100),
+        });
+        for _ in 0..3 {
+            give_weapon(&mut s, 0);
+        }
+        mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        fire_weapons(&mut s);
+        assert_eq!(s.projectiles.len(), 3, "all three Bows fire");
+        // add_self = 3 × 1% = 3% ⇒ 75 × 1.03 = 77 (floored).
+        assert_eq!(s.projectiles[0].damage, 77);
+
+        // Wrong damage type is unaffected: a Siege rule does nothing for the Bow.
+        let mut s2 = blank_state();
+        s2.weapons.clear();
+        s2.modifiers.weapon_count_scaling.push(crate::state::WeaponCountScale {
+            weapon_def: 0,
+            dmg_type: content::DMG_SIEGE,
+            per: Fixed::from_ratio(1, 100),
+        });
+        give_weapon(&mut s2, 0);
+        mk_enemy(&mut s2, 0, 1_000_000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        fire_weapons(&mut s2);
+        assert_eq!(s2.projectiles[0].damage, content::WEAPONS[0].damage, "no piercing scaling");
     }
 
     #[test]

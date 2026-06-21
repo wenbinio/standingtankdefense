@@ -37,9 +37,9 @@ pub(crate) fn collect_bounties(s: &mut ArenaState) {
     s.pending_kills = kills_vec;
     s.pending_kills.clear();
     s.economy.gold += gained;
-    // On-kill trigger: heal the tank per enemy killed this tick, capped at max HP.
+    // On-kill trigger: heal the tank per enemy killed this tick.
     if s.tank.heal_on_kill > 0 && kills > 0 && !s.dead {
-        s.tank.hp = (s.tank.hp + kills * s.tank.heal_on_kill).min(s.tank.max_hp);
+        s.tank.heal(kills * s.tank.heal_on_kill);
     }
 }
 
@@ -51,17 +51,21 @@ pub(crate) fn tick_income(s: &mut ArenaState) {
     s.economy.gold += amount;
     // Income-as-HP-regen (the source's "% of Gold Income as instant HP Regen").
     if s.economy.income_regen_pct > Fixed::ZERO && !s.dead {
-        let heal = s.economy.income_regen_pct.scale_i64(amount);
-        if heal > 0 {
-            s.tank.hp = (s.tank.hp + heal).min(s.tank.max_hp);
-        }
+        s.tank.heal(s.economy.income_regen_pct.scale_i64(amount));
     }
 }
 
-/// Phase 9: if `s.tank.hp <= 0` and not already dead, set `dead = true` and
-/// `death_tick = Some(s.tick)`.
+/// Phase 9: resolve a fatal hit. A pending revive (Ankh) is consumed first —
+/// fully repairing the tank and granting `revive_bonus_hp` Max HP — so the tank
+/// survives. Only when no revive remains does it die.
 pub(crate) fn resolve_deaths(s: &mut ArenaState) {
     if s.tank.hp <= 0 && !s.dead {
+        if s.tank.revives > 0 {
+            s.tank.revives -= 1;
+            s.tank.max_hp += s.tank.revive_bonus_hp;
+            s.tank.hp = s.tank.max_hp; // full repair
+            return;
+        }
         s.dead = true;
         s.death_tick = Some(s.tick);
     }
@@ -242,6 +246,27 @@ mod tests {
         s2.pending_kills = vec![0];
         collect_bounties(&mut s2);
         assert_eq!(s2.tank.hp, 500);
+    }
+
+    #[test]
+    fn revive_survives_fatal_hit_then_dies_without_one() {
+        let mut s = fresh();
+        s.tank.revives = 1;
+        s.tank.revive_bonus_hp = 2000;
+        let max0 = s.tank.max_hp;
+        s.tick = 100;
+        s.tank.hp = -50;
+        resolve_deaths(&mut s);
+        assert!(!s.dead, "revive prevented death");
+        assert_eq!(s.tank.revives, 0, "revive consumed");
+        assert_eq!(s.tank.max_hp, max0 + 2000, "gained bonus Max HP");
+        assert_eq!(s.tank.hp, s.tank.max_hp, "fully repaired");
+
+        // A second fatal hit with no revives left → death.
+        s.tank.hp = 0;
+        resolve_deaths(&mut s);
+        assert!(s.dead);
+        assert_eq!(s.death_tick, Some(100));
     }
 
     #[test]

@@ -65,14 +65,27 @@ pub(crate) fn spikes(s: &mut ArenaState) {
     s.enemies = survivors;
 }
 
-/// Per-tick regeneration of the Mana Shield and HP (each capped at its max).
+/// Ticks per in-game second (30 Hz) — cadence of the Missing-HP pulse.
+const TICKS_PER_SECOND: u32 = 30;
+
+/// Per-tick regeneration of the Mana Shield and HP (each capped at its max),
+/// plus the once-per-second Missing-HP heal. HP healing routes through
+/// `Tank::heal` so the "+% Healing" multiplier and the cap apply uniformly.
 pub(crate) fn regen(s: &mut ArenaState) {
     if s.tank.mana_regen_per_tick > 0 && s.tank.mana_shield < s.tank.mana_shield_max {
         s.tank.mana_shield =
             (s.tank.mana_shield + s.tank.mana_regen_per_tick).min(s.tank.mana_shield_max);
     }
-    if s.tank.hp_regen_per_tick > 0 && s.tank.hp < s.tank.max_hp {
-        s.tank.hp = (s.tank.hp + s.tank.hp_regen_per_tick).min(s.tank.max_hp);
+    if s.tank.hp_regen_per_tick > 0 {
+        s.tank.heal(s.tank.hp_regen_per_tick);
+    }
+    // Missing-HP heal: once per second, restore a fraction of the HP deficit.
+    if s.tank.missing_hp_heal_pct > Fixed::ZERO && s.tick % TICKS_PER_SECOND == 0 {
+        let missing = s.tank.max_hp - s.tank.hp;
+        if missing > 0 {
+            let amount = s.tank.missing_hp_heal_pct.scale_i64(missing);
+            s.tank.heal(amount);
+        }
     }
 }
 
@@ -183,6 +196,34 @@ mod tests {
         hit_tank(&mut s, 100); // sets the flag
         spikes(&mut s);
         assert_eq!(s.enemies[0].hp, 200, "no spikes stat → no retaliation");
+    }
+
+    #[test]
+    fn healing_mult_scales_hp_regen() {
+        let mut s = fresh();
+        s.tank.hp = s.tank.max_hp - 1000;
+        s.tank.hp_regen_per_tick = 100;
+        s.tank.healing_mult = Fixed::from_int(2); // +100% healing
+        regen(&mut s);
+        assert_eq!(s.tank.hp, s.tank.max_hp - 1000 + 200, "regen doubled by healing mult");
+    }
+
+    #[test]
+    fn missing_hp_heal_pulses_once_per_second() {
+        let mut s = fresh();
+        s.tank.max_hp = 10_000;
+        s.tank.hp = 0;
+        s.tank.missing_hp_heal_pct = Fixed::from_ratio(1, 4); // 25% of missing (exact)
+
+        // Mid-second → no pulse.
+        s.tick = 15;
+        regen(&mut s);
+        assert_eq!(s.tank.hp, 0, "only pulses on a second boundary");
+
+        // On the boundary → heals 25% of the 10000 deficit.
+        s.tick = 30;
+        regen(&mut s);
+        assert_eq!(s.tank.hp, 2500);
     }
 
     #[test]
