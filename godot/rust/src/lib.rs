@@ -249,6 +249,24 @@ impl StMatch {
         })
     }
 
+    /// Constrain player `i`'s bot to a challenge (see `bot::Challenge::from_code`:
+    /// 0 none, 1..=6 purist of attack-class 0..5, 7 no-economy, 8 jack-of-all).
+    /// Cosmetic preview aid — it only filters that bot's shop choices.
+    #[func]
+    fn set_challenge(&mut self, i: i64, code: i64) {
+        let c = sim::bot::Challenge::from_code(code);
+        let idx = i as usize;
+        if let Some(b) = self.bots.get_mut(idx) {
+            *b = Bot::with_challenge(c);
+        }
+        // Mirror onto the authoritative director + this client so the buy-filter
+        // is applied identically on both shadows (they stay in lockstep).
+        self.director.set_challenge(idx, c);
+        if let Some(cl) = self.clients.get_mut(idx) {
+            cl.set_challenge(c);
+        }
+    }
+
     /// Advance the whole match one server iteration: the director steps every
     /// alive shadow, and each client sends its bot's chosen input — all through
     /// the real `Hub` transport, exactly like the netcode integration tests.

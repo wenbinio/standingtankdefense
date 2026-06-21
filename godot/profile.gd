@@ -45,7 +45,7 @@ const ACHIEVEMENTS: Array[Dictionary] = [
 	{"id": "purist_area",    "name": "Aura Farmer",       "desc": "Buy only Area weapons (3+)."},
 	{"id": "purist_wave",    "name": "Wavy Gravy",        "desc": "Buy only Wave weapons (3+)."},
 	{"id": "purist_bounce",  "name": "Ricochet Rascal",   "desc": "Buy only Bounce weapons (3+)."},
-	{"id": "no_economy",     "name": "Stone Broke",       "desc": "Reach round 10 with zero income buys."},
+	{"id": "no_economy",     "name": "Stone Broke",       "desc": "Buy 6 weapons with zero income purchases."},
 	{"id": "jack_of_all",    "name": "Jack of All Trades", "desc": "Buy a weapon of every attack type."},
 	{"id": "bloodletter",    "name": "Bloodletter",       "desc": "Deal 1,000,000 damage in a match."},
 	{"id": "long_watch",     "name": "Long Watch",        "desc": "Survive to round 20."},
@@ -53,8 +53,25 @@ const ACHIEVEMENTS: Array[Dictionary] = [
 	{"id": "sole_survivor",  "name": "Sole Survivor",     "desc": "Win a match (last tank standing)."},
 ]
 
+# --- Challenges --------------------------------------------------------------
+# Optional self-imposed rules the preview's player-0 bot will honor, so the
+# constraint achievements are earnable on demand. `code` matches the Rust
+# `bot::Challenge::from_code` (0 = free play). `ach` is the achievement (and
+# thus skin) the run targets. Cosmetic preview aid only.
+const CHALLENGES: Array[Dictionary] = [
+	{"name": "Purist: Single-Target", "code": 1, "ach": "purist_single",  "rule": "Bot buys ONLY Single-Target weapons."},
+	{"name": "Purist: Splash",        "code": 2, "ach": "purist_splash",  "rule": "Bot buys ONLY Splash weapons."},
+	{"name": "Purist: Barrage",       "code": 3, "ach": "purist_barrage", "rule": "Bot buys ONLY Barrage weapons."},
+	{"name": "Purist: Area",          "code": 4, "ach": "purist_area",    "rule": "Bot buys ONLY Area weapons."},
+	{"name": "Purist: Wave",          "code": 5, "ach": "purist_wave",    "rule": "Bot buys ONLY Wave weapons."},
+	{"name": "Purist: Bounce",        "code": 6, "ach": "purist_bounce",  "rule": "Bot buys ONLY Bounce weapons."},
+	{"name": "No Economy",            "code": 7, "ach": "no_economy",     "rule": "Bot never buys income, only weapons."},
+	{"name": "Jack of All Trades",    "code": 8, "ach": "jack_of_all",    "rule": "Bot collects a weapon of every type."},
+]
+
 var earned := {}                 # ach_id -> true
 var selected := "ol_reliable"
+var active_challenge_code := 0   # transient: applied to player 0 on next deploy
 var last_unlocks: Array = []     # ach ids granted by the most recent record_match()
 
 func _ready() -> void:
@@ -75,6 +92,13 @@ func ach_def(id: String) -> Dictionary:
 		if a.id == id:
 			return a
 	return {}
+
+# The skin granted by an achievement id (for challenge-reward previews).
+func skin_for_ach(ach_id: String) -> Dictionary:
+	for s in SKINS:
+		if s.unlock == ach_id:
+			return s
+	return SKINS[0]
 
 func is_unlocked(skin_id: String) -> bool:
 	var u: String = skin_def(skin_id).unlock
@@ -100,7 +124,7 @@ func _qualifies(ach_id: String, rec: Dictionary) -> bool:
 		"purist_area":    return _purist(rec, 3)
 		"purist_wave":    return _purist(rec, 4)
 		"purist_bounce":  return _purist(rec, 5)
-		"no_economy":     return int(rec.get("round", 0)) >= 10 and int(rec.get("economy_buys", 0)) == 0
+		"no_economy":     return int(rec.get("weapons_bought", 0)) >= 6 and int(rec.get("economy_buys", 0)) == 0
 		"jack_of_all":    return int(rec.get("attack_mask", 0)) == ALL_TYPES_MASK
 		"bloodletter":    return int(rec.get("damage", 0)) >= 1000000
 		"long_watch":     return int(rec.get("round", 0)) >= 20

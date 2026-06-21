@@ -34,6 +34,7 @@ func _deploy() -> void:
 	var s: Dictionary = Profile.SKINS[sel]
 	if Profile.is_unlocked(s.id):
 		Profile.select(s.id)
+		Profile.active_challenge_code = 0   # plain deploy = free play
 		get_tree().change_scene_to_file("res://Match.tscn")
 
 func _input(e: InputEvent) -> void:
@@ -44,6 +45,7 @@ func _input(e: InputEvent) -> void:
 			KEY_RIGHT, KEY_D: sel = (sel + 1) % n; queue_redraw()
 			KEY_UP, KEY_W:    sel = (sel - COLS + n) % n; queue_redraw()
 			KEY_DOWN, KEY_S:  sel = (sel + COLS) % n; queue_redraw()
+			KEY_C: get_tree().change_scene_to_file("res://ChallengeSelect.tscn")
 			KEY_T: ArtTheme.cycle(); _cache_thumbs(); queue_redraw()
 			KEY_U: Profile.unlock_all(); queue_redraw()         # dev: preview the gallery
 			KEY_R: Profile.reset(); sel = 0; queue_redraw()     # dev: relock everything
@@ -68,7 +70,7 @@ func _draw() -> void:
 	draw_string(font, Vector2(330, 46), "%d / %d unlocked" % [have, n],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.55, 0.78, 0.6))
 	draw_string(font, Vector2(36, 72),
-		"Unlock skins via achievements — purist runs (one weapon type), no-economy, and more.   [arrows] move   [Enter] deploy   [T] theme   [U] dev-unlock",
+		"Unlock skins via achievements — purist runs (one weapon type), no-economy, and more.   [arrows] move   [Enter] deploy   [C] challenges   [T] theme   [U] dev-unlock",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.56, 0.6, 0.68))
 
 	cards.clear()

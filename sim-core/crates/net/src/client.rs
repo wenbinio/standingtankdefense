@@ -47,6 +47,9 @@ pub struct Client {
     /// Iteration of the last `Join` sent, to rate-limit retries so we don't
     /// trigger redundant snapshots while one is already in flight.
     last_join_iter: Option<u32>,
+    /// Self-imposed purchase challenge, mirrored from the director so this
+    /// client's shadow filters buys identically and stays in lockstep.
+    challenge: sim::bot::Challenge,
 }
 
 /// Resend `Join` at most this often (in iterations) while awaiting state.
@@ -77,7 +80,13 @@ impl Client {
             corrections: 0,
             master_seed: None,
             last_join_iter: None,
+            challenge: sim::bot::Challenge::None,
         }
+    }
+
+    /// Mirror the director's challenge for this client so buy-filtering matches.
+    pub fn set_challenge(&mut self, c: sim::bot::Challenge) {
+        self.challenge = c;
     }
 
     /// One driver iteration: process `inbox`, step the local arena, emit outbound.
@@ -122,7 +131,7 @@ impl Client {
                             let before = sim::checksum(current);
                             let mut a = restored;
                             while a.tick < target {
-                                let action = self.schedule.take(a.tick);
+                                let action = self.challenge.filter(self.schedule.take(a.tick), &a);
                                 sim::step(&mut a, action);
                             }
                             // Only count a correction that actually changed state.
@@ -148,7 +157,7 @@ impl Client {
         if self.iter >= self.step_gate {
             if let Some(arena) = self.arena.as_mut() {
                 let pre = arena.tick;
-                let action = self.schedule.take(pre);
+                let action = self.challenge.filter(self.schedule.take(pre), arena);
                 sim::step(arena, action);
                 stepped_tick = Some(pre);
             }

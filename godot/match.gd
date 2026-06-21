@@ -13,6 +13,9 @@ var enemy_tex := []           # by kind: 0 grunt, 1 steam, 2 boss
 func _ready() -> void:
 	randomize()
 	m = StMatch.new_match(N, randi())
+	# You are player 0; honor a chosen challenge so its achievement is earnable.
+	if Profile.active_challenge_code != 0:
+		m.set_challenge(0, Profile.active_challenge_code)
 	_load_textures()
 
 func _load_textures() -> void:
@@ -75,9 +78,14 @@ func _draw() -> void:
 		"MULTI-ARENA NET VIEW  —  %d sharded sims · 1 authoritative director · server tick %d · alive %d/%d  [%s]"
 		% [n, m.server_tick(), m.alive_count(), n, status],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.82, 0.88, 0.96))
-	draw_string(font, Vector2(vp.x - 250, 26),
-		"YOU: %s  ·  [S] skins" % Profile.skin_def(Profile.selected).name,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.62, 0.66, 0.74))
+	var you := "YOU: %s  ·  [S] skins" % Profile.skin_def(Profile.selected).name
+	if Profile.active_challenge_code != 0:
+		for c in Profile.CHALLENGES:
+			if c.code == Profile.active_challenge_code:
+				you = "CHALLENGE: %s  ·  %s" % [c.name, you]
+				break
+	draw_string(font, Vector2(vp.x - mini(int(vp.x) - 20, 16 + you.length() * 7), 26),
+		you, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.72, 0.66, 0.5))
 	if not _toast.is_empty():
 		draw_string(font, Vector2(16, vp.y - 16),
 			"ACHIEVEMENT UNLOCKED:  " + ", ".join(_toast),

@@ -58,6 +58,10 @@ struct Player {
     /// Whether this shadow has already been recorded as dead (so we only emit
     /// `DeathConfirmed` once).
     death_recorded: bool,
+    /// Optional self-imposed challenge filtering this player's purchases
+    /// (cosmetic preview aid). Applied at apply-time on both director and
+    /// client identically, so shadows stay in lockstep.
+    challenge: sim::bot::Challenge,
 }
 
 pub struct Director {
@@ -89,6 +93,7 @@ impl Director {
                 schedule: Schedule::new(),
                 history: BTreeMap::new(),
                 death_recorded: false,
+                challenge: sim::bot::Challenge::None,
             })
             .collect();
         Director {
@@ -98,6 +103,14 @@ impl Director {
             players,
             death_order: Vec::new(),
             result: None,
+        }
+    }
+
+    /// Constrain player `i`'s purchases to a challenge (cosmetic preview aid).
+    /// Must mirror the matching client's challenge so their shadows agree.
+    pub fn set_challenge(&mut self, i: usize, c: sim::bot::Challenge) {
+        if let Some(p) = self.players.get_mut(i) {
+            p.challenge = c;
         }
     }
 
@@ -202,7 +215,8 @@ impl Director {
             for i in 0..self.peers.len() {
                 let was_dead = self.players[i].death_recorded;
                 if !was_dead {
-                    let inp = self.players[i].schedule.take(arena_tick);
+                    let raw = self.players[i].schedule.take(arena_tick);
+                    let inp = self.players[i].challenge.filter(raw, &self.players[i].shadow);
                     sim::step(&mut self.players[i].shadow, inp);
                     let cs = sim::checksum(&self.players[i].shadow);
                     self.players[i].history.insert(arena_tick, cs);
