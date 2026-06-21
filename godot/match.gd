@@ -1,0 +1,107 @@
+# Multi-arena / net view. Runs the REAL netcode loop in `StMatch` (authoritative
+# director + N clients + hub, bot-driven) and renders every player's
+# authoritative shadow arena as a grid — the visual proof of the sharded-sim
+# architecture: N independent arenas under one director, no entity replication.
+extends Node2D
+
+const N := 8                  # players in the demo match
+
+var m
+var tex := {}
+var enemy_tex := []           # by kind: 0 grunt, 1 steam, 2 boss
+
+func _ready() -> void:
+	randomize()
+	m = StMatch.new_match(N, randi())
+	tex = {
+		"ground": load("res://art/env/arena_ground.svg"),
+		"ring":   load("res://art/env/spawn_ring.svg"),
+		"tank":   load("res://art/tank/player_tank.svg"),
+		"coin":   load("res://art/ui/coin.svg"),
+	}
+	enemy_tex = [load("res://art/enemies/fel_orc_grunt.svg"),
+		load("res://art/enemies/steam_tank.svg"), load("res://art/enemies/samwise.svg")]
+
+func _physics_process(_delta: float) -> void:
+	if m == null:
+		return
+	m.step()
+	queue_redraw()
+
+func _blit(tx: Texture2D, center: Vector2, size: float, mod := Color.WHITE) -> void:
+	draw_texture_rect(tx, Rect2(center - Vector2(size, size) * 0.5, Vector2(size, size)), false, mod)
+
+func _draw() -> void:
+	if m == null:
+		return
+	var vp: Vector2 = get_viewport_rect().size
+	var font := ThemeDB.fallback_font
+	var n: int = m.player_count()
+
+	# header
+	var status := "MATCH OVER" if m.match_over() else "LIVE"
+	draw_string(font, Vector2(16, 26),
+		"MULTI-ARENA NET VIEW  —  %d sharded sims · 1 authoritative director · server tick %d · alive %d/%d  [%s]"
+		% [n, m.server_tick(), m.alive_count(), n, status],
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.82, 0.88, 0.96))
+
+	# grid
+	var cols: int = mini(n, 4)
+	var rows: int = int(ceil(float(n) / cols))
+	var pad := 8.0
+	var top := 40.0
+	var cw := (vp.x - pad * (cols + 1)) / cols
+	var ch := (vp.y - top - pad * (rows + 1)) / rows
+	for i in n:
+		var col: int = i % cols
+		var row: int = i / cols
+		var rect := Rect2(pad + col * (cw + pad), top + pad + row * (ch + pad), cw, ch)
+		_draw_cell(font, i, rect)
+
+func _draw_cell(font, i: int, r: Rect2) -> void:
+	var arena: PackedInt64Array = m.arena(i)   # [x,y,hp,maxhp,rev,round,tick,dead]
+	if arena.size() < 8:
+		return
+	var dead: bool = arena[7] != 0
+	var center := r.position + Vector2(r.size.x * 0.5, r.size.y * 0.5 + 8.0)
+	var scl: float = minf(r.size.x, r.size.y) * 0.42 / 1700.0
+
+	# arena floor + spawn ring (clipped to cell)
+	draw_texture_rect(tex["ground"], r, false)
+	_blit(tex["ring"], center, 2.0 * 1500.0 * scl / 0.90)
+
+	# enemies (small)
+	var ep: PackedVector2Array = m.enemies_pos(i)
+	var ek: PackedByteArray = m.enemies_kind(i)
+	for j in ep.size():
+		var kind: int = ek[j] if j < ek.size() else 0
+		var sz := 56.0 if kind == 2 else 20.0
+		_blit(enemy_tex[kind], center + Vector2(ep[j].x * scl, -ep[j].y * scl), sz)
+
+	# tank
+	_blit(tex["tank"], center, 40.0, Color(1, 1, 1, 0.5) if dead else Color.WHITE)
+
+	# HP bar
+	var hp := maxi(int(arena[2]), 0)
+	var maxhp := maxi(int(arena[3]), 1)
+	var bw := r.size.x - 16.0
+	draw_rect(Rect2(r.position + Vector2(8, 8), Vector2(bw, 7)), Color(0, 0, 0, 0.55))
+	draw_rect(Rect2(r.position + Vector2(8, 8), Vector2(bw * float(hp) / float(maxhp), 7)),
+		Color(0.5, 0.5, 0.55) if dead else Color(0.33, 0.72, 1.0))
+
+	# label + economy
+	var eco: PackedInt64Array = m.economy(i)
+	var gold: int = eco[0] if eco.size() > 0 else 0
+	draw_string(font, r.position + Vector2(10, 34), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.9, 0.93, 0.98))
+	draw_string(font, r.position + Vector2(46, 34), "R%d · %dg · %dw" % [arena[5], gold, m.weapon_count(i)],
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.74, 0.66, 0.4))
+
+	# cell border
+	draw_rect(r, Color(0.06, 0.07, 0.09, 1.0), false, 2.0)
+
+	# dead overlay + placement
+	if dead:
+		draw_rect(r, Color(0, 0, 0, 0.5))
+		var place: int = m.placement(i)
+		var txt := "OUT" if place == 0 else "#%d" % place
+		draw_string(font, center - Vector2(22, 6), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1.0, 0.4, 0.28))

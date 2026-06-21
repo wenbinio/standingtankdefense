@@ -18,3 +18,5 @@ crate-type = ["cdylib"]
 godot = { version = "0.5", features = ["api-4-3"] }
 # The deterministic core, by path — the binding never duplicates game logic.
 sim = { path = "../../sim-core/crates/sim" }
+# The netcode (authoritative director + clients + hub) for the multi-arena view.
+net = { path = "../../sim-core/crates/net" }

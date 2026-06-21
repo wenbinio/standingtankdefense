@@ -120,6 +120,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a846cbc04412cf509efcd8f3694b114fc700a035fb5a37f21517f9fb019f1ebc"
 
 [[package]]
+name = "net"
+version = "0.1.0"
+dependencies = [
+ "determinism",
+ "sim",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -149,6 +157,7 @@ name = "standing_tank_gdext"
 version = "0.1.0"
 dependencies = [
  "godot",
+ "net",
  "sim",
 ]
 

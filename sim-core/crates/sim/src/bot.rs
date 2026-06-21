@@ -1,8 +1,10 @@
-//! A deterministic auto-player so the preview plays itself. It reads only the
-//! public `ArenaState` (the same surface a real client/UI sees) and returns one
-//! `Input` per tick — proving the sim is drivable through its render-facing API.
+//! A deterministic auto-player so previews and the spectator/net demo can play
+//! themselves. It reads only the public [`ArenaState`] (the same surface a real
+//! client/UI sees) and returns one [`Input`] per tick — proving the sim is
+//! drivable through its render-facing API. No RNG, no wall-clock: purely a
+//! function of observed state, so it never threatens determinism.
 
-use sim::{ArenaState, Input, OfferKind};
+use crate::{ArenaState, Input, OfferKind};
 
 /// Greedy survivor policy: clear when swarmed, otherwise keep buying.
 pub struct Bot {

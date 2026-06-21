@@ -8,10 +8,10 @@
 //!
 //! Flags: --seed <u64>  --every <ticks>  --frames <n>  --max-ticks <n>  --speed <n>
 
-mod bot;
+
 mod render;
 
-use bot::Bot;
+use sim::bot::Bot;
 use sim::{content, step, ArenaState, Input, OfferKind};
 
 struct Args {

@@ -8,6 +8,7 @@
 //! - centrally owned seams: `ids`, `state`, `content`, this file (`step`/`checksum`).
 //! - behavior modules: `combat`, `waves` (Agent B); `economy`, `shop`, `input` (Agent C).
 
+pub mod bot;
 pub mod content;
 pub mod snapshot;
 pub mod view;

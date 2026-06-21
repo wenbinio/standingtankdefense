@@ -15,6 +15,11 @@
 //!   sim.arsenal_lines()
 
 use godot::prelude::*;
+use net::client::Client;
+use net::director::Director;
+use net::hub::Hub;
+use net::transport::{PeerId, DIRECTOR};
+use sim::bot::Bot;
 use sim::view;
 use sim::{ArenaState, Input};
 
@@ -119,6 +124,18 @@ impl StSim {
         a
     }
 
+    /// Per-enemy stable id, parallel to `enemies_pos()`. The front-end diffs
+    /// these between frames to drive juice (hit flash on hp drop, death poof on
+    /// an id that vanished).
+    #[func]
+    fn enemies_id(&self) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        for e in &view::snapshot(&self.state).enemies {
+            a.push(e.id as i64);
+        }
+        a
+    }
+
     /// Per-enemy HP as a permille of catalog base HP (for a health bar).
     #[func]
     fn enemies_hp_permille(&self) -> PackedInt32Array {
@@ -175,5 +192,174 @@ impl StSim {
             a.push(&GString::from(format!("{} x{}", e.name, e.count).as_str()));
         }
         a
+    }
+}
+
+// ===================== Multi-arena / net view =====================
+
+/// Arbitrary content hash for the demo clients (the M2 director doesn't gate it).
+const DEMO_CONTENT_HASH: u64 = 0xC0DE_C0DE;
+
+/// A full N-player match running the REAL netcode loop — authoritative
+/// [`Director`] + per-player [`Client`]s wired through the deterministic [`Hub`],
+/// each client driven by the shared [`Bot`]. It renders every player's
+/// authoritative shadow arena, showcasing the sharded-simulation architecture:
+/// N independent arenas advancing under one director, no entity replication.
+#[derive(GodotClass)]
+#[class(no_init, base = RefCounted)]
+pub struct StMatch {
+    director: Director,
+    clients: Vec<Client>,
+    bots: Vec<Bot>,
+    hub: Hub,
+    peers: Vec<PeerId>,
+    base: Base<RefCounted>,
+}
+
+#[godot_api]
+impl StMatch {
+    /// Start an `n`-player match (clamped 1..=16) seeded with `seed`.
+    #[func]
+    fn new_match(n: i64, seed: i64) -> Gd<StMatch> {
+        let n = n.clamp(1, 16) as u32;
+        let peers: Vec<PeerId> = (1..=n).map(PeerId).collect();
+        let director = Director::new(&peers, seed as u64);
+        let clients = peers.iter().map(|p| Client::new(*p, DEMO_CONTENT_HASH)).collect();
+        let bots = peers.iter().map(|_| Bot::default()).collect();
+        Gd::from_init_fn(|base| StMatch {
+            director,
+            clients,
+            bots,
+            hub: Hub::new(),
+            peers,
+            base,
+        })
+    }
+
+    /// Advance the whole match one server iteration: the director steps every
+    /// alive shadow, and each client sends its bot's chosen input — all through
+    /// the real `Hub` transport, exactly like the netcode integration tests.
+    #[func]
+    fn step(&mut self) {
+        let in_d = self.hub.take(DIRECTOR);
+        let out_d = self.director.tick(in_d);
+        self.hub.send(DIRECTOR, out_d);
+        for (i, p) in self.peers.iter().enumerate() {
+            let in_i = self.hub.take(*p);
+            let desired = match self.director.shadow(*p) {
+                Some(sh) => self.bots[i].decide(sh),
+                None => Input::Noop,
+            };
+            let out_i = self.clients[i].tick(in_i, desired);
+            self.hub.send(*p, out_i);
+        }
+        self.hub.advance();
+    }
+
+    #[func]
+    fn player_count(&self) -> i64 {
+        self.peers.len() as i64
+    }
+    #[func]
+    fn server_tick(&self) -> i64 {
+        self.director.server_tick() as i64
+    }
+    #[func]
+    fn alive_count(&self) -> i64 {
+        self.peers.iter().filter(|p| self.director.is_alive(**p)).count() as i64
+    }
+    #[func]
+    fn is_alive(&self, i: i64) -> bool {
+        self.peers.get(i as usize).is_some_and(|p| self.director.is_alive(*p))
+    }
+    #[func]
+    fn match_over(&self) -> bool {
+        self.director.result().is_some()
+    }
+    /// 1-based final placement for player `i` (1 = winner), or 0 if undecided.
+    #[func]
+    fn placement(&self, i: i64) -> i64 {
+        let p = match self.peers.get(i as usize) {
+            Some(p) => *p,
+            None => return 0,
+        };
+        match self.director.result() {
+            Some(r) => r
+                .iter()
+                .find(|(pp, _)| *pp == p)
+                .map(|(_, place)| *place as i64)
+                .unwrap_or(0),
+            None => 0,
+        }
+    }
+
+    fn snap(&self, i: i64) -> Option<view::RenderView> {
+        self.peers
+            .get(i as usize)
+            .and_then(|p| self.director.shadow(*p))
+            .map(view::snapshot)
+    }
+
+    /// `[x, y, hp, max_hp, revives, round, tick, dead]` for player `i`.
+    #[func]
+    fn arena(&self, i: i64) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        if let Some(v) = self.snap(i) {
+            for x in [
+                v.tank.x,
+                v.tank.y,
+                v.tank.hp,
+                v.tank.max_hp,
+                v.tank.revives as i64,
+                v.round as i64,
+                v.tick as i64,
+                v.dead as i64,
+            ] {
+                a.push(x);
+            }
+        }
+        a
+    }
+
+    /// `[gold, income_per_tick]` for player `i`.
+    #[func]
+    fn economy(&self, i: i64) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        if let Some(v) = self.snap(i) {
+            a.push(v.economy.gold);
+            a.push(v.economy.income_per_tick);
+        }
+        a
+    }
+
+    /// Enemy world positions for player `i`'s arena.
+    #[func]
+    fn enemies_pos(&self, i: i64) -> PackedVector2Array {
+        let mut a = PackedVector2Array::new();
+        if let Some(v) = self.snap(i) {
+            for e in &v.enemies {
+                a.push(Vector2::new(e.x as f32, e.y as f32));
+            }
+        }
+        a
+    }
+
+    /// Enemy sprite kinds for player `i`'s arena (parallel to `enemies_pos`).
+    #[func]
+    fn enemies_kind(&self, i: i64) -> PackedByteArray {
+        let mut a = PackedByteArray::new();
+        if let Some(v) = self.snap(i) {
+            for e in &v.enemies {
+                a.push(e.kind as u8);
+            }
+        }
+        a
+    }
+
+    /// Number of weapons player `i` has bought (for a quick HUD readout).
+    #[func]
+    fn weapon_count(&self, i: i64) -> i64 {
+        self.snap(i)
+            .map_or(0, |v| v.arsenal.iter().map(|a| a.count as i64).sum())
     }
 }

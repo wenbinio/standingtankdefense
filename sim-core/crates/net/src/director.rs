@@ -299,6 +299,17 @@ impl Director {
         }
     }
 
+    /// Read-only access to player `p`'s authoritative shadow arena — for
+    /// spectator/lobby rendering (e.g. the multi-arena view). Never mutated.
+    pub fn shadow(&self, p: PeerId) -> Option<&ArenaState> {
+        self.index_of(p).map(|i| &self.players[i].shadow)
+    }
+
+    /// The match's peers, in the sorted order the director iterates them.
+    pub fn peers(&self) -> &[PeerId] {
+        &self.peers
+    }
+
     /// Current checksum of player `p`'s shadow (for tests/leaderboard).
     pub fn shadow_checksum(&self, p: PeerId) -> Option<u64> {
         self.index_of(p)
