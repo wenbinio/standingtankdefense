@@ -63,6 +63,8 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     combat::advance_projectiles(s);
     // 6. Enemies advance toward the tank; contact damage on arrival.
     combat::move_enemies(s);
+    // 6b. Spikes: if the tank was hit, retaliate against nearby enemies.
+    defense::spikes(s);
     // 7. Status effects: poison DoT, frost/stun decay (poison kills → pending_kills).
     status::tick(s);
     // 8. Drain pending_kills → award bounty (scaled by bounty_mult).
@@ -99,6 +101,8 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_i64(s.tank.mana_shield_max);
     c.write_i64(s.tank.mana_regen_per_tick);
     c.write_i64(s.tank.hp_regen_per_tick);
+    c.write_i64(s.tank.spikes_damage);
+    c.write_fixed(s.tank.spikes_mult);
 
     c.write_i64(s.economy.gold);
     c.write_i64(s.economy.income_per_tick);

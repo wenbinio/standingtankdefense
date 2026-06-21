@@ -65,6 +65,10 @@ pub struct Tank {
     pub mana_regen_per_tick: i64,
     /// Passive HP regeneration per tick.
     pub hp_regen_per_tick: i64,
+    /// Spikes: damage dealt to nearby enemies when the tank is hit.
+    pub spikes_damage: i64,
+    /// Multiplier on spikes damage (starts at `ONE`).
+    pub spikes_mult: Fixed,
 }
 
 /// An owned weapon instance (multiple copies of one def stack as separate
@@ -208,6 +212,10 @@ pub struct ArenaState {
     pub modifiers: Modifiers,
     /// Active time-scaling growths (re-applied at their intervals).
     pub ramps: Vec<ActiveRamp>,
+    /// Set when the tank takes damage this tick (drives Spikes retaliation).
+    /// Transient: always `false` at a tick boundary, so it is excluded from the
+    /// checksum/snapshot.
+    pub tank_hit_this_tick: bool,
 
     pub next_entity_id: u32,
     pub dead: bool,
@@ -248,6 +256,8 @@ impl ArenaState {
                 mana_shield_max: 0,
                 mana_regen_per_tick: 0,
                 hp_regen_per_tick: 0,
+                spikes_damage: 0,
+                spikes_mult: Fixed::ONE,
             },
             weapons: Vec::new(),
             enemies: Vec::new(),
@@ -262,6 +272,7 @@ impl ArenaState {
             shop: ShopState::default(),
             modifiers: Modifiers::new(),
             ramps: Vec::new(),
+            tank_hit_this_tick: false,
             next_entity_id: 1,
             dead: false,
             death_tick: None,

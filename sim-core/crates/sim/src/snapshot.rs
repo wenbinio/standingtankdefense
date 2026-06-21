@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 5;
+pub const SNAPSHOT_VERSION: u32 = 6;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -168,6 +168,8 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.i64(s.tank.mana_shield_max);
     w.i64(s.tank.mana_regen_per_tick);
     w.i64(s.tank.hp_regen_per_tick);
+    w.i64(s.tank.spikes_damage);
+    w.fixed(s.tank.spikes_mult);
 
     // weapons
     w.len(s.weapons.len());
@@ -298,6 +300,8 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         mana_shield_max: r.i64()?,
         mana_regen_per_tick: r.i64()?,
         hp_regen_per_tick: r.i64()?,
+        spikes_damage: r.i64()?,
+        spikes_mult: r.fixed()?,
     };
 
     let mut weapons = Vec::new();
@@ -431,6 +435,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         shop,
         modifiers,
         ramps,
+        tank_hit_this_tick: false,
         next_entity_id,
         dead,
         death_tick,

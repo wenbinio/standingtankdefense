@@ -2,7 +2,12 @@
 //! per-tick Mana-Shield and HP regeneration. Deterministic — the only RNG is the
 //! dodge roll from `rng_proc`.
 
+use crate::content;
 use crate::state::ArenaState;
+use determinism::Fixed;
+
+/// Radius (from the tank) of Spikes retaliation.
+const SPIKES_RANGE: i64 = 400;
 
 /// Apply `raw` incoming damage to the tank through the defensive layers.
 pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) {
@@ -16,6 +21,8 @@ pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) {
             return;
         }
     }
+    // The hit landed (even if fully absorbed by the shield) → Spikes will fire.
+    s.tank_hit_this_tick = true;
     // Armor: flat reduction, but at least 1 damage always lands.
     let mut remaining = (raw - s.tank.armor).max(1);
     // Mana Shield absorbs before HP.
@@ -25,6 +32,37 @@ pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) {
         remaining -= absorbed;
     }
     s.tank.hp -= remaining;
+}
+
+/// Spikes retaliation: if the tank was hit this tick, deal its (multiplied)
+/// spikes damage to every non-boss enemy within `SPIKES_RANGE`. Consumes and
+/// resets the hit flag. Kills push to `pending_kills` (so they award bounty).
+pub(crate) fn spikes(s: &mut ArenaState) {
+    let hit = s.tank_hit_this_tick;
+    s.tank_hit_this_tick = false;
+    if !hit {
+        return;
+    }
+    let dmg = s.tank.spikes_mult.scale_i64(s.tank.spikes_damage);
+    if dmg <= 0 {
+        return;
+    }
+    let range = Fixed::from_int(SPIKES_RANGE);
+    let r2 = range.mul(range);
+    let tank_pos = s.tank.pos;
+    let mut survivors = Vec::with_capacity(s.enemies.len());
+    for mut e in std::mem::take(&mut s.enemies) {
+        let boss = content::ENEMIES[e.def as usize].boss;
+        if !boss && tank_pos.dist_sq(e.pos) <= r2 {
+            e.hp -= dmg;
+        }
+        if e.hp <= 0 {
+            s.pending_kills.push(e.def);
+        } else {
+            survivors.push(e);
+        }
+    }
+    s.enemies = survivors;
 }
 
 /// Per-tick regeneration of the Mana Shield and HP (each capped at its max).
@@ -100,6 +138,51 @@ mod tests {
         }
         assert_eq!(a.tank.hp, b.tank.hp, "same seed → same dodge outcomes");
         assert_eq!(a.rng_proc.state(), b.rng_proc.state());
+    }
+
+    fn enemy_at(id: u32, hp: i64, x: i64) -> crate::state::Enemy {
+        let pos = crate::state::Vec2::new(Fixed::from_int(x), Fixed::ZERO);
+        crate::state::Enemy::new(crate::ids::EntityId(id), 0, hp, pos)
+    }
+
+    #[test]
+    fn spikes_retaliate_on_nearby_enemies_only_when_hit() {
+        let mut s = fresh();
+        s.tank.spikes_damage = 100;
+        s.enemies = vec![enemy_at(1, 200, 100), enemy_at(2, 200, 1000)]; // near, far
+
+        // Not hit this tick → no retaliation.
+        spikes(&mut s);
+        assert_eq!(s.enemies[0].hp, 200);
+
+        // Take a hit, then retaliate: near enemy takes 100, far enemy untouched.
+        hit_tank(&mut s, 500);
+        assert!(s.tank_hit_this_tick);
+        spikes(&mut s);
+        assert!(!s.tank_hit_this_tick, "hit flag consumed");
+        assert_eq!(s.enemies[0].hp, 100, "near enemy took spikes");
+        assert_eq!(s.enemies[1].hp, 200, "far enemy out of range");
+    }
+
+    #[test]
+    fn spikes_mult_scales_and_kills_award_bounty() {
+        let mut s = fresh();
+        s.tank.spikes_damage = 100;
+        s.tank.spikes_mult = Fixed::from_ratio(3, 2); // ×1.5 ⇒ 150
+        s.enemies = vec![enemy_at(1, 150, 50)];
+        hit_tank(&mut s, 100);
+        spikes(&mut s);
+        assert!(s.enemies.is_empty(), "150 spikes killed the 150-hp enemy");
+        assert_eq!(s.pending_kills, vec![0]);
+    }
+
+    #[test]
+    fn spikes_does_nothing_without_spikes_damage() {
+        let mut s = fresh();
+        s.enemies = vec![enemy_at(1, 200, 50)];
+        hit_tank(&mut s, 100); // sets the flag
+        spikes(&mut s);
+        assert_eq!(s.enemies[0].hp, 200, "no spikes stat → no retaliation");
     }
 
     #[test]
