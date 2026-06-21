@@ -36,10 +36,22 @@ sim-core/
 
 ```bash
 cd sim-core
-cargo test --workspace      # 48 tests, incl. the cross-platform golden checksum
+cargo test --workspace      # full suite, incl. the cross-platform golden checksum
 cargo run -p harness        # the M0 DETERMINISM GATE (prints PASS/FAIL)
 cargo run -p harness --example liveness   # sanity: shows the sim actually simulates
+
+# Watch the game play itself — a self-driving, full-loop preview over the real
+# sim, rendered as text (the same read-only state a Godot front-end will draw):
+cargo run -p preview              # headless: a few spaced frames + a summary line
+cargo run -p preview -- --watch   # live at ~30 Hz (clears the screen each frame)
+cargo run -p preview -- --watch --speed 8   # fast-forward to the 15-min boss
 ```
+
+The `preview` crate is the first **integration seam**: it constructs a real
+`ArenaState`, drives `sim::step` with a bot's `Input`s, and renders only public
+sim state (tank, enemies, projectiles, economy, shop, arsenal). It proves the
+whole pipeline composes into a playable match and is the reference for what the
+engine front-end consumes.
 
 ## Invariants (enforced; see `CLAUDE.md`, `docs/05 §5.6`)
 

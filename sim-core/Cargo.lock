@@ -23,6 +23,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "preview"
+version = "0.1.0"
+dependencies = [
+ "determinism",
+ "sim",
+]
+
+[[package]]
 name = "sim"
 version = "0.1.0"
 dependencies = [
