@@ -135,7 +135,29 @@ impl Director {
             let from = inb.from;
             match msg {
                 Msg::Join { .. } => {
-                    // M2: note only; no gating.
+                    // (Re)join: hand the peer what it needs to start its arena.
+                    // Pre-start → the MatchStart broadcast covers it; live →
+                    // send an authoritative Snapshot of its shadow so a
+                    // reconnecting client can adopt and catch up (docs/03 §3.7).
+                    if self.iter >= START_LEAD {
+                        if let Some(i) = self.index_of(from) {
+                            let bytes = sim::snapshot::serialize(&self.players[i].shadow);
+                            out.push(send(
+                                from,
+                                Channel::Bulk,
+                                &Msg::Snapshot { tick: arena_tick, bytes },
+                            ));
+                        }
+                    } else {
+                        out.push(send(
+                            from,
+                            Channel::Control,
+                            &Msg::MatchStart {
+                                start_tick: START_LEAD,
+                                master_seed: self.master_seed,
+                            },
+                        ));
+                    }
                 }
                 Msg::Input { seq, action } => {
                     let apply_tick = arena_tick + INPUT_LEAD_TICKS;
