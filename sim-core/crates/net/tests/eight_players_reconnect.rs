@@ -1,0 +1,100 @@
+//! M3 exit test (part 1): **8 players + reconnect**. Eight independent arenas
+//! run under one authoritative director. One player drops mid-match and rejoins
+//! as a fresh `reconnecting` client; the director hands it an authoritative
+//! snapshot, it adopts and continues on the canonical trajectory — while the
+//! other seven are entirely unaffected (`docs/06` M3).
+
+use net::client::Client;
+use net::director::Director;
+use net::hub::Hub;
+use net::transport::{PeerId, DIRECTOR};
+use sim::Input;
+
+const SEED: u64 = 0x38_504C_4159_4552; // "8PLAYER"-ish
+const HASH: u64 = 0xC0DE;
+const N: u32 = 8;
+const ITERS: u32 = 700;
+const DROP_AT: u32 = 100; // iteration P3 disconnects
+const REJOIN_AT: u32 = 320; // iteration a fresh P3 client reconnects
+const DROPPED: u32 = 3; // peer id that drops/reconnects
+
+fn peers() -> Vec<PeerId> {
+    (1..=N).map(PeerId).collect()
+}
+
+#[test]
+fn eight_players_one_drops_and_reconnects() {
+    let ps = peers();
+    let mut d = Director::new(&ps, SEED);
+    // clients[i] for peer i+1; None while disconnected.
+    let mut clients: Vec<Option<Client>> = ps.iter().map(|p| Some(Client::new(*p, HASH))).collect();
+    let mut hub = Hub::new();
+
+    for it in 0..ITERS {
+        // Disconnect P3: drop the client and discard its queued inbound.
+        if it == DROP_AT {
+            clients[(DROPPED - 1) as usize] = None;
+        }
+        // Reconnect P3 as a brand-new client that must request state via Join.
+        if it == REJOIN_AT {
+            clients[(DROPPED - 1) as usize] = Some(Client::reconnecting(PeerId(DROPPED), HASH));
+        }
+
+        let in_d = hub.take(DIRECTOR);
+        let out_d = d.tick(in_d);
+
+        let mut client_out = Vec::new();
+        for (i, slot) in clients.iter_mut().enumerate() {
+            let peer = PeerId(i as u32 + 1);
+            let inbox = hub.take(peer);
+            match slot {
+                Some(c) => client_out.push((peer, c.tick(inbox, Input::Noop))),
+                None => { /* disconnected: inbox discarded */ }
+            }
+        }
+
+        hub.send(DIRECTOR, out_d);
+        for (peer, outs) in client_out {
+            hub.send(peer, outs);
+        }
+        hub.advance();
+    }
+
+    // The seven never-dropped players are in lockstep with their shadows.
+    for &p in &ps {
+        if p.0 == DROPPED {
+            continue;
+        }
+        let c = clients[(p.0 - 1) as usize].as_ref().unwrap();
+        assert_eq!(
+            c.arena_checksum(),
+            d.shadow_checksum(p),
+            "player {} drifted from its shadow",
+            p.0
+        );
+    }
+
+    // The reconnected P3 adopted authoritative state and stayed on the canonical
+    // trajectory: zero corrections, behind the live tick, and bit-equal to a
+    // reference advanced to its (lower) tick.
+    let p3 = clients[(DROPPED - 1) as usize].as_ref().unwrap();
+    assert!(p3.started(), "P3 never reconnected");
+    assert_eq!(p3.corrections(), 0, "reconnect should need no in-sync corrections");
+
+    let p3_tick = p3.arena_tick().unwrap();
+    assert!(p3_tick > 0, "P3 made no progress after reconnect");
+    assert!(
+        p3_tick < d.server_tick(),
+        "P3 should be behind the live director tick after a mid-match rejoin"
+    );
+
+    let mut reference = sim::ArenaState::new(SEED, DROPPED);
+    for _ in 0..p3_tick {
+        sim::step(&mut reference, Input::Noop);
+    }
+    assert_eq!(
+        p3.arena_checksum().unwrap(),
+        sim::checksum(&reference),
+        "reconnected P3 is not on the canonical trajectory"
+    );
+}

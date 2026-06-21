@@ -44,7 +44,13 @@ pub struct Client {
     pending: BTreeMap<u32, Input>,
     corrections: u32,
     master_seed: Option<u64>,
+    /// Iteration of the last `Join` sent, to rate-limit retries so we don't
+    /// trigger redundant snapshots while one is already in flight.
+    last_join_iter: Option<u32>,
 }
+
+/// Resend `Join` at most this often (in iterations) while awaiting state.
+const JOIN_RETRY_TICKS: u32 = 30;
 
 impl Client {
     /// An INITIAL client (joins at match start via the `MatchStart` broadcast).
@@ -70,6 +76,7 @@ impl Client {
             pending: BTreeMap::new(),
             corrections: 0,
             master_seed: None,
+            last_join_iter: None,
         }
     }
 
@@ -110,14 +117,23 @@ impl Client {
                         } else {
                             // IN-SYNC CORRECTION: fast-forward the authoritative
                             // state up to our current (pre-step) arena tick.
-                            let target = self.arena.as_ref().unwrap().tick;
+                            let current = self.arena.as_ref().unwrap();
+                            let target = current.tick;
+                            let before = sim::checksum(current);
                             let mut a = restored;
                             while a.tick < target {
                                 let action = self.schedule.take(a.tick);
                                 sim::step(&mut a, action);
                             }
+                            // Only count a correction that actually changed state.
+                            // A redundant snapshot (e.g. a second reply to a
+                            // duplicate Join) fast-forwards to the same state and
+                            // is a harmless no-op, not a real divergence fix.
+                            let changed = sim::checksum(&a) != before;
                             self.arena = Some(a);
-                            self.corrections += 1;
+                            if changed {
+                                self.corrections += 1;
+                            }
                         }
                     }
                 }
@@ -138,13 +154,21 @@ impl Client {
             }
         }
 
-        // 3. Reconnecting clients ask for state until they have an arena.
+        // 3. Reconnecting clients ask for state until they have an arena,
+        //    rate-limited so we don't draw redundant snapshots while one is in
+        //    flight (a second, later snapshot would shove a behind-client forward).
         if self.seek_join && self.arena.is_none() {
-            out.push(Outbound {
-                to: DIRECTOR,
-                channel: Channel::Control,
-                bytes: wire::encode(&Msg::Join { content_hash: self.content_hash }),
-            });
+            let due = self
+                .last_join_iter
+                .map_or(true, |last| self.iter - last >= JOIN_RETRY_TICKS);
+            if due {
+                out.push(Outbound {
+                    to: DIRECTOR,
+                    channel: Channel::Control,
+                    bytes: wire::encode(&Msg::Join { content_hash: self.content_hash }),
+                });
+                self.last_join_iter = Some(self.iter);
+            }
         }
 
         // 4. Emit the player's desired action (applies later, on ack).
