@@ -1,0 +1,3 @@
+# Transient per-agent git worktrees (subagent isolation). Never commit these —
+# they are throwaway workspaces created/removed by the agent harness.
+.claude/worktrees/
