@@ -212,6 +212,15 @@ pub struct Modifiers {
     pub mul_global: Fixed,
     /// Additive % attack speed (reduces effective weapon cooldown).
     pub attack_speed: Fixed,
+    /// Additive % bonus damage dealt to **stunned** enemies (target-conditional,
+    /// resolved at impact; starts `ZERO`).
+    pub vs_stunned: Fixed,
+    /// Additive % bonus damage dealt to **poisoned** enemies (starts `ZERO`).
+    pub vs_poisoned: Fixed,
+    /// Multiplier on applied Poison DoT magnitude (starts at `ONE`).
+    pub poison_dmg_mult: Fixed,
+    /// Multiplier on applied Stun duration (starts at `ONE`).
+    pub stun_dur_mult: Fixed,
 }
 
 /// The per-round shop. M0 offers weapons only.

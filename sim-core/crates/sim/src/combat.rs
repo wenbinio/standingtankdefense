@@ -8,14 +8,43 @@ use crate::ids::EntityId;
 use crate::state::*;
 use determinism::Fixed;
 
+/// Player's target-conditional damage bonuses, captured once per tick (they don't
+/// change mid-tick) and applied at impact against each enemy's live status.
+#[derive(Clone, Copy)]
+struct CondDamage {
+    vs_stunned: Fixed,
+    vs_poisoned: Fixed,
+}
+
+impl CondDamage {
+    fn of(s: &ArenaState) -> CondDamage {
+        CondDamage {
+            vs_stunned: s.modifiers.vs_stunned,
+            vs_poisoned: s.modifiers.vs_poisoned,
+        }
+    }
+    /// Multiplier for this enemy: `1 + Σ matching conditional bonuses`.
+    fn mult(&self, e: &Enemy) -> Fixed {
+        let mut m = Fixed::ONE;
+        if e.status.stun_ticks > 0 {
+            m += self.vs_stunned;
+        }
+        if e.status.poison_ticks > 0 {
+            m += self.vs_poisoned;
+        }
+        m
+    }
+}
+
 /// Apply one weapon hit to an enemy: `base × armor-matrix × modifier-stack ×
-/// fire-vulnerability` damage, then the weapon's on-hit status. Bosses are
-/// immune to weapon fire — only `Clear` damages them.
+/// fire-vulnerability × target-conditional` damage, then the weapon's on-hit
+/// status. Bosses are immune to weapon fire — only `Clear` damages them.
 fn apply_weapon_hit(
     e: &mut Enemy,
     base: i64,
     damage_type: u8,
     mod_mult: Fixed,
+    cond: CondDamage,
     on_hit: &content::StatusOnHit,
 ) {
     let edef = &content::ENEMIES[e.def as usize];
@@ -24,7 +53,7 @@ fn apply_weapon_hit(
     }
     let armor = content::damage_multiplier(damage_type, edef.armor_class);
     let vuln = crate::status::vulnerability_mult(e);
-    e.hp -= armor.mul(mod_mult).mul(vuln).scale_i64(base);
+    e.hp -= armor.mul(mod_mult).mul(vuln).mul(cond.mult(e)).scale_i64(base);
     crate::status::apply_on_hit(e, on_hit);
 }
 
@@ -40,6 +69,8 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
     // enemies are gathered in stable id order before any random pick.
     let mut new_projectiles: Vec<Projectile> = Vec::new();
     let mut any_instant_damage = false;
+    // Target-conditional bonuses are constant across this tick's fires.
+    let cond = CondDamage::of(s);
 
     for wi in 0..s.weapons.len() {
         let def = s.weapons[wi].def;
@@ -64,6 +95,9 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // instant attacks we pass it to apply_weapon_hit.
         let wmult = s.modifiers.weapon_damage_mult(&wdef);
         let baked = wmult.scale_i64(wdef.damage);
+        // Poison-damage / stun-duration scalers depend only on the player's
+        // modifiers, so (like base damage) they bake into the hit at fire time.
+        let on_hit = s.modifiers.scale_on_hit(wdef.on_hit);
         let mut new_proj = |s: &mut ArenaState, target_idx: usize, splash: Fixed| {
             let e = &s.enemies[target_idx];
             new_projectiles.push(Projectile {
@@ -75,7 +109,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 damage_type: wdef.damage_type,
                 splash_radius: splash,
                 speed: Fixed::from_int(wdef.proj_speed),
-                on_hit: wdef.on_hit,
+                on_hit,
             });
         };
 
@@ -103,7 +137,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 let r2 = Fixed::from_int(r).mul(Fixed::from_int(r));
                 for e in s.enemies.iter_mut() {
                     if s.tank.pos.dist_sq(e.pos) <= r2 {
-                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, &wdef.on_hit);
+                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit);
                     }
                 }
                 any_instant_damage = true;
@@ -114,7 +148,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 let r2 = reach.mul(reach);
                 for e in s.enemies.iter_mut() {
                     if s.tank.pos.dist_sq(e.pos) <= r2 {
-                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, &wdef.on_hit);
+                        apply_weapon_hit(e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit);
                     }
                 }
                 any_instant_damage = true;
@@ -136,7 +170,8 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                         wdef.damage,
                         wdef.damage_type,
                         wmult,
-                        &wdef.on_hit,
+                        cond,
+                        &on_hit,
                     );
                 }
                 any_instant_damage = true;
@@ -250,17 +285,19 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     // = base × armor-matrix × modifier-stack × status-vulnerability
     // (`docs/05 §5.3`). Bosses are immune to weapon fire (only `Clear` hurts
     // them), and each hit also applies the weapon's on-hit status.
+    // Conditional bonuses are evaluated live at impact against the target's status.
+    let cond = CondDamage::of(s);
     for imp in impacts {
         let mod_mult = Fixed::ONE; // weapon multiplier was baked into projectile damage at fire time
         if imp.splash_radius > Fixed::ZERO {
             let radius_sq = imp.splash_radius.mul(imp.splash_radius);
             for e in s.enemies.iter_mut() {
                 if imp.point.dist_sq(e.pos) <= radius_sq {
-                    apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, &imp.on_hit);
+                    apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit);
                 }
             }
         } else if let Some(e) = s.enemies.iter_mut().find(|e| e.id == imp.target) {
-            apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, &imp.on_hit);
+            apply_weapon_hit(e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit);
         }
     }
 
@@ -627,6 +664,49 @@ mod tests {
         advance_projectiles(&mut s);
         assert_eq!(s.enemies[0].status.poison_dps, 20, "poison applied on hit");
         assert_eq!(s.enemies[0].status.poison_ticks, 90);
+    }
+
+    #[test]
+    fn conditional_damage_only_applies_to_matching_status() {
+        // +100% damage to stunned; a stunned and an un-stunned enemy take a hit.
+        let mut s = blank_state();
+        s.modifiers.vs_stunned = Fixed::from_ratio(1, 1);
+        let cond = CondDamage::of(&s);
+        let mut plain = Enemy::new(EntityId(2), 0, 1_000_000, Vec2::ZERO);
+        let mut stunned = Enemy::new(EntityId(1), 0, 1_000_000, Vec2::ZERO);
+        stunned.status.stun_ticks = 10;
+        // Piercing vs armor 0 = 2× matrix; base 100 ⇒ plain takes 200.
+        apply_weapon_hit(&mut plain, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE);
+        apply_weapon_hit(&mut stunned, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE);
+        assert_eq!(1_000_000 - plain.hp, 200, "no conditional bonus on un-stunned");
+        assert_eq!(1_000_000 - stunned.hp, 400, "+100% vs stunned doubles it");
+    }
+
+    #[test]
+    fn poison_damage_modifier_scales_applied_dot() {
+        // +50% Poison damage bakes into the on-hit poison the Poison Bow applies.
+        let mut s = blank_state();
+        s.weapons.clear();
+        s.modifiers.poison_dmg_mult = Fixed::ONE + Fixed::from_ratio(1, 2); // ×1.5
+        let pos = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
+        mk_enemy(&mut s, 0, 200, pos);
+        give_weapon(&mut s, 3); // Poison Bow: poison_dps 20
+        fire_weapons(&mut s);
+        assert_eq!(s.projectiles.len(), 1);
+        assert_eq!(s.projectiles[0].on_hit.poison_dps, 30, "20 × 1.5 baked at fire time");
+    }
+
+    #[test]
+    fn stun_duration_modifier_scales_applied_stun() {
+        // A weapon with stun on-hit gets its stun extended by the modifier.
+        let mut s = blank_state();
+        s.modifiers.stun_dur_mult = Fixed::from_int(2); // ×2
+        let on_hit = content::StatusOnHit { stun_ticks: 30, ..content::StatusOnHit::NONE };
+        let scaled = s.modifiers.scale_on_hit(on_hit);
+        assert_eq!(scaled.stun_ticks, 60);
+        // Identity multiplier leaves it untouched.
+        let s2 = blank_state();
+        assert_eq!(s2.modifiers.scale_on_hit(on_hit).stun_ticks, 30);
     }
 
     #[test]

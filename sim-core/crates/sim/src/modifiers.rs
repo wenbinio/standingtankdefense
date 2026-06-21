@@ -37,6 +37,10 @@ impl Modifiers {
             add_by_scope: [Fixed::ZERO; content::NUM_SCOPES],
             mul_global: Fixed::ONE,
             attack_speed: Fixed::ZERO,
+            vs_stunned: Fixed::ZERO,
+            vs_poisoned: Fixed::ZERO,
+            poison_dmg_mult: Fixed::ONE,
+            stun_dur_mult: Fixed::ONE,
         }
     }
 
@@ -49,6 +53,20 @@ impl Modifiers {
         add += self.add_by_scope[content::range_scope_id(w.range) as usize];
         add += self.add_by_scope[content::rarity_scope_id(w.rarity) as usize];
         (Fixed::ONE + add).mul(self.mul_global)
+    }
+
+    /// Scale a weapon's on-hit status by the player's flavor modifiers
+    /// (Poison-damage % and Stun-duration %). Depends only on the modifiers, so
+    /// it bakes into the hit at fire time (like base damage). Frost/Fire stacks
+    /// are unaffected here.
+    pub fn scale_on_hit(&self, mut on_hit: content::StatusOnHit) -> content::StatusOnHit {
+        if on_hit.poison_dps > 0 && self.poison_dmg_mult != Fixed::ONE {
+            on_hit.poison_dps = self.poison_dmg_mult.scale_i64(on_hit.poison_dps);
+        }
+        if on_hit.stun_ticks > 0 && self.stun_dur_mult != Fixed::ONE {
+            on_hit.stun_ticks = self.stun_dur_mult.scale_i64(on_hit.stun_ticks as i64) as u32;
+        }
+        on_hit
     }
 
     /// Fold a purchased modifier in (applies its base `effect`).
@@ -99,6 +117,10 @@ impl Modifiers {
                 economy.bounty_proc_chance_pct += c;
                 economy.bounty_proc_bonus += Fixed::from_ratio(b, 100);
             }
+            ModEffect::DamageVsStunnedPct(n, d) => self.vs_stunned += Fixed::from_ratio(n, d),
+            ModEffect::DamageVsPoisonedPct(n, d) => self.vs_poisoned += Fixed::from_ratio(n, d),
+            ModEffect::PoisonDamagePct(n, d) => self.poison_dmg_mult += Fixed::from_ratio(n, d),
+            ModEffect::StunDurationPct(n, d) => self.stun_dur_mult += Fixed::from_ratio(n, d),
             // Registered as per-arena trigger state in `buy_modifier`; no aggregate.
             ModEffect::GrantVulnPulse(..) => {}
         }

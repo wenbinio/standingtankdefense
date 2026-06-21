@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 9;
+pub const SNAPSHOT_VERSION: u32 = 10;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -236,6 +236,10 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     }
     w.fixed(s.modifiers.mul_global);
     w.fixed(s.modifiers.attack_speed);
+    w.fixed(s.modifiers.vs_stunned);
+    w.fixed(s.modifiers.vs_poisoned);
+    w.fixed(s.modifiers.poison_dmg_mult);
+    w.fixed(s.modifiers.stun_dur_mult);
 
     // active ramps
     w.len(s.ramps.len());
@@ -395,6 +399,10 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         add_by_scope,
         mul_global: r.fixed()?,
         attack_speed: r.fixed()?,
+        vs_stunned: r.fixed()?,
+        vs_poisoned: r.fixed()?,
+        poison_dmg_mult: r.fixed()?,
+        stun_dur_mult: r.fixed()?,
     };
 
     let mut ramps = Vec::new();

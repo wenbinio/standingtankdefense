@@ -133,6 +133,14 @@ pub enum ModEffect {
     /// Chance-based bonus bounty: `(chance_pct, bonus_pct)` — with `chance_pct%`
     /// probability per kill, pay an extra `bonus_pct%` of the base bounty.
     BountyProc(i64, i64),
+    /// +% bonus damage dealt to **stunned** enemies (target-conditional, at impact).
+    DamageVsStunnedPct(i64, i64),
+    /// +% bonus damage dealt to **poisoned** enemies (target-conditional, at impact).
+    DamageVsPoisonedPct(i64, i64),
+    /// +% applied Poison DoT magnitude (the source's "+% Poison damage").
+    PoisonDamagePct(i64, i64),
+    /// +% applied Stun duration (the source's "+% Stun Duration").
+    StunDurationPct(i64, i64),
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
@@ -187,6 +195,10 @@ impl ModEffect {
             ModEffect::IncomePct(n, d) => (17, n, d, 0),
             ModEffect::IncomeRegenPct(n, d) => (18, n, d, 0),
             ModEffect::BountyProc(c, b) => (19, c, b, 0),
+            ModEffect::DamageVsStunnedPct(n, d) => (20, n, d, 0),
+            ModEffect::DamageVsPoisonedPct(n, d) => (21, n, d, 0),
+            ModEffect::PoisonDamagePct(n, d) => (22, n, d, 0),
+            ModEffect::StunDurationPct(n, d) => (23, n, d, 0),
         }
     }
     /// Inverse of [`words`](Self::words).
@@ -212,6 +224,10 @@ impl ModEffect {
             17 => ModEffect::IncomePct(a, b),
             18 => ModEffect::IncomeRegenPct(a, b),
             19 => ModEffect::BountyProc(a, b),
+            20 => ModEffect::DamageVsStunnedPct(a, b),
+            21 => ModEffect::DamageVsPoisonedPct(a, b),
+            22 => ModEffect::PoisonDamagePct(a, b),
+            23 => ModEffect::StunDurationPct(a, b),
             _ => return None,
         })
     }
@@ -288,6 +304,12 @@ pub static MODIFIERS: &[ModifierDef] = &[
     ModifierDef { name: "+25% Short-Range Damage (300/600)", rarity: 1, cost: 1500, effect: ModEffect::DamageScopePct(6, 25, 100), ramp: None },
     ModifierDef { name: "+25% Long-Range Damage (900/1200)", rarity: 1, cost: 1500, effect: ModEffect::DamageScopePct(7, 25, 100), ramp: None },
     ModifierDef { name: "+100% Common Weapon Damage", rarity: 1, cost: 1500, effect: ModEffect::DamageScopePct(8, 100, 100), ramp: None },
+    // Status-conditional & flavor damage (`docs/06` #4): bonus damage vs enemies
+    // in a status, and scalers on the statuses the tank applies.
+    ModifierDef { name: "+20% Damage to Stunned", rarity: 1, cost: 1500, effect: ModEffect::DamageVsStunnedPct(20, 100), ramp: None },
+    ModifierDef { name: "+25% Damage to Poisoned", rarity: 1, cost: 1500, effect: ModEffect::DamageVsPoisonedPct(25, 100), ramp: None },
+    ModifierDef { name: "+10% Poison Damage", rarity: 0, cost: 500, effect: ModEffect::PoisonDamagePct(10, 100), ramp: None },
+    ModifierDef { name: "+50% Stun Duration", rarity: 1, cost: 1500, effect: ModEffect::StunDurationPct(50, 100), ramp: None },
     // Spikes (`docs/06`): retaliation damage to nearby enemies when the tank is hit.
     ModifierDef { name: "+80 Spikes Damage", rarity: 0, cost: 500, effect: ModEffect::SpikesFlat(80), ramp: None },
     ModifierDef { name: "+300 Spikes Damage", rarity: 1, cost: 1500, effect: ModEffect::SpikesFlat(300), ramp: None },
