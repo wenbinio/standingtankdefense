@@ -1,560 +1,207 @@
-//! Flavor + tip text for every weapon and modifier, keyed by catalog index.
-//!
-//! Pure data, render/UI-facing only — never feeds the checksum. Mirrors the
-//! `&'static str` idiom used for names in [`crate::content`]. The arrays are
-//! sized 1:1 with `content::WEAPONS` / `content::MODIFIERS`; a length test below
-//! fails loudly if a catalog entry is added without text.
+//! Flavor + mechanical tips for every weapon and modifier, keyed by catalog
+//! index. Lore-written (the Pale Wardens, the Ninth Foundry, the Conclave, the
+//! fall of Ashmark). Surfaced as shop tooltips; never touches the sim.
+use crate::content;
 
-/// `(flavor, tip)` for weapon index `i`. Out of range → `("", "")`.
+/// `(flavor, tip)` for weapon index `i`; `("", "")` out of range.
 pub fn weapon_text(i: u16) -> (&'static str, &'static str) {
     WEAPON_TEXT.get(i as usize).copied().unwrap_or(("", ""))
 }
 
-/// `(flavor, tip)` for modifier index `i`. Out of range → `("", "")`.
+/// `(flavor, tip)` for modifier index `i`; `("", "")` out of range.
 pub fn modifier_text(i: u16) -> (&'static str, &'static str) {
     MODIFIER_TEXT.get(i as usize).copied().unwrap_or(("", ""))
 }
 
-/// Indexed 1:1 with [`content::WEAPONS`].
 const WEAPON_TEXT: [(&str, &str); 86] = [
-    // 0 — Bow (piercing, single target, starter)
-    ("Wood, gut, and spite. It outlived the man who carved it, and it'll outlive you.",
-     "Single-target piercing. Cheap, honest, ruthless."),
-    // 1 — Mortar Launcher (siege splash)
-    ("It doesn't hate the crowd. It just doesn't see the difference between them.",
-     "Lobbed siege splash. Wide blast, slow reload."),
-    // 2 — Frost Bow (magic, frost stacks)
-    ("Cold doesn't kill. It just holds them still while everything else does.",
-     "Fast magic shots. Stacks frost; slows."),
-    // 3 — Poison Bow (piercing, poison DoT)
-    ("The arrow's an afterthought. The rot is the whole point.",
-     "Weak hit, heavy poison bleed-out."),
-    // 4 — Flamecaster (chaos splash, fire stacks)
-    ("Light one, light the row. They cook on the way to dying.",
-     "Chaos splash. Stacks fire; cooks then bursts."),
-    // 5 — Storm Hammer (magic, stun)
-    ("One swing. The thunder gets there before the corpse hits the dirt.",
-     "Heavy magic hit. Stuns the target."),
-    // 6 — Ballista (siege barrage 4)
-    ("Aim is for people with fewer bolts.",
-     "Siege barrage. Four bolts, four bodies."),
-    // 7 — Immolation (chaos area, fire stacks)
-    ("Stand close. Let the heat come off you like a confession.",
-     "Chaos pulse around the tank. Stacks fire."),
-    // 8 — Shockwave Axe (normal wave, heavy)
-    ("The ground remembers the swing long after the screaming stops.",
-     "Sweeping wave. Big normal hit, everything near."),
-    // 9 — Moon Glaive (piercing bounce 4)
-    ("Throw it once. It does the rest of the math itself.",
-     "Piercing bounce. Chains to four enemies."),
-    // 10 — Death Engine (chaos single, self-scaling generator)
-    ("It doesn't aim. It doesn't tire. It doesn't ask whose side you're on.",
-     "Chaos single-target. Scales with each one owned."),
-    // 11 — Magic Missile (normal single)
-    ("The first spell anyone learns, and the last thing plenty of things see.",
-     "Plain magical bolt. One target, normal damage."),
-    // 12 — Boulder (siege single)
-    ("Gravity, with extra steps.",
-     "Single-target siege. A rock, thrown angry."),
-    // 13 — Magic Bolt (magic single)
-    ("No fire, no frost. Just a clean hole where the magic went in.",
-     "Single-target magic. Plain and quick."),
-    // 14 — Chaos Orb (chaos single)
-    ("Whatever it's made of, it wasn't meant to leave the vault.",
-     "Single-target chaos. Ignores armor types."),
-    // 15 — Throwing Axes (piercing bounce 4, short, fast)
-    ("Up close, all the time. They land before you finish exhaling.",
-     "Short-range piercing bounce. Fast, four hops."),
-    // 16 — Chaos Skulls (chaos bounce 4)
-    ("They remember whose head they were. They don't care anymore.",
-     "Chaos bounce. Skips between four bodies."),
-    // 17 — Chaos Heart (chaos wave, heal exotic)
-    ("It beats for nobody, and it beats anyway.",
-     "Heavy chaos wave. Slow, vampiric upkeep."),
-    // 18 — Missile Barrage (piercing barrage 8, epic, stun)
-    ("Eight at once. The sky decides this isn't your day.",
-     "Epic piercing barrage. Eight hits, all stun."),
-    // 19 — Seeker Axe (piercing bounce 4, long)
-    ("It finds them. It always finds them. That's the whole feature.",
-     "Long-range piercing bounce. Chains four."),
-    // 20 — Steam Cannon (siege splash, short, stun)
-    ("Pressure builds. Pressure is released. Someone is in the way of the release.",
-     "Short siege splash. Brief stun on hit."),
-    // 21 — Demon Eye (chaos single, heavy)
-    ("It watches. It picks. The picking is fatal.",
-     "Heavy chaos single-target. Pure punch."),
-    // 22 — Impaler (piercing single, fast, stun)
-    ("In, through, and out the back. They're upright out of habit.",
-     "Fast piercing single-target. Short stun."),
-    // 23 — Chaos Swarm (chaos splash, long)
-    ("A cloud of small wrong things, and then quiet.",
-     "Long-range chaos splash. Spreads on impact."),
-    // 24 — Catapult (siege single, short)
-    ("It's a rock, and you're a problem. The math is simple.",
-     "Short-range siege single-target. Heavy stone."),
-    // 25 — Wind Spear (piercing single, epic, knockback)
-    ("The air sharpens, picks a throat, and is gone.",
-     "Epic piercing single-target. Enormous hit."),
-    // 26 — Crippler (piercing single, rare, permanent)
-    ("It doesn't kill the leg. It just ends the leg's career.",
-     "Heavy piercing single-target. Lasting wound."),
-    // 27 — Lifeleecher (normal single, long, heal)
-    ("Every drop it takes, it takes from the wrong end.",
-     "Long-range normal single-target. Feeds you."),
-    // 28 — Spell Glaive (magic bounce 4)
-    ("Sharpened thought. It cuts on the way out and on the way back.",
-     "Magic bounce. Carves through four."),
-    // 29 — Glaive Thrower (normal bounce 4)
-    ("No magic, no excuses. Just steel that won't sit still.",
-     "Normal bounce. Four ricochets, no frills."),
-    // 30 — Spikewheel Launcher (siege bounce 8, long)
-    ("It rolls. It does not stop rolling. Ask the eight behind you.",
-     "Long siege bounce. Mows through eight."),
-    // 31 — Meatapult (normal splash, stun)
-    ("Whatever it was, it's ammunition now. Show some respect, or don't.",
-     "Normal splash. Heavy impact, brief stun."),
-    // 32 — Arcane Blaster (magic single, stun)
-    ("Point. Discharge. The smell lingers; the target doesn't.",
-     "Magic single-target. Stuns on hit."),
-    // 33 — Quills (piercing single, light poison)
-    ("Each one's a little gift that keeps on taking.",
-     "Piercing single-target. Light poison bleed."),
-    // 34 — Living Spittle (magic single, light poison)
-    ("It's still alive when it lands. Briefly. So is the target.",
-     "Magic single-target. Trickling poison."),
-    // 35 — Poison Bomb (siege splash, poison)
-    ("The blast is the polite part.",
-     "Siege splash. Poisons the whole crater."),
-    // 36 — Serpent (normal single, heavy poison)
-    ("It bites once. Once is the appointment; the rest is the wait.",
-     "Normal single-target. Strong poison bleed."),
-    // 37 — Overloaded Catapult (siege splash, rare)
-    ("They told it the safe load. It laughed in stone.",
-     "Heavy siege splash. Bigger rock, bigger hole."),
-    // 38 — Chaos Claw (chaos single, stun)
-    ("Reaches out of nowhere, takes something that mattered.",
-     "Chaos single-target. Stuns on hit."),
-    // 39 — Net Thrower (normal single, fast, stun)
-    ("Can't run if you're already on the floor counting threads.",
-     "Fast normal single-target. Tangling stun."),
-    // 40 — Thornburst (piercing area, big radius)
-    ("The garden's gone feral. Mind the garden.",
-     "Wide piercing area pulse. Hits all near."),
-    // 41 — Chaotic Spirit (magic bounce 8, epic)
-    ("It died once already and took the lesson badly.",
-     "Epic magic bounce. Wails through eight."),
-    // 42 — Energy Pulse (magic wave, stun)
-    ("A clean white nothing, and then a list of names.",
-     "Magic wave. Sweeps wide, stuns."),
-    // 43 — Cluster Rockets (chaos barrage 12, long)
-    ("Twelve apologies, none of them sincere.",
-     "Long chaos barrage. Twelve warheads out."),
-    // 44 — Frost Bomb (piercing splash, fast, frost)
-    ("Shatters warm. Lands cold. Leaves them slow.",
-     "Fast piercing splash. Frosts the cluster."),
-    // 45 — Bouncy Cannonball (normal bounce 4, stun)
-    ("It's having more fun than anyone it hits.",
-     "Normal bounce. Four hops, each stuns."),
-    // 46 — Soulstealer (normal bounce 4, epic, heal)
-    ("It collects. You'd call it greedy if it answered to you.",
-     "Epic normal bounce. Reaps and feeds you."),
-    // 47 — Splasher (normal splash, very fast)
-    ("Cheap, quick, and everywhere at once. Like a rumor.",
-     "Rapid normal splash. Constant small bursts."),
-    // 48 — Fire Bow (piercing barrage 4, fire)
-    ("Four arrows, four small fires, one bad afternoon.",
-     "Piercing barrage. Each shot stacks fire."),
-    // 49 — Chaos Web (chaos bounce 8, poison)
-    ("Strung between corpses. It works either way.",
-     "Chaos bounce. Eight links, leaves poison."),
-    // 50 — Magic Claw (magic bounce 4, short, mana)
-    ("Up close and personal, in the worst dialect of magic.",
-     "Short magic bounce. Chains four."),
-    // 51 — Liquid Fire Hurler (siege single, very fast, fire)
-    ("It pours. It clings. It does not negotiate.",
-     "Fast siege single-target. Stacks fire."),
-    // 52 — Boulder Toss (normal splash, short, heavy)
-    ("Old-fashioned. Devastating. Honest about it.",
-     "Short normal splash. Crushing impact."),
-    // 53 — Bloody Spikes (normal wave, epic, fast, stun)
-    ("The floor grew teeth and an opinion.",
-     "Epic normal wave. Fast, ruinous, stuns."),
-    // 54 — Inferno Stone (chaos area, epic, huge fire + stun)
-    ("Drop it once and the world handles the rest.",
-     "Epic chaos pulse. Massive fire, stuns."),
-    // 55 — Flame Generator (magic area, epic, huge fire)
-    ("It makes fire the way other things make excuses: endlessly.",
-     "Epic magic pulse. Buries them in fire stacks."),
-    // 56 — Firebreather (piercing splash, fast, fire)
-    ("Exhales. The front rank stops attending.",
-     "Fast piercing splash. Lays down fire."),
-    // 57 — Lavaspitter (siege splash, epic, long, fire)
-    ("Spits the earth's bad temper at anything that moves.",
-     "Epic long siege splash. Heavy fire stacks."),
-    // 58 — Frostbolt (piercing single, fast, frost)
-    ("A small cruelty, delivered cold and often.",
-     "Fast piercing single-target. Frosts target."),
-    // 59 — Living Ice (magic splash, frost)
-    ("It crawls before it cracks. Then it's everywhere and it's freezing.",
-     "Magic splash. Spreads frost on impact."),
-    // 60 — Ice Generator (magic area, epic, long, frost)
-    ("It just keeps making winter. Nobody asked it to stop, exactly.",
-     "Epic magic pulse. Frosts a huge radius."),
-    // 61 — Ice Spears (normal barrage 4, frost)
-    ("Four shards. Four shudders. Then the slow part.",
-     "Normal barrage. Four frosting hits."),
-    // 62 — Knives (piercing barrage 4, fast, cheap)
-    ("Cheap, plural, and unsentimental about it.",
-     "Fast piercing barrage. Four cheap blades."),
-    // 63 — Blaster (siege single, fast)
-    ("Loud, blunt, and rarely wrong.",
-     "Fast siege single-target. No tricks."),
-    // 64 — Bandit Sniper (normal single, fast, long)
-    ("Doesn't fight fair. Never claimed to.",
-     "Fast long normal single-target. Picks off."),
-    // 65 — Bombs (siege splash, short, stun)
-    ("Light, lob, look away. Manners.",
-     "Short siege splash. Concussive stun."),
-    // 66 — Death Coil (chaos single, long)
-    ("A black ribbon that finds the soft middle of things.",
-     "Long chaos single-target. Withers a target."),
-    // 67 — Chaos Skull Bomb (chaos splash, stun)
-    ("Somebody's skull, packed with worse.",
-     "Chaos splash. Bursts and stuns."),
-    // 68 — Icebreather (siege splash, frost)
-    ("Breathes out the long cold and the slow death after.",
-     "Siege splash. Frosts the blast."),
-    // 69 — Frostwave (magic wave, frost)
-    ("The cold arrives in a line, like bad news.",
-     "Magic wave. Sweeps and frosts."),
-    // 70 — Flamewave (normal wave, fire)
-    ("A wall of heat that walks toward you on purpose.",
-     "Normal wave. Sweeps, stacks heavy fire."),
-    // 71 — Chaotic Spirit Bolt (chaos single, very fast, heal)
-    ("It flickers out and takes a sliver of someone with it.",
-     "Fast chaos single-target. Sips life back."),
-    // 72 — Manabolt (magic single, very fast, long, drain)
-    ("Spends their magic against them, then spends them.",
-     "Fast long magic single-target. Drains."),
-    // 73 — Death Generator (chaos single, epic, long, raises)
-    ("It makes corpses, then makes them work.",
-     "Epic long chaos single-target. Relentless."),
-    // 74 — Immolation Aura (magic wave, very fast, fire)
-    ("Stand inside the burn. Let it be everyone else's problem.",
-     "Rapid magic wave. Constant fire near tank."),
-    // 75 — Goblin Land Mines (siege wave, epic, fast, stun)
-    ("The goblin who set them is also gone. Worth it, apparently.",
-     "Epic siege wave. Fast, brutal, stuns."),
-    // 76 — Quill Burst (piercing splash, long)
-    ("One bristling instant, then a quiet field of pincushions.",
-     "Long piercing splash. Sprays the cluster."),
-    // 77 — Arcane Burst (magic splash, long)
-    ("A clean detonation of pure intention.",
-     "Long magic splash. Blasts on impact."),
-    // 78 — Meteor Barrage (siege barrage 8, epic, very slow)
-    ("The sky pays its debts all at once.",
-     "Epic siege barrage. Eight meteors, long wait."),
-    // 79 — Ale Launcher (siege splash, fast, heal)
-    ("A round on the house. The house burns down.",
-     "Fast siege splash. Heals you on the side."),
-    // 80 — Chaos Bolt (chaos single, very fast, long)
-    ("Fast, mean, and unbothered by your armor.",
-     "Fast long chaos single-target. Ignores armor."),
-    // 81 — Rotating Orb of Lightning (magic area, huge radius)
-    ("It circles. Standing near it is a personal decision.",
-     "Huge magic pulse. Shocks everything around."),
-    // 82 — Lightning Generator (magic single, long, mana)
-    ("It hums. Things near it stop humming.",
-     "Long magic single-target. Steady arc."),
-    // 83 — Flame Nova (chaos area, fire)
-    ("Blooms outward, all heat and no mercy.",
-     "Chaos pulse. Erupts fire around the tank."),
-    // 84 — Shocker (siege area, very fast, long, stun)
-    ("Tap, tap, tap. Nobody gets to move between the taps.",
-     "Rapid long siege pulse. Chronic stun-lock."),
-    // 85 — Entangler (normal single, epic, very fast, root)
-    ("Roots them where they stand and keeps them company.",
-     "Fast epic normal single-target. Pins down."),
+    ("Warden issue, third pattern; the stock is notched once for every gunner the Pale Wardens lost holding this same dirt.", "Single-target piercing. The first thing they hand you, and often the last."),  // 0
+    ("Ninth Foundry overrun, its sights still ground for a wall that no longer stands at Ashmark.", "Lobbed siege splash. Wide blast, slow to reseat."),  // 1
+    ("The cold it throws is the same cold that took Ashmark in one night; the Hexwrights only learned to aim it afterward.", "Fast single-target magic. Stacks frost toward the freeze."),  // 2
+    ("Greycoat field-rations went bad in the same crates that carried these tips, and the quartermaster shipped both anyway.", "Single-target piercing. Light hit, heavy poison rot."),  // 3
+    ("Foundry-work turned outward; the men who pour the cannon learned long ago that fire spreads down a packed column.", "Short-range chaos splash. Stacks fire that cooks, then bursts on death."),  // 4
+    ("The Hexwrights bound a storm into the head and never told the Wardens how to put it down.", "Heavy single-target magic. Long stun on the target."),  // 5
+    ("Stamped at the Ninth Foundry, four-bolt pattern, built for a frontier that needed walls cleared faster than it had men.", "Long-range siege barrage. Four bolts to four targets."),  // 6
+    ("Wardens who stood too long beside a failing reactor learned to wear the burn; this makes a weapon of it.", "Chaos area pulse around the tank. Stacks fire on everything near."),  // 7
+    ("Salvaged off the Ashmark sappers, who swung once and let the ground carry the rest of the argument.", "Point-blank normal wave. Big sweeping hit, nothing applied."),  // 8
+    ("A Hexwright trinket that does its own targeting; the Conclave swears it was never meant to leave the vault.", "Single-target piercing chain. Bounces to four enemies."),  // 9
+    ("The Foundry built one and then could not stop building it; each copy makes the next cheaper to feed.", "Single-target chaos. Damage compounds per Death Engine owned."),  // 10
+    ("First rite the Conclave teaches its apprentices, and the last thing a great many things ever saw.", "Single-target magic. Plain bolt, no status."),  // 11
+    ("A rock the Greycoats no longer had to carry, thrown at a problem they no longer had to name.", "Single-target siege. Heavy stone, no status."),  // 12
+    ("Conclave-cut and clean, with none of the frost or fire the Hexwrights add when they want to be remembered.", "Single-target magic. Quick, plain hit."),  // 13
+    ("Whatever the Conclave sealed in here predates the war, and it leaves armor unconvinced.", "Single-target chaos. Ignores armor type."),  // 14
+    ("Greycoat sidearms, three to a belt, meant for the work that happens after the line already broke.", "Short-range piercing chain. Fast, bounces to three."),  // 15
+    ("The Conclave renders down the heads of its own dead and stuffs them with worse; they remember whose they were.", "Chaos chain. Bounces between three bodies."),  // 16
+    ("An exotic the Hexwrights keep beating long after its owner stopped; it pays its upkeep in someone else's life.", "Heavy point-blank chaos wave. Slow, vampiric on the base item."),  // 17
+    ("Eight tubes off the Ashmark batteries, recovered from a position that fired this volley once and was overrun anyway.", "Epic long-range piercing barrage. Eight bolts, each stuns."),  // 18
+    ("A Warden glaive cut to find its mark across the open ground command never reinforced.", "Long-range piercing chain. Bounces to three."),  // 19
+    ("Ninth Foundry pressure-rig, the kind that scalds the loader as readily as the target.", "Short-range siege splash. Brief stun on hit."),  // 20
+    ("The Conclave does not say where this eye came from, only that it chooses, and the choosing is final.", "Heavy single-target chaos. Pure punch, no status."),  // 21
+    ("Warden spearwork, made for the press at the wire where there is no room to miss.", "Fast single-target piercing. Short stun."),  // 22
+    ("A Hexwright cloud of small wrong things, loosed long over the Ashmark dead and quiet after.", "Long-range chaos splash. Spreads on impact."),  // 23
+    ("Foundry stonework, short-ranged and unsubtle, built for a line that had run out of subtler answers.", "Short-range siege single-target. Heavy stone."),  // 24
+    ("The Conclave sharpened the air itself, and command logged the cost only in throats.", "Epic single-target piercing. Enormous hit, no status."),  // 25
+    ("The Greycoats took to calling this one mercy and kept walking; whatever it touches stops being a leg.", "Heavy single-target piercing. Lasting wound on the base item."),  // 26
+    ("A Warden exotic that takes from the wrong end of the wound and gives it back to the gunner.", "Long-range normal single-target. Feeds you on the base item."),  // 27
+    ("Conclave-honed thought given an edge, cutting outbound and again on the return.", "Magic chain. Carves through four."),  // 28
+    ("No Hexwright trick on this one, just Foundry steel that refuses to lie where it lands.", "Normal chain. Bounces to three."),  // 29
+    ("Spikewheel off the Ashmark works, set rolling once and never minded the men behind it.", "Long-range siege chain. Bounces through six."),  // 30
+    ("Whatever the Greycoats could not bury, they loaded; the ledger lists it as ammunition.", "Normal splash. Heavy impact, brief stun."),  // 31
+    ("Conclave hardware that discharges clean and leaves the smell on the air longer than the target.", "Single-target magic. Stuns on hit."),  // 32
+    ("Barbs the Greycoats scavenged off something the Conclave should have burned, each one a small lasting debt.", "Single-target piercing. Light poison rot."),  // 33
+    ("A Hexwright thing that lands still living, briefly, and leaves the target the same way.", "Single-target magic. Trickling poison."),  // 34
+    ("Foundry shell packed over a Greycoat sickness, so the crater goes on killing after the blast is done.", "Siege splash. Poisons the whole crater."),  // 35
+    ("One bite, by a thing the Conclave bred and refuses to account for; the rest is only the waiting.", "Single-target normal. Strong poison rot."),  // 36
+    ("They told it the safe load at the Ninth Foundry, and the catapult overruled them in stone.", "Heavy siege splash. Bigger rock, bigger hole."),  // 37
+    ("A Conclave reach out of nowhere that closes on whatever the gunner could least spare.", "Single-target chaos. Stuns on hit."),  // 38
+    ("Greycoat netting, weighted and thrown, because a thing on the floor counting threads is a thing not at the wire.", "Fast long-range normal single-target. Tangling stun."),  // 39
+    ("The Hexwrights seeded this ground and walked away; what grew has its own opinion about trespass.", "Wide piercing area pulse. Hits everything near."),  // 40
+    ("A Conclave spirit that died once already and took the lesson badly, loosed to chain through a column.", "Epic magic chain. Wails through eight."),  // 41
+    ("A Hexwright reactor's exhale, a clean white nothing the Wardens learned to point downrange.", "Point-blank magic wave. Sweeps wide, stuns."),  // 42
+    ("A full rack of Ninth Foundry warheads, every casing serial-stamped and none of them aimed at anyone in particular.", "Long chaos barrage. Twelve warheads to scattered targets, no status."),  // 43
+    ("The Hexwrights bottled the night Ashmark froze and packed it behind a fuse.", "Fast piercing splash. Stacks frost on the cluster."),  // 44
+    ("A Foundry reject that never machined round, so the Greycoats let it loose to crack heads instead.", "Normal bounce. Four hops, each stuns."),  // 45
+    ("The Pale Wardens cut this from the field after the Relief failed to come, and it has been hungry since.", "Epic normal bounce. Chains four; feeds the tank."),  // 46
+    ("Foundry-town surplus by the crateload, cheap enough that the quartermaster stopped counting them.", "Fast normal splash. Rapid small bursts, no status."),  // 47
+    ("Warden arrows wrapped in Foundry pitch, lit one rank at a time the way the line always burns.", "Piercing barrage. Four shots, each stacks fire."),  // 48
+    ("The Conclave strung this between the Ashmark dead and called the rot it leaves a side effect.", "Chaos bounce. Six links; leaves poison."),  // 49
+    ("Hexwright work meant for close quarters, borrowing more power than the gunner can hold.", "Short magic bounce. Chains four."),  // 50
+    ("Ladled straight from a Ninth Foundry crucible and slung before it cools.", "Fast siege single-target. Stacks fire."),  // 51
+    ("Catapult ammunition the Greycoats stripped from Ashmark's broken walls and lobbed back.", "Short normal splash. Crushing impact, no status."),  // 52
+    ("The Wardens worked these into the dirt of the last yard the night before they were overrun.", "Epic normal wave. Heavy sweep; stuns."),  // 53
+    ("A Hexwright relic the Conclave refused to log, kept for the day the line could not be held by lesser means.", "Epic chaos pulse. Massive fire stacks; stuns."),  // 54
+    ("The Ninth Foundry never meant for one furnace to feed a whole field, but the war stopped asking.", "Epic magic pulse. Buries a pack in fire stacks."),  // 55
+    ("Standard Foundry issue for the front rank, where the line meets the dark and rarely holds.", "Fast piercing splash. Stacks fire."),  // 56
+    ("The Foundry-towns tap the deep crucibles for this, and what it spits keeps burning long after Ashmark's example.", "Epic long siege splash. Heavy fire stacks."),  // 57
+    ("A single sliver of the cold that took Ashmark, fired again and again until something stops.", "Fast piercing single-target. Stacks frost."),  // 58
+    ("Conclave frost that does not wait to be aimed; it spreads the way the Ashmark winter spread.", "Magic splash. Spreads frost on impact."),  // 59
+    ("The Hexwrights bound a piece of that killing winter to a frame and could never make it stop.", "Epic magic pulse. Frosts a huge radius toward freeze."),  // 60
+    ("Ashmark-cold shards racked by the Greycoats, four to a volley, ledgered by the dozen.", "Normal barrage. Four hits, each stacks frost."),  // 61
+    ("The first thing the quartermaster hands a green Greycoat, and the cheapest line in the ledger.", "Fast piercing barrage. Three blades, no status."),  // 62
+    ("Blunt Foundry overrun, loud and serial-stamped, sold by weight to the Wardens.", "Fast siege single-target. No status."),  // 63
+    ("A Greycoat deserter's rifle, recovered from Ashmark with the scope still sighted on a fleeing back.", "Fast long normal single-target. No status."),  // 64
+    ("Ninth Foundry charges that the Greycoats lob underhand and never look back at.", "Short siege splash. Brief stun."),  // 65
+    ("Conclave craft for the soft middle of things, the kind of work the Hexwrights deny doing.", "Long chaos single-target. No status."),  // 66
+    ("Somebody's skull, packed by the Greycoats with worse and stamped for the line.", "Chaos splash. Bursts and stuns."),  // 67
+    ("Foundry casings charged with Ashmark's leftover cold, breathed out across the crater.", "Siege splash. Frosts the blast."),  // 68
+    ("The Conclave sends the cold out in a line now, the way the news of Ashmark traveled the front.", "Magic wave. Sweeps and frosts."),  // 69
+    ("A wall of Foundry-fire walked forward across the dirt, the way the line is supposed to and no longer can.", "Normal wave. Sweeps; heavy fire stacks."),  // 70
+    ("A Hexwright spark that flickers out and carries a sliver of the gunner back with each kill.", "Fast chaos single-target. Heals the tank."),  // 71
+    ("The Conclave taught it to drink an enemy's borrowed power before it spends the enemy.", "Fast long magic single-target. No status."),  // 72
+    ("The Hexwrights built it to make corpses out of the Ashmark dead and then make them march.", "Epic long chaos single-target. No status."),  // 73
+    ("Warden field-rig that wraps the tank in Foundry heat and makes the burn everyone else's problem.", "Rapid magic wave. Constant fire near the tank."),  // 74
+    ("Some goblin sapper salted the last yard for the Greycoats and went up with the first rank.", "Epic siege wave. Fast, brutal; stuns."),  // 75
+    ("A Warden quill-rig recovered off Ashmark, sprung once across a whole closing cluster.", "Long piercing splash. Sprays the cluster, no status."),  // 76
+    ("Pure Conclave intention let off all at once, the kind of borrowing the Hexwrights regret in the morning.", "Long magic splash. Detonates on impact."),  // 77
+    ("The sky pays the Ninth Foundry's debts all at once, then makes the line wait a long time for the next installment.", "Epic siege barrage. Eight meteors; long reload."),  // 78
+    ("A keg the Greycoats meant for after the Relief came, lit and thrown instead.", "Fast siege splash. Heals the tank."),  // 79
+    ("Quick mean Conclave work that goes through armor like it was never logged.", "Fast long chaos single-target. Ignores armor types."),  // 80
+    ("Hexwright lightning bound to circle the tank, and standing near it is the gunner's own decision.", "Wide magic pulse. Shocks everything around."),  // 81
+    ("The Conclave wired this to hum off the enemy's own borrowed mana, and things near it stop humming.", "Long magic single-target. No status."),  // 82
+    ("Foundry-fire let off in a bloom, the way the front rank goes when the line finally breaks.", "Chaos pulse. Erupts fire around the tank."),  // 83
+    ("A Ninth Foundry coil that taps fast enough to leave no gap between the taps.", "Rapid long siege pulse. Near-constant stun-lock."),  // 84
+    ("The last rite the Pale Wardens kept for what's coming: it pins a thing where it stands and waits beside it.", "Fast epic normal single-target. Roots the target in place."),  // 85
 ];
 
-/// Indexed 1:1 with [`content::MODIFIERS`].
 const MODIFIER_TEXT: [(&str, &str); 84] = [
-    // 0 — +10% Damage (global)
-    ("Hit harder. There's no second lesson.",
-     "+10% to all weapon damage."),
-    // 1 — +10% Piercing Damage
-    ("Sharper is just meaner with better posture.",
-     "+10% piercing damage."),
-    // 2 — +10% Siege Damage
-    ("Walls were a suggestion. So were bodies.",
-     "+10% siege damage."),
-    // 3 — +10% Magic Damage
-    ("Borrow more from the things that should stay asleep.",
-     "+10% magic damage."),
-    // 4 — +25% Damage (Epic, multiplicative)
-    ("Why nudge the numbers when you can break them?",
-     "+25% damage, multiplicative on top."),
-    // 5 — +10% Attack Speed
-    ("Reload is a state of mind. Lose it.",
-     "+10% attack speed. Shorter cooldowns."),
-    // 6 — +50% Kill Bounty
-    ("Corpses pay better when you ask nicely with volume.",
-     "+50% gold per kill."),
-    // 7 — +20 Gold Income
-    ("Greed is the only god that pays out.",
-     "+20 gold income per round."),
-    // 8 — +10% Gold Income (pct)
-    ("Skim a little off every coin. It adds up. It always adds up.",
-     "+10% to passive income."),
-    // 9 — +25% Gold Income (pct)
-    ("More than a skim. A confident bite.",
-     "+25% to passive income."),
-    // 10 — Golden Vitality (25% income as HP regen)
-    ("Money can't buy health. This is the loophole.",
-     "Heals 25% of income each tick."),
-    // 11 — Lucky Strikes (5% chance: +200% bounty)
-    ("Most kills pay scale. Some kills pay rent.",
-     "5% of kills pay triple bounty."),
-    // 12 — +2000 Max HP
-    ("More wall between you and the inevitable.",
-     "+2000 max HP."),
-    // 13 — +10 Armor
-    ("Let it bounce off something for once.",
-     "+10 flat armor. Shaves every hit."),
-    // 14 — +2000 Mana Shield
-    ("A second skin made of borrowed math.",
-     "+2000 mana shield, slow regen."),
-    // 15 — +50 HP Regen
-    ("Stitch faster than they cut.",
-     "+50 HP regen per tick."),
-    // 16 — +10% Dodge
-    ("Not there is the best armor there is.",
-     "+10% chance to dodge a hit."),
-    // 17 — Building Power (+2% dmg, +1%/round, ramp)
-    ("Patience is a weapon. So is everything you build on it.",
-     "+2% damage now, +1% every round."),
-    // 18 — Escalating Chaos (+20% chaos, +3%/round, ramp)
-    ("It feeds on the clock. Don't make it wait long.",
-     "+20% chaos now, +3% every round."),
-    // 19 — Compounding Greed (+10 income, +5/round, ramp)
-    ("Today's coin breeds tomorrow's pile.",
-     "+10 income now, +5 every round."),
-    // 20 — Hardening (+10 armor, +5/round, ramp)
-    ("Scar tissue, by appointment.",
-     "+10 armor now, +5 every round."),
-    // 21 — +25% Single-Target Damage
-    ("Pick one. Mean it.",
-     "+25% to single-target weapons."),
-    // 22 — +25% Splash Damage
-    ("Why ruin one when the crater's already dug?",
-     "+25% to splash weapons."),
-    // 23 — +25% Barrage Damage
-    ("More of everything, harder.",
-     "+25% to barrage weapons."),
-    // 24 — +25% Area Damage
-    ("The whole room signed up. The whole room pays.",
-     "+25% to area-pulse weapons."),
-    // 25 — +25% Wave Damage
-    ("Push the front rank into the next world louder.",
-     "+25% to wave weapons."),
-    // 26 — +25% Bounce Damage
-    ("Each hop hits a little angrier.",
-     "+25% to bounce weapons."),
-    // 27 — +25% Short-Range Damage
-    ("Up close, where the work is honest.",
-     "+25% to short-range weapons (<=600)."),
-    // 28 — +25% Long-Range Damage
-    ("Kill them before they smell you.",
-     "+25% to long-range weapons (>=900)."),
-    // 29 — +100% Common Weapon Damage
-    ("The cheap junk earns its keep, twice over.",
-     "Doubles common-rarity weapon damage."),
-    // 30 — +20% Damage to Stunned
-    ("Kick them while they're down. That's what down is for.",
-     "+20% damage to stunned enemies."),
-    // 31 — +25% Damage to Poisoned
-    ("Finish what the rot started.",
-     "+25% damage to poisoned enemies."),
-    // 32 — +10% Poison Damage
-    ("Make the slow death less slow.",
-     "+10% applied poison damage."),
-    // 33 — +50% Stun Duration
-    ("Keep them on the floor a little longer.",
-     "+50% stun duration."),
-    // 34 — +80 Spikes Damage
-    ("Touch the tank, lose a hand.",
-     "+80 retaliation damage when hit."),
-    // 35 — +300 Spikes Damage
-    ("Touch the tank, lose the argument.",
-     "+300 retaliation damage when hit."),
-    // 36 — +50% Spikes Damage
-    ("Sharpen the punishment.",
-     "+50% to all spikes damage."),
-    // 37 — Bloody Spikes (+80, +10/round, ramp)
-    ("Every round, the welcome gets less welcoming.",
-     "+80 spikes now, +10 every round."),
-    // 38 — Vulnerability Pulse (aura)
-    ("Mark them all. The flesh remembers being marked.",
-     "Nearby enemies take +5% damage/sec."),
-    // 39 — +15 Heal on Kill
-    ("Their last breath, your next.",
-     "+15 HP each time an enemy dies."),
-    // 40 — +60 Heal on Kill
-    ("A feast, one corpse at a time.",
-     "+60 HP each time an enemy dies."),
-    // 41 — Vampiric Spores (+5 HP/poison tick)
-    ("The rot feeds two mouths now.",
-     "+5 HP every poison tick you deal."),
-    // 42 — Magic Coin (+3 copies of next Common)
-    ("Flip it. Wish small. It pays small, three times.",
-     "Next common bought yields 3 free copies."),
-    // 43 — Duplicator (+1 copy of next Rare)
-    ("Why own one good thing?",
-     "Next rare bought yields 1 free copy."),
-    // 44 — Black Market (next Uncommon free)
-    ("Everything's for sale. Some things twice, one free.",
-     "Next uncommon purchase is free."),
-    // 45 — Magic Treasure (+250 gold, +5 income/round, ramp)
-    ("Buried money, dug up and put to work.",
-     "+250 gold now, +5 income every round."),
-    // 46 — Ankh of Reincarnation (revive, +2000 max HP)
-    ("Death filed the paperwork early. It got rejected. Once.",
-     "Revive once on lethal hit, +2000 max HP."),
-    // 47 — +25% Healing
-    ("Bleed slower, mend faster.",
-     "+25% to all healing received."),
-    // 48 — Regeneration (1.5% missing HP/sec)
-    ("The closer to dead, the harder it claws back.",
-     "Heals 1.5% of missing HP each second."),
-    // 49 — +1% Piercing Damage per Bow
-    ("Every bow you hoard sharpens the rest.",
-     "+1% piercing per Bow owned."),
-    // 50 — +1% Siege Damage per Mortar
-    ("A choir of mortars sings louder together.",
-     "+1% siege per Mortar Launcher owned."),
-    // 51 — Overclocked Death Engine (+10% Chaos per Death Engine)
-    ("Feed the machine more of itself. It likes that.",
-     "+10% chaos per Death Engine owned."),
-    // 52 — Blood Pact (-1000 max HP, +2000 gold)
-    ("Sell the meat. Buy the means.",
-     "-1000 max HP, +2000 gold. No going back."),
-    // 53 — Last Rites (-100 HP regen, +5000 gold)
-    ("Stop healing. Start hoarding. Pray it's enough.",
-     "-100 HP regen, +5000 gold."),
-    // 54 — Bloodmoney (+1 gold per 100 damage)
-    ("Every wound you open is a coin you keep.",
-     "+1 gold per 100 damage dealt."),
-    // 55 — Bloodmoney II (+1 gold per 20 damage)
-    ("The slaughter pays five times better now.",
-     "+1 gold per 20 damage dealt."),
-    // 56 — Wartithe (25% of income as mana shield)
-    ("Tithe to the shield. The shield keeps you solvent.",
-     "Income tops up your mana shield, 25%."),
-    // 57 — Aegis Protocol (scaling mana shield)
-    ("Stolen math, and it learns more every round.",
-     "+2500 shield, +400 more each round."),
-    // 58 — +500 Max HP
-    ("A little more give before you break.",
-     "+500 max HP."),
-    // 59 — +10% Piercing Damage (gen dup)
-    ("Hone the point that little bit further.",
-     "+10% piercing damage."),
-    // 60 — +10% Normal Damage
-    ("Hit plain. Hit hard.",
-     "+10% normal damage."),
-    // 61 — +10% Siege Damage (gen dup)
-    ("Make the rubble finer.",
-     "+10% siege damage."),
-    // 62 — +10% Chaos Damage
-    ("Pour more of the wrong stuff in.",
-     "+10% chaos damage."),
-    // 63 — +1000 Max HP
-    ("More buffer between you and the dirt.",
-     "+1000 max HP."),
-    // 64 — +10 Armor (gen dup)
-    ("Let more of it glance off.",
-     "+10 flat armor."),
-    // 65 — +2000 Max HP (rare)
-    ("A serious wall, for serious trouble.",
-     "+2000 max HP."),
-    // 66 — +50% Kill Bounty (rare)
-    ("The dead are generous when there are this many.",
-     "+50% gold per kill."),
-    // 67 — +2000 Mana Shield (rare)
-    ("More borrowed skin to throw away first.",
-     "+2000 mana shield, slow regen."),
-    // 68 — +20 Gold Income (gen dup)
-    ("Steady coin for steady greed.",
-     "+20 gold income per round."),
-    // 69 — +5 Armor
-    ("A thin shave off every blow.",
-     "+5 flat armor."),
-    // 70 — +10% Attack Speed (gen dup)
-    ("Shave the pause between killings.",
-     "+10% attack speed."),
-    // 71 — +80 HP Regen
-    ("Knit it back faster than they tear it.",
-     "+80 HP regen per tick."),
-    // 72 — +20 HP Regen
-    ("A slow, stubborn mending.",
-     "+20 HP regen per tick."),
-    // 73 — +5 Gold Income
-    ("A trickle. Trickles fill buckets.",
-     "+5 gold income per round."),
-    // 74 — +10 Gold Income
-    ("A little more in the pile every round.",
-     "+10 gold income per round."),
-    // 75 — +100% Kill Bounty
-    ("Twice paid for the same dead men.",
-     "+100% gold per kill."),
-    // 76 — +10% Magic Damage (gen dup)
-    ("Lean harder on the things that bite back.",
-     "+10% magic damage."),
-    // 77 — +40 HP Regen
-    ("Mend at a respectable clip.",
-     "+40 HP regen per tick."),
-    // 78 — +10000 Mana Shield (epic)
-    ("An obscene coat of borrowed life.",
-     "+10000 mana shield, fast regen."),
-    // 79 — +10% Dodge (gen dup)
-    ("One in ten swings hits the air and stays mad.",
-     "+10% chance to dodge a hit."),
-    // 80 — Escalating Plunder (scaling bounty)
-    ("Greed with interest. The bodies pay more each round.",
-     "+100% kill gold, +15% more each round."),
-    // 81 — Living Fortress (scaling max HP)
-    ("Meat becomes wall becomes mountain. Keep chewing.",
-     "+2500 max HP, +500 more each round."),
-    // 82 — +1000 Mana Shield
-    ("A thin coat of borrowed math.",
-     "+1000 mana shield, slow regen."),
-    // 83 — Mending Engine (scaling regen)
-    ("It stitches faster the longer the war drags on.",
-     "+120 HP/tick regen, +30 more each round."),
+    ("Foundry stamps this kit \"general issue,\" the catch-all crate the Wardens hand out when nothing specialized survived the haul from Ashmark.", "+10% to all weapon damage."),  // 0
+    ("Hexwrights ground these heads to a finer point than the Foundry would risk, and the Wardens never asked how.", "+10% piercing damage."),  // 1
+    ("Recovered from the Ashmark siege-works, calibrated for walls that fell the night the line broke.", "+10% siege damage."),  // 2
+    ("The Conclave bottles a little more of what it borrows, and signs none of it.", "+10% magic damage."),  // 3
+    ("Foundry overrun stamped EPIC and locked in the deep vault; the Wardens were told it would never leave Ashmark.", "+25% damage, multiplicative on top."),  // 4
+    ("A Hexwright governor wired into the firing chain, shaving the pause the Foundry built in for safety.", "+10% attack speed. Shorter cooldowns."),  // 5
+    ("The quartermaster's ledger pays a premium per body, settled out of whatever the Greycoats strip off the field.", "+50% gold per kill."),  // 6
+    ("A standing line in the quartermaster's ledger, drawn each round against the fallen the Greycoats process.", "+20 gold income per round."),  // 7
+    ("The quartermaster skims a margin off every coin the Greycoats turn in, and the ledger never forgets.", "+10% to passive income."),  // 8
+    ("A heavier cut, written into the ledger by a quartermaster who stopped pretending the conscripts would be paid.", "+25% to passive income."),  // 9
+    ("Greycoat field-medics were paid in salvage, so the ledger learned to mend what the Relief never sent.", "Heals 25% of income each tick."),  // 10
+    ("The quartermaster keeps a crooked ledger; now and then a body settles for far more than its line was worth.", "5% of kills pay triple bounty."),  // 11
+    ("Plating scavenged off the Ashmark redoubts, bolted on by Wardens who knew the Relief was not coming.", "+2000 max HP."),  // 12
+    ("Foundry hull-shave, rolled too thin in the rush but thick enough to turn what the Relief left you to face.", "+10 flat armor. Shaves every hit."),  // 13
+    ("A Hexwright's borrowed skin of math, holding where the Wardens' own armor and the Relief both gave out.", "+2000 mana shield, slow regen."),  // 14
+    ("The Relief that never came included field-surgeons; the Wardens improvised this drip in their absence.", "+50 HP regen per tick."),  // 15
+    ("A Warden's last trick when the line is held and the Relief is a rumor: be where the blow is not.", "+10% chance to dodge a hit."),  // 16
+    ("The longer the war drags on, the heavier the Foundry's old governor leans into the firing chain.", "+2% damage now, +1% every round."),  // 17
+    ("The Conclave warned that borrowed chaos compounds with every round it sits unrepaid, and Samwise is still on the horizon.", "+20% chaos now, +5% every round."),  // 18
+    ("The quartermaster's ledger breeds on itself; each round the Greycoats turn in more, and the line grows fatter.", "+10 income now, +5 every round."),  // 19
+    ("Scar over scar, the way a Warden's plating thickens every round the Relief fails to arrive.", "+10 armor now, +5 every round."),  // 20
+    ("Warden marksmanship doctrine, the kind drilled into gunners told to make every single shot count.", "+25% to single-target weapons."),  // 21
+    ("Foundry overpressure tuning meant for the crater-makers, ground for walls and the crowds behind them.", "+25% to splash weapons."),  // 22
+    ("Greycoat volley discipline, salvaged off a unit that fired in ranks until the ranks ran out.", "+25% to barrage weapons."),  // 23
+    ("A Hexwright field-binding that thickens whatever the tank pulses out into the ring of dirt around it.", "+25% to area-pulse weapons."),  // 24
+    ("Calibration recovered from the Ashmark breakwalls, meant to shove a whole front rank into the next world.", "+25% to wave weapons."),  // 25
+    ("Foundry ricochet-work, each hop tuned to land angrier than the last off scrap nobody else would salvage.", "+25% to bounce weapons."),  // 26
+    ("Warden close-line doctrine, where the work is done at knife-reach and the gunner smells what he kills.", "+25% to short-range weapons (<=600)."),  // 27
+    ("A long-glass sighting kit off an Ashmark sniper-nest, for killing them before they have a face.", "+25% to long-range weapons (>=900)."),  // 28
+    ("The Foundry's cheapest overruns, the junk the Greycoats are handed first, made to earn twice its serial.", "Doubles common-rarity weapon damage."),  // 29
+    ("Warden execution drill: a thing on the ground and stunned is a thing the line stops counting.", "+20% damage to stunned enemies."),  // 30
+    ("Finish what the field-rations and the rot already started in them.", "+25% damage to poisoned enemies."),  // 31
+    ("Greycoat sickness spread through Ashmark in the bad winters; the Conclave learned to concentrate it.", "+10% applied poison damage."),  // 32
+    ("A Hexwright lock that holds the stunned a breath longer, long enough for the Wardens to work.", "+50% stun duration."),  // 33
+    ("Field-improvised cruelty: Ashmark scrap-iron driven point-out into the tank's hull.", "+80 retaliation damage when hit."),  // 34
+    ("A denser hide of welded scrap, the kind a Warden bolts on when reaching the tank should cost a limb.", "+300 retaliation damage when hit."),  // 35
+    ("The same improvised barbs, ground keener by a gunner with nothing left to do but sharpen the punishment.", "+50% to all spikes damage."),  // 36
+    ("Every round the war drags on, the Wardens hammer fresh scrap into the hull and the welcome gets crueler.", "+80 spikes now, +10 every round."),  // 37
+    ("A Hexwright marking-rite that opens the flesh of everything near; the marked do not heal what is opened.", "Nearby enemies take +5% damage/sec."),  // 38
+    ("The Relief never came, so the Wardens learned to take their mending off the dying instead.", "+15 HP each time an enemy dies."),  // 39
+    ("A deeper draught of the same grim arithmetic, each corpse on the line paying back the Relief's debt.", "+60 HP each time an enemy dies."),  // 40
+    ("Conclave rot-spores feed two mouths at once, the dying enemy's and the gunner the Relief abandoned.", "+5 HP every poison tick you deal."),  // 41
+    ("Three flips of a Greycoat token, and the quartermaster's ledger pays out in triplicate before anyone checks the column twice.", "Next common bought yields 3 free copies."),  // 42
+    ("The Conclave keeps a second of everything worth having, off the ledger and out of the quartermaster's count.", "Next rare bought yields 1 free copy."),  // 43
+    ("A name in the right margin of the ledger, and the Greycoats look the other way once.", "Next uncommon purchase is free."),  // 44
+    ("Coin the Greycoats buried at Ashmark before the line broke, dug up and still drawing interest.", "+250 gold now, +5 income every round."),  // 45
+    ("The Wardens buried this rite with their last chaplain; it answers once, and resents being asked.", "Revive once on lethal hit, +2000 max HP."),  // 46
+    ("What field-dressing the Wardens have left, doled out by a surgeon who stopped counting the dead at Ashmark.", "+25% to all healing received."),  // 47
+    ("Scar tissue layered over scar tissue; the closer to the dirt, the harder the body argues.", "Heals 1.5% of missing HP each second."),  // 48
+    ("Every Warden bow racked beside this one lends its draw to the next; the post hoards what it cannot replace.", "+1% piercing per Bow owned."),  // 49
+    ("Ranged together, Foundry mortars find the old Ashmark firing tables faster, each barrel correcting the last.", "+1% siege per Mortar Launcher owned."),  // 50
+    ("Feed the Foundry's worst machine more of its own kind and the chaos in it deepens with the count.", "+10% chaos per Death Engine owned."),  // 51
+    ("The Greycoats will buy the meat off a living Warden, and the ledger never asks why the line went thin.", "-1000 max HP, +2000 gold. No going back."),  // 52
+    ("Stop the surgeon's work, sell the bandages, and pay the quartermaster in the healing you'll never get.", "-100 HP regen, +5000 gold."),  // 53
+    ("The Greycoats price the dead by the wound; every hundred you open is a coin in the ledger.", "+1 gold per 100 damage dealt."),  // 54
+    ("A richer contract from the same bloody ledger, paying out every twenty points of ruin you deal.", "+1 gold per 20 damage dealt."),  // 55
+    ("The Hexwrights tithe a quarter of your takings into borrowed math, keeping the skin paid up.", "Income tops up your mana shield, 25%."),  // 56
+    ("Conclave shieldwork that studies the siege as it stands, thickening a little more each round it endures.", "+2500 shield, +400 more each round."),  // 57
+    ("A patched plate off an Ashmark casualty, just enough give before the seam parts.", "+500 max HP."),  // 58
+    ("A spare Warden quiver, the heads honed on the same stone the last gunner used.", "+10% piercing damage."),  // 59
+    ("Plain Foundry shot, no markings, no cleverness, stamped out by the crate.", "+10% normal damage."),  // 60
+    ("A Foundry overrun of siege charges, serialed for a wall at Ashmark that no longer stands.", "+10% siege damage."),  // 61
+    ("Conclave ordnance the Hexwrights signed for but never logged, full of something that resents the barrel.", "+10% chaos damage."),  // 62
+    ("Hull plating cut from a dead Ashmark engine, bolted over the old wounds.", "+1000 max HP."),  // 63
+    ("A Foundry armor ration, thin but stamped and accounted for in the ledger.", "+10 flat armor."),  // 64
+    ("Heavy Warden plate pulled off a tank that held this line three reliefs ago.", "+2000 max HP."),  // 65
+    ("The Greycoats run the corpse-tally generous when the bodies pile this high.", "+50% gold per kill."),  // 66
+    ("A Hexwright shield-charm, borrowed life to throw away before your own.", "+2000 mana shield, slow regen."),  // 67
+    ("A standing line in the quartermaster's ledger, paid out of Ashmark salvage each round.", "+20 gold income per round."),  // 68
+    ("A scrap of Foundry plate, half a ration, glancing off what it can.", "+5 flat armor."),  // 69
+    ("A Foundry gear-kit that shaves the pause between firings, cut from a faster machine.", "+10% attack speed."),  // 70
+    ("The Wardens' field-surgeon at full pace, stitching faster than the line falls apart.", "+80 HP regen per tick."),  // 71
+    ("A slow, stubborn mending, all the relief the Wardens could spare this post.", "+20 HP regen per tick."),  // 72
+    ("A thin trickle on the Greycoat ledger, the kind command forgets to honor.", "+5 gold income per round."),  // 73
+    ("A modest entry in the quartermaster's books, paid round on round from the dead.", "+10 gold income per round."),  // 74
+    ("The Greycoats pay twice over for the same fallen, the ledger long past honesty.", "+100% gold per kill."),  // 75
+    ("Conclave shot the Hexwrights leaned on too hard, biting back through the barrel each time.", "+10% magic damage."),  // 76
+    ("A respectable clip of mending, more than the Relief ever delivered to this line.", "+40 HP regen per tick."),  // 77
+    ("An obscene coat of Hexwright life-work, more borrowed skin than any Warden was meant to wear.", "+10000 mana shield, fast regen."),  // 78
+    ("A Greycoat's bad habits, learned at Ashmark: one swing in ten finds only air.", "+10% chance to dodge a hit."),  // 79
+    ("The Greycoat ledger compounds as the siege drags on, the dead worth more every round Samwise nears.", "+100% kill gold, +15% more each round."),  // 80
+    ("Warden salvage welded round Warden salvage, the wall thickening every round the line holds.", "+2500 max HP, +500 more each round."),  // 81
+    ("A thin Hexwright coat of borrowed math, enough to spend before your own skin.", "+1000 mana shield, slow regen."),  // 82
+    ("The Wardens' last surgeon works faster the longer the war grinds, mending quickening as the siege wears on.", "+120 HP/tick regen, +30 more each round."),  // 83
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content;
 
     #[test]
-    fn descriptions_cover_every_catalog_entry() {
-        assert_eq!(
-            WEAPON_TEXT.len(),
-            content::WEAPONS.len(),
-            "WEAPON_TEXT length must match content::WEAPONS"
-        );
-        assert_eq!(
-            MODIFIER_TEXT.len(),
-            content::MODIFIERS.len(),
-            "MODIFIER_TEXT length must match content::MODIFIERS"
-        );
+    fn arrays_cover_the_catalog() {
+        assert_eq!(WEAPON_TEXT.len(), content::WEAPONS.len());
+        assert_eq!(MODIFIER_TEXT.len(), content::MODIFIERS.len());
     }
 
     #[test]
-    fn descriptions_out_of_range_is_empty() {
-        assert_eq!(weapon_text(u16::MAX), ("", ""));
-        assert_eq!(modifier_text(u16::MAX), ("", ""));
+    fn out_of_range_is_empty() {
+        assert_eq!(weapon_text(9999), ("", ""));
+        assert_eq!(modifier_text(9999), ("", ""));
     }
 }
