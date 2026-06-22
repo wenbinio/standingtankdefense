@@ -29,7 +29,8 @@ pub mod steam;
 pub mod transport;
 pub mod wire;
 
-pub use replay::{ClaimedResult, Replay, VerifyFail, VerifyOutcome};
+pub use replay::{verify, Capture, ClaimedResult, Replay, VerifyFail, VerifyOutcome};
+pub use results::{verify_submissions, MatchStats, PlayerStats, SubmittedResult};
 pub use schedule::Schedule;
 pub use transport::{Channel, Inbound, Outbound, PeerId, Transport, DIRECTOR};
 pub use wire::{InputCode, Msg, WireError};

@@ -3,6 +3,7 @@
 //! (leaderboards/achievements). Pure data — the actual Steam calls live behind
 //! the `steam` adapter (`steam.rs`), not built in this sandbox.
 
+use crate::replay::{verify, Replay, VerifyOutcome};
 use crate::transport::PeerId;
 
 /// One player's end-of-match record.
@@ -42,6 +43,30 @@ impl MatchStats {
     }
 }
 
+/// A leaderboard-submission row: a player's placement plus the captured replay
+/// backing it. The replay is the anti-cheat evidence — re-simming it must
+/// reproduce the claimed death (`docs/07 §7.6`).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SubmittedResult<'a> {
+    pub player: PeerId,
+    pub place: u32,
+    pub replay: &'a Replay,
+}
+
+/// Verify a batch of submitted replays against a local content hash before they
+/// reach the leaderboard. Returns one `(player, VerifyOutcome)` per submission,
+/// in input order — `VerifyOutcome::Pass` rows are safe to upload; any `Fail`
+/// is a rejected (forged/tampered/wrong-content) claim. Pure re-sim, no Steam.
+pub fn verify_submissions(
+    submissions: &[SubmittedResult<'_>],
+    local_content_hash: u64,
+) -> Vec<(PeerId, VerifyOutcome)> {
+    submissions
+        .iter()
+        .map(|s| (s.player, verify(s.replay, local_content_hash)))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -67,5 +92,47 @@ mod tests {
         let stats = MatchStats::from_placements(&placements);
         // ceil(7/2) = 4 winners.
         assert_eq!(stats.rows.iter().filter(|r| r.win).count(), 4);
+    }
+
+    /// Drive a director to a player's death and pull the captured replay, so the
+    /// submission test runs against a real live-capture record (not a synthetic
+    /// one).
+    fn captured_replay(content_hash: u64) -> Replay {
+        use crate::director::Director;
+        use crate::START_LEAD;
+        let mut d = Director::with_content_hash(&[pid(1)], 0x5151, content_hash);
+        for _ in 0..START_LEAD {
+            d.tick(vec![]);
+        }
+        for _ in 0..500_000u32 {
+            d.tick(vec![]);
+            if d.result().is_some() {
+                break;
+            }
+        }
+        d.replay(pid(1)).cloned().expect("captured replay")
+    }
+
+    #[test]
+    fn verify_submissions_passes_clean_and_rejects_tampered() {
+        const CONTENT: u64 = 0xC0FFEE;
+        let clean = captured_replay(CONTENT);
+        let mut forged = clean.clone();
+        forged.claimed.death_tick = forged.claimed.death_tick.saturating_sub(1);
+
+        let subs = vec![
+            SubmittedResult { player: pid(1), place: 1, replay: &clean },
+            SubmittedResult { player: pid(2), place: 2, replay: &forged },
+        ];
+        let outcomes = verify_submissions(&subs, CONTENT);
+        assert_eq!(outcomes.len(), 2);
+        assert_eq!(outcomes[0].0, pid(1));
+        assert!(outcomes[0].1.is_pass(), "clean replay must pass");
+        assert_eq!(outcomes[1].0, pid(2));
+        assert!(!outcomes[1].1.is_pass(), "tampered replay must be rejected");
+
+        // Wrong content hash rejects everything.
+        let wrong = verify_submissions(&subs, CONTENT ^ 0x1);
+        assert!(wrong.iter().all(|(_, o)| !o.is_pass()));
     }
 }
