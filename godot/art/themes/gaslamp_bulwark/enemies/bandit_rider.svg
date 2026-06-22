@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - ENEMY "Bandit Rider" (mounted human bandit, fastest unit) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- HEAVILY CHIBI: a fat round dire-beast mount lunging north (big snarl head, tiny running -->
+  <!-- legs) with a tiny hooded bandit perched on its back, stubby raised blade, billow-cloak. -->
+  <!-- TWIN speed-smears behind = fastest. Enemy team: menace-orange glints on beast eyes. -->
+  <defs>
+    <filter id="bn_menace" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+    <filter id="bn_motion" x="-40%" y="-40%" width="180%" height="220%">
+      <feGaussianBlur stdDeviation="3.4"/>
+    </filter>
+  </defs>
+
+  <!-- twin speed-smears behind (south), reads "fastest" -->
+  <path d="M28 94 C32 80 36 72 42 66 L47 70 C43 80 41 86 39 94 Z"
+        fill="#5e8c3a" filter="url(#bn_motion)" opacity="0.4"/>
+  <path d="M68 94 C64 80 60 72 54 66 L49 70 C53 80 55 86 57 94 Z"
+        fill="#5e8c3a" filter="url(#bn_motion)" opacity="0.4"/>
+
+  <!-- ground shadow (long, streaked by speed) -->
+  <ellipse cx="48" cy="85" rx="29" ry="8" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- ===================== TINY RUNNING LEGS (peeking, splayed) ===================== -->
+  <g stroke="#101218" stroke-width="4.5" stroke-linecap="round" fill="none">
+    <path d="M30 74 C24 78 22 84 26 88"/>
+    <path d="M66 74 C72 78 74 84 70 88"/>
+    <path d="M38 50 C32 46 28 42 30 36"/>
+    <path d="M58 50 C64 46 68 42 66 36"/>
+  </g>
+
+  <!-- ===================== FAT ROUND DIRE-BEAST MOUNT (lunging north) ===================== -->
+  <!-- body shadow base -->
+  <path d="M48 44 C70 44 76 60 73 72 C69 82 60 84 48 84 C36 84 27 82 23 72 C20 60 26 44 48 44 Z"
+        fill="#1f3322" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- body fill -->
+  <path d="M48 46 C68 46 73 60 70 71 C66 79 58 81 48 81 C38 81 30 79 26 71 C23 60 28 46 48 46 Z"
+        fill="#5e8c3a" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- inner shadow -->
+  <path d="M70 71 C66 79 58 81 48 81 C38 81 30 79 26 71 C33 76 41 77 48 77 C55 77 63 76 70 71 Z"
+        fill="#1f3322" opacity="0.85"/>
+
+  <!-- ===================== BIG SNARLING BEAST HEAD (north) ===================== -->
+  <!-- head shadow base -->
+  <path d="M48 18 C60 18 65 28 65 38 C65 48 58 52 48 52 C38 52 31 48 31 38 C31 28 36 18 48 18 Z"
+        fill="#1f3322" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- pricked ears -->
+  <g fill="#5e8c3a" stroke="#101218" stroke-width="3" stroke-linejoin="round">
+    <path d="M37 24 L31 12 L45 22 Z"/>
+    <path d="M59 24 L65 12 L51 22 Z"/>
+  </g>
+  <!-- head fill -->
+  <path d="M48 20 C59 20 63 29 63 38 C63 47 57 50 48 50 C39 50 33 47 33 38 C33 29 37 20 48 20 Z"
+        fill="#5e8c3a" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+  <!-- head rim light -->
+  <path d="M48 20 C57 20 61 27 61 33 C56 27 52 25 48 25 C44 25 40 27 35 33 C35 27 39 20 48 20 Z"
+        fill="#a6d65e" opacity="0.55"/>
+  <!-- snout + bone fangs (north tip) -->
+  <path d="M42 22 L48 12 L54 22 Z" fill="#5e8c3a" stroke="#101218" stroke-width="3" stroke-linejoin="round"/>
+  <g fill="#d9d2b0" stroke="#101218" stroke-width="1.8" stroke-linejoin="round">
+    <path d="M44 22 L43 15 L47 22 Z"/>
+    <path d="M52 22 L53 15 L49 22 Z"/>
+  </g>
+  <!-- beast menace eyes -->
+  <g>
+    <circle cx="42" cy="36" r="5" fill="#ff5a3c" filter="url(#bn_menace)"/>
+    <circle cx="42" cy="36" r="3.2" fill="#ff5a3c" stroke="#101218" stroke-width="2"/>
+    <circle cx="54" cy="36" r="5" fill="#ff5a3c" filter="url(#bn_menace)"/>
+    <circle cx="54" cy="36" r="3.2" fill="#ff5a3c" stroke="#101218" stroke-width="2"/>
+  </g>
+
+  <!-- ===================== HOODED BANDIT RIDER (perched on the back) ===================== -->
+  <!-- billowing cloak streaming south -->
+  <path d="M36 62 C32 76 40 84 48 86 C56 84 64 76 60 62 C56 68 40 68 36 62 Z"
+        fill="#7a3a30" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M48 66 L48 86 M42 66 C41 74 43 80 42 86 M54 66 C55 74 53 80 54 86"
+        fill="none" stroke="#4a201a" stroke-width="2" opacity="0.7" stroke-linecap="round"/>
+  <!-- hunched cloaked torso -->
+  <path d="M48 52 C58 52 62 58 62 64 C62 70 56 72 48 72 C40 72 34 70 34 64 C34 58 38 52 48 52 Z"
+        fill="#7a3a30" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+  <!-- torso rim light -->
+  <path d="M48 52 C56 52 60 56 61 60 C56 55 52 54 48 54 C44 54 40 55 35 60 C36 56 40 52 48 52 Z"
+        fill="#a85a4a" opacity="0.6"/>
+  <!-- deep hood void with menace glints (no face) -->
+  <circle cx="48" cy="58" r="8" fill="#101218" stroke="#101218" stroke-width="3"/>
+  <circle cx="45.5" cy="58" r="1.6" fill="#ff5a3c" filter="url(#bn_menace)"/>
+  <circle cx="50.5" cy="58" r="1.6" fill="#ff5a3c" filter="url(#bn_menace)"/>
+
+  <!-- ===================== RAISED STUBBY BLADE (right hand, swept north) ===================== -->
+  <path d="M66 26 L72 25 L62 50 L56 52 Z" fill="#6f8db3" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M67 28 L59 49" fill="none" stroke="#bcd6f2" stroke-width="2" opacity="0.7" stroke-linecap="round"/>
+  <rect x="56" y="49" width="8" height="8" rx="2.5" fill="#3a2a16" stroke="#101218" stroke-width="2.5" transform="rotate(-20 60 53)"/>
+</svg>

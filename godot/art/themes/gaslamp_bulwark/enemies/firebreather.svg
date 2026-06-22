@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - ENEMY "Firebreather" (ranged fire beast) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- BREATHER SET (matched chibi form, 3 elements): squat fat round maw-beast, big gaping -->
+  <!-- front maw aimed north, 4 stubby splayed legs, slit eyes flanking the maw. -->
+  <!-- Element = FIRE: draconic horns, molten maw, menace-orange glow, smoke, flame curls. -->
+  <defs>
+    <filter id="fb_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="2.6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+    <filter id="fb_smoke" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="3.2"/>
+    </filter>
+  </defs>
+
+  <!-- smoke plume rising off the maw (north) -->
+  <ellipse cx="48" cy="14" rx="13" ry="9" fill="#3a4a63" filter="url(#fb_smoke)" opacity="0.4"/>
+
+  <!-- ground shadow under the squat bulk -->
+  <ellipse cx="48" cy="84" rx="32" ry="8.5" fill="#0b0d14" opacity="0.48"/>
+
+  <!-- ===================== STUBBY CLAWED LEGS (4, flank corners) ===================== -->
+  <g fill="#1f3322" stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <ellipse cx="22" cy="48" rx="9" ry="6.5" transform="rotate(-30 22 48)"/>
+    <ellipse cx="74" cy="48" rx="9" ry="6.5" transform="rotate(30 74 48)"/>
+    <ellipse cx="22" cy="74" rx="9" ry="6.5" transform="rotate(30 22 74)"/>
+    <ellipse cx="74" cy="74" rx="9" ry="6.5" transform="rotate(-30 74 74)"/>
+  </g>
+
+  <!-- ===================== FAT ROUND SCALED BODY (dominant mass) ===================== -->
+  <!-- body shadow base -->
+  <path d="M48 34 C72 34 80 52 78 66 C74 80 60 82 48 82 C36 82 22 80 18 66 C16 52 24 34 48 34 Z"
+        fill="#1f3322" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- flesh fill -->
+  <path d="M48 36 C70 36 77 52 75 65 C71 77 59 79 48 79 C37 79 25 77 21 65 C19 52 26 36 48 36 Z"
+        fill="#5e8c3a" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- inner shadow (lower half) -->
+  <path d="M75 65 C71 77 59 79 48 79 C37 79 25 77 21 65 C29 72 38 74 48 74 C58 74 67 72 75 65 Z"
+        fill="#1f3322" opacity="0.85"/>
+  <!-- forward rim light -->
+  <path d="M48 36 C66 36 73 48 71 57 C63 47 56 44 48 44 C40 44 33 47 25 57 C23 48 30 36 48 36 Z"
+        fill="#a6d65e" opacity="0.55"/>
+
+  <!-- ===================== ELEMENT: MOLTEN SCALE CRACKS (menace, on back) ===================== -->
+  <g stroke="#ff5a3c" stroke-linecap="round" opacity="0.6">
+    <path d="M34 54 C33 62 36 70 34 78" stroke-width="2.6"/>
+    <path d="M48 58 L48 78" stroke-width="2.4"/>
+    <path d="M62 54 C63 62 60 70 62 78" stroke-width="2.4"/>
+  </g>
+  <circle cx="40" cy="66" r="5" fill="#ff5a3c" filter="url(#fb_glow)"/>
+  <circle cx="40" cy="66" r="2.8" fill="#ff5a3c" stroke="#101218" stroke-width="2"/>
+  <circle cx="58" cy="64" r="5" fill="#ff5a3c" filter="url(#fb_glow)"/>
+  <circle cx="58" cy="64" r="2.8" fill="#ff5a3c" stroke="#101218" stroke-width="2"/>
+  <!-- raised dorsal scale-spikes -->
+  <g fill="#5e8c3a" stroke="#101218" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M41 50 L38 40 L47 49 Z"/>
+    <path d="M55 50 L58 40 L49 49 Z"/>
+  </g>
+
+  <!-- ===================== BIG GAPING MOLTEN MAW (front, aimed north) ===================== -->
+  <!-- swept-back bone horns -->
+  <g fill="#d9d2b0" stroke="#101218" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M33 40 L24 30 L38 42 Z"/>
+    <path d="M63 40 L72 30 L58 42 Z"/>
+  </g>
+  <circle cx="48" cy="34" r="15" fill="#ff5a3c" filter="url(#fb_glow)" opacity="0.9"/>
+  <!-- maw cavity -->
+  <path d="M34 36 C38 20 58 20 62 36 C58 48 38 48 34 36 Z"
+        fill="#1f3322" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <!-- glowing molten throat -->
+  <path d="M39 35 C43 25 53 25 57 35 C53 43 43 43 39 35 Z" fill="#ff5a3c"/>
+  <ellipse cx="48" cy="33" rx="4" ry="5" fill="#5a1206" opacity="0.7"/>
+  <!-- chunky bone fang ring -->
+  <g fill="#d9d2b0" stroke="#101218" stroke-width="2" stroke-linejoin="round">
+    <path d="M41 28 L43 21 L47 28 Z"/>
+    <path d="M49 28 L53 21 L55 28 Z"/>
+    <path d="M40 40 L43 47 L46 40 Z"/>
+    <path d="M50 40 L53 47 L56 40 Z"/>
+  </g>
+
+  <!-- licking flame curls escaping the maw (north) -->
+  <g fill="none" stroke="#ff5a3c" stroke-linecap="round" opacity="0.85">
+    <path d="M43 22 C41 16 45 12 43 8" stroke-width="2.6"/>
+    <path d="M53 22 C55 16 51 12 53 8" stroke-width="2.4"/>
+  </g>
+  <circle cx="43" cy="8" r="2.2" fill="#ff5a3c" filter="url(#fb_glow)"/>
+  <circle cx="53" cy="8" r="2" fill="#ff5a3c" filter="url(#fb_glow)"/>
+
+  <!-- molten slit eyes flanking the maw -->
+  <g>
+    <circle cx="30" cy="44" r="4.5" fill="#ff5a3c" filter="url(#fb_glow)"/>
+    <path d="M27 42 L33 44 L27 46 Z" fill="#5a1206" stroke="#101218" stroke-width="1.4" stroke-linejoin="round"/>
+    <circle cx="66" cy="44" r="4.5" fill="#ff5a3c" filter="url(#fb_glow)"/>
+    <path d="M69 42 L63 44 L69 46 Z" fill="#5a1206" stroke="#101218" stroke-width="1.4" stroke-linejoin="round"/>
+  </g>
+</svg>

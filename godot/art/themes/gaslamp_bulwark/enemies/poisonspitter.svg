@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - ENEMY "Poisonspitter" (ranged venom toad-beast) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- BREATHER SET (matched chibi form, 3 elements): squat fat round maw-beast, big gaping -->
+  <!-- front maw aimed north, 4 stubby splayed legs, beady eyes flanking the maw. -->
+  <!-- Element = POISON: sick-bile green glow, pustules, dripping venom. -->
+  <defs>
+    <filter id="ps_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="2.4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ground shadow under the squat bulk -->
+  <ellipse cx="48" cy="84" rx="32" ry="8.5" fill="#0b0d14" opacity="0.48"/>
+
+  <!-- ===================== STUBBY SPLAYED LEGS (4, flank corners) ===================== -->
+  <g fill="#1f3322" stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <ellipse cx="22" cy="48" rx="9" ry="6.5" transform="rotate(-30 22 48)"/>
+    <ellipse cx="74" cy="48" rx="9" ry="6.5" transform="rotate(30 74 48)"/>
+    <ellipse cx="22" cy="74" rx="9" ry="6.5" transform="rotate(30 22 74)"/>
+    <ellipse cx="74" cy="74" rx="9" ry="6.5" transform="rotate(-30 74 74)"/>
+  </g>
+
+  <!-- ===================== FAT ROUND BLOATED BODY (dominant mass) ===================== -->
+  <!-- body shadow base -->
+  <path d="M48 34 C72 34 80 52 78 66 C74 80 60 82 48 82 C36 82 22 80 18 66 C16 52 24 34 48 34 Z"
+        fill="#1f3322" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- flesh fill -->
+  <path d="M48 36 C70 36 77 52 75 65 C71 77 59 79 48 79 C37 79 25 77 21 65 C19 52 26 36 48 36 Z"
+        fill="#5e8c3a" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- inner shadow (lower half) -->
+  <path d="M75 65 C71 77 59 79 48 79 C37 79 25 77 21 65 C29 72 38 74 48 74 C58 74 67 72 75 65 Z"
+        fill="#1f3322" opacity="0.85"/>
+  <!-- forward rim light -->
+  <path d="M48 36 C66 36 73 48 71 57 C63 47 56 44 48 44 C40 44 33 47 25 57 C23 48 30 36 48 36 Z"
+        fill="#a6d65e" opacity="0.55"/>
+
+  <!-- ===================== ELEMENT: VENOM PUSTULES (sick-bile, on back) ===================== -->
+  <g>
+    <circle cx="34" cy="64" r="6" fill="#a6d65e" filter="url(#ps_glow)"/>
+    <circle cx="34" cy="64" r="3.4" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
+    <circle cx="62" cy="62" r="6" fill="#a6d65e" filter="url(#ps_glow)"/>
+    <circle cx="62" cy="62" r="3.4" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
+    <circle cx="48" cy="71" r="5" fill="#a6d65e" filter="url(#ps_glow)"/>
+    <circle cx="48" cy="71" r="2.8" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
+  </g>
+  <!-- dark warty bumps -->
+  <g fill="#1f3322" opacity="0.7">
+    <circle cx="40" cy="56" r="2.4"/><circle cx="57" cy="69" r="2.4"/><circle cx="29" cy="61" r="2"/>
+  </g>
+
+  <!-- ===================== BIG GAPING VENOM MAW (front, aimed north) ===================== -->
+  <circle cx="48" cy="34" r="15" fill="#a6d65e" filter="url(#ps_glow)" opacity="0.9"/>
+  <!-- maw cavity -->
+  <path d="M34 36 C38 20 58 20 62 36 C58 48 38 48 34 36 Z"
+        fill="#1f3322" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <!-- glowing venom throat -->
+  <path d="M39 35 C43 25 53 25 57 35 C53 43 43 43 39 35 Z" fill="#a6d65e"/>
+  <ellipse cx="48" cy="33" rx="4" ry="5" fill="#1f3322" opacity="0.6"/>
+  <!-- chunky bone fang ring -->
+  <g fill="#d9d2b0" stroke="#101218" stroke-width="2" stroke-linejoin="round">
+    <path d="M41 28 L43 21 L47 28 Z"/>
+    <path d="M49 28 L53 21 L55 28 Z"/>
+    <path d="M40 40 L43 47 L46 40 Z"/>
+    <path d="M50 40 L53 47 L56 40 Z"/>
+  </g>
+
+  <!-- dripping venom strings (down off the maw) -->
+  <g fill="none" stroke="#a6d65e" stroke-linecap="round" opacity="0.85">
+    <path d="M38 44 C37 50 39 54 38 58" stroke-width="2.4"/>
+    <path d="M58 44 C59 50 57 55 58 59" stroke-width="2.2"/>
+  </g>
+  <circle cx="38" cy="59" r="2.2" fill="#a6d65e" filter="url(#ps_glow)"/>
+  <circle cx="58" cy="60" r="2" fill="#a6d65e" filter="url(#ps_glow)"/>
+
+  <!-- beady venom eyes flanking the maw -->
+  <g>
+    <circle cx="30" cy="44" r="4.5" fill="#a6d65e" filter="url(#ps_glow)"/>
+    <circle cx="30" cy="44" r="2.8" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
+    <circle cx="29" cy="43" r="0.9" fill="#e8e3d2"/>
+    <circle cx="66" cy="44" r="4.5" fill="#a6d65e" filter="url(#ps_glow)"/>
+    <circle cx="66" cy="44" r="2.8" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
+    <circle cx="65" cy="43" r="0.9" fill="#e8e3d2"/>
+  </g>
+</svg>

@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
+  <!-- Standing Tank Defense - ENEMY "Mountain Giant" (huge armored stone giant, fortified/slow) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- Biggest non-boss: scaled to 140 (vs 96 swarm) but smaller than Samwise (320). -->
+  <!-- HEAVILY CHIBI: one enormous fat round granite body, hulking stubby boulder fists, blunt -->
+  <!-- mossy stone head sunk between pauldrons, ONE big cute-angry menace pair, tiny feet. -->
+  <!-- Steel-grey stone armor + rot-green moss joints (ties to orcs) + menace magma seams. -->
+  <defs>
+    <filter id="mg_menace" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- heavy ground shadow under the immense bulk -->
+  <ellipse cx="70" cy="122" rx="52" ry="13" fill="#0b0d14" opacity="0.5"/>
+
+  <!-- ===================== TINY STUBBY FEET (peeking under huge body) ===================== -->
+  <g stroke="#101218" stroke-width="5" stroke-linejoin="round" fill="#1f3322">
+    <rect x="48" y="106" width="22" height="16" rx="7"/>
+    <rect x="70" y="106" width="22" height="16" rx="7"/>
+  </g>
+
+  <!-- ===================== HULKING STUBBY BOULDER FISTS (to either flank, north reach) ===================== -->
+  <!-- left arm slab -->
+  <path d="M24 60 C16 64 14 84 22 96 C30 104 40 102 42 92 L40 66 C38 58 30 56 24 60 Z"
+        fill="#3a4a63" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- right arm slab -->
+  <path d="M116 60 C124 64 126 84 118 96 C110 104 100 102 98 92 L100 66 C102 58 110 56 116 60 Z"
+        fill="#3a4a63" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- boulder fists -->
+  <circle cx="28" cy="56" r="16" fill="#6f8db3" stroke="#101218" stroke-width="5"/>
+  <circle cx="112" cy="56" r="16" fill="#6f8db3" stroke="#101218" stroke-width="5"/>
+  <!-- fist rim light + knuckle magma cracks -->
+  <path d="M18 50 C22 42 30 42 38 46" fill="none" stroke="#bcd6f2" stroke-width="4" opacity="0.55" stroke-linecap="round"/>
+  <path d="M102 50 C106 42 114 42 122 46" fill="none" stroke="#bcd6f2" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+  <g stroke="#ff5a3c" stroke-width="2.5" opacity="0.7" stroke-linecap="round">
+    <path d="M20 60 L34 60"/><path d="M106 60 L120 60"/>
+  </g>
+
+  <!-- ===================== HUGE FAT ROUND GRANITE BODY (dominant mass) ===================== -->
+  <!-- body shadow base -->
+  <path d="M70 40 C108 40 120 64 118 88 C116 110 96 116 70 116 C44 116 24 110 22 88 C20 64 32 40 70 40 Z"
+        fill="#1f3322" stroke="#101218" stroke-width="6" stroke-linejoin="round"/>
+  <!-- stone plate fill -->
+  <path d="M70 43 C106 43 117 64 115 87 C113 107 95 113 70 113 C45 113 27 107 25 87 C23 64 34 43 70 43 Z"
+        fill="#6f8db3" stroke="#101218" stroke-width="5.5" stroke-linejoin="round"/>
+  <!-- body inner shadow (lower half) -->
+  <path d="M115 87 C113 107 95 113 70 113 C45 113 27 107 25 87 C36 99 52 104 70 104 C88 104 104 99 115 87 Z"
+        fill="#3a4a63" opacity="0.85"/>
+  <!-- forward rim light -->
+  <path d="M70 43 C100 43 112 60 110 75 C96 60 84 54 70 54 C56 54 44 60 30 75 C28 60 40 43 70 43 Z"
+        fill="#bcd6f2" opacity="0.5"/>
+
+  <!-- overlapping granite armor plate seam -->
+  <path d="M40 68 C52 62 62 60 70 60 C78 60 88 62 100 68 C88 74 52 74 40 68 Z"
+        fill="#3a4a63" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+  <!-- moss grime in the plate seam (rot tie) -->
+  <path d="M40 68 C52 73 88 73 100 68" fill="none" stroke="#5e8c3a" stroke-width="3.5" opacity="0.7" stroke-linecap="round"/>
+  <!-- magma cracks bleeding through -->
+  <g stroke="#ff5a3c" stroke-width="2.5" opacity="0.5" stroke-linecap="round">
+    <path d="M52 62 C50 76 54 90 52 104"/>
+    <path d="M88 64 C90 78 86 92 88 106"/>
+  </g>
+
+  <!-- hulking stone shoulder pauldrons -->
+  <g stroke="#101218" stroke-width="5.5" stroke-linejoin="round">
+    <circle cx="42" cy="66" r="22" fill="#6f8db3"/>
+    <circle cx="98" cy="66" r="22" fill="#6f8db3"/>
+  </g>
+  <!-- craggy spike outcrops on pauldrons -->
+  <g fill="#6f8db3" stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <path d="M32 48 L26 28 L48 46 Z"/>
+    <path d="M108 48 L114 28 L92 46 Z"/>
+  </g>
+  <!-- pauldron rim light -->
+  <ellipse cx="34" cy="56" rx="8" ry="5" fill="#bcd6f2" opacity="0.45"/>
+  <ellipse cx="106" cy="56" rx="8" ry="5" fill="#bcd6f2" opacity="0.45"/>
+
+  <!-- ===================== BLUNT MOSSY STONE HEAD (sunk between shoulders) ===================== -->
+  <path d="M70 56 C86 56 92 70 92 82 C92 94 82 100 70 100 C58 100 48 94 48 82 C48 70 54 56 70 56 Z"
+        fill="#5e8c3a" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- head inner shadow -->
+  <path d="M92 82 C92 94 82 100 70 100 C58 100 48 94 48 82 C55 89 62 92 70 92 C78 92 85 89 92 82 Z"
+        fill="#1f3322" opacity="0.8"/>
+  <!-- heavy stone brow slab -->
+  <path d="M52 74 C60 62 80 62 88 74 C80 68 60 68 52 74 Z"
+        fill="#3a4a63" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+
+  <!-- HUGE cute-angry menace eyes (dominant feature) -->
+  <g>
+    <circle cx="60" cy="82" r="9" fill="#ff5a3c" filter="url(#mg_menace)"/>
+    <circle cx="60" cy="82" r="6.5" fill="#ff5a3c" stroke="#101218" stroke-width="2.6"/>
+    <circle cx="58" cy="80" r="2" fill="#ffd0c2"/>
+    <circle cx="80" cy="82" r="9" fill="#ff5a3c" filter="url(#mg_menace)"/>
+    <circle cx="80" cy="82" r="6.5" fill="#ff5a3c" stroke="#101218" stroke-width="2.6"/>
+    <circle cx="78" cy="80" r="2" fill="#ffd0c2"/>
+  </g>
+  <!-- angry slanted brows -->
+  <g stroke="#101218" stroke-width="5" stroke-linecap="round">
+    <line x1="50" y1="71" x2="66" y2="76"/>
+    <line x1="90" y1="71" x2="74" y2="76"/>
+  </g>
+
+  <!-- craggy broken stone teeth (lower head) -->
+  <g fill="#d9d2b0" stroke="#101218" stroke-width="2.6" stroke-linejoin="round">
+    <path d="M60 90 L62 100 L68 90 Z"/>
+    <path d="M72 90 L74 100 L80 90 Z"/>
+  </g>
+</svg>

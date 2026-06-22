@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - ENEMY "Icebreather" (ranged frost beast, bulkier/tankier) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- BREATHER SET (matched chibi form, 3 elements): squat fat round maw-beast, big gaping -->
+  <!-- front maw aimed north, 4 stubby splayed legs (thicker), eyes flanking the maw. -->
+  <!-- Element = ICE: pale frosted hide, glassy icicle spines, cold cyan frost glow; bulkier. -->
+  <defs>
+    <filter id="ib_glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="2.6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- cold frost-mist drifting off the maw (north) -->
+  <ellipse cx="48" cy="14" rx="13" ry="9" fill="#6fe0ff" filter="url(#ib_glow)" opacity="0.3"/>
+
+  <!-- ground shadow under the heavy bulk (bigger footprint, tanky) -->
+  <ellipse cx="48" cy="85" rx="35" ry="9" fill="#0b0d14" opacity="0.48"/>
+
+  <!-- ===================== HEAVY STUBBY LEGS (4, flank corners — thicker) ===================== -->
+  <g fill="#33505e" stroke="#101218" stroke-width="4.2" stroke-linejoin="round">
+    <ellipse cx="20" cy="48" rx="11" ry="7.5" transform="rotate(-30 20 48)"/>
+    <ellipse cx="76" cy="48" rx="11" ry="7.5" transform="rotate(30 76 48)"/>
+    <ellipse cx="20" cy="75" rx="11" ry="7.5" transform="rotate(30 20 75)"/>
+    <ellipse cx="76" cy="75" rx="11" ry="7.5" transform="rotate(-30 76 75)"/>
+  </g>
+
+  <!-- ===================== FAT ROUND BULKY FROSTED BODY (dominant, biggest of the set) ===================== -->
+  <!-- body shadow base -->
+  <path d="M48 32 C74 32 83 50 81 66 C77 81 62 84 48 84 C34 84 19 81 15 66 C13 50 22 32 48 32 Z"
+        fill="#1d2b35" stroke="#101218" stroke-width="5.5" stroke-linejoin="round"/>
+  <!-- frosted hide fill -->
+  <path d="M48 34 C72 34 80 50 78 65 C74 78 61 81 48 81 C35 81 22 78 18 65 C16 50 24 34 48 34 Z"
+        fill="#4e6e84" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- inner shadow (lower half) -->
+  <path d="M78 65 C74 78 61 81 48 81 C35 81 22 78 18 65 C26 72 37 75 48 75 C59 75 70 72 78 65 Z"
+        fill="#1d2b35" opacity="0.85"/>
+  <!-- frost-rim light -->
+  <path d="M48 34 C67 34 75 47 73 57 C64 46 56 43 48 43 C40 43 32 46 23 57 C21 47 29 34 48 34 Z"
+        fill="#bcd6f2" opacity="0.55"/>
+
+  <!-- ===================== ELEMENT: ICICLE SPINE RIDGE + cryo seams (on back) ===================== -->
+  <g fill="#bcd6f2" stroke="#101218" stroke-width="2.4" stroke-linejoin="round">
+    <path d="M30 60 L26 46 L37 58 Z"/>
+    <path d="M44 62 L42 44 L51 62 Z"/>
+    <path d="M62 60 L66 46 L55 58 Z"/>
+    <path d="M48 74 L46 62 L54 74 Z"/>
+  </g>
+  <g stroke="#6fe0ff" stroke-linecap="round" opacity="0.6">
+    <path d="M34 60 C33 68 35 74 34 80" stroke-width="2.2"/>
+    <path d="M62 60 C63 68 61 74 62 80" stroke-width="2"/>
+  </g>
+  <circle cx="38" cy="68" r="5" fill="#6fe0ff" filter="url(#ib_glow)"/>
+  <circle cx="38" cy="68" r="2.8" fill="#6fe0ff" stroke="#101218" stroke-width="2"/>
+  <circle cx="58" cy="66" r="5" fill="#6fe0ff" filter="url(#ib_glow)"/>
+  <circle cx="58" cy="66" r="2.8" fill="#6fe0ff" stroke="#101218" stroke-width="2"/>
+
+  <!-- ===================== BIG GAPING FROSTED MAW (front, aimed north) ===================== -->
+  <!-- swept ice-horns -->
+  <g fill="#bcd6f2" stroke="#101218" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M32 38 L22 28 L37 41 Z"/>
+    <path d="M64 38 L74 28 L59 41 Z"/>
+  </g>
+  <circle cx="48" cy="33" r="15" fill="#6fe0ff" filter="url(#ib_glow)" opacity="0.85"/>
+  <!-- maw cavity -->
+  <path d="M34 35 C38 19 58 19 62 35 C58 47 38 47 34 35 Z"
+        fill="#0a2638" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <!-- glowing cryo throat -->
+  <path d="M39 34 C43 24 53 24 57 34 C53 42 43 42 39 34 Z" fill="#6fe0ff"/>
+  <ellipse cx="48" cy="32" rx="4" ry="5" fill="#0a2638" opacity="0.7"/>
+  <!-- glassy icicle fang ring -->
+  <g fill="#bcd6f2" stroke="#101218" stroke-width="2" stroke-linejoin="round">
+    <path d="M41 27 L43 20 L47 27 Z"/>
+    <path d="M49 27 L53 20 L55 27 Z"/>
+    <path d="M40 39 L43 46 L46 39 Z"/>
+    <path d="M50 39 L53 46 L56 39 Z"/>
+  </g>
+
+  <!-- frost vapor curls escaping the maw (north) -->
+  <g fill="none" stroke="#6fe0ff" stroke-linecap="round" opacity="0.8">
+    <path d="M43 21 C41 15 45 11 43 7" stroke-width="2.4"/>
+    <path d="M53 21 C55 15 51 11 53 7" stroke-width="2.2"/>
+  </g>
+  <circle cx="43" cy="7" r="2.2" fill="#6fe0ff" filter="url(#ib_glow)"/>
+  <circle cx="53" cy="7" r="2" fill="#6fe0ff" filter="url(#ib_glow)"/>
+
+  <!-- pale cryo eyes flanking the maw -->
+  <g>
+    <circle cx="28" cy="44" r="4.5" fill="#6fe0ff" filter="url(#ib_glow)"/>
+    <circle cx="28" cy="44" r="2.8" fill="#6fe0ff" stroke="#101218" stroke-width="2"/>
+    <circle cx="27" cy="43" r="0.9" fill="#eafbff"/>
+    <circle cx="68" cy="44" r="4.5" fill="#6fe0ff" filter="url(#ib_glow)"/>
+    <circle cx="68" cy="44" r="2.8" fill="#6fe0ff" stroke="#101218" stroke-width="2"/>
+    <circle cx="67" cy="43" r="0.9" fill="#eafbff"/>
+  </g>
+</svg>
