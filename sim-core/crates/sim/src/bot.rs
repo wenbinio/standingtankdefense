@@ -4,7 +4,33 @@
 //! drivable through its render-facing API. No RNG, no wall-clock: purely a
 //! function of observed state, so it never threatens determinism.
 
+use crate::content::ModEffect;
 use crate::{content, ArenaState, Input, Offer, OfferKind};
+
+/// Whether buying `off` would strictly hurt *this* tank with no upside the bot's
+/// policy can spend — i.e. a modifier that debuffs the owner's own survivability
+/// (cuts Max HP, or pushes HP regen toward a per-tick drain) in exchange for a
+/// gold windfall the greedy bot never converts back into survival. Detected from
+/// the effect *category*, not item names: any `Trade*ForGold` self-debuff counts,
+/// so a future trap of the same shape is declined too. Humans still see and may
+/// pick these as high-risk gambles — only the BOT auto-declines them, since
+/// blindly buying them is the self-kill that wrecked the survival-curve proxy.
+///
+/// These trades are net-negative to the bot specifically because its buy logic
+/// has no path that uses the gained gold to repair the lost HP/regen in time, so
+/// the trade only ever hurts the one axis the bot is graded on: staying alive.
+fn is_self_harm_trade(off: &Offer) -> bool {
+    if !matches!(off.kind, OfferKind::Modifier) {
+        return false;
+    }
+    match content::MODIFIERS[off.def as usize].effect {
+        // Reduces Max HP for gold — a smaller HP pool the bot never offsets.
+        ModEffect::TradeMaxHpForGold(hp_cost, _) => hp_cost > 0,
+        // Reduces HP regen for gold (may go negative → a drain) — self-damage.
+        ModEffect::TradeRegenForGold(regen_cost, _) => regen_cost > 0,
+        _ => false,
+    }
+}
 
 /// A self-imposed playstyle constraint the bot will honor while buying, so the
 /// preview can earn the cosmetic challenge achievements on demand. Purely a
@@ -89,9 +115,12 @@ impl Bot {
         content::attack_scope_id(content::WEAPONS[def as usize].attack)
     }
 
-    /// Whether the active challenge permits buying this offer.
+    /// Whether the active challenge permits buying this offer *and* the offer is
+    /// not a strictly self-harmful trade the bot would die to. This is the single
+    /// chokepoint every buy path funnels through, so no selection route (weapon
+    /// floor, economy, or the generic best-affordable scan) can auto-pick a trap.
     fn allowed(&self, off: &Offer) -> bool {
-        self.challenge.permits(off)
+        self.challenge.permits(off) && !is_self_harm_trade(off)
     }
 
     /// Cheapest affordable slot holding a weapon this challenge wants, if any.
