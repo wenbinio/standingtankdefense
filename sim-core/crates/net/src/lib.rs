@@ -22,12 +22,14 @@
 pub mod client;
 pub mod director;
 pub mod hub;
+pub mod replay;
 pub mod results;
 pub mod schedule;
 pub mod steam;
 pub mod transport;
 pub mod wire;
 
+pub use replay::{ClaimedResult, Replay, VerifyFail, VerifyOutcome};
 pub use schedule::Schedule;
 pub use transport::{Channel, Inbound, Outbound, PeerId, Transport, DIRECTOR};
 pub use wire::{InputCode, Msg, WireError};
