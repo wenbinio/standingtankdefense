@@ -511,13 +511,13 @@ func _draw_hud(font: Font, vp: Vector2) -> void:
 	var eco: PackedInt64Array = sim.economy()
 	draw_texture_rect(tex["panel"], Rect2(Vector2(12, 10), Vector2(330, 92)), false)
 	_blit(tex["heart"], Vector2(40, 38), 30)
-	draw_string(head, Vector2(60, 45), "%d / %d" % [maxi(ta[2], 0), ta[3]], HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color(0.91, 0.89, 0.82))
+	draw_string(head, Vector2(60, 45), "%d / %d" % [maxi(ta[2], 0), ta[3]], HORIZONTAL_ALIGNMENT_LEFT, -1, 19, ArtTheme.ui("hp"))
 	_blit(tex["coin"], Vector2(40, 74), 28)
-	draw_string(head, Vector2(60, 81), "%d" % eco[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color(0.92, 0.78, 0.36))
+	draw_string(head, Vector2(60, 81), "%d" % eco[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 19, ArtTheme.ui("coin"))
 	var gold_w := head.get_string_size("%d" % eco[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 19).x
-	draw_string(font, Vector2(60 + gold_w + 8, 81), "+%d/t" % eco[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.6, 0.55, 0.34))
-	draw_string(head, Vector2(212, 45), "ROUND %d" % sim.round(), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.74, 0.84, 0.95))
-	draw_string(font, Vector2(212, 81), "tick %d" % sim.tick(), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.6, 0.64, 0.72))
+	draw_string(font, Vector2(60 + gold_w + 8, 81), "+%d/t" % eco[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("accent_dim"))
+	draw_string(head, Vector2(212, 45), "ROUND %d" % sim.round(), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ArtTheme.ui("header"))
+	draw_string(font, Vector2(212, 81), "tick %d" % sim.tick(), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
 	_draw_arsenal(font, head, vp)
 	# While dead the bottom shop bar is frozen/irrelevant — replace it with the
 	# results panel so the destroyed-run summary owns the screen.
@@ -548,51 +548,51 @@ func _draw_results(font: Font, head: Font, vp: Vector2) -> void:
 	var px := vp.x * 0.5 - pw * 0.5
 	var py := vp.y * 0.5 - ph * 0.5
 	var panel := Rect2(Vector2(px, py), Vector2(pw, ph))
-	draw_rect(panel, Color(0.05, 0.06, 0.09, 0.97))
-	draw_rect(panel, Color(0.5, 0.16, 0.12), false, 2.0)
-	# Emissive top rule so it blooms under glow.
-	draw_rect(Rect2(Vector2(px, py), Vector2(pw, 3)), Color(1.6, 0.5, 0.34))
+	draw_rect(panel, ArtTheme.ui("panel_bg"))
+	draw_rect(panel, ArtTheme.ui("danger").darkened(0.5), false, 2.0)
+	# Emissive top rule so it blooms under glow (boost danger to HDR for bloom).
+	draw_rect(Rect2(Vector2(px, py), Vector2(pw, 3)), ArtTheme.ui("danger") * 1.4)
 
 	var cx := vp.x * 0.5
 	# Title.
 	var title := "TANK DESTROYED"
 	var tw := head.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34).x
-	draw_string(head, Vector2(cx - tw * 0.5, py + 48), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(1.4, 0.4, 0.28))
+	draw_string(head, Vector2(cx - tw * 0.5, py + 48), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, ArtTheme.ui("danger") * 1.4)
 	var sub := "Run summary"
 	var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
-	draw_string(font, Vector2(cx - sw * 0.5, py + 72), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.62, 0.66, 0.74))
+	draw_string(font, Vector2(cx - sw * 0.5, py + 72), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("text_dim"))
 
 	# Stat rows (label left, value right).
 	var lx := px + 36.0
 	var rx := px + pw - 36.0
 	var ry := py + 110.0
 	var rstep := 30.0
-	_draw_stat_row(font, head, lx, rx, ry, "Round reached", "%d" % rnd, Color(0.78, 0.86, 0.96))
+	_draw_stat_row(font, head, lx, rx, ry, "Round reached", "%d" % rnd, ArtTheme.ui("header"))
 	ry += rstep
-	_draw_stat_row(font, head, lx, rx, ry, "Damage dealt", "%d" % dmg, Color(0.96, 0.74, 0.5))
+	_draw_stat_row(font, head, lx, rx, ry, "Damage dealt", "%d" % dmg, ArtTheme.ui("accent"))
 	ry += rstep
-	_draw_stat_row(font, head, lx, rx, ry, "Gold earned", "%d" % gold, Color(0.92, 0.78, 0.36))
+	_draw_stat_row(font, head, lx, rx, ry, "Gold earned", "%d" % gold, ArtTheme.ui("coin"))
 	ry += rstep
-	_draw_stat_row(font, head, lx, rx, ry, "Weapons bought", "%d" % bought, Color(0.7, 0.84, 0.9))
+	_draw_stat_row(font, head, lx, rx, ry, "Weapons bought", "%d" % bought, ArtTheme.ui("text"))
 	ry += rstep + 4.0
 
 	# Owned arsenal, condensed onto one wrapped line.
-	draw_string(head, Vector2(lx, ry), "ARSENAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.66, 0.88, 0.68))
+	draw_string(head, Vector2(lx, ry), "ARSENAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("header"))
 	ry += 20.0
 	var ars := "  ·  ".join(owned) if owned.size() > 0 else "— nothing acquired —"
-	draw_string(font, Vector2(lx, ry), ars, HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 13, Color(0.78, 0.84, 0.8))
+	draw_string(font, Vector2(lx, ry), ars, HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 13, ArtTheme.ui("text"))
 	ry += 30.0
 
 	# Achievements unlocked this run.
-	draw_string(head, Vector2(lx, ry), "ACHIEVEMENTS UNLOCKED", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.86, 0.78, 0.5))
+	draw_string(head, Vector2(lx, ry), "ACHIEVEMENTS UNLOCKED", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("accent"))
 	ry += 20.0
 	if unlock_n == 0:
-		draw_string(font, Vector2(lx, ry), "— none this run —", HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 13, Color(0.5, 0.54, 0.6))
+		draw_string(font, Vector2(lx, ry), "— none this run —", HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 13, ArtTheme.ui("text_dim"))
 		ry += 22.0
 	else:
 		for id in Profile.last_unlocks:
 			var nm: String = Profile.ach_def(id).get("name", id)
-			draw_string(font, Vector2(lx, ry), "★ " + nm, HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 14, Color(0.96, 0.86, 0.5))
+			draw_string(font, Vector2(lx, ry), "★ " + nm, HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 14, ArtTheme.ui("accent"))
 			ry += 22.0
 
 	# Redeploy button + Esc prompt.
@@ -601,19 +601,22 @@ func _draw_results(font: Font, head: Font, vp: Vector2) -> void:
 	redeploy_rect = Rect2(cx - btn_w * 0.5, py + ph - 64.0, btn_w, btn_h)
 	var mpos := get_viewport().get_mouse_position()
 	var hovered := redeploy_rect.has_point(mpos)
-	var bbg := Color(0.16, 0.26, 0.2) if hovered else Color(0.12, 0.2, 0.16)
+	var btn_base := ArtTheme.ui("accent").darkened(0.7)
+	var bbg := btn_base.lightened(0.08) if hovered else btn_base
 	draw_rect(redeploy_rect, bbg)
-	draw_rect(redeploy_rect, Color(0.4, 0.8, 0.55, 0.7), false, 1.5)
+	var btn_border := ArtTheme.ui("accent")
+	btn_border.a = 0.7
+	draw_rect(redeploy_rect, btn_border, false, 1.5)
 	var blabel := "REDEPLOY"
 	var blw := head.get_string_size(blabel, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
-	draw_string(head, redeploy_rect.position + Vector2(btn_w * 0.5 - blw * 0.5, 27), blabel, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.78, 0.96, 0.82))
+	draw_string(head, redeploy_rect.position + Vector2(btn_w * 0.5 - blw * 0.5, 27), blabel, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, ArtTheme.ui("accent").lightened(0.3))
 	var prompt := "[Enter] Redeploy   ·   [Esc] Menu"
 	var pwid := font.get_string_size(prompt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-	draw_string(font, Vector2(cx - pwid * 0.5, py + ph - 12.0), prompt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.66, 0.72, 0.8))
+	draw_string(font, Vector2(cx - pwid * 0.5, py + ph - 12.0), prompt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("text_dim"))
 
 # One label/value row for the results panel.
 func _draw_stat_row(font: Font, head: Font, lx: float, rx: float, y: float, label: String, value: String, vcol: Color) -> void:
-	draw_string(font, Vector2(lx, y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.7, 0.74, 0.82))
+	draw_string(font, Vector2(lx, y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ArtTheme.ui("text_dim"))
 	var vw := head.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
 	draw_string(head, Vector2(rx - vw, y + 1), value, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, vcol)
 
@@ -627,16 +630,16 @@ func _draw_arsenal(font: Font, head: Font, vp: Vector2) -> void:
 	var row_h := 19.0
 	var head_h := 26.0
 	var ph := head_h + 8.0 + maxf(float(lines.size()), 1.0) * row_h + 6.0
-	draw_rect(Rect2(Vector2(px, py), Vector2(pw, ph)), Color(0.06, 0.07, 0.09, 0.9))
-	draw_rect(Rect2(Vector2(px, py), Vector2(pw, ph)), Color(0.22, 0.27, 0.33), false, 1.0)
-	draw_rect(Rect2(Vector2(px, py), Vector2(pw, head_h)), Color(0.11, 0.14, 0.12))
-	draw_string(head, Vector2(px + 10, py + 18), "ARSENAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.66, 0.88, 0.68))
+	draw_rect(Rect2(Vector2(px, py), Vector2(pw, ph)), ArtTheme.ui("panel_bg"))
+	draw_rect(Rect2(Vector2(px, py), Vector2(pw, ph)), ArtTheme.ui("panel_border"), false, 1.0)
+	draw_rect(Rect2(Vector2(px, py), Vector2(pw, head_h)), ArtTheme.ui("panel_border").darkened(0.4))
+	draw_string(head, Vector2(px + 10, py + 18), "ARSENAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("header"))
 	var ct := "%d" % lines.size()
 	var ctw := font.get_string_size(ct, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-	draw_string(font, Vector2(px + pw - ctw - 10, py + 18), ct, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.45, 0.6, 0.48))
+	draw_string(font, Vector2(px + pw - ctw - 10, py + 18), ct, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("text_dim"))
 	var ay := py + head_h + 8.0
 	if lines.is_empty():
-		draw_string(font, Vector2(px + 10, ay + 12), "— nothing yet —", HORIZONTAL_ALIGNMENT_LEFT, pw - 20, 13, Color(0.5, 0.54, 0.6))
+		draw_string(font, Vector2(px + 10, ay + 12), "— nothing yet —", HORIZONTAL_ALIGNMENT_LEFT, pw - 20, 13, ArtTheme.ui("text_dim"))
 		return
 	for line in lines:
 		# Split "Name xN" so the count can be right-aligned for legibility.
@@ -646,10 +649,10 @@ func _draw_arsenal(font: Font, head: Font, vp: Vector2) -> void:
 		if sp > 0:
 			nm = line.substr(0, sp)
 			cnt = line.substr(sp + 1)   # "xN"
-		draw_string(font, Vector2(px + 10, ay + 13), nm, HORIZONTAL_ALIGNMENT_LEFT, pw - 56, 14, Color(0.82, 0.88, 0.82))
+		draw_string(font, Vector2(px + 10, ay + 13), nm, HORIZONTAL_ALIGNMENT_LEFT, pw - 56, 14, ArtTheme.ui("text"))
 		if cnt != "":
 			var cw := font.get_string_size(cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-			draw_string(font, Vector2(px + pw - cw - 10, ay + 13), cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.62, 0.8, 0.62))
+			draw_string(font, Vector2(px + pw - cw - 10, ay + 13), cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("accent_dim"))
 		ay += row_h
 
 # Bottom shop bar: every offer this round as a clickable card, plus reroll and
@@ -668,13 +671,13 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 
 	var bar_h := 162.0
 	var y0 := vp.y - bar_h
-	draw_rect(Rect2(Vector2(0, y0), Vector2(vp.x, bar_h)), Color(0.06, 0.07, 0.09, 0.93))
-	draw_rect(Rect2(Vector2(0, y0), Vector2(vp.x, 2)), Color(0.22, 0.26, 0.32))
-	draw_string(head, Vector2(16, y0 + 20), "SHOP", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.86, 0.9, 0.98))
+	draw_rect(Rect2(Vector2(0, y0), Vector2(vp.x, bar_h)), ArtTheme.ui("panel_bg"))
+	draw_rect(Rect2(Vector2(0, y0), Vector2(vp.x, 2)), ArtTheme.ui("panel_border"))
+	draw_string(head, Vector2(16, y0 + 20), "SHOP", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("header"))
 	var sw := head.get_string_size("SHOP", HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 	draw_string(font, Vector2(16 + sw + 10, y0 + 20),
 		"click a card or press [1-8] to buy  ·  refreshes every round (30s)  ·  buy as many as you can afford",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.6, 0.66, 0.74))
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
 
 	var n := names.size()
 	var split := 4              # slots 0-3 are weapons, 4-7 are economy/passives/spikes
@@ -692,7 +695,7 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 	for i in n:
 		if i == split:
 			# divider between the two groups
-			draw_rect(Rect2(Vector2(x - group_gap * 0.5 - gap * 0.5, top - 18), Vector2(2, ch + 18)), Color(0.2, 0.23, 0.29))
+			draw_rect(Rect2(Vector2(x - group_gap * 0.5 - gap * 0.5, top - 18), Vector2(2, ch + 18)), ArtTheme.ui("panel_border"))
 			x += group_gap - gap
 		var r := Rect2(x, top, cw, ch)
 		shop_rects.append(r)
@@ -702,11 +705,12 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 		var is_weapon := (flags & 1) != 0
 		var affordable := (flags & 2) != 0
 		var tip := desc[i * 2 + 1] if i * 2 + 1 < desc.size() else ""
-		var fg := Color.WHITE if affordable else Color(0.42, 0.42, 0.48)
+		var fg := ArtTheme.ui("text") if affordable else ArtTheme.ui("text_dim").darkened(0.2)
 		# C5 hover/press feedback (read-only — uses the same rects/inputs as the handlers).
 		var hovered := r.has_point(mpos)
 		var pressed := pending_code == 1 and pending_slot == i
-		var bg := Color(0.11, 0.12, 0.15) if affordable else Color(0.075, 0.08, 0.10)
+		var bg := ArtTheme.ui("panel_bg").lightened(0.06) if affordable else ArtTheme.ui("panel_bg")
+		bg.a = 1.0
 		if pressed:
 			bg = bg.lightened(0.10) if affordable else bg
 		elif hovered and affordable:
@@ -720,18 +724,18 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 		var icx := r.position + Vector2(cw * 0.5, 26)
 		_blit(frame_tex[clampi(rarity, 0, 3)], icx, 46, fg)
 		_blit(tex["weapon"] if is_weapon else tex["mod"], icx, 30, fg)
-		draw_string(head, r.position + Vector2(6, 16), "%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.55, 0.6, 0.68))
+		draw_string(head, r.position + Vector2(6, 16), "%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
 		draw_string(head, r.position + Vector2(6, ch - 38), _fit(font, names[i], 13, cw - 12), HORIZONTAL_ALIGNMENT_LEFT, cw - 10, 13, fg)
 		# C2 self-describing effect line (the mechanical tip), truncated to fit.
-		var eff_col := Color(0.6, 0.78, 0.62) if affordable else Color(0.42, 0.5, 0.44)
+		var eff_col := ArtTheme.ui("text_dim") if affordable else ArtTheme.ui("text_dim").darkened(0.3)
 		draw_string(font, r.position + Vector2(6, ch - 22), _fit(font, tip, 11, cw - 12), HORIZONTAL_ALIGNMENT_LEFT, cw - 10, 11, eff_col)
 		# cost (left) + rarity word (right), measured for clean right-alignment.
-		draw_string(head, r.position + Vector2(6, ch - 5), "%dg" % cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.92, 0.77, 0.36) if affordable else Color(0.6, 0.4, 0.4))
-		draw_string(font, r.position + Vector2(cw - 8 - font.get_string_size(cat[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x, ch - 6), cat[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, (cat[1] as Color).lightened(0.1) if affordable else Color(0.4, 0.42, 0.46))
+		draw_string(head, r.position + Vector2(6, ch - 5), "%dg" % cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("coin") if affordable else ArtTheme.ui("accent_dim"))
+		draw_string(font, r.position + Vector2(cw - 8 - font.get_string_size(cat[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x, ch - 6), cat[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, (cat[1] as Color).lightened(0.1) if affordable else ArtTheme.ui("text_dim").darkened(0.2))
 		if i == 0:
-			draw_string(head, Vector2(x, top - 6), "WEAPONS", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.62, 0.72, 0.86))
+			draw_string(head, Vector2(x, top - 6), "WEAPONS", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ArtTheme.ui("header"))
 		elif i == split:
-			draw_string(head, Vector2(x, top - 6), "ECONOMY · PASSIVES · SPIKES", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.78, 0.7, 0.5))
+			draw_string(head, Vector2(x, top - 6), "ECONOMY · PASSIVES · SPIKES", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ArtTheme.ui("accent"))
 		x += cw + gap
 
 	var bx := vp.x - btn_w - 8.0
@@ -739,24 +743,32 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 	clear_rect = Rect2(bx, top + ch * 0.5 + 4.0, btn_w, ch * 0.5 - 4.0)
 	var rr_ok := free_rr > 0 or gold >= rr_cost
 	var rr_label := "REROLL  free x%d" % free_rr if free_rr > 0 else "REROLL  %dg" % rr_cost
-	var rr_bg := _btn_bg(Color(0.13, 0.16, 0.2), Color(0.09, 0.1, 0.12), rr_ok, reroll_rect.has_point(mpos), pending_code == 2)
+	var rr_on := ArtTheme.ui("header").darkened(0.7)
+	var rr_bg := _btn_bg(rr_on, ArtTheme.ui("panel_border").darkened(0.45), rr_ok, reroll_rect.has_point(mpos), pending_code == 2)
 	draw_rect(reroll_rect, rr_bg)
 	if reroll_rect.has_point(mpos) and rr_ok:
-		draw_rect(reroll_rect, Color(0.5, 0.7, 0.9, 0.5), false, 1.0)
+		var rr_outline := ArtTheme.ui("header")
+		rr_outline.a = 0.5
+		draw_rect(reroll_rect, rr_outline, false, 1.0)
 	draw_string(head, reroll_rect.position + Vector2(12, reroll_rect.size.y * 0.5 + 5), "[R] " + rr_label,
-		HORIZONTAL_ALIGNMENT_LEFT, btn_w - 18, 14, Color(0.72, 0.86, 0.96) if rr_ok else Color(0.5, 0.5, 0.55))
-	var cl_bg := _btn_bg(Color(0.2, 0.13, 0.13), Color(0.2, 0.13, 0.13), true, clear_rect.has_point(mpos), pending_code == 3)
+		HORIZONTAL_ALIGNMENT_LEFT, btn_w - 18, 14, ArtTheme.ui("header") if rr_ok else ArtTheme.ui("text_dim"))
+	var cl_on := ArtTheme.ui("danger").darkened(0.7)
+	var cl_bg := _btn_bg(cl_on, cl_on, true, clear_rect.has_point(mpos), pending_code == 3)
 	draw_rect(clear_rect, cl_bg)
 	if clear_rect.has_point(mpos):
-		draw_rect(clear_rect, Color(0.9, 0.5, 0.45, 0.5), false, 1.0)
+		var cl_outline := ArtTheme.ui("danger")
+		cl_outline.a = 0.5
+		draw_rect(clear_rect, cl_outline, false, 1.0)
 	draw_string(head, clear_rect.position + Vector2(12, clear_rect.size.y * 0.5 + 5), "[Space] CLEAR",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.96, 0.62, 0.52))
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("danger"))
 
 	# Hover tooltip: flavor + mechanical tip for the card under the cursor.
 	for i in shop_rects.size():
 		if shop_rects[i].has_point(mpos):
 			draw_rect(shop_rects[i], Color(1, 1, 1, 0.05))
-			draw_rect(shop_rects[i], Color(0.85, 0.88, 0.95, 0.6), false, 1.0)
+			var hov := ArtTheme.ui("text")
+			hov.a = 0.6
+			draw_rect(shop_rects[i], hov, false, 1.0)
 			var fl := desc[i * 2] if i * 2 < desc.size() else ""
 			var tp := desc[i * 2 + 1] if i * 2 + 1 < desc.size() else ""
 			_draw_tooltip(font, vp, shop_rects[i], names[i], fl, tp)
@@ -799,11 +811,11 @@ func _draw_tooltip(font: Font, vp: Vector2, card: Rect2, nm: String, flavor: Str
 	var h := 96.0
 	var x := clampf(card.position.x + card.size.x * 0.5 - w * 0.5, 8.0, vp.x - w - 8.0)
 	var y := card.position.y - h - 12.0
-	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07, 0.97))
-	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.32, 0.36, 0.44), false, 2.0)
-	draw_string(head, Vector2(x + 14, y + 26), nm, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 17, Color(0.96, 0.92, 0.8))
-	draw_multiline_string(font, Vector2(x + 14, y + 48), flavor, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, 2, Color(0.72, 0.76, 0.85))
-	draw_string(font, Vector2(x + 14, y + h - 12), tip, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, Color(0.6, 0.82, 0.62))
+	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), ArtTheme.ui("panel_bg"))
+	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), ArtTheme.ui("panel_border"), false, 2.0)
+	draw_string(head, Vector2(x + 14, y + 26), nm, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 17, ArtTheme.ui("accent"))
+	draw_multiline_string(font, Vector2(x + 14, y + 48), flavor, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, 2, ArtTheme.ui("text"))
+	draw_string(font, Vector2(x + 14, y + h - 12), tip, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, ArtTheme.ui("text_dim"))
 
 func _rarity_color(r: int) -> Color:
 	match r:
