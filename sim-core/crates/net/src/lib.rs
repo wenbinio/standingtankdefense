@@ -22,6 +22,7 @@
 pub mod client;
 pub mod director;
 pub mod hub;
+pub mod lobby;
 pub mod replay;
 pub mod results;
 pub mod schedule;
@@ -29,6 +30,7 @@ pub mod steam;
 pub mod transport;
 pub mod wire;
 
+pub use lobby::{JoinReject, Lobby, MatchPlan, Member, Phase, Ruleset, StartReject, MAX_PARTY};
 pub use replay::{verify, Capture, ClaimedResult, Replay, VerifyFail, VerifyOutcome};
 pub use results::{verify_submissions, MatchStats, PlayerStats, SubmittedResult};
 pub use schedule::Schedule;
