@@ -23,6 +23,18 @@ var enemy_tex := []           # by kind: 0 grunt, 1 steam, 2 boss
 var minion_tex := []          # summoned allies: 0 skeleton, 1 infernal
 var frame_tex := []           # by rarity 0..3
 
+# --- juice / lighting (render-only) ---------------------------------------
+var fx: Fx                    # reusable pooled FX + screen-shake/hitstop bus
+var _spark_tex: Texture2D     # hit_spark.svg, used for impact pops
+var _world_env: WorldEnvironment
+var _vignette: ColorRect      # screen-space vignette + danger color-grade
+var _vig_mat: ShaderMaterial
+var _tank_light: PointLight2D # tank floor light (aether-blue, idle pulse)
+var _muzzle_light: PointLight2D
+var _menace_light: PointLight2D  # red boss/fire-breather menace glow
+var _proj_history := []       # recent frames of projectiles_pos() (motion trail)
+var _shake := Vector2.ZERO    # this-frame world-origin shake offset
+
 # interactive shop hit-targets (recomputed each draw)
 var shop_rects: Array[Rect2] = []
 var reroll_rect := Rect2()
@@ -32,7 +44,98 @@ var _recorded := false        # match-end achievements credited once
 func _ready() -> void:
 	randomize()
 	sim = StSim.new_match(randi())
+	fx = Fx.new()
 	_load_textures()
+	_setup_environment()
+
+# Build the render-only lighting + post-processing rig in code (Main.tscn is a
+# bare Node2D). All cosmetic; nothing here touches the sim.
+func _setup_environment() -> void:
+	# --- A1: real bloom via WorldEnvironment glow -------------------------
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CANVAS
+	env.glow_enabled = true
+	env.glow_intensity = 0.9
+	env.glow_strength = 1.05
+	env.glow_bloom = 0.15
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+	# Only pixels brighter than ~1.0 (HDR) bloom — the Color(2.4,..) hit-flash,
+	# bright FX sparks and the painted SVG halos. Keeps the base art clean.
+	env.glow_hdr_threshold = 1.0
+	env.glow_hdr_scale = 2.0
+	# Bias the blur pyramid toward mid levels for a soft, wide bloom.
+	env.set_glow_level(1, 0.0)
+	env.set_glow_level(2, 0.4)
+	env.set_glow_level(3, 0.8)
+	env.set_glow_level(4, 1.0)
+	env.set_glow_level(5, 0.6)
+	_world_env = WorldEnvironment.new()
+	_world_env.environment = env
+	add_child(_world_env)
+
+	# --- A3: CanvasModulate dims the floor so lights read -----------------
+	var cm := CanvasModulate.new()
+	cm.color = Color(0.62, 0.64, 0.7)   # ~0.6 ambient, faintly cool
+	add_child(cm)
+
+	# Tank floor light — aether-blue, parented under Main; moved each frame.
+	_tank_light = PointLight2D.new()
+	_tank_light.texture = _radial_light_tex(256)
+	_tank_light.color = Color(0.42, 0.66, 1.0)
+	_tank_light.energy = 1.1
+	_tank_light.texture_scale = 3.4
+	_tank_light.blend_mode = Light2D.BLEND_MODE_ADD
+	add_child(_tank_light)
+
+	# Muzzle flash light — brief punch reusing the _muzzle timer.
+	_muzzle_light = PointLight2D.new()
+	_muzzle_light.texture = _radial_light_tex(128)
+	_muzzle_light.color = Color(0.5, 0.74, 1.0)
+	_muzzle_light.energy = 0.0
+	_muzzle_light.texture_scale = 2.0
+	_muzzle_light.blend_mode = Light2D.BLEND_MODE_ADD
+	add_child(_muzzle_light)
+
+	# Cheap red menace light that hovers over the nastiest enemy on screen.
+	_menace_light = PointLight2D.new()
+	_menace_light.texture = _radial_light_tex(192)
+	_menace_light.color = Color(1.0, 0.32, 0.22)
+	_menace_light.energy = 0.0
+	_menace_light.texture_scale = 2.6
+	_menace_light.blend_mode = Light2D.BLEND_MODE_ADD
+	add_child(_menace_light)
+
+	# --- A2: screen-space vignette + escalating danger grade --------------
+	# BackBufferCopy captures the arena so the shader can read SCREEN_TEXTURE.
+	var bb := BackBufferCopy.new()
+	bb.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
+	add_child(bb)
+	_vig_mat = ShaderMaterial.new()
+	_vig_mat.shader = load("res://shaders/vignette_grade.gdshader")
+	_vig_mat.set_shader_parameter("danger", 0.0)
+	_vignette = ColorRect.new()
+	_vignette.material = _vig_mat
+	_vignette.color = Color(1, 1, 1, 1)
+	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Layer above the arena but the HUD (drawn by the UI agent in _draw) renders
+	# on the Node2D canvas; this CanvasLayer sits between arena and HUD intent.
+	var cl := CanvasLayer.new()
+	cl.layer = 0
+	cl.add_child(_vignette)
+	add_child(cl)
+
+# A soft radial gradient texture for PointLight2D (bright center -> transparent).
+func _radial_light_tex(size: int) -> Texture2D:
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var c := float(size) * 0.5
+	for y in size:
+		for x in size:
+			var d := Vector2(x - c, y - c).length() / c
+			var a := clampf(1.0 - d, 0.0, 1.0)
+			a = a * a                       # soft falloff
+			img.set_pixel(x, y, Color(1, 1, 1, a))
+	return ImageTexture.create_from_image(img)
 
 func _load_textures() -> void:
 	tex = {
@@ -66,6 +169,7 @@ func _load_textures() -> void:
 	minion_tex = [ArtTheme.tex("minions/skeleton.svg"), ArtTheme.tex("minions/infernal.svg")]
 	frame_tex = [ArtTheme.tex("ui/frame_common.svg"), ArtTheme.tex("ui/frame_uncommon.svg"),
 		ArtTheme.tex("ui/frame_rare.svg"), ArtTheme.tex("ui/frame_epic.svg")]
+	_spark_tex = ArtTheme.tex("fx/hit_spark.svg")
 
 func _unhandled_key_input(e: InputEvent) -> void:
 	if not (e is InputEventKey) or not e.pressed or e.echo:
@@ -122,7 +226,73 @@ func _physics_process(_delta: float) -> void:
 	pending_slot = 0
 	queue_redraw()
 
-# Diff this tick's enemies vs last to spawn hit-flashes / death-poofs / muzzle.
+# Frame-rate cosmetic update: advance the FX bus, animate lights, drive the
+# danger color-grade, and keep particles smooth above the 30 Hz sim tick.
+func _process(delta: float) -> void:
+	if sim == null or fx == null:
+		return
+	fx.update(delta)
+	_shake = fx.shake_offset()
+
+	# Tank floor light follows the tank (origin + idle bob) and pulses gently
+	# in sync with the idle bob.
+	if _tank_light:
+		var origin := _to_screen(0, 0)
+		var tbob := sin(t * 0.14) * 2.0
+		_tank_light.position = origin + Vector2(0, tbob) + _shake
+		_tank_light.energy = 1.0 + sin(t * 0.14) * 0.18
+
+	# Muzzle light: brief punch driven by the _muzzle timer.
+	if _muzzle_light:
+		var origin2 := _to_screen(0, 0)
+		_muzzle_light.position = origin2 + Vector2(0, -44) + _shake
+		_muzzle_light.energy = lerpf(_muzzle_light.energy,
+			2.4 if _muzzle > 0 else 0.0, 0.5)
+
+	# Menace light hovers over the most dangerous enemy (boss, else fire/ice
+	# breather, kind 9/10), pulsing red. Cheap single light.
+	_update_menace_light()
+
+	# A2: danger color-grade ramps with the round number (cosmetic read).
+	if _vig_mat:
+		var danger := clampf(float(sim.round()) / 18.0, 0.0, 1.0)
+		_vig_mat.set_shader_parameter("danger", danger)
+
+	queue_redraw()
+
+# Pick the scariest on-screen enemy and park a red light on it.
+func _update_menace_light() -> void:
+	if _menace_light == null:
+		return
+	var ep: PackedVector2Array = sim.enemies_pos()
+	var ek: PackedByteArray = sim.enemies_kind()
+	var boss: PackedByteArray = sim.enemies_boss()
+	var best := -1
+	var best_score := 0
+	for i in ep.size():
+		var k: int = ek[i] if i < ek.size() else 0
+		var is_boss: bool = i < boss.size() and boss[i] != 0
+		var score := 0
+		if is_boss or k == 2:
+			score = 3
+		elif k == 9 or k == 10:   # fire-/ice-breather
+			score = 2
+		elif k == 6:              # mountain giant
+			score = 1
+		if score > best_score:
+			best_score = score
+			best = i
+	if best >= 0:
+		var sp := _to_screen(ep[best].x, ep[best].y) + _shake
+		_menace_light.position = sp
+		_menace_light.energy = lerpf(_menace_light.energy,
+			0.7 + sin(t * 0.25) * 0.25, 0.2)
+	else:
+		_menace_light.energy = lerpf(_menace_light.energy, 0.0, 0.2)
+
+# Diff this tick's enemies vs last to spawn hit-flashes / death-poofs / muzzle,
+# AND fire the cosmetic juice bus (sparks, kill bursts, shake, hit-stop, combat
+# text). All render-only — driven by sim reads, never feeding the sim back.
 func _update_juice() -> void:
 	var ids: PackedInt64Array = sim.enemies_id()
 	var pos: PackedVector2Array = sim.enemies_pos()
@@ -135,13 +305,32 @@ func _update_juice() -> void:
 		cur[id] = {"pos": wp, "hp": h}
 		if _prev.has(id) and h < _prev[id]["hp"]:
 			_flash[id] = 6
+			# impact spark pop + damage number at the hit location
+			var sp := _to_screen(wp.x, wp.y)
+			fx.burst_sparks(sp, Color(2.2, 1.3, 0.6), 6, 200.0, 0.26)
+			var dmg: int = int(_prev[id]["hp"]) - h   # permille drop (proxy)
+			if dmg > 30:
+				fx.combat_text(sp + Vector2(0, -28),
+					str(maxi(1, dmg / 10)), Color(1.0, 0.86, 0.4), 16, 38.0)
 	for id in _prev:
 		if not cur.has(id):
-			_poofs.append({"wpos": _prev[id]["pos"], "ttl": 12, "life": 12})
+			var wp2: Vector2 = _prev[id]["pos"]
+			_poofs.append({"wpos": wp2, "ttl": 12, "life": 12})
+			# kill burst + shake + a "death" combat pop
+			var sp2 := _to_screen(wp2.x, wp2.y)
+			fx.kill_burst(sp2, Color(2.4, 1.6, 0.7))
 	_prev = cur
-	var pc: int = sim.projectiles_pos().size()
+
+	# Projectile motion trail: keep a short history of position frames to blit
+	# fading ghosts behind each orb.
+	var ppos: PackedVector2Array = sim.projectiles_pos()
+	_proj_history.push_front(ppos)
+	if _proj_history.size() > 5:
+		_proj_history.resize(5)
+	var pc: int = ppos.size()
 	if pc > _prev_proj:
 		_muzzle = 5
+		fx.add_shake(0.05)   # tiny recoil kick on fire
 	_prev_proj = pc
 	for id in _flash.keys():
 		_flash[id] -= 1
@@ -152,6 +341,12 @@ func _update_juice() -> void:
 	_poofs = _poofs.filter(func(p): return p["ttl"] > 0)
 	if _muzzle > 0:
 		_muzzle -= 1
+
+	# Clear (Space) is a big event: shockwave already drawn; add shake + flash.
+	if clear_fx == 18:
+		fx.add_shake(0.5)
+		fx.add_flash(Color(0.7, 0.85, 1.0, 0.35), 0.22)
+		fx.add_hitstop(0.05)
 
 func _scale() -> float:
 	var c: Vector2 = get_viewport_rect().size * 0.5
@@ -169,24 +364,39 @@ func _draw() -> void:
 	var vp: Vector2 = get_viewport_rect().size
 	var font := ThemeDB.fallback_font
 	var s := _scale()
-	var origin := _to_screen(0, 0)
+	# Screen-shake offset (render-only) applied to the whole arena layer.
+	var sh := _shake
+	var origin := _to_screen(0, 0) + sh
 
 	draw_texture_rect(tex["ground"], Rect2(Vector2.ZERO, vp), false)
 	var ring_d := 2.0 * 1500.0 * s / 0.90
 	_blit(tex["ring"], origin, ring_d)
 
+	# Upgraded Clear shockwave: brighter (blooms) + a second trailing ring.
 	if clear_fx > 0:
 		var prog := 1.0 - float(clear_fx) / 18.0
-		_blit(tex["clear"], origin, 200.0 + prog * (ring_d - 200.0), Color(1, 1, 1, 1.0 - prog * 0.7))
+		var ca := 1.0 - prog * 0.7
+		# emissive (>1) so it blooms under glow
+		_blit(tex["clear"], origin, 200.0 + prog * (ring_d - 200.0), Color(1.8, 2.0, 2.4, ca))
+		if prog > 0.15:
+			_blit(tex["clear"], origin, 200.0 + (prog - 0.15) * (ring_d - 200.0),
+				Color(1.2, 1.5, 2.0, ca * 0.5))
 
+	# Projectile motion trail (fading ghosts) under the live orbs.
+	for hidx in range(_proj_history.size() - 1, 0, -1):
+		var frame: PackedVector2Array = _proj_history[hidx]
+		var ta := (1.0 - float(hidx) / float(_proj_history.size())) * 0.45
+		for p in frame:
+			_blit(tex["proj"], _to_screen(p.x, p.y) + sh, 26.0 * (1.0 - 0.08 * hidx),
+				Color(1.0, 1.0, 1.2, ta))
 	for p in sim.projectiles_pos():
-		_blit(tex["proj"], _to_screen(p.x, p.y), 26.0)
+		_blit(tex["proj"], _to_screen(p.x, p.y) + sh, 26.0, Color(1.5, 1.5, 1.9))
 
 	# death poofs (under enemies)
 	for poof in _poofs:
 		var pr := 1.0 - float(poof["ttl"]) / float(poof["life"])
 		var wp: Vector2 = poof["wpos"]
-		_blit(tex["poof"], _to_screen(wp.x, wp.y), 38.0 + pr * 42.0, Color(1, 1, 1, 1.0 - pr))
+		_blit(tex["poof"], _to_screen(wp.x, wp.y) + sh, 38.0 + pr * 42.0, Color(1, 1, 1, 1.0 - pr))
 
 	# enemies with idle bob + hit flash
 	var ep: PackedVector2Array = sim.enemies_pos()
@@ -201,7 +411,7 @@ func _draw() -> void:
 			continue
 		var size := 230.0 if kind == 2 else (118.0 if kind == 6 else 74.0)
 		var mod := Color(2.4, 2.4, 2.4) if _flash.has(id) else Color.WHITE
-		_blit(tx, _to_screen(ep[i].x, ep[i].y) + Vector2(0, bob), size, mod)
+		_blit(tx, _to_screen(ep[i].x, ep[i].y) + Vector2(0, bob) + sh, size, mod)
 
 	# summoned allies (skeletons / infernals) — drawn beneath the tank
 	var mp: PackedVector2Array = sim.minions_pos()
@@ -211,13 +421,27 @@ func _draw() -> void:
 		var mtx: Texture2D = minion_tex[k] if k < minion_tex.size() else null
 		if mtx:
 			var mbob := sin(t * 0.2 + float(i) * 1.3) * 3.0
-			_blit(mtx, _to_screen(mp[i].x, mp[i].y) + Vector2(0, mbob), 64.0)
+			_blit(mtx, _to_screen(mp[i].x, mp[i].y) + Vector2(0, mbob) + sh, 64.0)
 
 	# tank with gentle bob + muzzle flash
 	var tbob := sin(t * 0.14) * 2.0
 	_blit(tex["tank"], origin + Vector2(0, tbob), 124.0)
 	if _muzzle > 0:
-		_blit(tex["muzzle"], origin + Vector2(0, -44 + tbob), 64.0, Color(1, 1, 1, float(_muzzle) / 5.0))
+		# emissive muzzle flash blooms; spark texture adds bite
+		_blit(tex["muzzle"], origin + Vector2(0, -44 + tbob), 64.0,
+			Color(1.8, 2.0, 2.6, float(_muzzle) / 5.0))
+		if _spark_tex:
+			_blit(_spark_tex, origin + Vector2(0, -44 + tbob), 40.0,
+				Color(2.2, 1.6, 0.9, float(_muzzle) / 5.0))
+
+	# Pooled custom-_draw FX (impact sparks, kill bursts, shockwaves, combat
+	# text) — all in screen space, so drawn after the world layer.
+	if fx:
+		fx.draw(self, font)
+		# Full-screen flash pulse on big hits / Clear.
+		var fc := fx.flash_color()
+		if fc.a > 0.001:
+			draw_rect(Rect2(Vector2.ZERO, vp), fc)
 
 	_draw_hud(font, vp)
 
