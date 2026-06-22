@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Deadeye Dan" (Gaslamp Bulwark, CHIBI) -->
+  <!-- One-eyed sniper: long stubby scope-barrel UP, brass scope rings, tiny cowboy-hat brim, big single aether eye with crosshair. -->
+  <defs>
+    <filter id="dd_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <ellipse cx="96" cy="160" rx="60" ry="22" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- stubby feet -->
+  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <rect x="50" y="148" width="34" height="22" rx="9" fill="#3a4a63"/>
+    <rect x="108" y="148" width="34" height="22" rx="9" fill="#3a4a63"/>
+  </g>
+
+  <!-- long scope-barrel UP (sniper read) -->
+  <rect x="86" y="20" width="28" height="58" rx="12" fill="#0b0d14" opacity="0.35"/>
+  <rect x="80" y="8" width="36" height="70" rx="16" fill="#3a4a63" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <rect x="85" y="14" width="9" height="58" rx="4.5" fill="#6f8db3"/>
+  <!-- brass scope adjustment rings -->
+  <rect x="74" y="30" width="48" height="11" rx="5" fill="#caa24a" stroke="#101218" stroke-width="3"/>
+  <rect x="74" y="50" width="48" height="11" rx="5" fill="#caa24a" stroke="#101218" stroke-width="3"/>
+  <!-- scope muzzle + targeting lens with crosshair -->
+  <rect x="72" y="4" width="48" height="16" rx="8" fill="#3a4a63" stroke="#101218" stroke-width="4.5"/>
+  <circle cx="96" cy="13" r="8" fill="#3fa9ff" filter="url(#dd_glow)"/>
+  <circle cx="96" cy="13" r="5.5" fill="#bcd6f2"/>
+  <g stroke="#101218" stroke-width="1.4" opacity="0.8"><path d="M88 13 L104 13"/><path d="M96 5 L96 21"/></g>
+
+  <!-- hunched body -->
+  <path d="M96 56 C140 56 158 84 158 116 C158 148 132 162 96 162
+           C60 162 34 148 34 116 C34 84 52 56 96 56 Z"
+        fill="#6f8db3" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M158 116 C158 148 132 162 96 162 C60 162 34 148 34 116
+           C34 132 64 142 96 142 C128 142 158 132 158 116 Z" fill="#3a4a63" opacity="0.9"/>
+  <path d="M96 56 C140 56 158 84 158 116 C144 86 124 76 96 76
+           C68 76 48 86 34 116 C34 84 52 56 96 56 Z" fill="#bcd6f2" opacity="0.7"/>
+
+  <!-- tiny cowboy hat brim cocked over the brow (north-west) -->
+  <ellipse cx="80" cy="70" rx="30" ry="10" fill="#caa24a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M66 70 C68 54 74 48 82 48 C90 48 94 56 94 70 Z" fill="#caa24a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <ellipse cx="80" cy="65" rx="15" ry="4" fill="#bcd6f2" opacity="0.5"/>
+
+  <!-- big single aether eye, deadpan squint -->
+  <circle cx="96" cy="116" r="26" fill="#3fa9ff" filter="url(#dd_glow)"/>
+  <circle cx="96" cy="116" r="23" fill="#101218" stroke="#caa24a" stroke-width="4.5"/>
+  <path d="M73 110 C84 102 108 102 119 110 L119 105 C108 99 84 99 73 105 Z" fill="#3a4a63"/>
+  <circle cx="96" cy="116" r="13" fill="#3fa9ff"/>
+  <circle cx="91" cy="110" r="5" fill="#bcd6f2"/>
+
+  <g fill="#bcd6f2" opacity="0.85">
+    <circle cx="54" cy="116" r="2.6"/><circle cx="138" cy="116" r="2.6"/>
+  </g>
+</svg>

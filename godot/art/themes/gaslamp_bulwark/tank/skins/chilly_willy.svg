@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Chilly Willy" (Gaslamp Bulwark, CHIBI) -->
+  <!-- Snowman turret: stacked snow-spheres (frost-rim steel), carrot-nose barrel UP, brass-band scarf, coal eyes, frost core. -->
+  <defs>
+    <filter id="cw_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <ellipse cx="96" cy="162" rx="58" ry="20" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- twig arms (steel) -->
+  <g stroke="#3a4a63" stroke-width="4" stroke-linecap="round" fill="none">
+    <path d="M48 120 L24 106 M30 112 L20 104 M28 116 L18 118"/>
+    <path d="M144 118 L168 102 M162 108 L172 100 M164 112 L174 114"/>
+  </g>
+
+  <!-- lower snow sphere -->
+  <circle cx="96" cy="124" r="52" fill="#bcd6f2" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M148 124 A52 52 0 0 1 96 176 A52 52 0 0 0 140 96 Z" fill="#6f8db3" opacity="0.7"/>
+  <path d="M96 72 A52 52 0 0 0 50 108 A52 52 0 0 1 90 80 Z" fill="#e8e3d2" opacity="0.7"/>
+  <!-- icicle drips -->
+  <g fill="#bcd6f2" stroke="#101218" stroke-width="1.5">
+    <path d="M64 162 L68 162 L66 176 Z"/><path d="M90 166 L94 166 L92 182 Z"/><path d="M116 164 L120 164 L118 178 Z"/>
+  </g>
+
+  <!-- upper snow sphere (head) -->
+  <circle cx="96" cy="74" r="40" fill="#bcd6f2" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M136 74 A40 40 0 0 1 96 114 A40 40 0 0 0 130 54 Z" fill="#6f8db3" opacity="0.7"/>
+  <path d="M96 34 A40 40 0 0 0 60 96 A40 40 0 0 1 90 38 Z" fill="#e8e3d2" opacity="0.7"/>
+
+  <!-- brass-band scarf between spheres -->
+  <path d="M58 96 C76 108 116 108 134 96 L132 108 C114 118 78 118 60 108 Z"
+        fill="#caa24a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M124 106 L142 130 L130 134 L116 110 Z" fill="#caa24a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+
+  <!-- coal button eyes + smile -->
+  <circle cx="82" cy="64" r="5" fill="#101218"/><circle cx="110" cy="64" r="5" fill="#101218"/>
+  <circle cx="80.5" cy="62" r="1.6" fill="#bcd6f2"/><circle cx="108.5" cy="62" r="1.6" fill="#bcd6f2"/>
+  <g fill="#101218">
+    <circle cx="84" cy="82" r="2.4"/><circle cx="93" cy="85" r="2.4"/><circle cx="103" cy="84" r="2.4"/><circle cx="111" cy="81" r="2.4"/>
+  </g>
+
+  <!-- carrot-nose = barrel UP (brass), frosty muzzle -->
+  <path d="M88 70 L104 70 L99 14 L96 10 L93 14 Z" fill="#caa24a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <g stroke="#101218" stroke-width="1.6" opacity="0.55"><path d="M90 58 L102 58"/><path d="M91 46 L101 46"/><path d="M92 34 L100 34"/></g>
+  <path d="M95 68 L98 16" stroke="#bcd6f2" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+  <circle cx="96" cy="14" r="6" fill="#3fa9ff" filter="url(#cw_glow)"/>
+  <circle cx="96" cy="14" r="3.5" fill="#e8e3d2"/>
+
+  <!-- frost-glow core eye (belly) -->
+  <circle cx="96" cy="124" r="22" fill="#3fa9ff" filter="url(#cw_glow)"/>
+  <circle cx="96" cy="124" r="18" fill="#101218" stroke="#caa24a" stroke-width="4.5"/>
+  <circle cx="96" cy="124" r="10" fill="#3fa9ff"/>
+  <circle cx="91" cy="119" r="4" fill="#e8e3d2"/>
+</svg>
