@@ -18,6 +18,27 @@ func _ready() -> void:
 	if Profile.active_challenge_code != 0:
 		m.set_challenge(0, Profile.active_challenge_code)
 	_load_textures()
+	_setup_environment()
+
+# Cheap render-only glow parity with the single-arena view: a WorldEnvironment
+# with bloom so emissive (>1.0) pixels — tanks, the spawn rings — bloom. No
+# per-cell PointLight2D (too many cells); we lean on additive bloom instead.
+func _setup_environment() -> void:
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CANVAS
+	env.glow_enabled = true
+	env.glow_intensity = 0.7
+	env.glow_strength = 1.0
+	env.glow_bloom = 0.1
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+	env.glow_hdr_threshold = 1.05
+	env.glow_hdr_scale = 2.0
+	var we := WorldEnvironment.new()
+	we.environment = env
+	add_child(we)
+	var cm := CanvasModulate.new()
+	cm.color = Color(0.74, 0.76, 0.82)   # gentle cool dim; lets bloom read
+	add_child(cm)
 
 func _load_textures() -> void:
 	tex = {
@@ -143,8 +164,9 @@ func _draw_cell(font, i: int, r: Rect2) -> void:
 		if mtx:
 			_blit(mtx, center + Vector2(mp[j].x * scl, -mp[j].y * scl), 18.0)
 
-	# tank
-	_blit(tex["tank"], center, 40.0, Color(1, 1, 1, 0.5) if dead else Color.WHITE)
+	# tank — living tanks get a faint emissive lift so they bloom under glow,
+	# echoing the single-arena tank light without a per-cell PointLight2D.
+	_blit(tex["tank"], center, 40.0, Color(1, 1, 1, 0.5) if dead else Color(1.18, 1.22, 1.35))
 
 	# HP bar
 	var hp := maxi(int(arena[2]), 0)

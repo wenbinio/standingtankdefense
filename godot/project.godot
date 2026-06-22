@@ -22,3 +22,12 @@ common/physics_ticks_per_second=30
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+
+[rendering]
+
+; Forward+ is required for 2D HDR + glow (real bloom on bright emissive pixels).
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="forward_plus"
+; HDR 2D lets modulate values >1.0 (e.g. the Color(2.4,2.4,2.4) hit-flash and
+; the bright FX) exceed white so the glow post-pass can bloom them.
+viewport/hdr_2d=true
