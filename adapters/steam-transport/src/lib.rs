@@ -442,16 +442,25 @@ pub struct SteamBootstrap {
     pub single: steamworks::SingleClient,
 }
 
+/// **Spacewar** — Valve's public test App ID. Development/testing uses this so
+/// `SteamAPI_Init` succeeds against any running Steam client without a registered
+/// app. For a release build, call [`SteamBootstrap::init_app`] with the
+/// registered free App ID instead (`docs/07 §7.7`).
+pub const TEST_APP_ID: u32 = 480;
+
 impl SteamBootstrap {
-    /// `SteamAPI_Init`. Requires a running Steam client and a `steam_appid.txt`
-    /// next to the executable carrying the registered App ID (see `steam_appid.txt`
-    /// at the repo root / `godot/`). Returns the client + the single-threaded
-    /// callback dispatcher.
+    /// `SteamAPI_Init` for development/testing, pinned to the Spacewar test App ID
+    /// ([`TEST_APP_ID`] = 480). Requires a running Steam client. Forcing the App
+    /// ID in-process is more robust than relying on `steam_appid.txt` being in the
+    /// binary's CWD. Returns the client + the single-threaded callback dispatcher.
     pub fn init() -> Result<SteamBootstrap, SteamError> {
-        // `Client::init()` reads `steam_appid.txt`; `Client::init_app(app_id)`
-        // forces the App ID for dev. The shipping build uses the registered free
-        // App ID via the file.
-        let (client, single) = Client::init().map_err(|_| SteamError::Init)?;
+        Self::init_app(TEST_APP_ID)
+    }
+
+    /// `SteamAPI_Init` against a specific App ID. Pass [`TEST_APP_ID`] (480) for
+    /// dev, or the registered free App ID for a release build.
+    pub fn init_app(app_id: u32) -> Result<SteamBootstrap, SteamError> {
+        let (client, single) = Client::init_app(app_id).map_err(|_| SteamError::Init)?;
 
         // Initialize the relay network access early so the first connection
         // doesn't pay the SDR cert/route warmup latency.

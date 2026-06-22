@@ -36,15 +36,20 @@ pass — see "How to verify" below.)
 
 ### 1. Link the Steamworks SDK; init `SteamAPI_Init`; ship `steam_appid.txt`
 - **Code**: `SteamBootstrap::init()` in `adapters/steam-transport/src/lib.rs`
-  calls `Client::init()` (reads `steam_appid.txt`) and warms SDR relay access.
-  Placeholder App ID files: [`steam_appid.txt`](../steam_appid.txt) (repo root)
-  and [`godot/steam_appid.txt`](../godot/steam_appid.txt), both `480` (Spacewar).
-  Which ships: the **Godot-export** copy — see
+  pins the **Spacewar test App ID** (`init_app(TEST_APP_ID = 480)`) and warms SDR
+  relay access. **480 is the intentional testing App ID** — `SteamAPI_Init`
+  succeeds against any running Steam client with no registered app, so the adapter
+  can be brought up and tested now. App ID files:
+  [`steam_appid.txt`](../steam_appid.txt) (repo root) and
+  [`godot/steam_appid.txt`](../godot/steam_appid.txt), both `480`; which ships:
+  the **Godot-export** copy — see
   [`godot/STEAM_APPID.README.md`](../godot/STEAM_APPID.README.md).
-- **Needs real Steam**: a **vendored Steamworks SDK** for `steamworks-sys` to
-  link (set `STEAM_SDK_LOCATION` / vendor per the crate README); the registered
-  **free App ID** on the partner site to replace `480`; a running Steam client
-  for `Client::init()` to succeed.
+- **Testing now**: works with App ID `480` + a running Steam client (no partner
+  registration required).
+- **Needs real Steam for *release***: a **vendored Steamworks SDK** for
+  `steamworks-sys` to link (set `STEAM_SDK_LOCATION` / vendor per the crate
+  README); and the registered **free App ID** on the partner site — swap it in via
+  `SteamBootstrap::init_app(real_app_id)` and the `steam_appid.txt` copies.
 
 ### 2. Lobby create/join/list + lobby data (host SteamID, content_hash, ruleset, ready)
 - **Code**: **TODO**. The transport intentionally does NOT own matchmaking — it
@@ -115,7 +120,10 @@ pass — see "How to verify" below.)
    it, `cargo build` in `adapters/steam-transport` fails at the `steamworks`
    dependency. This is the ONLY reason it fails to build offline.
 2. **Network access** — to fetch `steamworks`/`steamworks-sys` from crates.io.
-3. **Registered free App ID** — replace `480` in both `steam_appid.txt` copies.
+3. **Testing uses App ID `480`** (Spacewar) — no partner registration needed; a
+   running Steam client is enough. For **release**, register the free App ID and
+   swap it in via `SteamBootstrap::init_app(real_app_id)` + the `steam_appid.txt`
+   copies.
 4. **Running Steam client** — for `SteamAPI_Init` and all live API calls.
 5. **Multi-peer live test** — host + ≥2 clients over SDR to validate connect,
    per-channel delivery, auth binding, and a forced host migration.
