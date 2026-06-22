@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Stone Broke" (Gaslamp Bulwark, CHIBI) -->
+  <!-- Dead-broke hobo turret: cardboard-box body, taped patches, rusty stovepipe barrel UP, tattered flag, weak dim core. -->
+  <defs>
+    <filter id="sb_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <ellipse cx="96" cy="160" rx="58" ry="21" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- tattered flag (atop, leaning) -->
+  <path d="M120 16 L120 64" stroke="#101218" stroke-width="4" stroke-linecap="round"/>
+  <path d="M120 18 L150 22 L142 30 L150 38 L120 40 Z" fill="#caa24a" stroke="#101218" stroke-width="3" stroke-linejoin="round" opacity="0.85"/>
+
+  <!-- rusty stovepipe barrel UP (dented) -->
+  <rect x="68" y="22" width="30" height="56" rx="8" fill="#3a4a63" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <rect x="72" y="28" width="7" height="42" rx="3" fill="#6f8db3" opacity="0.6"/>
+  <rect x="62" y="16" width="42" height="14" rx="5" fill="#3a4a63" stroke="#101218" stroke-width="4"/>
+  <!-- rust streaks -->
+  <g stroke="#caa24a" stroke-width="2.5" opacity="0.5" stroke-linecap="round"><path d="M76 34 L74 60"/><path d="M90 36 L92 58"/></g>
+  <!-- weak dim smoke puff -->
+  <circle cx="83" cy="18" r="7" fill="#3fa9ff" filter="url(#sb_glow)" opacity="0.5"/>
+
+  <!-- cardboard box body (square, lopsided), with one inner shadow -->
+  <path d="M40 70 L150 66 L156 150 C156 158 148 162 96 162 C44 162 36 158 36 150 Z"
+        fill="#6f8db3" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M156 116 C156 150 124 162 96 162 C68 162 36 150 36 116
+           C36 134 64 144 96 144 C128 144 156 134 156 116 Z" fill="#3a4a63" opacity="0.9"/>
+  <path d="M40 70 L150 66 L150 80 L40 84 Z" fill="#bcd6f2" opacity="0.55"/>
+  <!-- box flaps + taped patches -->
+  <path d="M70 66 L96 80 L122 66" fill="none" stroke="#101218" stroke-width="3" opacity="0.6"/>
+  <g fill="#caa24a" opacity="0.8" stroke="#101218" stroke-width="2">
+    <rect x="48" y="96" width="22" height="13" rx="2" transform="rotate(-8 59 102)"/>
+    <rect x="122" y="104" width="22" height="13" rx="2" transform="rotate(7 133 110)"/>
+  </g>
+  <!-- scrawled patch stitches -->
+  <g stroke="#101218" stroke-width="1.6" opacity="0.6"><path d="M50 102 L68 102"/><path d="M124 110 L142 110"/></g>
+
+  <!-- begging cup (lower-right) -->
+  <path d="M132 140 L150 140 L146 158 L136 158 Z" fill="#3a4a63" stroke="#101218" stroke-width="3" stroke-linejoin="round"/>
+  <ellipse cx="141" cy="140" rx="9" ry="3" fill="#bcd6f2" opacity="0.5"/>
+
+  <!-- weak dim aether eye -->
+  <circle cx="96" cy="116" r="22" fill="#3fa9ff" filter="url(#sb_glow)" opacity="0.7"/>
+  <circle cx="96" cy="116" r="20" fill="#101218" stroke="#caa24a" stroke-width="4"/>
+  <circle cx="96" cy="116" r="10" fill="#3fa9ff" opacity="0.8"/>
+  <circle cx="92" cy="111" r="4" fill="#bcd6f2"/>
+</svg>

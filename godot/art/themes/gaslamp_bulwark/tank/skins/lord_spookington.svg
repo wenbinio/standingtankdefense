@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Lord Spookington" (Gaslamp Bulwark, CHIBI) -->
+  <!-- Floating eldritch eyeball: levitating orb (eye IS the core), obsidian shards orbiting, violet arcane glow, wispy tendrils. -->
+  <defs>
+    <filter id="ls_glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- levitation shadow pulled down (hover read) -->
+  <ellipse cx="96" cy="172" rx="42" ry="12" fill="#0b0d14" opacity="0.5"/>
+
+  <!-- arcane violet levitation glow under the eye -->
+  <ellipse cx="96" cy="150" rx="34" ry="14" fill="#b04dff" opacity="0.5" filter="url(#ls_glow)"/>
+
+  <!-- wispy violet tendrils dangling toward shadow -->
+  <g stroke="#b04dff" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.85">
+    <path d="M70 136 C66 150 74 156 68 168"/>
+    <path d="M96 142 C92 156 100 160 96 172"/>
+    <path d="M122 136 C126 150 118 156 124 168"/>
+  </g>
+
+  <!-- obsidian shards orbiting the orb -->
+  <g fill="#3a4a63" stroke="#101218" stroke-width="3.5" stroke-linejoin="round">
+    <path d="M30 88 L18 70 L40 78 L34 96 Z"/>
+    <path d="M162 88 L174 70 L152 78 L158 96 Z"/>
+    <path d="M96 28 L84 12 L108 12 Z"/>
+  </g>
+  <g fill="#b04dff" opacity="0.6"><path d="M34 80 L26 74 L36 84 Z"/><path d="M158 80 L166 74 L156 84 Z"/></g>
+
+  <!-- floating eyeball orb (the body = one big eye) -->
+  <circle cx="96" cy="92" r="56" fill="#b04dff" opacity="0.5" filter="url(#ls_glow)"/>
+  <circle cx="96" cy="92" r="50" fill="#bcd6f2" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M146 92 A50 50 0 0 1 96 142 A50 50 0 0 0 138 64 Z" fill="#6f8db3" opacity="0.7"/>
+  <path d="M96 42 A50 50 0 0 0 50 78 A50 50 0 0 1 92 50 Z" fill="#e8e3d2" opacity="0.7"/>
+  <!-- veins -->
+  <g stroke="#b04dff" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.6">
+    <path d="M60 70 C70 80 66 92 76 100"/><path d="M134 76 C124 86 128 98 118 104"/>
+  </g>
+
+  <!-- giant violet iris/pupil looking UP, the arcane glow core -->
+  <circle cx="96" cy="86" r="30" fill="#b04dff" filter="url(#ls_glow)"/>
+  <circle cx="96" cy="86" r="26" fill="#101218" stroke="#caa24a" stroke-width="4.5"/>
+  <circle cx="96" cy="80" r="15" fill="#b04dff"/>
+  <circle cx="96" cy="76" r="7" fill="#101218"/>
+  <circle cx="90" cy="72" r="4" fill="#e8e3d2"/>
+</svg>

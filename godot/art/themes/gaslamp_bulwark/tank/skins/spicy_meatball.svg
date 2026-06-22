@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Spicy Meatball" (Gaslamp Bulwark, CHIBI) -->
+  <!-- Molten meatball orb cradled in a brass sauce-pan; mouth-crater belches hellfire UP (splash). -->
+  <defs>
+    <filter id="sm_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <ellipse cx="96" cy="160" rx="60" ry="22" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- brass sauce-pan base + comedic handle to lower-right -->
+  <rect x="120" y="150" width="48" height="13" rx="6" fill="#3a4a63" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+  <ellipse cx="96" cy="150" rx="60" ry="22" fill="#caa24a" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="96" cy="146" rx="48" ry="14" fill="#bcd6f2" opacity="0.4"/>
+  <ellipse cx="96" cy="155" rx="50" ry="12" fill="#3a4a63" opacity="0.45"/>
+
+  <!-- belched hellfire plume UP -->
+  <path d="M96 14 C82 32 78 50 96 64 C114 50 110 32 96 14 Z" fill="#ff5a3c" filter="url(#sm_glow)" opacity="0.9"/>
+  <path d="M96 22 C88 36 86 50 96 60 C106 50 104 36 96 22 Z" fill="#caa24a"/>
+  <path d="M96 30 C92 40 91 50 96 58 C101 50 100 40 96 30 Z" fill="#e8e3d2"/>
+
+  <!-- fat molten meatball orb -->
+  <circle cx="96" cy="106" r="58" fill="#5e8c3a" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- charred crust inner shadow (away/lower) -->
+  <path d="M154 106 A58 58 0 0 1 96 164 A58 58 0 0 0 148 78 Z" fill="#1f3322" opacity="0.85"/>
+  <!-- marinara molten rim light (forward) -->
+  <path d="M96 48 A58 58 0 0 0 44 90 A58 58 0 0 1 96 68 A58 58 0 0 1 148 90 A58 58 0 0 0 96 48 Z" fill="#a6d65e" opacity="0.6"/>
+  <!-- molten cracks -->
+  <g stroke="#ff5a3c" stroke-width="3" stroke-linecap="round" opacity="0.85">
+    <path d="M70 96 L80 110 L74 124"/><path d="M120 92 L112 108 L122 122"/>
+  </g>
+
+  <!-- mouth-crater belching, big lava eye -->
+  <circle cx="96" cy="100" r="24" fill="#ff5a3c" filter="url(#sm_glow)"/>
+  <circle cx="96" cy="100" r="21" fill="#101218" stroke="#caa24a" stroke-width="4.5"/>
+  <circle cx="96" cy="100" r="11" fill="#ff5a3c"/>
+  <circle cx="92" cy="95" r="4" fill="#e8e3d2"/>
+</svg>

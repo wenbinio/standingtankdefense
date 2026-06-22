@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Octo-Blaster" (Gaslamp Bulwark, CHIBI) -->
+  <!-- Chibi octopus: fat steel-blue dome, eight stubby tentacles, a fan of little barrels UP (barrage), big aether eye. -->
+  <defs>
+    <filter id="ob_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <ellipse cx="96" cy="160" rx="62" ry="22" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- eight splayed stubby tentacles (base) -->
+  <g fill="#3a4a63" stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <path d="M40 130 C18 134 14 150 26 160 C34 150 38 144 52 142 Z"/>
+    <path d="M56 150 C44 164 50 176 64 174 C66 164 64 156 70 150 Z"/>
+    <path d="M86 156 C82 172 92 180 102 174 C100 164 98 158 104 154 Z"/>
+    <path d="M120 152 C132 166 128 178 116 176 C114 166 116 158 110 152 Z"/>
+    <path d="M152 130 C174 134 178 150 166 160 C158 150 154 144 140 142 Z"/>
+    <path d="M138 148 C150 160 146 172 134 172 C132 162 130 156 124 150 Z"/>
+  </g>
+  <g fill="#6f8db3" opacity="0.6">
+    <circle cx="30" cy="150" r="2.4"/><circle cx="60" cy="164" r="2.4"/>
+    <circle cx="94" cy="168" r="2.4"/><circle cx="120" cy="166" r="2.4"/>
+    <circle cx="162" cy="150" r="2.4"/><circle cx="140" cy="162" r="2.4"/>
+  </g>
+
+  <!-- fan of little barrels UP (barrage) -->
+  <g stroke="#101218" stroke-width="3.5" stroke-linejoin="round">
+    <rect x="62" y="26" width="14" height="44" rx="7" fill="#3a4a63" transform="rotate(-14 69 48)"/>
+    <rect x="80" y="18" width="14" height="50" rx="7" fill="#3a4a63" transform="rotate(-6 87 43)"/>
+    <rect x="98" y="18" width="14" height="50" rx="7" fill="#3a4a63" transform="rotate(6 105 43)"/>
+    <rect x="116" y="26" width="14" height="44" rx="7" fill="#3a4a63" transform="rotate(14 123 48)"/>
+  </g>
+  <g fill="#b04dff" filter="url(#ob_glow)">
+    <circle cx="66" cy="30" r="5"/><circle cx="86" cy="22" r="5"/>
+    <circle cx="106" cy="22" r="5"/><circle cx="126" cy="30" r="5"/>
+  </g>
+
+  <!-- fat octopus dome body, purple-accented steel -->
+  <path d="M96 52 C142 52 160 84 160 116 C160 150 132 162 96 162
+           C60 162 32 150 32 116 C32 84 50 52 96 52 Z"
+        fill="#6f8db3" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M160 116 C160 150 132 162 96 162 C60 162 32 150 32 116
+           C32 132 64 142 96 142 C128 142 160 132 160 116 Z" fill="#3a4a63" opacity="0.9"/>
+  <path d="M96 52 C142 52 160 84 160 116 C146 86 124 72 96 72
+           C68 72 46 86 32 116 C32 84 50 52 96 52 Z" fill="#bcd6f2" opacity="0.7"/>
+  <!-- violet mantle spots -->
+  <g fill="#b04dff" opacity="0.7"><circle cx="62" cy="92" r="6"/><circle cx="130" cy="92" r="6"/><circle cx="96" cy="78" r="6"/></g>
+
+  <!-- big aether eye -->
+  <circle cx="96" cy="116" r="26" fill="#3fa9ff" filter="url(#ob_glow)"/>
+  <circle cx="96" cy="116" r="23" fill="#101218" stroke="#caa24a" stroke-width="4.5"/>
+  <circle cx="96" cy="116" r="13" fill="#3fa9ff"/>
+  <circle cx="91" cy="110" r="5" fill="#bcd6f2"/>
+</svg>

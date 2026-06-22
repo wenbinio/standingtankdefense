@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Disco Doom" (Gaslamp Bulwark, CHIBI) -->
+  <!-- Faceted mirror-ball turret on a brass stand, emitting an outward pulse ring (area). Aether glints. -->
+  <defs>
+    <filter id="dx_glow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <ellipse cx="96" cy="160" rx="60" ry="22" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- outward pulse aura ring (area pulse) -->
+  <circle cx="96" cy="104" r="78" fill="none" stroke="#3fa9ff" stroke-width="5" opacity="0.5" filter="url(#dx_glow)"/>
+  <circle cx="96" cy="104" r="78" fill="none" stroke="#bcd6f2" stroke-width="2" opacity="0.7"/>
+
+  <!-- brass stand + stubby feet -->
+  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <rect x="56" y="150" width="30" height="20" rx="9" fill="#3a4a63"/>
+    <rect x="106" y="150" width="30" height="20" rx="9" fill="#3a4a63"/>
+  </g>
+  <rect x="86" y="120" width="20" height="40" rx="7" fill="#caa24a" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- faceted mirror-ball body -->
+  <circle cx="96" cy="100" r="58" fill="#6f8db3" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M154 100 A58 58 0 0 1 96 158 A58 58 0 0 0 148 72 Z" fill="#3a4a63" opacity="0.85"/>
+  <path d="M96 42 A58 58 0 0 0 44 84 A58 58 0 0 1 96 62 A58 58 0 0 1 148 84 A58 58 0 0 0 96 42 Z" fill="#bcd6f2" opacity="0.6"/>
+  <!-- mirror facet grid -->
+  <g stroke="#101218" stroke-width="2" opacity="0.55">
+    <path d="M52 78 L140 78"/><path d="M44 100 L148 100"/><path d="M52 122 L140 122"/>
+    <path d="M70 46 L70 154"/><path d="M96 42 L96 158"/><path d="M122 46 L122 154"/>
+  </g>
+  <!-- aether facet glints -->
+  <g fill="#bcd6f2" opacity="0.9">
+    <rect x="74" y="64" width="10" height="10" rx="2"/><rect x="106" y="82" width="10" height="10" rx="2"/>
+    <rect x="62" y="104" width="10" height="10" rx="2"/><rect x="118" y="106" width="10" height="10" rx="2"/>
+    <rect x="86" y="86" width="10" height="10" rx="2" fill="#3fa9ff"/>
+  </g>
+
+  <!-- pulsing aether core eye -->
+  <circle cx="96" cy="100" r="22" fill="#3fa9ff" filter="url(#dx_glow)"/>
+  <circle cx="96" cy="100" r="18" fill="#101218" stroke="#caa24a" stroke-width="4.5"/>
+  <circle cx="96" cy="100" r="10" fill="#3fa9ff"/>
+  <circle cx="91" cy="95" r="4" fill="#bcd6f2"/>
+</svg>

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Standing Tank Defense - SKIN "Tidal Terry" (Gaslamp Bulwark, CHIBI) -->
+  <!-- Goofy water-wave creature: fat aqua body, a sweeping curling wave arc with foam UP (wave), big aether eye. -->
+  <defs>
+    <filter id="tt_glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- wet puddle ground shadow -->
+  <ellipse cx="96" cy="162" rx="62" ry="20" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- sweeping upward curling wave arc with foam (wave sweep) -->
+  <path d="M50 86 C44 46 78 14 118 22 C150 28 158 56 142 78
+           C150 56 140 38 116 36 C86 34 62 56 70 90 Z"
+        fill="#3fa9ff" stroke="#101218" stroke-width="4.5" stroke-linejoin="round" opacity="0.95"/>
+  <path d="M52 84 C48 50 78 22 116 30 C100 26 78 32 70 58 C64 74 64 84 70 90 Z" fill="#bcd6f2" opacity="0.55"/>
+  <!-- foam caps -->
+  <g fill="#bcd6f2" stroke="#101218" stroke-width="2">
+    <circle cx="118" cy="22" r="7"/><circle cx="132" cy="30" r="6"/><circle cx="104" cy="20" r="6"/><circle cx="90" cy="26" r="5"/>
+  </g>
+  <circle cx="124" cy="26" r="5" fill="#3fa9ff" filter="url(#tt_glow)"/>
+
+  <!-- fat aqua body -->
+  <path d="M96 60 C140 60 158 86 158 116 C158 150 132 162 96 162
+           C60 162 34 150 34 116 C34 86 52 60 96 60 Z"
+        fill="#6f8db3" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M158 116 C158 150 132 162 96 162 C60 162 34 150 34 116
+           C34 132 64 142 96 142 C128 142 158 132 158 116 Z" fill="#3a4a63" opacity="0.9"/>
+  <path d="M96 60 C140 60 158 86 158 116 C144 88 124 78 96 78
+           C68 78 48 88 34 116 C34 86 52 60 96 60 Z" fill="#bcd6f2" opacity="0.7"/>
+  <!-- watery ripple bands -->
+  <g stroke="#bcd6f2" stroke-width="2.5" opacity="0.6" fill="none" stroke-linecap="round">
+    <path d="M54 128 C68 122 80 134 96 128 C112 122 124 134 138 128"/>
+    <path d="M58 142 C72 136 82 148 96 142 C110 136 120 148 134 142"/>
+  </g>
+
+  <!-- big aether watery eye -->
+  <circle cx="96" cy="116" r="26" fill="#3fa9ff" filter="url(#tt_glow)"/>
+  <circle cx="96" cy="116" r="23" fill="#101218" stroke="#caa24a" stroke-width="4.5"/>
+  <circle cx="96" cy="116" r="13" fill="#3fa9ff"/>
+  <circle cx="91" cy="110" r="5" fill="#bcd6f2"/>
+</svg>
