@@ -1,0 +1,186 @@
+# Standing Tank Defense — Playtest Guide
+
+A free, last-tank-standing **tower-defense / survival** game. You command **one
+immobile tank**. You can't move — you survive by **buying weapons and upgrades**
+from a shop that refreshes every round, and holding out against escalating waves
+longer than everyone else.
+
+This guide gets you from zero to playing, then explains every screen and control.
+
+---
+
+## 1. Get it running
+
+You need two things installed:
+
+- **Godot 4.3+** (tested on 4.4.1) — the game engine. Download from
+  <https://godotengine.org/download>. It's a single executable, no installer.
+- **Rust** (stable toolchain) — to build the simulation core. Get it from
+  <https://rustup.rs>.
+
+Then, from the repository:
+
+```bash
+# 1. Build the simulation core (the GDExtension the game loads).
+cd godot/rust
+cargo build            # first build downloads deps; takes a couple minutes
+cd ..
+
+# 2. Launch the game: open the `godot/` folder in Godot 4 and press Play (F5).
+#    (Or from a terminal:  <path-to-godot> --path godot )
+```
+
+That's it — you'll boot to the **Tank Select** screen.
+
+> If Godot says it can't find `StSim`, the Rust build didn't finish or landed in
+> the wrong place. Confirm `godot/rust/target/debug/libstanding_tank_gdext.*`
+> exists, then reopen the project.
+
+---
+
+## 2. The 60-second version
+
+1. On **Tank Select**, press **Enter** to deploy with the starter tank.
+2. You're now in a single arena. Enemies stream in from the ring toward your tank.
+3. A **shop bar** sits along the bottom. Press **1–8** (or click a card) to buy.
+   **Slots 1–4 are weapons; slots 5–8 are economy / passives / spikes.**
+4. Keep buying as gold comes in. The shop **refreshes every round (~30s)**; press
+   **R** to reroll it sooner.
+5. When the screen gets swamped, press **Space** to **Clear** (a board wipe — and
+   the *only* thing that damages the boss).
+6. Survive as long as you can. When your tank dies you get a **run summary** —
+   press **Enter** to redeploy and try again.
+
+---
+
+## 3. Screens & controls
+
+### Tank Select (start screen)
+A gallery of every tank skin. Unlocked ones are pickable; locked ones show the
+achievement that unlocks them.
+
+| Key | Action |
+| --- | --- |
+| **Arrows / WASD** | Move selection |
+| **Enter / Space** | Deploy with the selected tank |
+| **Click** a tank | Select it (click again to deploy) |
+| **C** | Open the **Challenge picker** |
+| **M** | Open the **Multi-arena net demo** |
+| **T** | Cycle the **art theme** (Grimdark ⇄ Gaslamp) |
+| **U** | *Dev:* unlock every skin (to preview the gallery) |
+| **R** | *Dev:* relock everything (reset progress) |
+| **Esc** | Quit |
+
+### Single-arena play (the main game)
+Your tank sits at the center. The **HUD** (top-left) shows your **HP**, **gold**
+(and income per tick), and the **round**. Top-right is your **Arsenal** — what
+you currently own. The **shop bar** is along the bottom.
+
+**Shop rules**
+- **8 offers** per round. **Slots 1–4 are always weapons**; **slots 5–8 are
+  economy, passives, and spikes.**
+- **Buy:** press the slot's number **1–8**, or click the card. Buy as many as you
+  can afford.
+- **Hover** a card for its lore + mechanical effect, its cost, and rarity.
+- **R — Reroll:** get a fresh set of offers (first reroll each round may be free;
+  after that it costs gold).
+- The shop **auto-refreshes every round (~30 seconds).** Slots persist until then,
+  so you can keep buying from the same board.
+
+| Key | Action |
+| --- | --- |
+| **1–8** | Buy that shop slot |
+| **R** | Reroll the shop |
+| **Space** | **Clear** — board wipe; the only thing that hurts the boss |
+| **T** | Cycle the art theme |
+| **M** | Jump to the multi-arena net demo |
+| **Esc** | Back to Tank Select |
+
+**When you die:** a centered **run summary** appears (round reached, damage, gold,
+weapons bought, and any achievements you just unlocked).
+- **Enter / Space / click Redeploy** — start a fresh run immediately.
+- **Esc** — back to Tank Select.
+
+### Challenge picker (press **C** from Tank Select)
+Self-imposed rules (e.g. *only Splash weapons*, *no economy*). Each clears to
+unlock a reward skin. Your tank's bot honors the rule for the run, so the
+matching achievement is earnable on demand.
+
+| Key | Action |
+| --- | --- |
+| **↑/↓** | Choose a challenge (or **Free Play**) |
+| **Enter / Space / click** | Deploy with that rule |
+| **C / Esc** | Back |
+
+### Multi-arena net demo (press **M**)
+The headline architecture, made visible: **8 independent arenas under one
+authoritative director**, each its own player. **Your arena is the large featured
+panel**; the other seven are smaller cells around it, each rendered in **that
+player's own theme and tank skin** (so you can see everyone's cosmetics). Watch
+players get knocked out until one is left standing.
+
+| Key | Action |
+| --- | --- |
+| **T** | Cycle the art theme |
+| **S** | Back to Tank Select |
+| **Esc** | Quit |
+
+### Themes
+Press **T** on most screens to swap the whole look between **Grimdark** and
+**Gaslamp Bulwark** — different art *and* UI colors (gold/blood vs brass/aether).
+
+---
+
+## 4. How to play well
+
+- **You can't move.** Positioning isn't the game — **shop decisions** are.
+- **Weapons vs. economy:** weapons (slots 1–4) kill things now; economy (slots
+  5–8) compounds your gold so you can out-buy the late game. Most runs want some
+  of both — pure-greed and pure-aggression are both viable but risky.
+- **Clear (Space)** is your panic button and your **only answer to the boss** —
+  but it's on a cooldown, so spend it wisely.
+- **High-risk picks exist on purpose.** Some cheap cards are deliberately
+  double-edged (they can even kill you). They're meant as gambles for a high
+  ceiling — read the tooltip before you commit.
+- Survive to round milestones and rack up damage/gold to unlock new tanks.
+
+---
+
+## 5. Unlocks
+
+Tanks are cosmetic and earned through achievements — e.g. **purist runs** (buy
+only one weapon type), **Jack of All Trades** (one of every type), **Bloodletter**
+(1,000,000 damage), **Long Watch** (reach round 20), **Sole Survivor** (win a net
+match). Unlock progress is saved between sessions.
+
+---
+
+## 6. (Advanced / optional) Steam test mode
+
+Networked multiplayer ships over **Steam** (host-authoritative over Steam Datagram
+Relay). For local bring-up testing it uses **App ID `480` (Spacewar)**, Valve's
+public test app — so it works against any running Steam client **without
+registering anything**. Building the Steam transport additionally needs the
+Steamworks SDK; see **`docs/07a-steam-bringup.md`**. You do **not** need any of
+this to play the single-player and net-demo flows above.
+
+---
+
+## 7. Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| "Can't find StSim" / blank screen | The Rust core isn't built. Run `cargo build` in `godot/rust`, confirm `target/debug/libstanding_tank_gdext.*` exists, reopen the project. |
+| Tank skins all look identical | You're on a theme that's missing that skin art, or progress was reset. Press **T** to switch theme; locked skins fall back to the default tank. |
+| Game won't open in Godot | Use **Godot 4.3 or newer** (4.4.1 recommended). Older 4.x may need the extension's compatibility floor lowered. |
+| No glow/bloom | Bloom needs the Vulkan (`forward_plus`) renderer; on a software/OpenGL fallback the game still plays, just without the glow. |
+
+---
+
+## 8. Telling us how it went
+
+When you playtest, the most useful feedback: **how far did a run feel decided by
+the shop vs. by luck?** Did any purchase feel like an obvious trap or an obvious
+must-buy? Were the first ~30 seconds fair? Did anything read as unclear on screen?
+</content>
+</invoke>

@@ -28,11 +28,14 @@ cd ..
 If Godot can't find `StSim`, confirm the library exists at the path in
 `standing_tank_defense.gdextension` for your platform, then reopen the project.
 
-## Controls
-- **1 / 2 / 3** — buy shop slot 1/2/3
+## Controls (single-arena)
+- **1–8** — buy that shop slot (1–4 weapons, 5–8 economy/passives/spikes)
 - **R** — reroll the shop
 - **Space** — Clear (board wipe; the only thing that hurts the boss)
-- **Esc** — quit
+- **T** — cycle art theme · **M** — multi-arena net demo · **Esc** — Tank Select
+
+See **[`../TUTORIAL.md`](../TUTORIAL.md)** for the full playtest guide (every
+screen, the start/challenge/net flows, and how to play well).
 
 ## How it's wired
 - `rust/src/lib.rs` — `StSim`: owns an `ArenaState`, `step(code, slot)` advances
