@@ -195,6 +195,13 @@ func _load_textures() -> void:
 func _unhandled_key_input(e: InputEvent) -> void:
 	if not (e is InputEventKey) or not e.pressed or e.echo:
 		return
+	# While dead, the only live controls are Redeploy (Enter/Space) and Menu
+	# (Esc); swallow the shop/number/reroll keys so a fresh run isn't dirtied.
+	if sim != null and sim.is_dead():
+		match e.keycode:
+			KEY_ENTER, KEY_KP_ENTER, KEY_SPACE: _redeploy()
+			KEY_ESCAPE: get_tree().change_scene_to_file("res://SkinSelect.tscn")
+		return
 	# Number row 1..8 buys the matching shop slot.
 	if e.keycode >= KEY_1 and e.keycode <= KEY_8:
 		pending_code = 1
@@ -210,6 +217,12 @@ func _unhandled_key_input(e: InputEvent) -> void:
 func _unhandled_input(e: InputEvent) -> void:
 	if not (e is InputEventMouseButton) or not e.pressed or e.button_index != MOUSE_BUTTON_LEFT:
 		return
+	# While dead, the only clickable target is the Redeploy button on the
+	# results panel; shop rects are stale and must not fire.
+	if sim != null and sim.is_dead():
+		if redeploy_rect.has_point(e.position):
+			_redeploy()
+		return
 	for i in shop_rects.size():
 		if shop_rects[i].has_point(e.position):
 			pending_code = 1; pending_slot = i; return
@@ -217,6 +230,32 @@ func _unhandled_input(e: InputEvent) -> void:
 		pending_code = 2; return
 	if clear_rect.has_point(e.position):
 		pending_code = 3
+
+# Results-panel "Redeploy" hit-target, recomputed by _draw_results each frame
+# while dead and consulted by the click handler above.
+var redeploy_rect := Rect2()
+
+# Start a fresh single-arena run in-place. Rebuilds the sim exactly as _ready()
+# does — plain new_match(randi()), no challenge (single-arena never applies
+# Profile.active_challenge_code) — then resets every render/juice/FX tracker so
+# nothing leaks across runs. Clearing _recorded re-arms the once-per-run
+# achievement latch so the new run credits its own play.
+func _redeploy() -> void:
+	sim = StSim.new_match(randi())
+	_prev = {}
+	_flash = {}
+	_poofs = []
+	_muzzle = 0
+	_prev_proj = 0
+	_proj_history = []
+	_shake = Vector2.ZERO
+	clear_fx = 0
+	_recorded = false
+	pending_code = 0
+	pending_slot = 0
+	fx = Fx.new()
+	redeploy_rect = Rect2()
+	queue_redraw()
 
 func _physics_process(_delta: float) -> void:
 	if sim == null:
@@ -479,13 +518,104 @@ func _draw_hud(font: Font, vp: Vector2) -> void:
 	draw_string(font, Vector2(60 + gold_w + 8, 81), "+%d/t" % eco[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.6, 0.55, 0.34))
 	draw_string(head, Vector2(212, 45), "ROUND %d" % sim.round(), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.74, 0.84, 0.95))
 	draw_string(font, Vector2(212, 81), "tick %d" % sim.tick(), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.6, 0.64, 0.72))
-	if sim.is_dead():
-		var msg := "*** TANK DESTROYED ***"
-		var mw := head.get_string_size(msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 30).x
-		draw_string(head, Vector2(vp.x * 0.5 - mw * 0.5, vp.y * 0.5 - 220), msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(1.0, 0.35, 0.23))
-
 	_draw_arsenal(font, head, vp)
-	_draw_shop(font, vp)
+	# While dead the bottom shop bar is frozen/irrelevant — replace it with the
+	# results panel so the destroyed-run summary owns the screen.
+	if sim.is_dead():
+		_draw_results(font, head, vp)
+	else:
+		_draw_shop(font, vp)
+
+# Centered run-summary panel shown on tank death. Reads the (still-valid) sim
+# for round/stats/arsenal and Profile.last_unlocks for this run's achievements,
+# and offers Redeploy (Enter/Space/click) or Menu (Esc). Cosmetic only; it never
+# touches the sim. Sets `redeploy_rect` for the click handler.
+func _draw_results(font: Font, head: Font, vp: Vector2) -> void:
+	# Dim the arena behind the panel so the summary reads cleanly.
+	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.02, 0.02, 0.04, 0.55))
+
+	var st: PackedInt64Array = sim.stats()
+	var dmg: int = st[0] if st.size() > 0 else 0
+	var gold: int = st[1] if st.size() > 1 else 0
+	var bought: int = st[3] if st.size() > 3 else 0
+	var rnd: int = sim.round()
+	var owned: PackedStringArray = sim.arsenal_lines()
+
+	# Panel geometry, centered.
+	var pw := 560.0
+	var unlock_n: int = Profile.last_unlocks.size()
+	var ph := 372.0 + maxf(float(unlock_n), 0.0) * 22.0
+	var px := vp.x * 0.5 - pw * 0.5
+	var py := vp.y * 0.5 - ph * 0.5
+	var panel := Rect2(Vector2(px, py), Vector2(pw, ph))
+	draw_rect(panel, Color(0.05, 0.06, 0.09, 0.97))
+	draw_rect(panel, Color(0.5, 0.16, 0.12), false, 2.0)
+	# Emissive top rule so it blooms under glow.
+	draw_rect(Rect2(Vector2(px, py), Vector2(pw, 3)), Color(1.6, 0.5, 0.34))
+
+	var cx := vp.x * 0.5
+	# Title.
+	var title := "TANK DESTROYED"
+	var tw := head.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34).x
+	draw_string(head, Vector2(cx - tw * 0.5, py + 48), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(1.4, 0.4, 0.28))
+	var sub := "Run summary"
+	var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+	draw_string(font, Vector2(cx - sw * 0.5, py + 72), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.62, 0.66, 0.74))
+
+	# Stat rows (label left, value right).
+	var lx := px + 36.0
+	var rx := px + pw - 36.0
+	var ry := py + 110.0
+	var rstep := 30.0
+	_draw_stat_row(font, head, lx, rx, ry, "Round reached", "%d" % rnd, Color(0.78, 0.86, 0.96))
+	ry += rstep
+	_draw_stat_row(font, head, lx, rx, ry, "Damage dealt", "%d" % dmg, Color(0.96, 0.74, 0.5))
+	ry += rstep
+	_draw_stat_row(font, head, lx, rx, ry, "Gold earned", "%d" % gold, Color(0.92, 0.78, 0.36))
+	ry += rstep
+	_draw_stat_row(font, head, lx, rx, ry, "Weapons bought", "%d" % bought, Color(0.7, 0.84, 0.9))
+	ry += rstep + 4.0
+
+	# Owned arsenal, condensed onto one wrapped line.
+	draw_string(head, Vector2(lx, ry), "ARSENAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.66, 0.88, 0.68))
+	ry += 20.0
+	var ars := "  ·  ".join(owned) if owned.size() > 0 else "— nothing acquired —"
+	draw_string(font, Vector2(lx, ry), ars, HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 13, Color(0.78, 0.84, 0.8))
+	ry += 30.0
+
+	# Achievements unlocked this run.
+	draw_string(head, Vector2(lx, ry), "ACHIEVEMENTS UNLOCKED", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.86, 0.78, 0.5))
+	ry += 20.0
+	if unlock_n == 0:
+		draw_string(font, Vector2(lx, ry), "— none this run —", HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 13, Color(0.5, 0.54, 0.6))
+		ry += 22.0
+	else:
+		for id in Profile.last_unlocks:
+			var nm: String = Profile.ach_def(id).get("name", id)
+			draw_string(font, Vector2(lx, ry), "★ " + nm, HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 14, Color(0.96, 0.86, 0.5))
+			ry += 22.0
+
+	# Redeploy button + Esc prompt.
+	var btn_w := 220.0
+	var btn_h := 40.0
+	redeploy_rect = Rect2(cx - btn_w * 0.5, py + ph - 64.0, btn_w, btn_h)
+	var mpos := get_viewport().get_mouse_position()
+	var hovered := redeploy_rect.has_point(mpos)
+	var bbg := Color(0.16, 0.26, 0.2) if hovered else Color(0.12, 0.2, 0.16)
+	draw_rect(redeploy_rect, bbg)
+	draw_rect(redeploy_rect, Color(0.4, 0.8, 0.55, 0.7), false, 1.5)
+	var blabel := "REDEPLOY"
+	var blw := head.get_string_size(blabel, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+	draw_string(head, redeploy_rect.position + Vector2(btn_w * 0.5 - blw * 0.5, 27), blabel, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.78, 0.96, 0.82))
+	var prompt := "[Enter] Redeploy   ·   [Esc] Menu"
+	var pwid := font.get_string_size(prompt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	draw_string(font, Vector2(cx - pwid * 0.5, py + ph - 12.0), prompt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.66, 0.72, 0.8))
+
+# One label/value row for the results panel.
+func _draw_stat_row(font: Font, head: Font, lx: float, rx: float, y: float, label: String, value: String, vcol: Color) -> void:
+	draw_string(font, Vector2(lx, y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.7, 0.74, 0.82))
+	var vw := head.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+	draw_string(head, Vector2(rx - vw, y + 1), value, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, vcol)
 
 # C3 — Arsenal panel: a framed list (top-right) of owned weapons/mods with a
 # header and right-aligned counts pulled from `sim.arsenal_lines()` ("Name xN").
