@@ -187,18 +187,38 @@ func _draw() -> void:
 			"ACHIEVEMENT UNLOCKED:  " + ", ".join(_toast),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1.0, 0.82, 0.4))
 
-	# grid
-	var cols: int = mini(n, 4)
-	var rows: int = int(ceil(float(n) / cols))
+	# Featured layout: player 0 (YOU) gets a large panel on the left taking ~60%
+	# of the width and the full height under the header; the other n-1 peers wrap
+	# into a tidy 2-column grid filling the remaining ~40% on the right. The big
+	# panel is far more than 2x the linear size of a peer cell, so it reads as the
+	# clear focal point while all arenas stay visible without overlap.
 	var pad := 8.0
 	var top := 40.0
-	var cw := (vp.x - pad * (cols + 1)) / cols
-	var ch := (vp.y - top - pad * (rows + 1)) / rows
-	for i in n:
-		var col: int = i % cols
-		var row: int = i / cols
-		var rect := Rect2(pad + col * (cw + pad), top + pad + row * (ch + pad), cw, ch)
-		_draw_cell(font, i, rect)
+	var avail_w := vp.x - pad * 3.0          # outer-left, center gutter, outer-right
+	var avail_h := vp.y - top - pad * 2.0
+	var big_w := avail_w * 0.60
+	var peers_w := avail_w - big_w
+	var x0 := pad
+	var y0 := top + pad
+
+	# YOU — one tall featured panel on the left.
+	var big := Rect2(x0, y0, big_w, avail_h)
+	_draw_cell(font, 0, big, true)
+
+	# Peers — a 2-column grid on the right, rows sized to fit n-1 cells.
+	var peers: int = n - 1
+	if peers > 0:
+		var pcols: int = 2 if peers > 1 else 1
+		var prows: int = int(ceil(float(peers) / pcols))
+		var px0 := x0 + big_w + pad
+		var pcw := (peers_w - pad * (pcols - 1)) / pcols
+		var pch := (avail_h - pad * (prows - 1)) / prows
+		for k in peers:
+			var i: int = k + 1
+			var col: int = k % pcols
+			var row: int = k / pcols
+			var rect := Rect2(px0 + col * (pcw + pad), y0 + row * (pch + pad), pcw, pch)
+			_draw_cell(font, i, rect, false)
 
 # A short uppercase tag for a theme index, for the per-cell theme pill.
 func _theme_tag(theme_idx: int) -> String:
@@ -207,7 +227,7 @@ func _theme_tag(theme_idx: int) -> String:
 		"gaslamp_bulwark":  return "GASLAMP"
 	return ArtTheme.themes[theme_idx].to_upper()
 
-func _draw_cell(font, i: int, r: Rect2) -> void:
+func _draw_cell(font, i: int, r: Rect2, is_big: bool = false) -> void:
 	var arena: PackedInt64Array = m.arena(i)   # [x,y,hp,maxhp,rev,round,tick,dead]
 	if arena.size() < 8:
 		return
@@ -215,11 +235,26 @@ func _draw_cell(font, i: int, r: Rect2) -> void:
 	var center := r.position + Vector2(r.size.x * 0.5, r.size.y * 0.5 + 8.0)
 	var scl: float = minf(r.size.x, r.size.y) * 0.42 / 1700.0
 
-	# This player's chosen cosmetics drive every texture in the cell.
+	# This player's chosen cosmetics drive every texture AND its UI chrome: each
+	# cell paints in its own player's theme palette via ArtTheme.ui_of(theme,...).
 	var pc: Dictionary = players[i] if i < players.size() else {"theme": 0, "skin": "ol_reliable"}
 	var theme_idx: int = pc["theme"]
 	var tset: Dictionary = _theme_tex[theme_idx]
 	var is_you: bool = i == 0
+
+	# Per-cell palette (this player's theme).
+	var c_accent: Color = ArtTheme.ui_of(theme_idx, "accent")
+	var c_text: Color = ArtTheme.ui_of(theme_idx, "text")
+	var c_dim: Color = ArtTheme.ui_of(theme_idx, "text_dim")
+	var c_header: Color = ArtTheme.ui_of(theme_idx, "header")
+	var c_hp: Color = ArtTheme.ui_of(theme_idx, "hp")
+	var c_danger: Color = ArtTheme.ui_of(theme_idx, "danger")
+	var c_coin: Color = ArtTheme.ui_of(theme_idx, "coin")
+	var c_border: Color = ArtTheme.ui_of(theme_idx, "panel_border")
+	# Dead cells desaturate/darken the HP color so a destroyed bar reads as gone.
+	var hp_fill: Color = Color(0.5, 0.5, 0.55) if dead else c_hp
+	# UI scale: the big featured cell gets larger type/markers; peers stay legible.
+	var us := 1.55 if is_big else 1.0
 
 	# arena floor + spawn ring (this player's theme, clipped to cell)
 	draw_texture_rect(tset["ground"], r, false)
@@ -252,54 +287,75 @@ func _draw_cell(font, i: int, r: Rect2) -> void:
 	if tank_tx:
 		_blit(tank_tx, center, 40.0, Color(1, 1, 1, 0.5) if dead else Color(1.18, 1.22, 1.35))
 
-	# HP bar
+	# HP bar — fill in this player's theme HP color (dead → desaturated).
 	var hp := maxi(int(arena[2]), 0)
 	var maxhp := maxi(int(arena[3]), 1)
+	var bh := 7.0 * us
 	var bw := r.size.x - 16.0
-	draw_rect(Rect2(r.position + Vector2(8, 8), Vector2(bw, 7)), Color(0, 0, 0, 0.55))
-	draw_rect(Rect2(r.position + Vector2(8, 8), Vector2(bw * float(hp) / float(maxhp), 7)),
-		Color(0.5, 0.5, 0.55) if dead else Color(0.33, 0.72, 1.0))
+	draw_rect(Rect2(r.position + Vector2(8, 8), Vector2(bw, bh)), Color(0, 0, 0, 0.55))
+	draw_rect(Rect2(r.position + Vector2(8, 8), Vector2(bw * float(hp) / float(maxhp), bh)), hp_fill)
 
-	# label + economy (round / gold / weapon count preserved)
+	# label + economy (round / gold / weapon count preserved). P# + skin name read
+	# in theme text; your own cell keeps the accent so it pops.
 	var eco: PackedInt64Array = m.economy(i)
 	var gold: int = eco[0] if eco.size() > 0 else 0
-	var pcol := Color(1.0, 0.9, 0.45) if is_you else Color(0.9, 0.93, 0.98)
-	draw_string(font, r.position + Vector2(10, 34), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, pcol)
-	draw_string(font, r.position + Vector2(46, 34), "R%d · %dg · %dw" % [arena[5], gold, m.weapon_count(i)],
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.74, 0.66, 0.4))
+	var top_y := r.position.y + 26.0 + bh
+	var pcol := c_accent if is_you else c_text
+	draw_string(font, Vector2(r.position.x + 10, top_y), "P%d" % (i + 1),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * us), pcol)
+	# round/gold/weapon metadata: gold figure in the theme coin color, rest dim.
+	var meta_x := r.position.x + 10.0 + (44.0 * us)
+	draw_string(font, Vector2(meta_x, top_y), "R%d · " % arena[5],
+		HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * us), c_dim)
+	var rw: float = font.get_string_size("R%d · " % arena[5], HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * us)).x
+	draw_string(font, Vector2(meta_x + rw, top_y), "%dg" % gold,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * us), c_coin)
+	var gw: float = font.get_string_size("%dg" % gold, HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * us)).x
+	draw_string(font, Vector2(meta_x + rw + gw, top_y), " · %dw" % m.weapon_count(i),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * us), c_dim)
 	# per-player damage score (log-compressed so it never runs into the thousands)
-	draw_string(font, Vector2(r.position.x + r.size.x - 104, r.position.y + 34), "SCORE %d" % _score(i),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.78, 0.35))
+	var score_txt := "SCORE %d" % _score(i)
+	var sw: float = font.get_string_size(score_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * us)).x
+	draw_string(font, Vector2(r.position.x + r.size.x - sw - 8.0, top_y), score_txt,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * us), c_accent)
 
-	# net legibility: who picked what. Skin name line + a small theme pill, so
-	# the grid reads like a lobby of cosmetic choices.
+	# net legibility: who picked what. Skin name line in theme text; your own cell
+	# keeps the accent and the ★ YOU mark so the grid reads like a lobby of choices.
 	var skin_name: String = Profile.skin_def(pc["skin"]).name
+	var name_sz := int(13 * us)
 	var who := ("P%d · %s" % [i + 1, skin_name]) + ("  ★ YOU" if is_you else "")
 	draw_string(font, Vector2(r.position.x + 10, r.position.y + r.size.y - 12), who,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1.0, 0.95, 0.7) if is_you else Color(0.86, 0.9, 0.96))
-	# theme pill, bottom-right
+		HORIZONTAL_ALIGNMENT_LEFT, -1, name_sz, c_accent if is_you else c_text)
+	# theme pill, bottom-right — the pill itself reads as THAT theme's color: fill
+	# from accent (dimmed), border + text from the theme's header/accent.
 	var tag := _theme_tag(theme_idx)
-	var tag_w: float = tag.length() * 8.0 + 12.0
-	var pill := Rect2(r.position.x + r.size.x - tag_w - 8.0, r.position.y + r.size.y - 26.0, tag_w, 18.0)
-	var pill_col := Color(0.30, 0.16, 0.18, 0.85) if theme_idx == 0 else Color(0.16, 0.22, 0.30, 0.85)
-	draw_rect(pill, pill_col)
-	draw_rect(pill, Color(0.7, 0.7, 0.75, 0.5), false, 1.0)
-	draw_string(font, Vector2(pill.position.x + 6.0, pill.position.y + 14.0), tag,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.92, 0.94, 0.98))
+	var pill_fs := int(11 * us)
+	var tag_w: float = font.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, pill_fs).x + 14.0
+	var pill_h := 18.0 * us
+	var pill := Rect2(r.position.x + r.size.x - tag_w - 8.0, r.position.y + r.size.y - pill_h - 8.0, tag_w, pill_h)
+	draw_rect(pill, Color(c_accent.r, c_accent.g, c_accent.b, 0.22))
+	draw_rect(pill, c_header, false, 1.0)
+	draw_string(font, Vector2(pill.position.x + 7.0, pill.position.y + pill_h - 5.0), tag,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, pill_fs, c_header)
 
-	# cell border — your cell gets a brighter accent + glow-y double frame.
+	# cell border — your cell gets a brighter, thicker accent + glow-y double frame
+	# in YOUR theme's accent; peers get their own theme's panel_border.
 	if is_you:
-		draw_rect(r, Color(1.0, 0.82, 0.32, 1.0), false, 3.0)
-		draw_rect(Rect2(r.position + Vector2(2, 2), r.size - Vector2(4, 4)), Color(1.0, 0.9, 0.5, 0.35), false, 1.0)
+		draw_rect(r, c_accent, false, 4.0)
+		draw_rect(Rect2(r.position + Vector2(3, 3), r.size - Vector2(6, 6)),
+			Color(c_accent.r, c_accent.g, c_accent.b, 0.35), false, 1.5)
 	else:
-		draw_rect(r, Color(0.06, 0.07, 0.09, 1.0), false, 2.0)
+		draw_rect(r, c_border, false, 2.0)
 
-	# dead overlay + placement
+	# dead overlay + placement — placement text tinted to this theme's danger color.
 	if dead:
 		draw_rect(r, Color(0, 0, 0, 0.5))
 		var place: int = m.placement(i)
 		var txt := "OUT" if place == 0 else "#%d" % place
-		draw_string(font, center - Vector2(22, 6), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(1.0, 0.4, 0.28))
+		var dead_fs := int(26 * us)
+		var dw: float = font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, dead_fs).x
+		draw_string(font, center - Vector2(dw * 0.5, dead_fs * 0.25), txt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, dead_fs, c_danger)
 
 # Compressed damage score for the per-player tracker: log-scaled so it climbs
 # steadily but never runs into the thousands (raw damage reaches the millions).
