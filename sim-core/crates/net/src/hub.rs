@@ -6,8 +6,10 @@
 //! link with delay `d` is delivered when the hub reaches step `S + d + 1`. A
 //! "stall" holds a source's messages until a given step.
 
-use crate::transport::{Inbound, Outbound, PeerId};
+use crate::transport::{Inbound, Outbound, PeerId, Transport};
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 struct InFlight {
     deliver_at: u32,
@@ -105,6 +107,31 @@ impl Hub {
     }
 }
 
+/// A single participant's [`Transport`] view onto a shared [`Hub`]. Several
+/// endpoints share one `Rc<RefCell<Hub>>`; the driver still calls
+/// [`Hub::advance`] centrally to move the global clock. This is the test-side
+/// implementation of the same trait the Steam adapter implements in production,
+/// so a driver written against `Transport` runs unchanged on either bus.
+pub struct HubEndpoint {
+    hub: Rc<RefCell<Hub>>,
+    me: PeerId,
+}
+
+impl HubEndpoint {
+    pub fn new(hub: Rc<RefCell<Hub>>, me: PeerId) -> HubEndpoint {
+        HubEndpoint { hub, me }
+    }
+}
+
+impl Transport for HubEndpoint {
+    fn send(&mut self, outs: Vec<Outbound>) {
+        self.hub.borrow_mut().send(self.me, outs);
+    }
+    fn poll(&mut self) -> Vec<Inbound> {
+        self.hub.borrow_mut().take(self.me)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,5 +178,23 @@ mod tests {
         }
         h.advance(); // step 6 > stall 5
         assert_eq!(h.take(PeerId(0)).len(), 1);
+    }
+
+    // Drive two participants purely through the `Transport` trait (no direct
+    // Hub calls), proving HubEndpoint is a faithful stand-in for the Steam
+    // adapter: A.send -> central advance -> B.poll.
+    #[test]
+    fn endpoints_route_over_transport_trait() {
+        use crate::transport::Transport;
+        let hub = Rc::new(RefCell::new(Hub::new()));
+        let mut a = HubEndpoint::new(hub.clone(), PeerId(0));
+        let mut b = HubEndpoint::new(hub.clone(), PeerId(1));
+        a.send(vec![out(1)]);
+        assert!(b.poll().is_empty()); // not delivered until the clock advances
+        hub.borrow_mut().advance();
+        let got = b.poll();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].from, PeerId(0));
+        assert!(a.poll().is_empty()); // nothing addressed back to A
     }
 }

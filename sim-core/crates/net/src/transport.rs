@@ -37,3 +37,24 @@ pub struct Outbound {
     pub channel: Channel,
     pub bytes: Vec<u8>,
 }
+
+/// One participant's endpoint onto the message bus — the seam every transport
+/// implements. The director and each client own a `Transport`: each driver
+/// iteration they `send` their [`Outbound`]s (addressed by `to`) and `poll` the
+/// [`Inbound`]s that have arrived for them. Director/Client logic is written
+/// against this trait, never against a concrete transport, so the bus is a
+/// drop-in choice:
+///
+/// - **Tests**: [`super::hub::HubEndpoint`] over the deterministic in-process
+///   [`super::hub::Hub`] (latency/stall injection, reproducible ordering).
+/// - **Production**: the Steam `ISteamNetworkingSockets` / SDR adapter
+///   (`super::steam`, `docs/07`) — addressed by SteamID, NAT/relay/crypto by SDR.
+///
+/// Channel→delivery semantics (reliable/unreliable) are the transport's job;
+/// for Steam they map to `k_nSteamNetworkingSend_*` (`super::steam::steam_send_flags`).
+pub trait Transport {
+    /// Queue this participant's outbound messages for delivery.
+    fn send(&mut self, outs: Vec<Outbound>);
+    /// Take all inbound messages that have arrived for this participant so far.
+    fn poll(&mut self) -> Vec<Inbound>;
+}

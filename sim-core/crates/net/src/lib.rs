@@ -29,7 +29,7 @@ pub mod transport;
 pub mod wire;
 
 pub use schedule::Schedule;
-pub use transport::{Channel, Inbound, Outbound, PeerId, DIRECTOR};
+pub use transport::{Channel, Inbound, Outbound, PeerId, Transport, DIRECTOR};
 pub use wire::{InputCode, Msg, WireError};
 
 /// Input delay in ticks (see invariant above). Must exceed normal one-way
