@@ -37,8 +37,9 @@
 //! clock. Use `sim::{step, checksum}`, `sim::snapshot::{serialize}`,
 //! `sim::ArenaState`.
 
+use crate::replay::{Capture, Replay};
 use crate::transport::{Channel, Inbound, Outbound, PeerId};
-use crate::wire::{self, Msg};
+use crate::wire::{self, InputCode, Msg};
 use crate::{BEACON_INTERVAL, INPUT_LEAD_TICKS, START_LEAD};
 use crate::Schedule;
 use sim::ArenaState;
@@ -62,6 +63,14 @@ struct Player {
     /// (cosmetic preview aid). Applied at apply-time on both director and
     /// client identically, so shadows stay in lockstep.
     challenge: sim::bot::Challenge,
+    /// Accumulates the EXACT post-filter actions fed to `sim::step` for this
+    /// shadow, keyed by `apply_tick`, so a finished run mints a verifiable
+    /// `(seed, input_log)` replay (`docs/07 §7.6`). `Some` until `finish` is
+    /// called at first-death, then `None` once `replay` is set.
+    capture: Option<Capture>,
+    /// The minted replay, set the instant the shadow first becomes dead. Pulled
+    /// by [`Director::replay`] / the match-result path for leaderboard checks.
+    replay: Option<Replay>,
 }
 
 pub struct Director {
@@ -69,6 +78,9 @@ pub struct Director {
     iter: u32,
     /// Match seed broadcast in `MatchStart` and used to build shadows.
     master_seed: u64,
+    /// Content version this match runs (`docs/05`); stamped into every player's
+    /// replay so an independent verifier can gate on a matching content set.
+    content_hash: u64,
     /// Players in sorted `PeerId` order (the only iteration order used).
     peers: Vec<PeerId>,
     /// Per-player state, index-aligned with `peers`.
@@ -80,9 +92,19 @@ pub struct Director {
 }
 
 impl Director {
-    /// Build a director for `players` (peers 1..=N) seeded with `master_seed`.
-    /// Constructs a shadow `ArenaState::new(master_seed, player_id)` per player.
+    /// Build a director for `players` (peers 1..=N) seeded with `master_seed`,
+    /// with a zero `content_hash`. Use [`Director::with_content_hash`] to stamp
+    /// the match's real content version into captured replays.
     pub fn new(players: &[PeerId], master_seed: u64) -> Director {
+        Director::with_content_hash(players, master_seed, 0)
+    }
+
+    /// Build a director for `players` seeded with `master_seed` and stamping
+    /// `content_hash` into every captured replay. Constructs a shadow
+    /// `ArenaState::new(master_seed, player_id)` per player and a
+    /// `replay::Capture` seeded with `(master_seed, player_id, content_hash)` so
+    /// the live shadow's exact applied inputs are logged for verification.
+    pub fn with_content_hash(players: &[PeerId], master_seed: u64, content_hash: u64) -> Director {
         let mut peers: Vec<PeerId> = players.to_vec();
         peers.sort();
         peers.dedup();
@@ -94,11 +116,14 @@ impl Director {
                 history: BTreeMap::new(),
                 death_recorded: false,
                 challenge: sim::bot::Challenge::None,
+                capture: Some(Capture::new(master_seed, p.0, content_hash)),
+                replay: None,
             })
             .collect();
         Director {
             iter: 0,
             master_seed,
+            content_hash,
             peers,
             players,
             death_order: Vec::new(),
@@ -217,6 +242,14 @@ impl Director {
                 if !was_dead {
                     let raw = self.players[i].schedule.take(arena_tick);
                     let inp = self.players[i].challenge.filter(raw, &self.players[i].shadow);
+                    // Record the EXACT post-filter action fed to `sim::step` at
+                    // its authoritative apply tick (`arena_tick`). This is the
+                    // same value passed to `step` below, so the captured input
+                    // log re-sims bit-identically under `replay::verify` (`Noop`
+                    // actions are dropped by `Capture::record`).
+                    if let Some(cap) = self.players[i].capture.as_mut() {
+                        cap.record(arena_tick, InputCode::from_input(inp));
+                    }
                     sim::step(&mut self.players[i].shadow, inp);
                     let cs = sim::checksum(&self.players[i].shadow);
                     self.players[i].history.insert(arena_tick, cs);
@@ -231,6 +264,14 @@ impl Director {
                             .death_tick
                             .unwrap_or(arena_tick);
                         self.players[i].death_recorded = true;
+                        // Mint the replay at the FIRST tick the shadow is dead.
+                        // `cs` is `sim::checksum(&shadow)` taken immediately after
+                        // the resolving step — the exact instant `verify` samples
+                        // its `result_digest` — so the digests line up without
+                        // adjustment.
+                        if let Some(cap) = self.players[i].capture.take() {
+                            self.players[i].replay = cap.finish(&self.players[i].shadow, cs);
+                        }
                         newly_dead.push((self.peers[i], died_tick));
                     }
                 }
@@ -333,6 +374,21 @@ impl Director {
     /// Final placements `(player, place)` once the match is resolved.
     pub fn result(&self) -> Option<Vec<(PeerId, u32)>> {
         self.result.clone()
+    }
+
+    /// The content hash this match runs under, stamped into captured replays.
+    pub fn content_hash(&self) -> u64 {
+        self.content_hash
+    }
+
+    /// Player `p`'s captured replay, available once that player's shadow has
+    /// died. The replay is the authoritative `(seed, input_log, claimed_result)`
+    /// record: re-simming it with [`crate::replay::verify`] against this
+    /// director's `content_hash` reproduces the shadow's death bit-for-bit
+    /// (`docs/07 §7.6`). `None` while the player is still alive (no claimable
+    /// death tick yet).
+    pub fn replay(&self, p: PeerId) -> Option<&Replay> {
+        self.index_of(p).and_then(|i| self.players[i].replay.as_ref())
     }
 }
 
@@ -627,5 +683,134 @@ mod tests {
             let last = deaths.iter().max_by_key(|(_, dt, _)| *dt).unwrap();
             assert_eq!(last.2, 1, "last to die is place 1");
         }
+    }
+
+    const REPLAY_CONTENT: u64 = 0xC0FFEE;
+
+    /// Drive a director (content-stamped) to a single player's death and return
+    /// the captured replay. Mirrors `records_death_and_match_result` but pulls
+    /// the live `Director::replay` instead of inspecting messages.
+    fn drive_to_death(seed: u64, player: u32) -> Replay {
+        let mut d = Director::with_content_hash(&[p(player)], seed, REPLAY_CONTENT);
+        for _ in 0..START_LEAD {
+            d.tick(vec![]);
+        }
+        for _ in 0..500_000u32 {
+            d.tick(vec![]);
+            if d.result().is_some() {
+                break;
+            }
+        }
+        assert!(d.result().is_some(), "match must resolve");
+        d.replay(p(player))
+            .cloned()
+            .expect("dead player must have a captured replay")
+    }
+
+    #[test]
+    fn live_capture_verifies_no_inputs() {
+        use crate::replay::{verify, VerifyOutcome};
+        // No client inputs: the lone tank dies to contact damage. The director's
+        // live capture must re-sim to Pass against the same content hash.
+        let replay = drive_to_death(0x5151, 1);
+        assert!(replay.claimed.death_tick > 0);
+        assert_eq!(replay.content_hash, REPLAY_CONTENT);
+        assert_eq!(replay.master_seed, 0x5151);
+        assert_eq!(replay.player_id, 1);
+        assert_eq!(
+            verify(&replay, REPLAY_CONTENT),
+            VerifyOutcome::Pass,
+            "live director capture must re-sim bit-identically"
+        );
+    }
+
+    #[test]
+    fn live_capture_verifies_with_inputs() {
+        use crate::replay::{verify, VerifyOutcome};
+        // Feed real Inputs through the message path so they are filtered and
+        // applied to the shadow exactly as a client's would be, then confirm the
+        // capture (which logs the post-filter action) re-sims to Pass.
+        let seed = 0x7777;
+        let mut d = Director::with_content_hash(&[p(1)], seed, REPLAY_CONTENT);
+        for _ in 0..START_LEAD {
+            d.tick(vec![]);
+        }
+        // arena_tick 0 is now the next live tick. Submit a couple of inputs; the
+        // director schedules each at arena_tick + INPUT_LEAD_TICKS and applies +
+        // records it there.
+        let in1 = inbound(p(1), Channel::Control, &Msg::Input { seq: 1, action: InputCode::Reroll });
+        d.tick(vec![in1]);
+        let in2 = inbound(p(1), Channel::Control, &Msg::Input { seq: 2, action: InputCode::Reroll });
+        d.tick(vec![in2]);
+        // Run to death.
+        let mut replay = None;
+        for _ in 0..500_000u32 {
+            d.tick(vec![]);
+            if d.result().is_some() {
+                replay = d.replay(p(1)).cloned();
+                break;
+            }
+        }
+        let replay = replay.expect("captured replay after death");
+        // The recorded inputs are exactly the non-Noop actions actually applied.
+        assert!(
+            replay.inputs.iter().all(|(_, a)| *a == InputCode::Reroll),
+            "only the applied Reroll actions are logged, got {:?}",
+            replay.inputs
+        );
+        assert_eq!(replay.inputs.len(), 2, "two inputs applied and logged");
+        assert_eq!(
+            verify(&replay, REPLAY_CONTENT),
+            VerifyOutcome::Pass,
+            "capture with real inputs must re-sim to Pass"
+        );
+    }
+
+    #[test]
+    fn tampered_live_capture_fails() {
+        use crate::replay::{verify, VerifyFail, VerifyOutcome};
+        // Tamper with the claimed death tick: the independent re-sim must reject.
+        let mut replay = drive_to_death(0x5151, 1);
+        let real = replay.claimed.death_tick;
+        replay.claimed.death_tick = real - 1;
+        match verify(&replay, REPLAY_CONTENT) {
+            VerifyOutcome::Fail(VerifyFail::WrongDeathTick { claimed, actual }) => {
+                assert_eq!(claimed, real - 1);
+                assert_eq!(actual, real);
+            }
+            other => panic!("expected WrongDeathTick, got {other:?}"),
+        }
+        // And a forged digest is caught too.
+        let mut replay2 = drive_to_death(0x5151, 1);
+        replay2.claimed.result_digest ^= 0xDEAD_BEEF;
+        assert!(
+            matches!(
+                verify(&replay2, REPLAY_CONTENT),
+                VerifyOutcome::Fail(VerifyFail::DigestMismatch { .. })
+            ),
+            "forged digest must fail"
+        );
+    }
+
+    #[test]
+    fn replay_absent_while_alive_present_after_death() {
+        let mut d = Director::with_content_hash(&[p(1)], 0x5151, REPLAY_CONTENT);
+        for _ in 0..START_LEAD {
+            d.tick(vec![]);
+        }
+        // Early on the tank is alive: no replay yet.
+        d.tick(vec![]);
+        assert!(d.is_alive(p(1)));
+        assert!(d.replay(p(1)).is_none(), "no replay while alive");
+        // Run to death; replay appears.
+        for _ in 0..500_000u32 {
+            d.tick(vec![]);
+            if d.result().is_some() {
+                break;
+            }
+        }
+        assert!(!d.is_alive(p(1)));
+        assert!(d.replay(p(1)).is_some(), "replay present after death");
+        assert_eq!(d.content_hash(), REPLAY_CONTENT);
     }
 }
