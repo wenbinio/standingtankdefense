@@ -32,7 +32,14 @@ var _player_tank: Array = []
 
 func _ready() -> void:
 	randomize()
-	m = StMatch.new_match(N, randi())
+	# If we arrived from the lobby, honor its host-authoritative plan (host + peers,
+	# planned seed) instead of the standalone demo's defaults; then clear the
+	# hand-off so a later direct launch falls back to the demo behavior.
+	if Session.lobby_players > 0:
+		m = StMatch.new_match(Session.lobby_players + 1, Session.lobby_seed)
+		Session.clear()
+	else:
+		m = StMatch.new_match(N, randi())
 	# You are player 0; honor a chosen challenge so its achievement is earnable.
 	if Profile.active_challenge_code != 0:
 		m.set_challenge(0, Profile.active_challenge_code)

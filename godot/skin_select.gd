@@ -46,6 +46,7 @@ func _input(e: InputEvent) -> void:
 			KEY_UP, KEY_W:    sel = (sel - COLS + n) % n; queue_redraw()
 			KEY_DOWN, KEY_S:  sel = (sel + COLS) % n; queue_redraw()
 			KEY_C: get_tree().change_scene_to_file("res://ChallengeSelect.tscn")
+			KEY_L: get_tree().change_scene_to_file("res://Lobby.tscn")   # multiplayer lobby (host-authoritative)
 			KEY_M: get_tree().change_scene_to_file("res://Match.tscn")   # multi-arena net demo
 			KEY_T: ArtTheme.cycle(); _cache_thumbs(); queue_redraw()
 			KEY_U: Profile.unlock_all(); queue_redraw()         # dev: preview the gallery
@@ -71,7 +72,7 @@ func _draw() -> void:
 	draw_string(font, Vector2(330, 46), "%d / %d unlocked" % [have, n],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.55, 0.78, 0.6))
 	draw_string(font, Vector2(36, 72),
-		"Unlock skins via achievements — purist runs (one weapon type), no-economy, and more.   [arrows] move   [Enter] play   [C] challenges   [M] net demo   [T] theme   [U] dev-unlock",
+		"Unlock skins via achievements — purist runs (one weapon type), no-economy, and more.   [arrows] move   [Enter] play   [C] challenges   [L] lobby   [M] net demo   [T] theme   [U] dev-unlock",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.56, 0.6, 0.68))
 
 	cards.clear()

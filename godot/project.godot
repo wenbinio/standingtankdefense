@@ -6,6 +6,7 @@ config_version=5
 
 ArtTheme="*res://theme.gd"
 Profile="*res://profile.gd"
+Session="*res://session.gd"
 
 [application]
 
