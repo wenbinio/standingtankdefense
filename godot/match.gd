@@ -6,10 +6,29 @@ extends Node2D
 
 const N := 8                  # players in the demo match
 
+# Relative paths under a theme folder (the locked art filename contract), in
+# enemy-kind order for the cached enemy set and minion-kind order for minions.
+const ENEMY_REL := [
+	"enemies/fel_orc_grunt.svg", "enemies/steam_tank.svg",
+	"enemies/samwise.svg", "enemies/fel_orc_peon.svg",
+	"enemies/fel_orc_raider.svg", "enemies/bandit_rider.svg",
+	"enemies/mountain_giant.svg", "enemies/fel_orc_warlock.svg",
+	"enemies/poisonspitter.svg", "enemies/firebreather.svg",
+	"enemies/icebreather.svg", "enemies/target_dummy.svg",
+]
+const MINION_REL := ["minions/skeleton.svg", "minions/infernal.svg"]
+
 var m
-var tex := {}
-var enemy_tex := []           # by kind: 0 grunt, 1 steam, 2 boss
-var minion_tex := []          # summoned allies: 0 skeleton, 1 infernal
+
+# Per-player cosmetic assignment, built once in _ready (stable across frames).
+# players[i] = {"theme": <idx into ArtTheme.themes>, "skin": <skin id string>}.
+var players: Array = []
+
+# Per-theme texture cache, keyed by theme index. Each entry:
+#   {"ground": Texture2D, "ring": Texture2D, "enemies": [Texture2D...], "minions": [...]}
+var _theme_tex: Array = []
+# Per-player tank texture, keyed by player index (resolved from theme+skin).
+var _player_tank: Array = []
 
 func _ready() -> void:
 	randomize()
@@ -17,8 +36,71 @@ func _ready() -> void:
 	# You are player 0; honor a chosen challenge so its achievement is earnable.
 	if Profile.active_challenge_code != 0:
 		m.set_challenge(0, Profile.active_challenge_code)
-	_load_textures()
+	_assign_cosmetics()
+	_cache_theme_textures()
 	_setup_environment()
+
+# --- Per-player cosmetic assignment (engine-only, never feeds the sim) --------
+# Player 0 is YOU (your live theme + selected skin). Players 1..N-1 simulate
+# other lobby members: a deterministic, varied spread that cycles BOTH themes
+# across a stable rotation of skin ids so the grid shows a range of distinct
+# looks — like 8 different people each picked their own cosmetics.
+func _assign_cosmetics() -> void:
+	players.clear()
+	players.append({"theme": ArtTheme.active, "skin": Profile.selected})
+	# A fixed, hand-picked rotation of skin ids (stable order, visibly varied).
+	# These are simulated peers, so unlock gating doesn't apply to the preview.
+	var rotation := [
+		"deadeye", "spicy_meatball", "octo_blaster", "disco_doom",
+		"tidal_terry", "bouncy_boi", "stone_broke", "franken_tank",
+		"gore_hound", "chilly_willy", "sir_toots", "lord_spookington",
+	]
+	var theme_count: int = ArtTheme.themes.size()
+	for i in range(1, N):
+		# Alternate themes so BOTH always appear; offset from your theme so the
+		# first peer already contrasts with your cell.
+		var theme_idx: int = (ArtTheme.active + i) % theme_count
+		var skin_id: String = rotation[(i - 1) % rotation.size()]
+		players.append({"theme": theme_idx, "skin": skin_id})
+
+# --- Theme path helpers (mirror ArtTheme WITHOUT mutating its global state) ---
+func _theme_base(theme_idx: int) -> String:
+	return "res://art/themes/%s/" % ArtTheme.themes[theme_idx]
+
+func _theme_load(theme_idx: int, rel: String) -> Texture2D:
+	return load(_theme_base(theme_idx) + rel)
+
+# Resolve a tank texture for (theme, skin) by the same rule as ArtTheme.tank_tex:
+# tank/skins/<file> if it exists in THAT theme, else that theme's player_tank.svg.
+func _tank_for(theme_idx: int, skin_id: String) -> Texture2D:
+	var f: String = Profile.skin_def(skin_id).file
+	if f != "":
+		var p := _theme_base(theme_idx) + "tank/" + f
+		if ResourceLoader.exists(p):
+			return load(p)
+	return _theme_load(theme_idx, "tank/player_tank.svg")
+
+# Cache BOTH theme texture sets up front (there are only 2), plus each player's
+# tank keyed by player index. Loads strictly by explicit path; ArtTheme.active
+# is never read for loading nor mutated here.
+func _cache_theme_textures() -> void:
+	_theme_tex.clear()
+	for t in ArtTheme.themes.size():
+		var enemies: Array = []
+		for rel in ENEMY_REL:
+			enemies.append(_theme_load(t, rel))
+		var minions: Array = []
+		for rel in MINION_REL:
+			minions.append(_theme_load(t, rel))
+		_theme_tex.append({
+			"ground": _theme_load(t, "env/arena_ground.svg"),
+			"ring":   _theme_load(t, "env/spawn_ring.svg"),
+			"enemies": enemies,
+			"minions": minions,
+		})
+	_player_tank.clear()
+	for p in players:
+		_player_tank.append(_tank_for(p["theme"], p["skin"]))
 
 # Cheap render-only glow parity with the single-arena view: a WorldEnvironment
 # with bloom so emissive (>1.0) pixels — tanks, the spawn rings — bloom. No
@@ -40,30 +122,15 @@ func _setup_environment() -> void:
 	cm.color = Color(0.74, 0.76, 0.82)   # gentle cool dim; lets bloom read
 	add_child(cm)
 
-func _load_textures() -> void:
-	tex = {
-		"ground": ArtTheme.tex("env/arena_ground.svg"),
-		"ring":   ArtTheme.tex("env/spawn_ring.svg"),
-		"tank":   ArtTheme.tank_tex(),
-		"coin":   ArtTheme.tex("ui/coin.svg"),
-	}
-	enemy_tex = [
-		ArtTheme.tex("enemies/fel_orc_grunt.svg"), ArtTheme.tex("enemies/steam_tank.svg"),
-		ArtTheme.tex("enemies/samwise.svg"), ArtTheme.tex("enemies/fel_orc_peon.svg"),
-		ArtTheme.tex("enemies/fel_orc_raider.svg"), ArtTheme.tex("enemies/bandit_rider.svg"),
-		ArtTheme.tex("enemies/mountain_giant.svg"), ArtTheme.tex("enemies/fel_orc_warlock.svg"),
-		ArtTheme.tex("enemies/poisonspitter.svg"), ArtTheme.tex("enemies/firebreather.svg"),
-		ArtTheme.tex("enemies/icebreather.svg"), ArtTheme.tex("enemies/target_dummy.svg"),
-	]
-	minion_tex = [ArtTheme.tex("minions/skeleton.svg"), ArtTheme.tex("minions/infernal.svg")]
-
 var _recorded := false        # match-end achievements credited once
 var _toast: Array = []        # newly-unlocked achievement names to flash
 
 func _unhandled_key_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
 		if e.keycode == KEY_T:
-			ArtTheme.cycle(); _load_textures()
+			# Cycling YOUR theme re-assigns your cell (player 0) and refreshes the
+			# peer spread + tank cache so the grid stays consistent.
+			ArtTheme.cycle(); _assign_cosmetics(); _cache_theme_textures()
 		elif e.keycode == KEY_S:
 			get_tree().change_scene_to_file("res://SkinSelect.tscn")
 		elif e.keycode == KEY_ESCAPE:
@@ -133,6 +200,13 @@ func _draw() -> void:
 		var rect := Rect2(pad + col * (cw + pad), top + pad + row * (ch + pad), cw, ch)
 		_draw_cell(font, i, rect)
 
+# A short uppercase tag for a theme index, for the per-cell theme pill.
+func _theme_tag(theme_idx: int) -> String:
+	match ArtTheme.themes[theme_idx]:
+		"grimdark":         return "GRIMDARK"
+		"gaslamp_bulwark":  return "GASLAMP"
+	return ArtTheme.themes[theme_idx].to_upper()
+
 func _draw_cell(font, i: int, r: Rect2) -> void:
 	var arena: PackedInt64Array = m.arena(i)   # [x,y,hp,maxhp,rev,round,tick,dead]
 	if arena.size() < 8:
@@ -141,32 +215,42 @@ func _draw_cell(font, i: int, r: Rect2) -> void:
 	var center := r.position + Vector2(r.size.x * 0.5, r.size.y * 0.5 + 8.0)
 	var scl: float = minf(r.size.x, r.size.y) * 0.42 / 1700.0
 
-	# arena floor + spawn ring (clipped to cell)
-	draw_texture_rect(tex["ground"], r, false)
-	_blit(tex["ring"], center, 2.0 * 1500.0 * scl / 0.90)
+	# This player's chosen cosmetics drive every texture in the cell.
+	var pc: Dictionary = players[i] if i < players.size() else {"theme": 0, "skin": "ol_reliable"}
+	var theme_idx: int = pc["theme"]
+	var tset: Dictionary = _theme_tex[theme_idx]
+	var is_you: bool = i == 0
 
-	# enemies (small)
+	# arena floor + spawn ring (this player's theme, clipped to cell)
+	draw_texture_rect(tset["ground"], r, false)
+	_blit(tset["ring"], center, 2.0 * 1500.0 * scl / 0.90)
+
+	# enemies (small) — this player's theme art
+	var theme_enemies: Array = tset["enemies"]
 	var ep: PackedVector2Array = m.enemies_pos(i)
 	var ek: PackedByteArray = m.enemies_kind(i)
 	for j in ep.size():
 		var kind: int = ek[j] if j < ek.size() else 0
 		var sz := 56.0 if kind == 2 else (30.0 if kind == 6 else 20.0)
-		var tx: Texture2D = enemy_tex[kind] if kind < enemy_tex.size() else null
+		var tx: Texture2D = theme_enemies[kind] if kind < theme_enemies.size() else null
 		if tx:
 			_blit(tx, center + Vector2(ep[j].x * scl, -ep[j].y * scl), sz)
 
-	# summoned allies
+	# summoned allies — this player's theme art
+	var theme_minions: Array = tset["minions"]
 	var mp: PackedVector2Array = m.minions_pos(i)
 	var mk: PackedByteArray = m.minions_kind(i)
 	for j in mp.size():
 		var mkind: int = mk[j] if j < mk.size() else 0
-		var mtx: Texture2D = minion_tex[mkind] if mkind < minion_tex.size() else null
+		var mtx: Texture2D = theme_minions[mkind] if mkind < theme_minions.size() else null
 		if mtx:
 			_blit(mtx, center + Vector2(mp[j].x * scl, -mp[j].y * scl), 18.0)
 
-	# tank — living tanks get a faint emissive lift so they bloom under glow,
-	# echoing the single-arena tank light without a per-cell PointLight2D.
-	_blit(tex["tank"], center, 40.0, Color(1, 1, 1, 0.5) if dead else Color(1.18, 1.22, 1.35))
+	# tank — this player's (theme, skin) texture. Living tanks get a faint
+	# emissive lift so they bloom under glow, echoing the single-arena tank light.
+	var tank_tx: Texture2D = _player_tank[i] if i < _player_tank.size() else null
+	if tank_tx:
+		_blit(tank_tx, center, 40.0, Color(1, 1, 1, 0.5) if dead else Color(1.18, 1.22, 1.35))
 
 	# HP bar
 	var hp := maxi(int(arena[2]), 0)
@@ -176,18 +260,39 @@ func _draw_cell(font, i: int, r: Rect2) -> void:
 	draw_rect(Rect2(r.position + Vector2(8, 8), Vector2(bw * float(hp) / float(maxhp), 7)),
 		Color(0.5, 0.5, 0.55) if dead else Color(0.33, 0.72, 1.0))
 
-	# label + economy
+	# label + economy (round / gold / weapon count preserved)
 	var eco: PackedInt64Array = m.economy(i)
 	var gold: int = eco[0] if eco.size() > 0 else 0
-	draw_string(font, r.position + Vector2(10, 34), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.9, 0.93, 0.98))
+	var pcol := Color(1.0, 0.9, 0.45) if is_you else Color(0.9, 0.93, 0.98)
+	draw_string(font, r.position + Vector2(10, 34), "P%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, pcol)
 	draw_string(font, r.position + Vector2(46, 34), "R%d · %dg · %dw" % [arena[5], gold, m.weapon_count(i)],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.74, 0.66, 0.4))
 	# per-player damage score (log-compressed so it never runs into the thousands)
 	draw_string(font, Vector2(r.position.x + r.size.x - 104, r.position.y + 34), "SCORE %d" % _score(i),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.78, 0.35))
 
-	# cell border
-	draw_rect(r, Color(0.06, 0.07, 0.09, 1.0), false, 2.0)
+	# net legibility: who picked what. Skin name line + a small theme pill, so
+	# the grid reads like a lobby of cosmetic choices.
+	var skin_name: String = Profile.skin_def(pc["skin"]).name
+	var who := ("P%d · %s" % [i + 1, skin_name]) + ("  ★ YOU" if is_you else "")
+	draw_string(font, Vector2(r.position.x + 10, r.position.y + r.size.y - 12), who,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1.0, 0.95, 0.7) if is_you else Color(0.86, 0.9, 0.96))
+	# theme pill, bottom-right
+	var tag := _theme_tag(theme_idx)
+	var tag_w: float = tag.length() * 8.0 + 12.0
+	var pill := Rect2(r.position.x + r.size.x - tag_w - 8.0, r.position.y + r.size.y - 26.0, tag_w, 18.0)
+	var pill_col := Color(0.30, 0.16, 0.18, 0.85) if theme_idx == 0 else Color(0.16, 0.22, 0.30, 0.85)
+	draw_rect(pill, pill_col)
+	draw_rect(pill, Color(0.7, 0.7, 0.75, 0.5), false, 1.0)
+	draw_string(font, Vector2(pill.position.x + 6.0, pill.position.y + 14.0), tag,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.92, 0.94, 0.98))
+
+	# cell border — your cell gets a brighter accent + glow-y double frame.
+	if is_you:
+		draw_rect(r, Color(1.0, 0.82, 0.32, 1.0), false, 3.0)
+		draw_rect(Rect2(r.position + Vector2(2, 2), r.size - Vector2(4, 4)), Color(1.0, 0.9, 0.5, 0.35), false, 1.0)
+	else:
+		draw_rect(r, Color(0.06, 0.07, 0.09, 1.0), false, 2.0)
 
 	# dead overlay + placement
 	if dead:
