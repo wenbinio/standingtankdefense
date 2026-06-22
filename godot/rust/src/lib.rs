@@ -161,6 +161,26 @@ impl StSim {
         a
     }
 
+    /// World positions of summoned allies (parallel to `minions_kind`).
+    #[func]
+    fn minions_pos(&self) -> PackedVector2Array {
+        let mut a = PackedVector2Array::new();
+        for m in &view::snapshot(&self.state).minions {
+            a.push(Vector2::new(m.x as f32, m.y as f32));
+        }
+        a
+    }
+
+    /// Per-minion sprite kind (0 skeleton · 1 infernal), parallel to `minions_pos`.
+    #[func]
+    fn minions_kind(&self) -> PackedByteArray {
+        let mut a = PackedByteArray::new();
+        for m in &view::snapshot(&self.state).minions {
+            a.push(m.kind);
+        }
+        a
+    }
+
     /// Names of the current shop offers (slot order).
     #[func]
     fn shop_names(&self) -> PackedStringArray {
@@ -398,6 +418,30 @@ impl StMatch {
         if let Some(v) = self.snap(i) {
             for e in &v.enemies {
                 a.push(e.kind as u8);
+            }
+        }
+        a
+    }
+
+    /// Summoned-ally world positions for player `i`'s arena.
+    #[func]
+    fn minions_pos(&self, i: i64) -> PackedVector2Array {
+        let mut a = PackedVector2Array::new();
+        if let Some(v) = self.snap(i) {
+            for m in &v.minions {
+                a.push(Vector2::new(m.x as f32, m.y as f32));
+            }
+        }
+        a
+    }
+
+    /// Summoned-ally sprite kinds for player `i` (0 skeleton · 1 infernal).
+    #[func]
+    fn minions_kind(&self, i: i64) -> PackedByteArray {
+        let mut a = PackedByteArray::new();
+        if let Some(v) = self.snap(i) {
+            for m in &v.minions {
+                a.push(m.kind);
             }
         }
         a

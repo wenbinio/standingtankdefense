@@ -20,6 +20,7 @@ var _prev_proj := 0
 
 var tex := {}
 var enemy_tex := []           # by kind: 0 grunt, 1 steam, 2 boss
+var minion_tex := []          # summoned allies: 0 skeleton, 1 infernal
 var frame_tex := []           # by rarity 0..3
 
 # interactive shop hit-targets (recomputed each draw)
@@ -62,6 +63,7 @@ func _load_textures() -> void:
 		ArtTheme.tex("enemies/icebreather.svg"),      # 10 icebreather
 		ArtTheme.tex("enemies/target_dummy.svg"),     # 11 target dummy
 	]
+	minion_tex = [ArtTheme.tex("minions/skeleton.svg"), ArtTheme.tex("minions/infernal.svg")]
 	frame_tex = [ArtTheme.tex("ui/frame_common.svg"), ArtTheme.tex("ui/frame_uncommon.svg"),
 		ArtTheme.tex("ui/frame_rare.svg"), ArtTheme.tex("ui/frame_epic.svg")]
 
@@ -200,6 +202,16 @@ func _draw() -> void:
 		var size := 230.0 if kind == 2 else (118.0 if kind == 6 else 74.0)
 		var mod := Color(2.4, 2.4, 2.4) if _flash.has(id) else Color.WHITE
 		_blit(tx, _to_screen(ep[i].x, ep[i].y) + Vector2(0, bob), size, mod)
+
+	# summoned allies (skeletons / infernals) — drawn beneath the tank
+	var mp: PackedVector2Array = sim.minions_pos()
+	var mk: PackedByteArray = sim.minions_kind()
+	for i in mp.size():
+		var k: int = mk[i] if i < mk.size() else 0
+		var mtx: Texture2D = minion_tex[k] if k < minion_tex.size() else null
+		if mtx:
+			var mbob := sin(t * 0.2 + float(i) * 1.3) * 3.0
+			_blit(mtx, _to_screen(mp[i].x, mp[i].y) + Vector2(0, mbob), 64.0)
 
 	# tank with gentle bob + muzzle flash
 	var tbob := sin(t * 0.14) * 2.0

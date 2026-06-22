@@ -62,10 +62,11 @@ pub enum WeaponAbility {
     /// oil). The hazard pulses `dmg` to enemies within `radius` each tick for
     /// `ticks` ticks.
     Hazard { dmg: i64, radius: i64, ticks: u32 },
-    /// Summon (DEFERRED): the source's skeleton/infernal raisers. Behaves as
-    /// `None` for now — see the implementation report. Kept as a distinct variant
-    /// so the catalog already models it.
-    Summon,
+    /// Summon: when this weapon's hit KILLS an enemy, raise a temporary ally
+    /// (the source's skeleton/infernal raisers) from the corpse, up to a global
+    /// cap. `kind` selects the sprite (0 skeleton, 1 infernal); `hp` and `damage`
+    /// seed the minion. An Area weapon that wipes a pack raises several at once.
+    Summon { kind: u8, hp: i64, damage: i64 },
 }
 
 impl WeaponAbility {
@@ -80,7 +81,7 @@ impl WeaponAbility {
             WeaponAbility::Root { ticks } => (4, ticks as i64, 0, 0),
             WeaponAbility::VulnOnHit { stacks } => (5, stacks as i64, 0, 0),
             WeaponAbility::Hazard { dmg, radius, ticks } => (6, dmg, radius, ticks as i64),
-            WeaponAbility::Summon => (7, 0, 0, 0),
+            WeaponAbility::Summon { kind, hp, damage } => (7, kind as i64, hp, damage),
         }
     }
     /// Inverse of [`words`](Self::words).
@@ -93,7 +94,7 @@ impl WeaponAbility {
             4 => WeaponAbility::Root { ticks: a as u32 },
             5 => WeaponAbility::VulnOnHit { stacks: a as u16 },
             6 => WeaponAbility::Hazard { dmg: a, radius: b, ticks: c as u32 },
-            7 => WeaponAbility::Summon,
+            7 => WeaponAbility::Summon { kind: a as u8, hp: b, damage: c },
             _ => return None,
         })
     }
@@ -845,7 +846,7 @@ pub static WEAPONS: &[WeaponDef] = &[
     WeaponDef { name: "Liquid Fire Hurler", rarity: 1, cost: 1500, damage: 210, damage_type: DMG_SIEGE, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 4, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 3 } },  // exotic: damage taken (base only); fast fire stacker
     WeaponDef { name: "Boulder Toss", rarity: 2, cost: 3000, damage: 980, damage_type: DMG_NORMAL, attack: Attack::Splash(300), cooldown_ticks: 45, range: 300, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: reduce enemy (base only)
     WeaponDef { name: "Bloody Spikes", rarity: 3, cost: 5000, damage: 2200, damage_type: DMG_NORMAL, attack: Attack::Wave(300), cooldown_ticks: 36, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 30 }, ability: WeaponAbility::None },  // HIGH-CEILING wave nuke, point-blank
-    WeaponDef { name: "Inferno Stone", rarity: 3, cost: 5000, damage: 3200, damage_type: DMG_CHAOS, attack: Attack::Area(300), cooldown_ticks: 90, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 60, stun_ticks: 60 }, ability: WeaponAbility::Summon },  // exotic: Summon (base only); BOOM-OR-BUST: huge nuke + 60 fire, very slow cd — devastating if it lands on a pack, dead air between casts
+    WeaponDef { name: "Inferno Stone", rarity: 3, cost: 5000, damage: 3200, damage_type: DMG_CHAOS, attack: Attack::Area(300), cooldown_ticks: 90, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 60, stun_ticks: 60 }, ability: WeaponAbility::Summon { kind: 1, hp: 1500, damage: 600 } },  // BOOM-OR-BUST: huge nuke + 60 fire, very slow cd; wiping a pack RAISES a host of infernals
     WeaponDef { name: "Flame Generator", rarity: 3, cost: 5000, damage: 1700, damage_type: DMG_MAGIC, attack: Attack::Area(300), cooldown_ticks: 60, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 200, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 4 } },  // exotic: damage taken (base only); FIRE PAYOFF ENGINE: drenches packs in 200 fire each pulse → explode-chain ceiling is enormous
     WeaponDef { name: "Firebreather", rarity: 1, cost: 1500, damage: 180, damage_type: DMG_PIERCING, attack: Attack::Splash(150), cooldown_ticks: 15, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 5, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only); rapid fire stacker
     WeaponDef { name: "Lavaspitter", rarity: 3, cost: 5000, damage: 1800, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 150, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only); long-range fire payoff
@@ -864,7 +865,7 @@ pub static WEAPONS: &[WeaponDef] = &[
     WeaponDef { name: "Flamewave", rarity: 1, cost: 1500, damage: 360, damage_type: DMG_NORMAL, attack: Attack::Wave(200), cooldown_ticks: 45, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 20, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 6 } },  // exotic: damage taken (base only)
     WeaponDef { name: "Chaotic Spirit Bolt", rarity: 1, cost: 1500, damage: 190, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 40 } },  // exotic: Heal (base only); fast cheap floor
     WeaponDef { name: "Manabolt", rarity: 1, cost: 1500, damage: 320, damage_type: DMG_MAGIC, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::ManaDrain { per_hit: 80 } },  // exotic: drain (base only); fast long-range
-    WeaponDef { name: "Death Generator", rarity: 3, cost: 5000, damage: 1300, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 18, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Summon },  // exotic: Raises (base only); steady high-rarity anchor
+    WeaponDef { name: "Death Generator", rarity: 3, cost: 5000, damage: 1300, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 18, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Summon { kind: 0, hp: 500, damage: 250 } },  // steady high-rarity anchor; every kill RAISES a skeleton
     WeaponDef { name: "Immolation Aura", rarity: 0, cost: 500, damage: 75, damage_type: DMG_MAGIC, attack: Attack::Wave(150), cooldown_ticks: 12, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 2, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 3 } },  // exotic: damage taken (base only); cheap point-blank pulse
     WeaponDef { name: "Goblin Land Mines", rarity: 3, cost: 5000, damage: 2600, damage_type: DMG_SIEGE, attack: Attack::Wave(200), cooldown_ticks: 45, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 90 }, ability: WeaponAbility::Hazard { dmg: 1000, radius: 200, ticks: 90 } },  // exotic: land mine (base only); point-blank stun-wave nuke
     WeaponDef { name: "Quill Burst", rarity: 1, cost: 1500, damage: 340, damage_type: DMG_PIERCING, attack: Attack::Splash(300), cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 10 } },  // exotic: damage taken (base only)

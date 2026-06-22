@@ -9,6 +9,7 @@ const N := 8                  # players in the demo match
 var m
 var tex := {}
 var enemy_tex := []           # by kind: 0 grunt, 1 steam, 2 boss
+var minion_tex := []          # summoned allies: 0 skeleton, 1 infernal
 
 func _ready() -> void:
 	randomize()
@@ -33,6 +34,7 @@ func _load_textures() -> void:
 		ArtTheme.tex("enemies/poisonspitter.svg"), ArtTheme.tex("enemies/firebreather.svg"),
 		ArtTheme.tex("enemies/icebreather.svg"), ArtTheme.tex("enemies/target_dummy.svg"),
 	]
+	minion_tex = [ArtTheme.tex("minions/skeleton.svg"), ArtTheme.tex("minions/infernal.svg")]
 
 var _recorded := false        # match-end achievements credited once
 var _toast: Array = []        # newly-unlocked achievement names to flash
@@ -131,6 +133,15 @@ func _draw_cell(font, i: int, r: Rect2) -> void:
 		var tx: Texture2D = enemy_tex[kind] if kind < enemy_tex.size() else null
 		if tx:
 			_blit(tx, center + Vector2(ep[j].x * scl, -ep[j].y * scl), sz)
+
+	# summoned allies
+	var mp: PackedVector2Array = m.minions_pos(i)
+	var mk: PackedByteArray = m.minions_kind(i)
+	for j in mp.size():
+		var mkind: int = mk[j] if j < mk.size() else 0
+		var mtx: Texture2D = minion_tex[mkind] if mkind < minion_tex.size() else null
+		if mtx:
+			_blit(mtx, center + Vector2(mp[j].x * scl, -mp[j].y * scl), 18.0)
 
 	# tank
 	_blit(tex["tank"], center, 40.0, Color(1, 1, 1, 0.5) if dead else Color.WHITE)

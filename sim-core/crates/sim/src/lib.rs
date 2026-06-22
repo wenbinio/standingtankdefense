@@ -74,6 +74,8 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     defense::spikes(s);
     // 6c. Hazards (land mines / burning oil) pulse damage to enemies in range.
     combat::tick_hazards(s);
+    // 6d. Summoned allies (skeletons / infernals) move and strike enemies.
+    combat::tick_minions(s);
     // 7. Status effects: poison DoT, frost/stun decay (poison kills → pending_kills).
     status::tick(s);
     // 8. Drain pending_kills → award bounty (scaled by bounty_mult).
@@ -279,6 +281,22 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.damage_type as u32);
         c.write_i64(x.radius);
         c.write_u32(x.ticks_left);
+    }
+
+    // Summoned allies (minions) in id order.
+    let mut mn: Vec<&Minion> = s.minions.iter().collect();
+    mn.sort_by_key(|x| x.id);
+    c.write_u32(mn.len() as u32);
+    for x in mn {
+        c.write_u32(x.id.0);
+        c.write_fixed(x.pos.x);
+        c.write_fixed(x.pos.y);
+        c.write_u32(x.kind as u32);
+        c.write_i64(x.hp);
+        c.write_i64(x.damage);
+        c.write_u32(x.damage_type as u32);
+        c.write_u32(x.next_attack_tick);
+        c.write_u32(x.expire_tick);
     }
 
     c.finish()

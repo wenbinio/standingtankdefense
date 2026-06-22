@@ -14,7 +14,18 @@ use determinism::Fixed;
 /// (vuln stacks, knockback displacement, root) are applied directly to the
 /// enemy inside [`apply_weapon_hit`]; only effects that touch the tank or spawn
 /// world entities are deferred here.
-#[derive(Clone, Copy, Default)]
+/// One ally to raise this attack: position of the slain enemy plus the minion's
+/// seed stats (the per-strike `damage_type` is taken from the killing weapon at
+/// flush time, so every minion of one cast shares it).
+#[derive(Clone, Copy)]
+struct SummonReq {
+    pos: Vec2,
+    kind: u8,
+    hp: i64,
+    damage: i64,
+}
+
+#[derive(Clone, Default)]
 struct AbilityAccum {
     /// Total HP to heal the tank (life-drain), summed per damaged enemy.
     heal: i64,
@@ -22,6 +33,8 @@ struct AbilityAccum {
     mana: i64,
     /// Where to drop a hazard (the first enemy this attack damaged), if any.
     hazard_at: Option<Vec2>,
+    /// Corpses to raise as allies (Summon weapons that killed an enemy this hit).
+    summons: Vec<SummonReq>,
 }
 
 impl AbilityAccum {
@@ -39,6 +52,23 @@ impl AbilityAccum {
         {
             let id = s.alloc_entity_id();
             s.hazards.push(Hazard { id, pos, dmg, damage_type, radius, ticks_left: ticks });
+        }
+        // Raise an ally from each corpse this attack made, up to the global cap.
+        for req in self.summons {
+            if s.minions.len() >= MAX_MINIONS {
+                break;
+            }
+            let id = s.alloc_entity_id();
+            s.minions.push(Minion {
+                id,
+                pos: req.pos,
+                kind: req.kind,
+                hp: req.hp,
+                damage: req.damage,
+                damage_type,
+                next_attack_tick: s.tick,
+                expire_tick: s.tick + MINION_LIFETIME,
+            });
         }
     }
 }
@@ -112,7 +142,14 @@ fn apply_ability_on_hit(
     accum: &mut AbilityAccum,
 ) {
     match ability {
-        WeaponAbility::None | WeaponAbility::Summon => {}
+        WeaponAbility::None => {}
+        WeaponAbility::Summon { kind, hp, damage } => {
+            // Raise from the corpse only if THIS hit was the killing blow.
+            // (`apply_weapon_hit` has already subtracted the damage.)
+            if e.hp <= 0 {
+                accum.summons.push(SummonReq { pos: e.pos, kind, hp, damage });
+            }
+        }
         WeaponAbility::LifeDrain { per_hit } => accum.heal += per_hit,
         WeaponAbility::ManaDrain { per_hit } => accum.mana += per_hit,
         WeaponAbility::VulnOnHit { stacks } => {
@@ -514,6 +551,83 @@ pub(crate) fn tick_hazards(s: &mut ArenaState) {
     if any {
         crate::status::reap_dead(s);
     }
+}
+
+/// Tuning for summoned allies (skeletons / infernals).
+const MAX_MINIONS: usize = 16;     // global cap on living minions
+const MINION_LIFETIME: u32 = 450;  // ~15s before a minion vanishes
+const MINION_ATTACK_CD: u32 = 30;  // ticks between a minion's strikes (~1/s)
+const MINION_REACH: i64 = 160;     // melee reach (world units)
+const MINION_SPEED: i64 = 18;      // step toward the target per tick (out of reach)
+
+/// Phase 6d: summoned allies act. Each minion (stable id order) targets the
+/// nearest non-boss enemy: in reach it strikes on its attack cooldown, else it
+/// steps toward the target. Strike damage scales with match time on the same
+/// curve as enemy HP/damage and routes through the shared death path, so a
+/// minion's kills award bounty and trigger Fire explosions. Expired minions are
+/// removed. Deterministic: integer/Fixed math, stable id order, no RNG.
+pub(crate) fn tick_minions(s: &mut ArenaState) {
+    if s.minions.is_empty() {
+        return;
+    }
+    let now = s.tick;
+    s.minions.retain(|m| now < m.expire_tick);
+    if s.minions.is_empty() {
+        return;
+    }
+
+    let dmg_mult = content::enemy_hp_mult(now);
+    let reach = Fixed::from_int(MINION_REACH);
+    let reach2 = reach.mul(reach);
+    let speed = Fixed::from_int(MINION_SPEED);
+
+    // Move minions / decide strikes without holding an enemy borrow.
+    let mut minions = std::mem::take(&mut s.minions);
+    let mut strikes: Vec<(EntityId, i64, u8)> = Vec::new(); // (target, scaled dmg, dtype)
+    for m in minions.iter_mut() {
+        // Nearest non-boss enemy; ties resolve to the lower id (id-ordered list).
+        let mut best: Option<(EntityId, Vec2, Fixed)> = None;
+        for e in s.enemies.iter() {
+            if content::ENEMIES[e.def as usize].boss {
+                continue;
+            }
+            let d2 = m.pos.dist_sq(e.pos);
+            if best.map_or(true, |(_, _, bd)| d2 < bd) {
+                best = Some((e.id, e.pos, d2));
+            }
+        }
+        if let Some((tid, tpos, d2)) = best {
+            if d2 <= reach2 {
+                if now >= m.next_attack_tick {
+                    m.next_attack_tick = now + MINION_ATTACK_CD;
+                    strikes.push((tid, dmg_mult.scale_i64(m.damage), m.damage_type));
+                }
+            } else {
+                m.pos = m.pos.step_toward(tpos, speed);
+            }
+        }
+    }
+    s.minions = minions;
+
+    if strikes.is_empty() {
+        return;
+    }
+    // Resolve strikes (deterministic: minion id order). A minion strike carries
+    // no on-hit status and no chained ability.
+    let cond = CondDamage::of(s);
+    let tank_pos = s.tank.pos;
+    let mut accum = AbilityAccum::default();
+    let mut total: i64 = 0;
+    for (tid, dmg, dtype) in strikes {
+        if let Some(e) = s.enemies.iter_mut().find(|e| e.id == tid) {
+            total += apply_weapon_hit(
+                e, dmg, dtype, Fixed::ONE, cond, &content::StatusOnHit::NONE,
+                WeaponAbility::None, tank_pos, &mut accum,
+            );
+        }
+    }
+    s.record_player_damage(total);
+    crate::status::reap_dead(s);
 }
 
 /// Phase 6c: ENEMY-side ranged attacks. Each enemy whose def carries
@@ -1505,6 +1619,128 @@ mod tests {
             advance_projectiles(&mut b);
         }
         assert_eq!(a.enemies, b.enemies, "knockback ability is deterministic");
+        assert_eq!(crate::checksum(&a), crate::checksum(&b));
+    }
+
+    // ---- Summon ability + minions ------------------------------------------
+
+    fn summon_kill(s: &mut ArenaState, eid: EntityId, ability: WeaponAbility) {
+        let cond = CondDamage::of(s);
+        let mut accum = AbilityAccum::default();
+        {
+            let e = s.enemies.iter_mut().find(|e| e.id == eid).unwrap();
+            apply_weapon_hit(
+                e, 9_999_999, content::DMG_CHAOS, Fixed::ONE, cond,
+                &content::StatusOnHit::NONE, ability, Vec2::ZERO, &mut accum,
+            );
+        }
+        accum.flush(s, ability, content::DMG_CHAOS);
+    }
+
+    #[test]
+    fn summon_raises_a_minion_from_a_corpse_on_kill() {
+        let mut s = blank_state();
+        let eid = mk_enemy(&mut s, 0, 10, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        summon_kill(&mut s, eid, WeaponAbility::Summon { kind: 0, hp: 500, damage: 250 });
+        assert_eq!(s.minions.len(), 1, "one ally rises from the corpse");
+        let m = s.minions[0];
+        assert_eq!(m.kind, 0);
+        assert_eq!(m.damage, 250);
+        assert_eq!(m.damage_type, content::DMG_CHAOS);
+        assert_eq!(m.expire_tick, s.tick + MINION_LIFETIME);
+    }
+
+    #[test]
+    fn summon_does_not_raise_without_a_kill() {
+        let mut s = blank_state();
+        let eid = mk_enemy(&mut s, 0, 1_000_000, Vec2::ZERO);
+        let ability = WeaponAbility::Summon { kind: 1, hp: 1500, damage: 600 };
+        let cond = CondDamage::of(&s);
+        let mut accum = AbilityAccum::default();
+        {
+            let e = s.enemies.iter_mut().find(|e| e.id == eid).unwrap();
+            apply_weapon_hit(
+                e, 100, content::DMG_CHAOS, Fixed::ONE, cond,
+                &content::StatusOnHit::NONE, ability, Vec2::ZERO, &mut accum,
+            );
+        }
+        accum.flush(&mut s, ability, content::DMG_CHAOS);
+        assert!(s.minions.is_empty(), "survivor ⇒ no minion raised");
+    }
+
+    #[test]
+    fn summon_respects_the_minion_cap() {
+        let mut s = blank_state();
+        let ability = WeaponAbility::Summon { kind: 0, hp: 1, damage: 1 };
+        let cond = CondDamage::of(&s);
+        let mut accum = AbilityAccum::default();
+        let mut ids = Vec::new();
+        for i in 0..(MAX_MINIONS + 4) {
+            ids.push(mk_enemy(&mut s, 0, 1, Vec2::new(Fixed::from_int(i as i64 * 10), Fixed::ZERO)));
+        }
+        for id in &ids {
+            let e = s.enemies.iter_mut().find(|e| e.id == *id).unwrap();
+            apply_weapon_hit(
+                e, 9_999_999, content::DMG_CHAOS, Fixed::ONE, cond,
+                &content::StatusOnHit::NONE, ability, Vec2::ZERO, &mut accum,
+            );
+        }
+        accum.flush(&mut s, ability, content::DMG_CHAOS);
+        assert_eq!(s.minions.len(), MAX_MINIONS, "capped at MAX_MINIONS");
+    }
+
+    #[test]
+    fn minion_strikes_and_damages_a_nearby_enemy() {
+        let mut s = blank_state();
+        let now = s.tick;
+        let mid = s.alloc_entity_id();
+        s.minions.push(Minion {
+            id: mid, pos: Vec2::ZERO, kind: 0, hp: 500, damage: 1000,
+            damage_type: content::DMG_CHAOS, next_attack_tick: now, expire_tick: now + 1000,
+        });
+        let eid = mk_enemy(&mut s, 0, 100_000, Vec2::new(Fixed::from_int(50), Fixed::ZERO));
+        let before = s.enemies.iter().find(|e| e.id == eid).unwrap().hp;
+        tick_minions(&mut s);
+        let after = s.enemies.iter().find(|e| e.id == eid).unwrap().hp;
+        assert!(after < before, "an in-reach minion strikes the enemy");
+    }
+
+    #[test]
+    fn minion_expires_after_its_lifetime() {
+        let mut s = blank_state();
+        let mid = s.alloc_entity_id();
+        s.minions.push(Minion {
+            id: mid, pos: Vec2::ZERO, kind: 1, hp: 1, damage: 1,
+            damage_type: content::DMG_CHAOS, next_attack_tick: 0, expire_tick: 5,
+        });
+        s.tick = 4;
+        tick_minions(&mut s);
+        assert_eq!(s.minions.len(), 1, "alive while tick < expire_tick");
+        s.tick = 5;
+        tick_minions(&mut s);
+        assert!(s.minions.is_empty(), "removed once tick reaches expire_tick");
+    }
+
+    #[test]
+    fn minion_phase_is_deterministic() {
+        let build = || {
+            let mut s = blank_state();
+            let mid = s.alloc_entity_id();
+            s.minions.push(Minion {
+                id: mid, pos: Vec2::ZERO, kind: 0, hp: 500, damage: 200,
+                damage_type: content::DMG_CHAOS, next_attack_tick: 0, expire_tick: 500,
+            });
+            mk_enemy(&mut s, 0, 5000, Vec2::new(Fixed::from_int(400), Fixed::ZERO));
+            for _ in 0..120 {
+                tick_minions(&mut s);
+                s.tick += 1;
+            }
+            s
+        };
+        let a = build();
+        let b = build();
+        assert_eq!(a.minions, b.minions, "minion movement/attacks are deterministic");
+        assert_eq!(a.enemies, b.enemies);
         assert_eq!(crate::checksum(&a), crate::checksum(&b));
     }
 }

@@ -203,6 +203,28 @@ pub struct Hazard {
     pub ticks_left: u32,
 }
 
+/// A temporary ALLY summoned by a weapon (the source's raised skeleton /
+/// summoned infernal). Each tick it walks toward the nearest non-boss enemy and
+/// strikes it when in reach; it expires at `expire_tick`. Damage routes through
+/// the shared death path so its kills award bounty and trigger Fire explosions.
+/// Fully deterministic: fixed/integer fields, stable id order, no RNG.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Minion {
+    pub id: EntityId,
+    pub pos: Vec2,
+    /// Render kind: 0 = skeleton, 1 = infernal.
+    pub kind: u8,
+    /// Reserved for future enemy retaliation; minions are lifetime-bounded today.
+    pub hp: i64,
+    /// Per-strike base damage (scaled by the match-time curve when it lands).
+    pub damage: i64,
+    pub damage_type: u8,
+    /// Earliest tick it may strike again (attack cooldown).
+    pub next_attack_tick: Tick,
+    /// Tick at which it vanishes.
+    pub expire_tick: Tick,
+}
+
 /// An in-flight projectile (homes on `target`; applies splash at arrival).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Projectile {
@@ -361,6 +383,9 @@ pub struct ArenaState {
     /// Persistent damaging areas (land mines / burning oil) from weapon
     /// abilities. Stored in id order; ticked in `combat::tick_hazards`.
     pub hazards: Vec<Hazard>,
+    /// Summoned allies (skeletons / infernals). Stored in id order; ticked in
+    /// `combat::tick_minions`.
+    pub minions: Vec<Minion>,
     pub economy: Economy,
     pub shop: ShopState,
     /// Aggregated damage/attack-speed modifiers consulted during combat.
@@ -443,6 +468,7 @@ impl ArenaState {
             enemies: Vec::new(),
             projectiles: Vec::new(),
             hazards: Vec::new(),
+            minions: Vec::new(),
             economy: Economy {
                 gold: 500,
                 income_per_tick: 20, // 600 gold/s baseline (tuning)

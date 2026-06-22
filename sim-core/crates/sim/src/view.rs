@@ -22,6 +22,8 @@ pub struct RenderView {
     pub tank: RenderTank,
     pub enemies: Vec<RenderEnemy>,
     pub projectiles: Vec<RenderPoint>,
+    /// Summoned allies (skeletons / infernals) to draw.
+    pub minions: Vec<RenderMinion>,
     pub economy: RenderEconomy,
     pub shop: Vec<RenderOffer>,
     /// Owned weapons collapsed to `(name, count)`, sorted by name.
@@ -55,6 +57,14 @@ pub struct RenderTank {
     pub hp: i64,
     pub max_hp: i64,
     pub revives: u32,
+}
+
+/// A summoned ally to render (`kind`: 0 skeleton, 1 infernal).
+#[derive(Clone, Copy, Debug)]
+pub struct RenderMinion {
+    pub x: i64,
+    pub y: i64,
+    pub kind: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -133,6 +143,16 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         })
         .collect();
 
+    let minions = s
+        .minions
+        .iter()
+        .map(|m| RenderMinion {
+            x: m.pos.x.floor_to_int(),
+            y: m.pos.y.floor_to_int(),
+            kind: m.kind,
+        })
+        .collect();
+
     let economy = RenderEconomy {
         gold: s.economy.gold,
         income_per_tick: s.economy.income_mult.scale_i64(s.economy.income_per_tick),
@@ -183,6 +203,7 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         tank,
         enemies,
         projectiles,
+        minions,
         economy,
         shop,
         arsenal,

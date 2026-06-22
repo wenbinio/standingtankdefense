@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0xd0073004a5632cef, // re-baselined: weapon abilities + hazards + 12-enemy roster + ranged breathers
+        0xb36b2d2745e6e0cf, // re-baselined: + Summon minion entity (skeletons / infernals)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - GRIMDARK MINION "Summoned Infernal" (ally, from Inferno Stone) -->
+  <!-- High 3/4 top-down. Facing UP (north, -Y). No baked rotation. Centered, ~8% margin. -->
+  <!-- Painterly: molten/charred volcanic-rock volume, warm magma cracks, crisp dark silhouette. -->
+  <!-- ALLY read: bound by a friendly CYAN aether ring + cyan eyes + cyan core, so it reads as YOURS -->
+  <!-- despite the fire. Cyan tell dominates the focal points; magma is body texture only. -->
+  <defs>
+    <!-- charred volcanic rock body (cool key, dark) -->
+    <radialGradient id="in_rock" cx="44%" cy="28%" r="88%">
+      <stop offset="0%"  stop-color="#5A4A44"/>
+      <stop offset="48%" stop-color="#332622"/>
+      <stop offset="100%" stop-color="#120C0A"/>
+    </radialGradient>
+    <!-- darker hunched back mass -->
+    <radialGradient id="in_back" cx="50%" cy="34%" r="82%">
+      <stop offset="0%"  stop-color="#463530"/>
+      <stop offset="60%" stop-color="#261B18"/>
+      <stop offset="100%" stop-color="#0C0807"/>
+    </radialGradient>
+    <!-- molten magma crack glow (warm body texture) -->
+    <linearGradient id="in_magma" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#FFD27A"/>
+      <stop offset="45%" stop-color="#FF6A2A"/>
+      <stop offset="100%" stop-color="#7A1E06"/>
+    </linearGradient>
+    <!-- cold aether binding core (ally cyan focal) -->
+    <radialGradient id="in_core" cx="50%" cy="42%" r="62%">
+      <stop offset="0%"  stop-color="#D7F4FB"/>
+      <stop offset="35%" stop-color="#5BC8E6"/>
+      <stop offset="100%" stop-color="#0E4756"/>
+    </radialGradient>
+    <filter id="in_cyan_glow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="2.6"/>
+    </filter>
+    <filter id="in_magma_glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="1.4"/>
+    </filter>
+    <filter id="in_ao" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.8"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow under pivot (cyan-tinged cast under a bound summon) -->
+  <ellipse cx="48" cy="83" rx="29" ry="9" fill="#06070A" opacity="0.55"/>
+  <ellipse cx="48" cy="84" rx="19" ry="5.5" fill="#0E2E38" opacity="0.5"/>
+
+  <!-- ================= SPREAD CHARRED WINGS (raised, framing north) ================= -->
+  <g stroke="#0A0B0F" stroke-width="3" stroke-linejoin="round">
+    <path d="M30 50 C14 38 8 30 10 22 C20 26 28 34 34 44 Z" fill="url(#in_back)"/>
+    <path d="M66 50 C82 38 88 30 86 22 C76 26 68 34 62 44 Z" fill="url(#in_back)"/>
+  </g>
+  <!-- molten membrane veins in wings -->
+  <g stroke="#FF6A2A" stroke-width="1.3" opacity="0.75" stroke-linecap="round" fill="none" filter="url(#in_magma_glow)">
+    <path d="M30 48 L18 30"/>
+    <path d="M66 48 L78 30"/>
+  </g>
+
+  <!-- ================= HUNCHED BACK MASS (lower = away/south) ================= -->
+  <path d="M48 78
+           C26 78 18 64 18 50
+           C18 36 30 30 48 30
+           C66 30 78 36 78 50
+           C78 64 70 78 48 78 Z"
+        fill="url(#in_back)" stroke="#0A0B0F" stroke-width="3.2" stroke-linejoin="round"/>
+  <!-- AO trench under the hunch -->
+  <path d="M18 50 C18 64 26 78 48 78 C70 78 78 64 78 50
+           C78 60 64 68 48 68 C32 68 18 60 18 50 Z"
+        fill="#06070A" opacity="0.5" filter="url(#in_ao)"/>
+
+  <!-- ================= SHOULDER MASSES (charred rock, to either side) ================= -->
+  <ellipse cx="31" cy="50" rx="15" ry="17" fill="url(#in_rock)" stroke="#0A0B0F" stroke-width="3.2"/>
+  <ellipse cx="65" cy="50" rx="15" ry="17" fill="url(#in_rock)" stroke="#0A0B0F" stroke-width="3.2"/>
+  <!-- magma cracks across shoulders (warm body texture) -->
+  <g stroke="url(#in_magma)" stroke-width="1.8" opacity="0.85" stroke-linecap="round" fill="none" filter="url(#in_magma_glow)">
+    <path d="M24 44 L30 52 L26 60"/>
+    <path d="M72 44 L66 52 L70 60"/>
+  </g>
+
+  <!-- ================= TORSO with CYAN BINDING RING (center, ally focal) ================= -->
+  <path d="M48 44
+           C60 44 66 54 66 64
+           C66 74 58 80 48 80
+           C38 80 30 74 30 64
+           C30 54 36 44 48 44 Z"
+        fill="url(#in_rock)" stroke="#0A0B0F" stroke-width="3.2" stroke-linejoin="round"/>
+  <!-- magma chest cracks (warm) -->
+  <g stroke="url(#in_magma)" stroke-width="1.6" opacity="0.8" stroke-linecap="round" fill="none" filter="url(#in_magma_glow)">
+    <path d="M40 56 L46 64 L42 72"/>
+    <path d="M56 56 L52 64 L56 72"/>
+  </g>
+  <!-- cyan AETHER BINDING RING around the core (the "this is bound to YOU" tell) -->
+  <circle cx="48" cy="64" r="13" fill="none" stroke="#5BC8E6" stroke-width="2.6" opacity="0.55" filter="url(#in_cyan_glow)"/>
+  <circle cx="48" cy="64" r="13" fill="none" stroke="#5BC8E6" stroke-width="1.6" opacity="0.9"/>
+  <!-- cold cyan summon core -->
+  <circle cx="48" cy="64" r="8.5" fill="#5BC8E6" opacity="0.5" filter="url(#in_cyan_glow)"/>
+  <circle cx="48" cy="64" r="6" fill="url(#in_core)"/>
+  <circle cx="46" cy="62" r="1.6" fill="#D7F4FB"/>
+
+  <!-- ================= HORNED HEAD (forward = north) ================= -->
+  <!-- backswept horns -->
+  <g stroke="#0A0B0F" stroke-width="2.4" stroke-linejoin="round">
+    <path d="M40 30 L30 12 L44 26 Z" fill="url(#in_rock)"/>
+    <path d="M56 30 L66 12 L52 26 Z" fill="url(#in_rock)"/>
+  </g>
+  <path d="M48 30
+           C58 30 64 38 64 48
+           C64 57 57 62 48 62
+           C39 62 32 57 32 48
+           C32 38 38 30 48 30 Z"
+        fill="url(#in_rock)" stroke="#0A0B0F" stroke-width="3.2" stroke-linejoin="round"/>
+  <!-- AO under brow -->
+  <ellipse cx="48" cy="44" rx="13" ry="4.5" fill="#06070A" opacity="0.45" filter="url(#in_ao)"/>
+  <!-- molten brow crack -->
+  <path d="M36 40 C42 35 54 35 60 40" fill="none" stroke="url(#in_magma)" stroke-width="1.6" opacity="0.8" stroke-linecap="round" filter="url(#in_magma_glow)"/>
+
+  <!-- ================= CYAN EYES (ally glow read, overrides the fire) ================= -->
+  <g>
+    <circle cx="42" cy="46" r="5.4" fill="#5BC8E6" opacity="0.7" filter="url(#in_cyan_glow)"/>
+    <circle cx="54" cy="46" r="5.4" fill="#5BC8E6" opacity="0.7" filter="url(#in_cyan_glow)"/>
+    <ellipse cx="42" cy="46" rx="3.8" ry="3.4" fill="#0A0B0F"/>
+    <ellipse cx="54" cy="46" rx="3.8" ry="3.4" fill="#0A0B0F"/>
+    <circle cx="42" cy="46" r="2.3" fill="url(#in_core)"/>
+    <circle cx="54" cy="46" r="2.3" fill="url(#in_core)"/>
+    <circle cx="41" cy="45" r="0.8" fill="#D7F4FB"/>
+    <circle cx="53" cy="45" r="0.8" fill="#D7F4FB"/>
+  </g>
+
+  <!-- ================= MAW (lower head, glowing molten throat) ================= -->
+  <path d="M40 54 C44 52 52 52 56 54 C53 61 43 61 40 54 Z"
+        fill="#2A0E06" stroke="#0A0B0F" stroke-width="1.6"/>
+  <path d="M42 55 C45 54 51 54 54 55 C52 58 44 58 42 55 Z"
+        fill="url(#in_magma)" opacity="0.85" filter="url(#in_magma_glow)"/>
+
+  <!-- rim catch on lit forward rock edge -->
+  <path d="M34 44 C36 36 41 32 47 32" fill="none" stroke="#5A4A44" stroke-width="1.6" opacity="0.55" stroke-linecap="round"/>
+</svg>

@@ -1,7 +1,6 @@
 //! Flavor + mechanical tips for every weapon and modifier, keyed by catalog
 //! index. Lore-written (the Pale Wardens, the Ninth Foundry, the Conclave, the
 //! fall of Ashmark). Surfaced as shop tooltips; never touches the sim.
-use crate::content;
 
 /// `(flavor, tip)` for weapon index `i`; `("", "")` out of range.
 pub fn weapon_text(i: u16) -> (&'static str, &'static str) {
@@ -192,6 +191,7 @@ const MODIFIER_TEXT: [(&str, &str); 84] = [
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content;
 
     #[test]
     fn arrays_cover_the_catalog() {

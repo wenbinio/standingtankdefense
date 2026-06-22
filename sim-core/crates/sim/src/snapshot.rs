@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 15;
+pub const SNAPSHOT_VERSION: u32 = 16;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -236,6 +236,19 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u32(h.ticks_left);
     }
 
+    // minions (summoned skeletons / infernals)
+    w.len(s.minions.len());
+    for m in &s.minions {
+        w.id(m.id);
+        w.vec2(m.pos);
+        w.u8(m.kind);
+        w.i64(m.hp);
+        w.i64(m.damage);
+        w.u8(m.damage_type);
+        w.u32(m.next_attack_tick);
+        w.u32(m.expire_tick);
+    }
+
     // economy
     w.i64(s.economy.gold);
     w.i64(s.economy.income_per_tick);
@@ -444,6 +457,20 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         });
     }
 
+    let mut minions = Vec::new();
+    for _ in 0..r.len()? {
+        minions.push(Minion {
+            id: r.id()?,
+            pos: r.vec2()?,
+            kind: r.u8()?,
+            hp: r.i64()?,
+            damage: r.i64()?,
+            damage_type: r.u8()?,
+            next_attack_tick: r.u32()?,
+            expire_tick: r.u32()?,
+        });
+    }
+
     let economy = Economy {
         gold: r.i64()?,
         income_per_tick: r.i64()?,
@@ -570,6 +597,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         enemies,
         projectiles,
         hazards,
+        minions,
         economy,
         shop,
         modifiers,
