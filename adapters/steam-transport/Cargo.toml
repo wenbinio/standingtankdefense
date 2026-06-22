@@ -1,0 +1,33 @@
+# Steam transport adapter — the production sibling of the test-time `net::hub`.
+# This is the ONLY place Steamworks types meet the netcode. It is kept OUT of the
+# `sim-core/` cargo workspace (exactly like `godot/rust`) so that:
+#   * `sim-core/` stays a ZERO-DEPENDENCY, offline-buildable workspace, and
+#   * `cargo test --workspace` (run from `sim-core/`) remains the CI gate.
+#
+# This crate is NOT part of that offline CI gate. Building it REQUIRES:
+#   * network access to fetch the `steamworks` crate from crates.io, and
+#   * the vendored Steamworks SDK (the `steamworks-sys` build script needs the
+#     SDK headers/redistributable libs — set `STEAM_SDK_LOCATION` or vendor it
+#     per the `steamworks` crate's README), and
+#   * at RUNTIME, a running Steam client + a valid `steam_appid.txt` (App ID).
+#
+# It depends on `net` BY PATH only — never duplicating game logic or the
+# `Channel -> send flags` mapping (that lives in `net::steam::steam_send_flags`,
+# the single source of truth, which we re-export below).
+[package]
+name = "steam-transport"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Production Steam ISteamNetworkingSockets/SDR transport for Standing Tank Defense netcode."
+
+[dependencies]
+# The netcode seam (Transport trait, PeerId, Channel, Inbound/Outbound, and the
+# steam_send_flags mapping). By path; `net` IS a member of the sim-core workspace
+# but we consume it here as a plain path dependency from OUTSIDE that workspace.
+net = { path = "../../sim-core/crates/net" }
+
+# Rust bindings to the Steamworks SDK. Pinned to a recent crates.io release.
+# `steamworks` re-exports `steamworks-sys`, whose build script links the SDK.
+# 0.11 is the current line targeting Steamworks SDK 1.58/1.59.
+steamworks = "0.11"
