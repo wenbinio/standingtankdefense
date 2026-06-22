@@ -18,6 +18,7 @@ use godot::prelude::*;
 use net::client::Client;
 use net::director::Director;
 use net::hub::Hub;
+use net::lobby::{Lobby, MatchPlan, Phase, Ruleset, StartReject, MAX_PARTY};
 use net::transport::{PeerId, DIRECTOR};
 use sim::bot::Bot;
 use sim::view;
@@ -466,5 +467,135 @@ impl StMatch {
             a.push(v.stats.economy_purchases as i64);
         }
         a
+    }
+}
+
+/// Host-authoritative **lobby** (`docs/07 §7.3`) exposed to the engine. Thin
+/// wrapper over the deterministic `net::lobby::Lobby` state machine: membership,
+/// ready-gating, and the `MatchPlan` (`master_seed` + player list) that launches
+/// a match. Cosmetics (each player's theme/skin) live in the engine layer, not
+/// here — the GDScript lobby UI layers them on by peer index. Over Steam the
+/// same model is fed by `ISteamMatchmaking`; this binding drives a local lobby.
+#[derive(GodotClass)]
+#[class(no_init, base = RefCounted)]
+pub struct StLobby {
+    lobby: Lobby,
+    plan: Option<MatchPlan>,
+    base: Base<RefCounted>,
+}
+
+#[godot_api]
+impl StLobby {
+    /// Open a lobby with you as host (peer 0), seated and ready, phase Filling.
+    #[func]
+    fn host() -> Gd<StLobby> {
+        Gd::from_init_fn(|base| StLobby {
+            lobby: Lobby::new(DIRECTOR, DEMO_CONTENT_HASH, Ruleset::standard()),
+            plan: None,
+            base,
+        })
+    }
+
+    /// Seat the next free peer (1..=MAX_PARTY-1) — simulates another player
+    /// joining. Returns the new peer id, or -1 if the lobby is full/closed.
+    #[func]
+    fn add_member(&mut self) -> i64 {
+        for id in 1..MAX_PARTY as u32 {
+            let p = PeerId(id);
+            if !self.lobby.contains(p) {
+                return match self.lobby.join(p, DEMO_CONTENT_HASH) {
+                    Ok(()) => id as i64,
+                    Err(_) => -1,
+                };
+            }
+        }
+        -1
+    }
+
+    /// Remove a member by peer id. Returns true if one was removed.
+    #[func]
+    fn leave(&mut self, peer: i64) -> bool {
+        self.lobby.leave(PeerId(peer as u32))
+    }
+
+    /// Set a member's ready flag. Returns true if the member exists.
+    #[func]
+    fn set_ready(&mut self, peer: i64, ready: bool) -> bool {
+        self.lobby.set_ready(PeerId(peer as u32), ready)
+    }
+
+    #[func]
+    fn all_ready(&self) -> bool {
+        self.lobby.all_ready()
+    }
+    /// 0 = Filling, 1 = Ready, 2 = Started.
+    #[func]
+    fn phase(&self) -> i64 {
+        match self.lobby.phase() {
+            Phase::Filling => 0,
+            Phase::Ready => 1,
+            Phase::Started => 2,
+        }
+    }
+    #[func]
+    fn host_peer(&self) -> i64 {
+        self.lobby.host().0 as i64
+    }
+    #[func]
+    fn member_count(&self) -> i64 {
+        self.lobby.members().len() as i64
+    }
+    /// Peer id of the `i`-th member (members are kept sorted by peer id).
+    #[func]
+    fn member_peer(&self, i: i64) -> i64 {
+        self.lobby.members().get(i as usize).map_or(-1, |m| m.peer.0 as i64)
+    }
+    #[func]
+    fn member_ready(&self, i: i64) -> bool {
+        self.lobby.members().get(i as usize).is_some_and(|m| m.ready)
+    }
+    /// True if the `i`-th member is the host.
+    #[func]
+    fn is_host_member(&self, i: i64) -> bool {
+        let host = self.lobby.host();
+        self.lobby.members().get(i as usize).is_some_and(|m| m.peer == host)
+    }
+
+    /// Try to start with host-minted `seed`. Returns 0 on success (the plan is
+    /// stored — read it via `plan_*`), or a negative reject code:
+    /// -1 not all ready, -2 not enough players, -3 already started.
+    #[func]
+    fn try_start(&mut self, seed: i64) -> i64 {
+        match self.lobby.start(seed as u64) {
+            Ok(plan) => {
+                self.plan = Some(plan);
+                0
+            }
+            Err(StartReject::NotAllReady) => -1,
+            Err(StartReject::NotEnoughPlayers) => -2,
+            Err(StartReject::AlreadyStarted) => -3,
+        }
+    }
+
+    /// Non-host player peers in the started plan (empty until `try_start` succeeds).
+    #[func]
+    fn plan_players(&self) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        if let Some(p) = &self.plan {
+            for peer in &p.players {
+                a.push(peer.0 as i64);
+            }
+        }
+        a
+    }
+    /// The started match's master seed (0 until `try_start` succeeds).
+    #[func]
+    fn plan_seed(&self) -> i64 {
+        self.plan.as_ref().map_or(0, |p| p.master_seed as i64)
+    }
+    /// Number of players in the started plan (0 until `try_start` succeeds).
+    #[func]
+    fn plan_player_count(&self) -> i64 {
+        self.plan.as_ref().map_or(0, |p| p.players.len() as i64)
     }
 }
