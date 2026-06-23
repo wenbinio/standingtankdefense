@@ -1,0 +1,82 @@
+name: windows-release
+
+# Builds the Rust GDExtension (Windows DLL) + exports the Godot Windows .exe on a
+# Windows runner, packages exe+dll into a one-click zip, and (on a version tag)
+# publishes it as a GitHub Release. Use workflow_dispatch to test the build
+# without publishing a release.
+on:
+  push:
+    branches: ["claude/tower-survivors-spec-20q1kk"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: "4.3-stable"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build GDExtension (release DLL)
+        working-directory: godot/rust
+        run: cargo build --release
+
+      - name: Fetch Godot editor + export templates
+        shell: pwsh
+        run: |
+          $base = "https://github.com/godotengine/godot/releases/download/$env:GODOT_VERSION"
+          curl.exe -L -o godot.zip "$base/Godot_v${env:GODOT_VERSION}_win64.exe.zip"
+          Expand-Archive -Force godot.zip -DestinationPath godot_bin
+          $exe = (Get-ChildItem godot_bin -Filter *.exe | Select-Object -First 1).FullName
+          "GODOT_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          curl.exe -L -o templates.zip "$base/Godot_v${env:GODOT_VERSION}_export_templates.tpz"
+          Expand-Archive -Force templates.zip -DestinationPath templates_extracted
+          $dest = "$env:APPDATA\Godot\export_templates\4.3.stable"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item "templates_extracted\templates\*" $dest -Force
+
+      - name: Import project (headless)
+        shell: pwsh
+        working-directory: godot
+        run: |
+          & "$env:GODOT_EXE" --headless --import 2>&1 | Out-Host
+        continue-on-error: true
+
+      - name: Export Windows .exe
+        shell: pwsh
+        working-directory: godot
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          & "$env:GODOT_EXE" --headless --export-release "Windows Desktop" "build\StandingTankDefense.exe" 2>&1 | Out-Host
+          if (-not (Test-Path "build\StandingTankDefense.exe")) { throw "Export failed: StandingTankDefense.exe not produced" }
+
+      - name: Package one-click zip (exe + gdextension dll)
+        shell: pwsh
+        working-directory: godot/build
+        run: |
+          if (-not (Test-Path "standing_tank_gdext.dll")) {
+            Copy-Item "..\rust\target\release\standing_tank_gdext.dll" . -Force
+          }
+          Get-ChildItem | Format-Table Name,Length
+          Compress-Archive -Force -Path * -DestinationPath "$env:GITHUB_WORKSPACE\StandingTankDefense-win64.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StandingTankDefense-win64
+          path: StandingTankDefense-win64.zip
+
+      - name: Publish GitHub Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: StandingTankDefense-win64.zip
+          generate_release_notes: true
