@@ -137,35 +137,101 @@ mod tests {
     }
 
     #[test]
-    fn scaling_is_identity_before_ten_minutes() {
-        // Early game (the golden-checksum window) must be unscaled.
-        assert_eq!(content::enemy_hp_mult(0), determinism::Fixed::ONE);
-        assert_eq!(content::enemy_hp_mult(2000), determinism::Fixed::ONE);
-        assert_eq!(
-            content::enemy_hp_mult(content::SCALE_STEP_1_TICK - 1),
-            determinism::Fixed::ONE
+    fn hp_curve_is_a_3min_stepped_ramp() {
+        // The iter-3 curve is a STEPPED "RAMP" on a strict 3-min cadence: every
+        // 5400-tick interval is `gentle climb → warning → DRAMATIC step`, with
+        // cliffs at k*5400 for k=1..=10. This test pins that shape numerically.
+        use determinism::Fixed;
+        let m = content::enemy_hp_mult;
+        let interval = content::RAMP_INTERVAL; // 5400
+        assert_eq!(interval, 5400);
+
+        // (1) Starts at exactly ×1 and is monotonic non-decreasing across the
+        //     whole curve (no downward steps anywhere).
+        assert_eq!(m(0), Fixed::ONE);
+        let mut prev = Fixed::ONE;
+        let mut t = 0u32;
+        while t <= content::BOSS_SPAWN_TICK + 600 {
+            let cur = m(t);
+            assert!(cur >= prev, "curve dipped at tick {t}");
+            prev = cur;
+            t += 30; // sample once per second — fast and dense enough
+        }
+
+        // (2) Exact post-cliff multipliers at each 3-min boundary (×10000),
+        //     compounding ~×1.2705 per interval up to exactly ×11 at the boss.
+        //     ITER-4 retuned the WITHIN-interval shape (jump-dominant), so these
+        //     per-mark values are essentially unchanged from iter-3 (±a few /1e4).
+        let post: [(u32, i64); 11] = [
+            (0, 10000),
+            (5400, 12704),
+            (10800, 16140),
+            (16200, 20505),
+            (21600, 26051),
+            (27000, 33098),
+            (32400, 42050),
+            (37800, 53423),
+            (43200, 67872),
+            (48600, 86230),
+            (54000, 110000), // the 30-min boss tier — preserved at exactly ×11.
+        ];
+        for (tick, mult10k) in post {
+            assert_eq!(m(tick).scale_i64(10000), mult10k, "post-cliff mult at {tick}");
+        }
+        // The boss phase HOLDS exactly ×11.
+        assert_eq!(m(content::BOSS_SPAWN_TICK), Fixed::from_int(11));
+        assert_eq!(m(content::BOSS_SPAWN_TICK + 5000), Fixed::from_int(11));
+
+        // (3) Within an interval: a gentle region, then a STEEPER warning region.
+        //     Verify on the k=1 interval [5400, 10800).
+        let lo = 5400;
+        let warn_start = lo + content::GENTLE_TICKS; // 9900
+        // Average slope over a 100-tick span in the gentle region vs the warning
+        // region (×1e6/tick) — a wide window avoids per-tick quantization noise.
+        let gentle_slope = (m(warn_start - 100).scale_i64(1_000_000)
+            - m(warn_start - 200).scale_i64(1_000_000))
+            / 100;
+        let warn_slope = (m(warn_start + 100).scale_i64(1_000_000)
+            - m(warn_start).scale_i64(1_000_000))
+            / 100;
+        assert!(gentle_slope > 0, "gentle region must rise");
+        assert!(
+            warn_slope >= gentle_slope * 3,
+            "warning slope ({warn_slope}) must be perceptibly steeper than gentle ({gentle_slope})"
         );
-        // At 15 min, enemies have ~2× HP.
+
+        // (4) The DRAMATIC step: the jump from the pre-cliff (warning peak) value
+        //     to the next interval's post-cliff value is a real instantaneous step
+        //     (~+22% — ITER-4's dominant event), far larger than any single
+        //     warning-region tick step.
+        let pre_cliff = m(lo + interval - 1); // tick 10799, warning peak
+        let post_cliff = m(lo + interval); //   tick 10800, post-cliff
+        let step = post_cliff.scale_i64(1_000_000) - pre_cliff.scale_i64(1_000_000);
+        assert!(
+            step > warn_slope * 50,
+            "boundary step must be a dramatic jump, not a ramp tick"
+        );
+        // ~+22% (J): post ≈ pre × 1.22 (within rounding, ×1000).
         assert_eq!(
-            content::enemy_hp_mult(content::SCALE_STEP_2_TICK).scale_i64(1000),
-            2000
+            post_cliff.scale_i64(1000),
+            pre_cliff.mul(Fixed::from_ratio(61, 50)).scale_i64(1000)
         );
     }
 
     #[test]
     fn late_game_enemies_spawn_with_scaled_hp() {
-        // Use a grunt-cadence (6) tick just before the 15-min cliff, where the
-        // 10→15 ramp has nearly reached ×2 (and is still ≤ ×2). Grunt is wave
-        // entry 0 (catalog order), so it is `enemies[0]` among this tick's spawns.
+        // Use a grunt-cadence (6) tick late in the curve (just before the 15-min
+        // boundary), where the multiplier is well above ×1. Grunt is wave entry 0
+        // (catalog order), so it is `enemies[0]` among this tick's spawns.
         let mut s = blank_state();
         s.tick = content::SCALE_STEP_2_TICK - 6; // 26994, a grunt-cadence tick
         assert_eq!(s.tick % 6, 0);
         spawn(&mut s);
         let grunt_base = content::ENEMIES[0].base_hp;
         assert_eq!(s.enemies[0].def, 0, "first spawn this tick is the grunt (entry 0)");
-        // hp should be just under 2× base (a tick before the 15-min ×2 tier).
-        assert!(s.enemies[0].hp > grunt_base, "late enemy HP must be scaled up");
-        assert!(s.enemies[0].hp <= grunt_base * 2);
+        // hp should be solidly scaled up (the curve is ~×3 here).
+        assert!(s.enemies[0].hp > grunt_base * 2, "late enemy HP must be scaled up");
+        assert!(s.enemies[0].hp <= grunt_base * 4);
     }
 
     #[test]

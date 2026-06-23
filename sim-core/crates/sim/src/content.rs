@@ -1046,15 +1046,15 @@ pub static ENEMIES: &[EnemyDef] = &[
 /// Index of the boss enemy def.
 pub const SAMWISE: u16 = 2;
 
-// Match timeline (ticks @ 30 Hz). The curve is a STAIRCASE: a gentle early ramp,
-// then discrete "difficulty cliffs" at 15 / 20 / 25 minutes, then the end-game
-// boss at 30 minutes. Each cliff is GENEROUS — telegraphed by a short ramp INTO
-// the step (a few-second HP ease-in, not an instant full-HP→dead spike), so a
-// prepared player can brace rather than being deleted. (`docs/02 §2.3`.)
-pub const SCALE_STEP_1_TICK: u32 = 10 * 60 * 30; // 18000 — 10 min (first soft ramp)
-pub const SCALE_STEP_2_TICK: u32 = 15 * 60 * 30; // 27000 — 15 min (cliff #1; the OLD boss moment, now a mid-cliff)
-pub const CLIFF_20_TICK: u32 = 20 * 60 * 30; // 36000 — 20 min (cliff #2)
-pub const CLIFF_25_TICK: u32 = 25 * 60 * 30; // 45000 — 25 min (cliff #3)
+// Match timeline (ticks @ 30 Hz). The HP/damage curve (`enemy_hp_mult`) is a
+// STEPPED "RAMP" on a strict 3-MINUTE cadence: every interval is gentle climb →
+// warning → DRAMATIC step, with cliffs at 3,6,…,30 min (see `RAMP_INTERVAL`).
+// These named tick constants pin the ROSTER schedule below (the wave/surge
+// gates) and a couple of tests; the HP curve itself no longer keys off them.
+pub const SCALE_STEP_1_TICK: u32 = 10 * 60 * 30; // 18000 — 10 min (roster reference)
+pub const SCALE_STEP_2_TICK: u32 = 15 * 60 * 30; // 27000 — 15 min (roster reference)
+pub const CLIFF_20_TICK: u32 = 20 * 60 * 30; // 36000 — 20 min (roster surge gate)
+pub const CLIFF_25_TICK: u32 = 25 * 60 * 30; // 45000 — 25 min (roster surge gate)
 /// The end-game boss ("Hungry Hungry Happypotamus") spawns here; normal waves
 /// stop. Moved from 15 min to 30 min — it is the climax most runs end at.
 pub const BOSS_SPAWN_TICK: u32 = 30 * 60 * 30; // 54000 — 30 min
@@ -1067,61 +1067,96 @@ pub const BOSS_SPAWN_TICK: u32 = 30 * 60 * 30; // 54000 — 30 min
 /// Pure function of `s.tick` — deterministic, no new RNG/state. (`combat::move_enemies`.)
 pub const BOSS_CONTACT_CADENCE: u32 = 16;
 
-/// Ticks of telegraphed ramp leading INTO each post-15 cliff: over this window
-/// (ending AT the cliff tick) HP eases STEEPLY from the gentle inter-cliff climb
-/// up to the next tier, rather than jumping in one tick. This is the "generous"
-/// mechanism — enemies visibly harden over the few seconds before the step lands,
-/// giving the player a beat to Clear / brace instead of an instant deletion.
-const CLIFF_RAMP: u32 = 8 * 30; // 8 s
+/// One difficulty interval = 3 minutes @ 30 Hz. Cliffs land at `k*RAMP_INTERVAL`
+/// for k = 1..=10; the boss tick (54000) is the k=10 boundary.
+pub const RAMP_INTERVAL: u32 = 3 * 60 * 30; // 5400 — 3 min
+/// Within each interval, the gentle climb spans this many ticks; the remaining
+/// `RAMP_INTERVAL - GENTLE_TICKS` ticks are the steeper "warning" sub-ramp that
+/// signals the cliff is coming.
+pub const GENTLE_TICKS: u32 = 4500; // first ~2.5 min: the gentle climb
+/// The "warning" window — the final ~30 s of each interval. Over it the curve
+/// rises perceptibly STEEPER than the gentle climb (the telegraph), then the
+/// dramatic step lands AT the next 3-min boundary.
+pub const WARN_TICKS: u32 = RAMP_INTERVAL - GENTLE_TICKS; // 900 — final 30 s
 
-/// Enemy HP scaling at `tick`. The shape is a GENEROUS STAIRCASE:
-///   • 0–10 min: ×1 (unscaled — the golden-checksum window).
-///   • 10–15 min: smooth ×1 → ×2 ramp (this long ramp IS the telegraph for the
-///     15-min cliff).
-///   • 15→20, 20→25, 25→30: each segment is a GENTLE inter-cliff climb (keeps a
-///     snowballing player pressured), then a STEEP telegraphed ramp over the last
-///     `CLIFF_RAMP` ticks that lands the next tier exactly at the cliff.
-/// Tier peaks: ×2 @15, ×4 @20, ×7 @25, ×11 @30. The function is piecewise-linear
-/// and CONTINUOUS at every boundary (the telegraph picks up from the climb's value
-/// at telegraph-start, so there is no downward jump). Integer/fixed-point only.
+/// The three per-interval multiplicative factors of the stepped "RAMP". An
+/// interval that starts (post-cliff) at value `b` runs:
+///   1. GENTLE climb  `b → b·G`           over the first `GENTLE_TICKS`,
+///   2. WARNING ramp  `b·G → b·G·W`       over the final `WARN_TICKS` (steeper),
+///   3. DRAMATIC step `b·G·W → b·G·W·J`   instantaneously AT the 3-min boundary.
+/// So each interval multiplies difficulty by `G·W·J ≈ 1.2705`, and over 10
+/// intervals that compounds toward ≈ ×11 at the 30-min boss (the boss tick
+/// force-returns exactly ×11), preserving iter-2's boss endpoint and iter-3's
+/// per-3-min marks (×1.27/1.61/…). ITER-4: the SHAPE is retuned so the boundary
+/// JUMP is the dominant, dramatic event and the in-between climb is calm. `J` now
+/// carries +22% (was +9%), while `G` drops to +2.5% (was +10%) and `W` to +1.6%
+/// (was +6%). `W`'s small gain is still packed into 1/5 the ticks of `G`'s, so the
+/// warning slope stays ~3.3× the gentle slope — a perceptible telegraph — but the
+/// instant +22% cliff step now towers over the whole gentle+warning ramp.
+/// `G·W·J = 1.025·1.016·1.22` (Fixed product ≈ 1.27048, ≈ iter-3's 1.27092, so the
+/// per-mark multipliers are unchanged within rounding). Pure `(num,den)` Fixed
+/// ratios — no floats, feeds `state_checksum`.
+const RAMP_GENTLE: (i64, i64) = (41, 40); //  G = +2.5% gentle climb (1.025)
+const RAMP_WARN: (i64, i64) = (127, 125); //  W = +1.6% over the short warning window (1.016)
+const RAMP_JUMP: (i64, i64) = (61, 50); //    J = +22% instantaneous cliff step (1.22) — the dominant event
+
+/// Enemy HP scaling at `tick`. The shape is a STEPPED "RAMP" on a strict 3-MINUTE
+/// cadence. Each 3-min interval is `gentle climb → warning → DRAMATIC step`:
+///   • a CALM smooth rise for the first ~2.5 min (`RAMP_GENTLE`, +2.5% total),
+///   • a perceptibly steeper sub-ramp over the final ~30 s (`RAMP_WARN`, +1.6%) —
+///     the telegraph that a big jump is coming (slope ~3.3× the gentle region),
+///   • an instantaneous +22% step up AT the 3-min boundary (`RAMP_JUMP`) — the
+///     cliff, now the dominant difficulty event of every interval.
+/// Cliffs land at 3,6,…,30 min. The function is monotonic non-decreasing,
+/// CONTINUOUS within each interval (the only instantaneous jumps are the cliffs
+/// at the boundaries), and lands exactly ×11 at the 30-min boss (tick 54000),
+/// matching iter-2's boss endpoint. Integer/fixed-point only.
 pub fn enemy_hp_mult(tick: u32) -> Fixed {
+    // 30 min+: boss phase. Hold the peak ×11 tier — the boss AND its escort swarm
+    // (see `BOSS_ESCORT`) ride this multiplier, exactly as in iter-2.
+    if tick >= BOSS_SPAWN_TICK {
+        return Fixed::from_int(11);
+    }
+
+    let g = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_GENTLE.0, RAMP_GENTLE.1));
+    let w = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_WARN.0, RAMP_WARN.1));
+    let j = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_JUMP.0, RAMP_JUMP.1));
+
+    // `base(k)` = the post-cliff value at the start of interval `k`, built by
+    // compounding the per-interval factor `k` times from ×1. Deterministic and
+    // cheap (k ≤ 9). The k=10 boundary (the boss tick) is handled above as
+    // exactly ×11, so the curve approaches ×11 across interval 9 and lands on it.
+    let base = |k: u32| -> Fixed {
+        let mut b = Fixed::ONE;
+        for _ in 0..k {
+            b = j(w(g(b)));
+        }
+        b
+    };
+
     // Linear interpolation `from → to` (Fixed) over `[lo, hi)`.
     let lerp_f = |lo: u32, hi: u32, from: Fixed, to: Fixed| -> Fixed {
         let span = (hi - lo) as i64;
         from + (to - from).mul(Fixed::from_ratio((tick - lo) as i64, span))
     };
-    let lerp = |lo: u32, hi: u32, from: i64, to: i64| -> Fixed {
-        lerp_f(lo, hi, Fixed::from_int(from), Fixed::from_int(to))
-    };
-    // One staircase segment `[lo, hi)` from tier `from` to tier `to`: a gentle
-    // climb across most of the segment (to `mid`), then a STEEP telegraphed ramp
-    // `mid → to` over the final `CLIFF_RAMP` ticks. `mid = from + (to-from)/3`,
-    // so ~1/3 of the tier gain is the slow climb and ~2/3 is the telegraphed cliff.
-    let segment = |lo: u32, hi: u32, from: i64, to: i64| -> Fixed {
-        let ramp_start = hi - CLIFF_RAMP;
-        let mid = Fixed::from_int(from) + Fixed::from_ratio(to - from, 3);
-        if tick < ramp_start {
-            lerp_f(lo, ramp_start, Fixed::from_int(from), mid) // gentle climb
-        } else {
-            lerp_f(ramp_start, hi, mid, Fixed::from_int(to)) // telegraphed cliff
-        }
-    };
 
-    if tick < SCALE_STEP_1_TICK {
-        Fixed::ONE
-    } else if tick < SCALE_STEP_2_TICK {
-        // 10–15 min: smooth ×1 → ×2 (the long telegraph into cliff #1).
-        lerp(SCALE_STEP_1_TICK, SCALE_STEP_2_TICK, 1, 2)
-    } else if tick < CLIFF_20_TICK {
-        segment(SCALE_STEP_2_TICK, CLIFF_20_TICK, 2, 4) // ×2 → ×4, cliff #2 @20
-    } else if tick < CLIFF_25_TICK {
-        segment(CLIFF_20_TICK, CLIFF_25_TICK, 4, 7) // ×4 → ×7, cliff #3 @25
-    } else if tick < BOSS_SPAWN_TICK {
-        segment(CLIFF_25_TICK, BOSS_SPAWN_TICK, 7, 11) // ×7 → ×11, into the 30-min boss
+    let k = tick / RAMP_INTERVAL; // interval index 0..=9
+    let lo = k * RAMP_INTERVAL;
+    let warn_start = lo + GENTLE_TICKS;
+    let hi = lo + RAMP_INTERVAL;
+
+    let bk = base(k);
+    let gentle_end = g(bk); // value at the end of the gentle climb
+    let warn_end = w(gentle_end); // pre-cliff peak (just before the step)
+
+    if tick < warn_start {
+        // Gentle climb: bk → bk·G across the first GENTLE_TICKS.
+        lerp_f(lo, warn_start, bk, gentle_end)
     } else {
-        // 30 min+: boss phase. Hold the peak ×11 tier — the boss AND its escort
-        // swarm (see `BOSS_ESCORT`) ride this multiplier.
-        Fixed::from_int(11)
+        // Warning sub-ramp: bk·G → bk·G·W across the final WARN_TICKS (steeper).
+        // The dramatic step (warn_end → base(k+1)) lands AT `hi`, i.e. the next
+        // interval's post-cliff value.
+        lerp_f(warn_start, hi, gentle_end, warn_end)
     }
 }
 
