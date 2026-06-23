@@ -86,6 +86,15 @@ pub struct Tank {
     pub spikes_damage: i64,
     /// Multiplier on spikes damage (starts at `ONE`).
     pub spikes_mult: Fixed,
+    /// Damage reduction (fraction) applied to ALL incoming damage while the Mana
+    /// Shield is active (`mana_shield > 0`) — the source's "+% Damage Reduction
+    /// while Mana Shield active". Accumulates additively; clamped to `[0, ONE]`
+    /// at hit time so the resulting multiplier can never go negative. Starts ZERO.
+    pub shield_active_dr: Fixed,
+    /// Flat HP healed each time an incoming hit LANDS (i.e. is not dodged) — the
+    /// source's "+N Heal when damaged". Routes through `heal` (so `healing_mult`
+    /// + max-HP cap apply). One heal per landed hit. Starts 0.
+    pub heal_on_damaged: i64,
     /// Heal the tank this much when an enemy dies (on-kill trigger).
     pub heal_on_kill: i64,
     /// Heal the tank this much each tick an enemy takes poison damage.
@@ -457,6 +466,8 @@ impl ArenaState {
                 hp_regen_per_tick: 0,
                 spikes_damage: 0,
                 spikes_mult: Fixed::ONE,
+                shield_active_dr: Fixed::ZERO,
+                heal_on_damaged: 0,
                 heal_on_kill: 0,
                 heal_on_poison: 0,
                 healing_mult: Fixed::ONE,

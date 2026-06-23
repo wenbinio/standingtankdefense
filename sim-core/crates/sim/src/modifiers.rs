@@ -147,6 +147,8 @@ impl Modifiers {
             ModEffect::DamageScopePct(sid, n, d) => {
                 self.add_by_scope[sid as usize % content::NUM_SCOPES] += Fixed::from_ratio(n, d)
             }
+            ModEffect::ShieldActiveDrPct(n, d) => tank.shield_active_dr += Fixed::from_ratio(n, d),
+            ModEffect::HealOnDamaged(n) => tank.heal_on_damaged += n,
             ModEffect::SpikesFlat(n) => tank.spikes_damage += n,
             ModEffect::SpikesPct(n, d) => tank.spikes_mult += Fixed::from_ratio(n, d),
             ModEffect::HealOnKill(n) => tank.heal_on_kill += n,

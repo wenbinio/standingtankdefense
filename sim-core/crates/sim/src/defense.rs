@@ -23,10 +23,25 @@ pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) {
     }
     // The hit landed (even if fully absorbed by the shield) → Spikes will fire.
     s.tank_hit_this_tick = true;
+    // Heal-on-damaged (Dreadlord Fang): one flat heal per LANDED hit, regardless
+    // of how much is ultimately absorbed. Routes through `Tank::heal` so the
+    // `healing_mult` and the max-HP cap apply uniformly.
+    if s.tank.heal_on_damaged > 0 {
+        s.tank.heal(s.tank.heal_on_damaged);
+    }
     // Armor: flat reduction, but at least 1 damage always lands.
     let mut remaining = (raw - s.tank.armor).max(1);
     // Mana Shield absorbs before HP.
     if s.tank.mana_shield > 0 {
+        // Energy Shield: while the shield is active (pool > 0 at hit time), ALL
+        // incoming damage — what the shield absorbs AND what overflows to HP — is
+        // reduced by `shield_active_dr`. The DR is clamped to `[0, ONE]` so the
+        // `(1 - dr)` multiplier can never go negative; the min-1 guarantee is kept
+        // so a hit is never reduced fully to zero. Once the shield hits 0 the
+        // reduction stops (this whole branch is gated on `mana_shield > 0`).
+        // Integer/Fixed only — feeds the checksum.
+        let dr = s.tank.shield_active_dr.clamp(Fixed::ZERO, Fixed::ONE);
+        remaining = (Fixed::ONE - dr).scale_i64(remaining).max(1);
         let absorbed = remaining.min(s.tank.mana_shield);
         s.tank.mana_shield -= absorbed;
         remaining -= absorbed;
@@ -264,6 +279,91 @@ mod tests {
         assert_eq!(s.total_damage_dealt, 200, "spikes counted as player damage");
         assert_eq!(s.economy.gold, gold0 + 50, "200 × 1/4 = 50 gold");
         assert_eq!(s.total_gold_earned, 50);
+    }
+
+    #[test]
+    fn shield_active_dr_reduces_hits_while_shield_up_then_stops() {
+        // 50% DR (1/2 is exactly representable) with a 300 shield pool.
+        let mut s = fresh();
+        s.tank.mana_shield = 300;
+        s.tank.mana_shield_max = 300;
+        s.tank.shield_active_dr = Fixed::from_ratio(1, 2);
+        let hp0 = s.tank.hp;
+
+        // Hit of 500 while shield up: reduced to 250, fully absorbed (≤300 pool),
+        // no HP loss. Shield drops to 50.
+        hit_tank(&mut s, 500);
+        assert_eq!(s.tank.mana_shield, 50, "250 absorbed of a 300 pool");
+        assert_eq!(s.tank.hp, hp0, "fully absorbed → no HP loss");
+
+        // Next 500 hit, shield still up (50): reduced to 250, 50 absorbed, 200 to HP.
+        hit_tank(&mut s, 500);
+        assert_eq!(s.tank.mana_shield, 0, "remaining shield drained");
+        assert_eq!(s.tank.hp, hp0 - 200, "overflow also reduced (250-50=200)");
+
+        // Shield now 0 → DR no longer applies. A 500 hit lands in full to HP.
+        let hp1 = s.tank.hp;
+        hit_tank(&mut s, 500);
+        assert_eq!(s.tank.hp, hp1 - 500, "no reduction once shield is 0");
+    }
+
+    #[test]
+    fn shield_active_dr_keeps_min_one_and_clamps() {
+        // 100% DR must still let at least 1 through while the shield is up.
+        let mut s = fresh();
+        s.tank.mana_shield = 1000;
+        s.tank.mana_shield_max = 1000;
+        s.tank.shield_active_dr = Fixed::ONE; // 100%
+        hit_tank(&mut s, 500);
+        assert_eq!(s.tank.mana_shield, 999, "min-1 still absorbed at 100% DR");
+
+        // Over-100% DR is clamped to 100% (multiplier never negative): same result.
+        let mut s2 = fresh();
+        s2.tank.mana_shield = 1000;
+        s2.tank.mana_shield_max = 1000;
+        s2.tank.shield_active_dr = Fixed::from_int(5); // 500% → clamped to 100%
+        let hp0 = s2.tank.hp;
+        hit_tank(&mut s2, 500);
+        assert_eq!(s2.tank.mana_shield, 999, "clamped DR still lets 1 land");
+        assert_eq!(s2.tank.hp, hp0, "no negative-damage HP gain from over-clamp");
+    }
+
+    #[test]
+    fn heal_on_damaged_heals_landed_hit_not_dodged_and_caps() {
+        // Lands on a hit: heals the flat amount (routed through `heal`).
+        let mut s = fresh();
+        s.tank.hp = s.tank.max_hp - 1000;
+        s.tank.heal_on_damaged = 8;
+        let hp_before = s.tank.hp;
+        hit_tank(&mut s, 100); // 100 damage, +8 heal → net -92
+        assert_eq!(s.tank.hp, hp_before + 8 - 100, "landed hit heals then takes damage");
+
+        // healing_mult scales the heal.
+        let mut s = fresh();
+        s.tank.hp = s.tank.max_hp - 1000;
+        s.tank.heal_on_damaged = 8;
+        s.tank.healing_mult = Fixed::from_int(2); // +100% healing → 16
+        let hp_before = s.tank.hp;
+        hit_tank(&mut s, 100);
+        assert_eq!(s.tank.hp, hp_before + 16 - 100, "heal scaled by healing_mult");
+
+        // Dodged hit does NOT heal (and takes no damage).
+        let mut s = fresh();
+        s.tank.dodge_num = 100;
+        s.tank.dodge_den = 100; // guaranteed dodge
+        s.tank.hp = s.tank.max_hp - 1000;
+        s.tank.heal_on_damaged = 8;
+        let hp_before = s.tank.hp;
+        hit_tank(&mut s, 100);
+        assert_eq!(s.tank.hp, hp_before, "dodged hit neither heals nor damages");
+
+        // Max-HP cap honored: a hit's heal cannot push HP above max. Set HP so the
+        // post-damage value plus heal would exceed max; heal clamps at max.
+        let mut s = fresh();
+        s.tank.hp = s.tank.max_hp; // already full
+        s.tank.heal_on_damaged = 8;
+        hit_tank(&mut s, 4); // heal clamps to max, then 4 damage lands
+        assert_eq!(s.tank.hp, s.tank.max_hp - 4, "heal capped at max, damage still applies");
     }
 
     #[test]

@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 16;
+pub const SNAPSHOT_VERSION: u32 = 17;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -170,6 +170,8 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.i64(s.tank.hp_regen_per_tick);
     w.i64(s.tank.spikes_damage);
     w.fixed(s.tank.spikes_mult);
+    w.fixed(s.tank.shield_active_dr);
+    w.i64(s.tank.heal_on_damaged);
     w.i64(s.tank.heal_on_kill);
     w.i64(s.tank.heal_on_poison);
     w.fixed(s.tank.healing_mult);
@@ -380,6 +382,8 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         hp_regen_per_tick: r.i64()?,
         spikes_damage: r.i64()?,
         spikes_mult: r.fixed()?,
+        shield_active_dr: r.fixed()?,
+        heal_on_damaged: r.i64()?,
         heal_on_kill: r.i64()?,
         heal_on_poison: r.i64()?,
         healing_mult: r.fixed()?,

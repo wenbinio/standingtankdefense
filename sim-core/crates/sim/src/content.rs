@@ -314,6 +314,17 @@ pub enum ModEffect {
     /// source's "+25% Mana Regeneration" rider on Recharge). Compounds on the flat
     /// shield-regen that ran before it in the same bundle.
     ManaRegenPct(i64, i64),
+    /// +% Damage Reduction while the Mana Shield is active `(num, den)` (the
+    /// source's Energy Shield rider). Accumulates additively into
+    /// `tank.shield_active_dr`; at hit time, while `mana_shield > 0`, ALL incoming
+    /// damage (shield + overflow) is scaled by `1 - dr` (clamped to `[0, ONE]`,
+    /// min-1 lands). Integer/Fixed only.
+    ShieldActiveDrPct(i64, i64),
+    /// +flat HP healed each time an incoming hit LANDS (not dodged) — the source's
+    /// "+N Heal when damaged" (Dreadlord Fang). Accumulates into
+    /// `tank.heal_on_damaged`; routes through `Tank::heal` (one heal per landed
+    /// hit, respecting `healing_mult` + the max-HP cap).
+    HealOnDamaged(i64),
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
@@ -386,6 +397,8 @@ impl ModEffect {
             ModEffect::MaxHpPct(n, d) => (35, n, d, 0),
             ModEffect::HpRegenPct(n, d) => (36, n, d, 0),
             ModEffect::ManaRegenPct(n, d) => (37, n, d, 0),
+            ModEffect::ShieldActiveDrPct(n, d) => (38, n, d, 0),
+            ModEffect::HealOnDamaged(n) => (39, n, 0, 0),
         }
     }
 
@@ -450,6 +463,8 @@ impl ModEffect {
             35 => ModEffect::MaxHpPct(a, b),
             36 => ModEffect::HpRegenPct(a, b),
             37 => ModEffect::ManaRegenPct(a, b),
+            38 => ModEffect::ShieldActiveDrPct(a, b),
+            39 => ModEffect::HealOnDamaged(a),
             _ => return None,
         })
     }
@@ -590,10 +605,9 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // Dazing Stuns (A0CH): "+50% Stun Duration".
     ModifierDef { name: "Dazing Stuns", rarity: 1, cost: 1500, effects: &[ModEffect::StunDurationPct(50, 100)], ramp: None },
     // Spikes (`docs/06`): retaliation damage to nearby enemies when the tank is hit.
-    // Dreadlord Fang (A03A): "+80 Spikes Damage | +8 Heal when damaged". Primary
-    // (flat spikes) modeled; the heal-on-damaged-taken rider is exotic.
-    // TODO(M2): exotic secondary "+8 Heal when damaged" — needs damage-taken retaliation/heal trigger.
-    ModifierDef { name: "Dreadlord Fang", rarity: 0, cost: 500, effects: &[ModEffect::SpikesFlat(80)], ramp: None },
+    // Dreadlord Fang (A03A): "+80 Spikes Damage | +8 Heal when damaged". Both
+    // effects modeled: flat spikes retaliation + a flat heal on every landed hit.
+    ModifierDef { name: "Dreadlord Fang", rarity: 0, cost: 500, effects: &[ModEffect::SpikesFlat(80), ModEffect::HealOnDamaged(8)], ramp: None },
     // representative big-flat-spikes item (source has +160/+400 flats, not +300);
     // kept as a slice.
     ModifierDef { name: "+300 Spikes Damage", rarity: 1, cost: 1500, effects: &[ModEffect::SpikesFlat(300)], ramp: None },
@@ -725,10 +739,9 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // kept as a plain slice.
     ModifierDef { name: "+40 HP Regen", rarity: 0, cost: 500, effects: &[ModEffect::HpRegen(40)], ramp: None },
     // Energy Shield (A0FD): "+10000 Mana Shield | +30% Damage Reduction while Mana
-    // Shield is active". Primary (the huge shield pool) modeled; the conditional DR
-    // is exotic.
-    // TODO(M2): exotic secondary "+30% Damage Reduction while Mana Shield active" — needs shield-active conditional damage-reduction.
-    ModifierDef { name: "Energy Shield", rarity: 3, cost: 5000, effects: &[ModEffect::ManaShield(10000, 50)], ramp: None },
+    // Shield is active". Both effects modeled: the huge shield pool plus the
+    // conditional -30% DR that applies to ALL incoming damage while the shield holds.
+    ModifierDef { name: "Energy Shield", rarity: 3, cost: 5000, effects: &[ModEffect::ManaShield(10000, 50), ModEffect::ShieldActiveDrPct(30, 100)], ramp: None },
     // Evasion (A0CL): "+10% Dodge".
     ModifierDef { name: "Evasion", rarity: 0, cost: 500, effects: &[ModEffect::Dodge(10)], ramp: None },
     // representative ramping-bounty item (Golden Ring's "+1% Damage per 50% Bounty"
