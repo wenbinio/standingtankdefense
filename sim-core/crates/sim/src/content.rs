@@ -325,6 +325,27 @@ pub enum ModEffect {
     /// `tank.heal_on_damaged`; routes through `Tank::heal` (one heal per landed
     /// hit, respecting `healing_mult` + the max-HP cap).
     HealOnDamaged(i64),
+    /// DYNAMIC `+n/d% global damage per 2000 Max HP` (the source's Mastercrafted
+    /// Masonry). Resolved LIVE from `tank.max_hp` at fire time (NOT baked at
+    /// purchase) — like `DamagePerWeapon`. Accumulates the per-unit rate into
+    /// `Modifiers::dmg_per_maxhp_rate`; the live bonus is `rate × (max_hp / 2000)`,
+    /// folded into the per-weapon multiplier via `dynamic_global_add`.
+    DamagePerMaxHp(i64, i64),
+    /// DYNAMIC `+n/d% global damage per 50% Bounty` (the source's Golden Ring).
+    /// Resolved LIVE from `economy.bounty_mult` at fire time. Accumulates the rate
+    /// into `Modifiers::dmg_per_bounty_rate`; the live bonus is
+    /// `rate × ((bounty_mult − 1) / 0.5)`, folded in via `dynamic_global_add`.
+    DamagePerBountyPct(i64, i64),
+    /// DYNAMIC `+n/d% global damage while the Mana Shield is active` (the source's
+    /// Arcane Mark) — the offensive mirror of `ShieldActiveDrPct`. Accumulates into
+    /// `Modifiers::shield_active_dmg`; added to the global additive at fire time iff
+    /// `tank.mana_shield > 0`, via `dynamic_global_add`.
+    ShieldActiveDamagePct(i64, i64),
+    /// `+N Mana Shield restored each time an enemy dies` (the source's Maw of
+    /// Death). Mirrors `HealOnKill`: accumulates into `tank.mana_on_kill` and fires
+    /// once per kill in `collect_bounties`, routed through `Tank::restore_mana`
+    /// (cap-respecting).
+    ManaOnKill(i64),
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
@@ -399,6 +420,10 @@ impl ModEffect {
             ModEffect::ManaRegenPct(n, d) => (37, n, d, 0),
             ModEffect::ShieldActiveDrPct(n, d) => (38, n, d, 0),
             ModEffect::HealOnDamaged(n) => (39, n, 0, 0),
+            ModEffect::DamagePerMaxHp(n, d) => (40, n, d, 0),
+            ModEffect::DamagePerBountyPct(n, d) => (41, n, d, 0),
+            ModEffect::ShieldActiveDamagePct(n, d) => (42, n, d, 0),
+            ModEffect::ManaOnKill(n) => (43, n, 0, 0),
         }
     }
 
@@ -465,6 +490,10 @@ impl ModEffect {
             37 => ModEffect::ManaRegenPct(a, b),
             38 => ModEffect::ShieldActiveDrPct(a, b),
             39 => ModEffect::HealOnDamaged(a),
+            40 => ModEffect::DamagePerMaxHp(a, b),
+            41 => ModEffect::DamagePerBountyPct(a, b),
+            42 => ModEffect::ShieldActiveDamagePct(a, b),
+            43 => ModEffect::ManaOnKill(a),
             _ => return None,
         })
     }
@@ -762,6 +791,32 @@ pub static MODIFIERS: &[ModifierDef] = &[
         effects: &[ModEffect::HpRegen(120)],
         ramp: Some(RampSpec { effect: ModEffect::HpRegen(30), interval_ticks: RAMP_PER_ROUND }) },
     // GEN-MODIFIERS-END
+    // EXPANSION batch E1 — four NEW source upgrades with DYNAMIC damage scalers
+    // (resolved live at fire time, never baked at purchase). The source map prices
+    // upgrades via a separate in-game gold system with no per-item cost in the
+    // catalog, so cost/rarity follow the batch guidance (rarity 2-3 / cost
+    // 3000-5000 for these scaling items) — flagged as a judgement call.
+    // Mastercrafted Masonry (A0CR): "+5000 Max HP | +1% Damage per 2000 Max HP
+    // Gained". The damage half scales LIVE with the tank's current Max HP (so later
+    // Max-HP buys retroactively boost it), via DamagePerMaxHp.
+    ModifierDef { name: "Mastercrafted Masonry", rarity: 2, cost: 3000,
+        effects: &[ModEffect::MaxHp(5000), ModEffect::DamagePerMaxHp(1, 100)], ramp: None },
+    // Golden Ring (A0H3): "+200% Kill Bounty | +1% Damage per 50% Kill Bounty". The
+    // damage half scales LIVE with the bounty multiplier (above the 1.0 base), via
+    // DamagePerBountyPct. rarity 3 / cost 5000 (a top-end bounty-snowball payoff).
+    ModifierDef { name: "Golden Ring", rarity: 3, cost: 5000,
+        effects: &[ModEffect::BountyPct(200, 100), ModEffect::DamagePerBountyPct(1, 100)], ramp: None },
+    // Arcane Mark (A0F3): "+4000 Mana Shield | +20% Damage while Mana Shield is
+    // active". The offensive mirror of Energy Shield's defensive +DR. Shield regen
+    // 20/tick matches Energy Shield's pool→regen ratio (10000→50, i.e. 4000→20).
+    // rarity 3 / cost 5000.
+    ModifierDef { name: "Arcane Mark", rarity: 3, cost: 5000,
+        effects: &[ModEffect::ManaShield(4000, 20), ModEffect::ShieldActiveDamagePct(20, 100)], ramp: None },
+    // Maw of Death (A0EU): "+2000 Mana Shield | +15 Mana regenerated when an enemy
+    // dies". The shield half uses Moonwell's 2000→10/tick regen ratio; the on-kill
+    // half restores 15 to the shield per kill (cap-respecting). rarity 2 / cost 3000.
+    ModifierDef { name: "Maw of Death", rarity: 2, cost: 3000,
+        effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ManaOnKill(15)], ramp: None },
 ];
 
 /// The weapon the tank starts with (index into [`WEAPONS`]).

@@ -101,7 +101,7 @@ const WEAPON_TEXT: [(&str, &str); 86] = [
     ("The last rite the Pale Wardens kept for what's coming: it pins a thing where it stands and waits beside it.", "Fast epic normal single-target. Roots the target in place."),  // 85
 ];
 
-const MODIFIER_TEXT: [(&str, &str); 83] = [
+const MODIFIER_TEXT: [(&str, &str); 87] = [
     ("Foundry stamps this kit \"general issue,\" the catch-all crate the Wardens hand out when nothing specialized survived the haul from Ashmark.", "+10% to all weapon damage."),  // 0
     ("Hexwrights ground these heads to a finer point than the Foundry would risk, and the Wardens never asked how.", "Improved Piercing Attacks: +10% piercing damage."),  // 1
     ("Recovered from the Ashmark siege-works, calibrated for walls that fell the night the line broke.", "Improved Siege Attacks: +10% siege damage."),  // 2
@@ -185,6 +185,10 @@ const MODIFIER_TEXT: [(&str, &str); 83] = [
     ("Warden salvage welded round Warden salvage, the wall thickening every round the line holds.", "+2500 max HP, +500 more each round."),  // 80
     ("A thin Hexwright coat of borrowed math, enough to spend before your own skin.", "Mana Shield: +1000 mana shield."),  // 81
     ("The Wardens' last surgeon works faster the longer the war grinds, mending quickening as the siege wears on.", "+120 HP/tick regen, +30 more each round."),  // 82
+    ("Foundry masons fit the old wall to a finer tolerance than the war deserves, and the thicker it stands the harder its guns hit.", "Mastercrafted Masonry: +5000 max HP, +1% damage per 2000 max HP."),  // 83
+    ("A Greycoat quartermaster's signet, worn smooth on the corpse-ledger; the richer the bounty it counts, the meaner the line shoots.", "Golden Ring: +200% kill bounty, +1% damage per 50% bounty."),  // 84
+    ("A Hexwright sigil burned into the borrowed skin; while the shield holds, every shot carries a little of that stolen fire.", "Arcane Mark: +4000 mana shield, +20% damage while it holds."),  // 85
+    ("The Conclave fed this thing on the dying and it learned to drink; each corpse on the line tops its borrowed skin back up.", "Maw of Death: +2000 mana shield, +15 shield per enemy killed."),  // 86
 ];
 
 #[cfg(test)]

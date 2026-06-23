@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0xcab3bbf00f8b3da1, // re-baselined (content-fidelity pass): the modifier catalog was rebuilt (restored source names, re-bundled split multi-effect upgrades, merged "Golden Vitality" into "Entangled Gold Mine", added MaxHpPct/HpRegenPct/ManaRegenPct riders). The M0 bot buys from the catalog, so the trace shifts; the RAMP/boss curve is unchanged. The interim difficulty re-tune (RAMP_JUMP 1.22→3.5, boss endpoint ×11→×413863) does NOT drift this: the M0 scenario runs only 2000 ticks, all within the k=0 interval before the first cliff (tick 5400), where the curve uses the UNCHANGED gentle/warning factors
+        0x935c95ffa9386f92, // re-baselined (EXPANSION batch E1): four NEW source upgrades appended to the modifier catalog (Mastercrafted Masonry, Golden Ring, Arcane Mark, Maw of Death) with their four dynamic mechanics (DamagePerMaxHp / DamagePerBountyPct / ShieldActiveDamagePct / ManaOnKill). The M0 bot buys from the catalog, so adding entries shifts its shop draw and the trace. No EXISTING entry's effects changed, and the RAMP/boss/wave curve is untouched. (Previous baseline 0xcab3bbf00f8b3da1 was the content-fidelity pass.) SNAPSHOT_VERSION 17→18 for the new checksum-feeding fields
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

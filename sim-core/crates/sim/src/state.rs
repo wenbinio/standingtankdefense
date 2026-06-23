@@ -97,6 +97,11 @@ pub struct Tank {
     pub heal_on_damaged: i64,
     /// Heal the tank this much when an enemy dies (on-kill trigger).
     pub heal_on_kill: i64,
+    /// Restore this much Mana Shield each time an enemy dies (on-kill trigger) —
+    /// the source's Maw of Death "+N Mana regenerated when an enemy dies". Routes
+    /// through `restore_mana` (cap-respecting; one per kill, like `heal_on_kill`).
+    /// Starts 0.
+    pub mana_on_kill: i64,
     /// Heal the tank this much each tick an enemy takes poison damage.
     pub heal_on_poison: i64,
     /// Multiplier on all healing the tank receives (the source's "+% Healing";
@@ -356,6 +361,23 @@ pub struct Modifiers {
     /// owned weapon of `weapon_def` (the source's "+1% Piercing Damage per Bow").
     /// Append-only; resolved live at fire time. Length grows with purchases.
     pub weapon_count_scaling: Vec<WeaponCountScale>,
+    /// DYNAMIC global-damage scaler keyed to the LIVE `tank.max_hp` (the source's
+    /// Mastercrafted Masonry "+X% Damage per 2000 Max HP"). Stored as the summed
+    /// per-unit rate `Σ (n/d)`; at fire time the live bonus is
+    /// `rate × (max_hp / 2000)`. Accumulates additively across purchases. Like
+    /// `weapon_count_scaling`, it is resolved live (never baked at purchase), so it
+    /// tracks Max-HP bought afterwards. Starts `ZERO`.
+    pub dmg_per_maxhp_rate: Fixed,
+    /// DYNAMIC global-damage scaler keyed to the LIVE `economy.bounty_mult` (the
+    /// source's Golden Ring "+X% Damage per 50% Bounty"). Summed per-unit rate;
+    /// live bonus is `rate × (bounty_bonus_pct / 50)` where `bounty_bonus_pct` is
+    /// the bounty multiplier ABOVE the 1.0 base. Starts `ZERO`.
+    pub dmg_per_bounty_rate: Fixed,
+    /// DYNAMIC global-damage scaler active only while the Mana Shield is up (the
+    /// source's Arcane Mark "+X% Damage while Mana Shield active"). Summed bonus;
+    /// at fire time it is added to the global additive iff `tank.mana_shield > 0`
+    /// (the offensive mirror of `tank.shield_active_dr`). Starts `ZERO`.
+    pub shield_active_dmg: Fixed,
 }
 
 /// One self-scaling damage rule (see [`Modifiers::weapon_count_scaling`]).
@@ -469,6 +491,7 @@ impl ArenaState {
                 shield_active_dr: Fixed::ZERO,
                 heal_on_damaged: 0,
                 heal_on_kill: 0,
+                mana_on_kill: 0,
                 heal_on_poison: 0,
                 healing_mult: Fixed::ONE,
                 missing_hp_heal_pct: Fixed::ZERO,

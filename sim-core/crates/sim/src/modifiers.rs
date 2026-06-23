@@ -51,7 +51,40 @@ impl Modifiers {
             poison_dmg_mult: Fixed::ONE,
             stun_dur_mult: Fixed::ONE,
             weapon_count_scaling: Vec::new(),
+            dmg_per_maxhp_rate: Fixed::ZERO,
+            dmg_per_bounty_rate: Fixed::ZERO,
+            shield_active_dmg: Fixed::ZERO,
         }
+    }
+
+    /// Live GLOBAL additive damage bonus from the three DYNAMIC scalers, evaluated
+    /// against the current `tank`/`economy` (NOT baked at purchase) — the offensive
+    /// analogue of `self_scaling_add`. Folded into the per-weapon multiplier at fire
+    /// time exactly like `self_scaling_add` (additive, then `×mul_global`):
+    ///   * Mastercrafted Masonry: `rate × (max_hp / 2000)`.
+    ///   * Golden Ring: `rate × ((bounty_mult − 1) / 0.5)`  ( = rate × 2 × bonus ).
+    ///   * Arcane Mark: `shield_active_dmg` while `mana_shield > 0`, else nothing.
+    /// Integer/Fixed only (feeds the checksum). A `bounty_mult` below the 1.0 base
+    /// (never happens in normal play) is clamped so the term can't go negative.
+    pub fn dynamic_global_add(&self, tank: &Tank, economy: &Economy) -> Fixed {
+        let mut add = Fixed::ZERO;
+        if self.dmg_per_maxhp_rate != Fixed::ZERO && tank.max_hp > 0 {
+            // units = max_hp / 2000 (Fixed); bonus = rate × units.
+            let units = Fixed::from_ratio(tank.max_hp, 2000);
+            add += self.dmg_per_maxhp_rate.mul(units);
+        }
+        if self.dmg_per_bounty_rate != Fixed::ZERO {
+            // bounty bonus above the 1.0 base, in units of 50% (×2 of the fraction).
+            let bonus = economy.bounty_mult - Fixed::ONE;
+            if bonus > Fixed::ZERO {
+                let units = bonus.mul(Fixed::from_int(2));
+                add += self.dmg_per_bounty_rate.mul(units);
+            }
+        }
+        if self.shield_active_dmg != Fixed::ZERO && tank.mana_shield > 0 {
+            add += self.shield_active_dmg;
+        }
+        add
     }
 
     /// Full damage multiplier for a specific weapon: global + its damage type +
@@ -152,6 +185,7 @@ impl Modifiers {
             ModEffect::SpikesFlat(n) => tank.spikes_damage += n,
             ModEffect::SpikesPct(n, d) => tank.spikes_mult += Fixed::from_ratio(n, d),
             ModEffect::HealOnKill(n) => tank.heal_on_kill += n,
+            ModEffect::ManaOnKill(n) => tank.mana_on_kill += n,
             ModEffect::HealOnPoison(n) => tank.heal_on_poison += n,
             ModEffect::IncomePct(n, d) => economy.income_mult += Fixed::from_ratio(n, d),
             ModEffect::IncomeRegenPct(n, d) => economy.income_regen_pct += Fixed::from_ratio(n, d),
@@ -176,6 +210,12 @@ impl Modifiers {
                     per: Fixed::from_ratio(num, 100),
                 });
             }
+            // DYNAMIC global-damage scalers (resolved live at fire time via
+            // `dynamic_global_add`, mirroring `DamagePerWeapon`/`self_scaling_add`).
+            // Accumulate only the per-unit RATE / flat bonus here.
+            ModEffect::DamagePerMaxHp(n, d) => self.dmg_per_maxhp_rate += Fixed::from_ratio(n, d),
+            ModEffect::DamagePerBountyPct(n, d) => self.dmg_per_bounty_rate += Fixed::from_ratio(n, d),
+            ModEffect::ShieldActiveDamagePct(n, d) => self.shield_active_dmg += Fixed::from_ratio(n, d),
             ModEffect::GoldPerDamagePct(n, d) => economy.gold_per_damage += Fixed::from_ratio(n, d),
             ModEffect::IncomeShieldPct(n, d) => economy.income_shield_pct += Fixed::from_ratio(n, d),
             // Percentage riders evaluated against the CURRENT stat at apply-time
@@ -425,6 +465,65 @@ mod tests {
         // A non-engine weapon of the same type is unaffected when count is 0.
         let none = s.modifiers.self_scaling_add(content::DMG_CHAOS, &[]);
         assert_eq!(none, Fixed::ZERO, "no engines ⇒ no self-scaling");
+    }
+
+    #[test]
+    fn damage_per_maxhp_scales_with_live_max_hp() {
+        // Mastercrafted Masonry: +1% damage per 2000 Max HP, resolved LIVE from the
+        // current tank.max_hp (never baked). Buy it, then verify the dynamic add
+        // tracks max_hp — including Max-HP bought AFTER the scaler.
+        let mut s = ArenaState::new(1, 0);
+        let idx = modifier_idx(|e| matches!(e, ModEffect::DamagePerMaxHp(..)));
+        let max_before = s.tank.max_hp;
+        s.buy_modifier(idx); // grants +5000 Max HP and the +1%/2000 scaler
+        let add = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        // bonus = (max_hp / 2000) × 1% ; at the post-buy max_hp.
+        let expect = Fixed::from_ratio(s.tank.max_hp, 2000).mul(Fixed::from_ratio(1, 100));
+        assert_eq!(add, expect, "per-MaxHp add tracks the live max_hp");
+        assert!(s.tank.max_hp >= max_before + 5000, "flat Max HP applied too");
+
+        // Buying more Max HP afterwards retroactively raises the bonus (live, not baked).
+        let before = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        s.modifiers.apply_effect(ModEffect::MaxHp(20000), &mut s.economy, &mut s.tank);
+        let after = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        assert!(after > before, "later Max-HP buys boost the per-MaxHp damage");
+    }
+
+    #[test]
+    fn damage_per_bounty_scales_with_live_bounty() {
+        // Golden Ring: +1% damage per 50% Kill Bounty, from the live bounty_mult.
+        let mut s = ArenaState::new(1, 0);
+        let idx = modifier_idx(|e| matches!(e, ModEffect::DamagePerBountyPct(..)));
+        s.buy_modifier(idx); // +200% bounty (mult 1.0→3.0) and the +1%/50% scaler
+        let add = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        // bonus above base = 2.0 ; in 50%-units = ×2 → 4 units × 1% = +4%.
+        let bonus = s.economy.bounty_mult - Fixed::ONE;
+        let expect = Fixed::from_ratio(1, 100).mul(bonus.mul(Fixed::from_int(2)));
+        assert_eq!(add, expect, "per-Bounty add tracks the live bounty_mult");
+        let v = add.scale_i64(1000);
+        assert!((39..=40).contains(&v), "≈+4% with +200% bounty, got {v}");
+
+        // More bounty afterwards raises the bonus.
+        let before = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        s.modifiers.apply_effect(ModEffect::BountyPct(100, 100), &mut s.economy, &mut s.tank);
+        let after = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        assert!(after > before, "later bounty buys boost the per-Bounty damage");
+    }
+
+    #[test]
+    fn shield_active_damage_applies_only_while_shield_up() {
+        // Arcane Mark: +20% damage WHILE the Mana Shield is active (mana_shield > 0).
+        let mut s = ArenaState::new(1, 0);
+        let idx = modifier_idx(|e| matches!(e, ModEffect::ShieldActiveDamagePct(..)));
+        s.buy_modifier(idx); // +4000 shield pool + the conditional +20%
+        assert!(s.tank.mana_shield > 0, "Arcane Mark grants a shield pool");
+        let up = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        // 0.20 isn't exactly representable; Fixed floors deterministically (≈199).
+        assert!((199..=200).contains(&up.scale_i64(1000)), "≈+20% while shield up");
+        // Drop the shield: the bonus disappears.
+        s.tank.mana_shield = 0;
+        let down = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        assert_eq!(down, Fixed::ZERO, "no bonus while shield is down");
     }
 
     #[test]

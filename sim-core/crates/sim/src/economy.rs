@@ -41,6 +41,12 @@ pub(crate) fn collect_bounties(s: &mut ArenaState) {
     if s.tank.heal_on_kill > 0 && kills > 0 && !s.dead {
         s.tank.heal(kills * s.tank.heal_on_kill);
     }
+    // On-kill trigger: restore Mana Shield per enemy killed this tick (the source's
+    // Maw of Death). Mirrors `heal_on_kill`: applies per kill, capped at the pool
+    // max via `restore_mana` (a no-op if the tank owns no shield pool).
+    if s.tank.mana_on_kill > 0 && kills > 0 && !s.dead {
+        s.tank.restore_mana(kills * s.tank.mana_on_kill);
+    }
 }
 
 /// Phase 8: add `floor(income_per_tick × income_mult)` to gold. `bounty_mult`
@@ -289,6 +295,34 @@ mod tests {
         s2.pending_kills = vec![0];
         collect_bounties(&mut s2);
         assert_eq!(s2.tank.hp, 500);
+    }
+
+    #[test]
+    fn mana_on_kill_restores_shield_per_kill_capped_at_max() {
+        let mut s = fresh();
+        s.tank.mana_shield_max = 1000;
+        s.tank.mana_shield = 500;
+        s.tank.mana_on_kill = 15;
+        s.economy.bounty_mult = Fixed::ONE;
+        // 3 kills → +45 shield.
+        s.pending_kills = vec![0, 1, 0];
+        collect_bounties(&mut s);
+        assert_eq!(s.tank.mana_shield, 545, "shield restored per kill");
+
+        // Cap at mana_shield_max.
+        s.tank.mana_shield = 990;
+        s.pending_kills = vec![0, 1, 0];
+        collect_bounties(&mut s);
+        assert_eq!(s.tank.mana_shield, 1000, "shield restore cannot exceed max");
+
+        // No shield pool ⇒ restore is a no-op (mirrors restore_mana guard).
+        let mut s2 = fresh();
+        s2.tank.mana_shield_max = 0;
+        s2.tank.mana_shield = 0;
+        s2.tank.mana_on_kill = 15;
+        s2.pending_kills = vec![0];
+        collect_bounties(&mut s2);
+        assert_eq!(s2.tank.mana_shield, 0, "no pool ⇒ mana-on-kill is a no-op");
     }
 
     #[test]

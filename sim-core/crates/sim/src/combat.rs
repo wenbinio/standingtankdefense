@@ -228,7 +228,11 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // (1 + add_static + add_self)×mul = weapon_damage_mult + add_self×mul.
         let static_mult = s.modifiers.weapon_damage_mult(&wdef);
         let add_self = s.modifiers.self_scaling_add(wdef.damage_type, &s.weapons);
-        let wmult = static_mult + add_self.mul(s.modifiers.mul_global);
+        // DYNAMIC global-damage scalers resolved from the LIVE tank/economy (per
+        // 2000 Max HP / per 50% Bounty / while Mana Shield active). GLOBAL additive,
+        // so they thread in exactly like `add_self` — additive, then `×mul_global`.
+        let add_dyn = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        let wmult = static_mult + (add_self + add_dyn).mul(s.modifiers.mul_global);
         let baked = wmult.scale_i64(wdef.damage);
         // Poison-damage / stun-duration scalers depend only on the player's
         // modifiers, so (like base damage) they bake into the hit at fire time.

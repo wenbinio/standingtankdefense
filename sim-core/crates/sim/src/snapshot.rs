@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 17;
+pub const SNAPSHOT_VERSION: u32 = 18;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -173,6 +173,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.fixed(s.tank.shield_active_dr);
     w.i64(s.tank.heal_on_damaged);
     w.i64(s.tank.heal_on_kill);
+    w.i64(s.tank.mana_on_kill);
     w.i64(s.tank.heal_on_poison);
     w.fixed(s.tank.healing_mult);
     w.fixed(s.tank.missing_hp_heal_pct);
@@ -284,6 +285,9 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u8(r.dmg_type);
         w.fixed(r.per);
     }
+    w.fixed(s.modifiers.dmg_per_maxhp_rate);
+    w.fixed(s.modifiers.dmg_per_bounty_rate);
+    w.fixed(s.modifiers.shield_active_dmg);
 
     // active ramps
     w.len(s.ramps.len());
@@ -385,6 +389,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         shield_active_dr: r.fixed()?,
         heal_on_damaged: r.i64()?,
         heal_on_kill: r.i64()?,
+        mana_on_kill: r.i64()?,
         heal_on_poison: r.i64()?,
         healing_mult: r.fixed()?,
         missing_hp_heal_pct: r.fixed()?,
@@ -516,6 +521,9 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
             }
             v
         },
+        dmg_per_maxhp_rate: r.fixed()?,
+        dmg_per_bounty_rate: r.fixed()?,
+        shield_active_dmg: r.fixed()?,
     };
 
     let mut ramps = Vec::new();
