@@ -557,46 +557,51 @@ impl ArenaState {
     pub fn buy_modifier(&mut self, def_idx: u16) {
         let def = &content::MODIFIERS[def_idx as usize];
         let ramp = def.ramp;
-        // A few effects carry per-arena trigger state and are intercepted here;
-        // all others fold into the Modifiers/Tank/Economy aggregates.
-        match def.effect {
-            content::ModEffect::GrantVulnPulse(mag, range, interval) => {
-                self.vuln_pulses.push(VulnPulse {
-                    magnitude: mag as u16,
-                    range,
-                    interval_ticks: interval as u32,
-                    next_tick: self.tick + interval as u32,
-                });
+        // Scan the modifier's effects IN ORDER. A few effects carry per-arena
+        // trigger state and are intercepted here; every other effect folds into
+        // the Modifiers/Tank/Economy aggregates via the normal path. (Each catalog
+        // entry carries a single effect today, so this reproduces the prior
+        // single-effect behavior exactly.)
+        for &effect in def.effects {
+            match effect {
+                content::ModEffect::GrantVulnPulse(mag, range, interval) => {
+                    self.vuln_pulses.push(VulnPulse {
+                        magnitude: mag as u16,
+                        range,
+                        interval_ticks: interval as u32,
+                        next_tick: self.tick + interval as u32,
+                    });
+                }
+                // META items (`docs/06` #5) arm the purchase flow / grant gold.
+                content::ModEffect::GrantDuplicator(rarity, copies) => {
+                    self.pending_perk = Some(PendingPerk {
+                        rarity: rarity as u8,
+                        extra_copies: copies as u32,
+                        free: false,
+                    });
+                }
+                content::ModEffect::GrantVoucher(rarity) => {
+                    self.pending_perk = Some(PendingPerk {
+                        rarity: rarity as u8,
+                        extra_copies: 0,
+                        free: true,
+                    });
+                }
+                content::ModEffect::GrantGold(g) => self.award_gold(g),
+                // HP/defense ↔ Gold trades: pay tank stats for gold, intercepted
+                // here so the gold routes through the scoreboard.
+                content::ModEffect::TradeMaxHpForGold(hp_cost, gold_gain) => {
+                    self.tank.max_hp -= hp_cost;
+                    self.tank.hp = self.tank.hp.min(self.tank.max_hp);
+                    self.award_gold(gold_gain);
+                }
+                content::ModEffect::TradeRegenForGold(regen_cost, gold_gain) => {
+                    // MAY go negative — a negative regen drains HP each tick.
+                    self.tank.hp_regen_per_tick -= regen_cost;
+                    self.award_gold(gold_gain);
+                }
+                other => self.modifiers.apply_effect(other, &mut self.economy, &mut self.tank),
             }
-            // META items (`docs/06` #5) arm the purchase flow / grant gold.
-            content::ModEffect::GrantDuplicator(rarity, copies) => {
-                self.pending_perk = Some(PendingPerk {
-                    rarity: rarity as u8,
-                    extra_copies: copies as u32,
-                    free: false,
-                });
-            }
-            content::ModEffect::GrantVoucher(rarity) => {
-                self.pending_perk = Some(PendingPerk {
-                    rarity: rarity as u8,
-                    extra_copies: 0,
-                    free: true,
-                });
-            }
-            content::ModEffect::GrantGold(g) => self.award_gold(g),
-            // HP/defense ↔ Gold trades: pay tank stats for gold, intercepted here
-            // so the gold routes through the scoreboard.
-            content::ModEffect::TradeMaxHpForGold(hp_cost, gold_gain) => {
-                self.tank.max_hp -= hp_cost;
-                self.tank.hp = self.tank.hp.min(self.tank.max_hp);
-                self.award_gold(gold_gain);
-            }
-            content::ModEffect::TradeRegenForGold(regen_cost, gold_gain) => {
-                // MAY go negative — a negative regen drains HP each tick.
-                self.tank.hp_regen_per_tick -= regen_cost;
-                self.award_gold(gold_gain);
-            }
-            other => self.modifiers.apply_effect(other, &mut self.economy, &mut self.tank),
         }
         if let Some(r) = ramp {
             self.ramps.push(ActiveRamp {
@@ -625,7 +630,7 @@ impl ArenaState {
                 });
             }
             OfferKind::Modifier => {
-                if content::MODIFIERS[offer.def as usize].effect.is_economy() {
+                if content::MODIFIERS[offer.def as usize].is_economy() {
                     self.economy_purchases += 1;
                 }
                 self.buy_modifier(offer.def);
@@ -644,6 +649,6 @@ impl ArenaState {
     /// Whether an offer is a META item (must not trigger or be duplicated).
     pub fn offer_is_meta(offer: Offer) -> bool {
         matches!(offer.kind, OfferKind::Modifier)
-            && content::MODIFIERS[offer.def as usize].effect.is_meta()
+            && content::MODIFIERS[offer.def as usize].is_meta()
     }
 }

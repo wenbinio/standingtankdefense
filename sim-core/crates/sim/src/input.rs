@@ -198,7 +198,10 @@ mod tests {
 
     /// Find a catalog modifier index whose effect matches a predicate.
     fn modifier_idx(pred: impl Fn(&content::ModEffect) -> bool) -> u16 {
-        content::MODIFIERS.iter().position(|m| pred(&m.effect)).expect("modifier exists") as u16
+        content::MODIFIERS
+            .iter()
+            .position(|m| m.effects.iter().any(&pred))
+            .expect("modifier exists") as u16
     }
 
     #[test]
@@ -206,10 +209,14 @@ mod tests {
         let mut s = fresh();
         // Arm "+N copies of next Common (rarity 0)".
         let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(0, _)));
-        let copies = match content::MODIFIERS[dup as usize].effect {
-            content::ModEffect::GrantDuplicator(_, c) => c as usize,
-            _ => unreachable!(),
-        };
+        let copies = content::MODIFIERS[dup as usize]
+            .effects
+            .iter()
+            .find_map(|e| match e {
+                content::ModEffect::GrantDuplicator(_, c) => Some(*c as usize),
+                _ => None,
+            })
+            .unwrap();
         s.buy_modifier(dup);
         assert!(s.pending_perk.is_some(), "perk armed");
 
@@ -275,10 +282,14 @@ mod tests {
     fn magic_treasure_grants_instant_gold() {
         let mut s = fresh();
         let treasure = modifier_idx(|e| matches!(e, content::ModEffect::GrantGold(_)));
-        let gold = match content::MODIFIERS[treasure as usize].effect {
-            content::ModEffect::GrantGold(g) => g,
-            _ => unreachable!(),
-        };
+        let gold = content::MODIFIERS[treasure as usize]
+            .effects
+            .iter()
+            .find_map(|e| match e {
+                content::ModEffect::GrantGold(g) => Some(*g),
+                _ => None,
+            })
+            .unwrap();
         let before = s.economy.gold;
         s.buy_modifier(treasure);
         assert_eq!(s.economy.gold, before + gold, "instant gold granted");

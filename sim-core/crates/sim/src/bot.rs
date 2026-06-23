@@ -23,13 +23,16 @@ fn is_self_harm_trade(off: &Offer) -> bool {
     if !matches!(off.kind, OfferKind::Modifier) {
         return false;
     }
-    match content::MODIFIERS[off.def as usize].effect {
+    // Scan the def's effects: a trade is self-harm if ANY effect drains the
+    // axis the bot is graded on. (Each catalog entry carries one effect today,
+    // so `any` reproduces the prior single-effect decision exactly.)
+    content::MODIFIERS[off.def as usize].effects.iter().any(|e| match e {
         // Reduces Max HP for gold — a smaller HP pool the bot never offsets.
-        ModEffect::TradeMaxHpForGold(hp_cost, _) => hp_cost > 0,
+        ModEffect::TradeMaxHpForGold(hp_cost, _) => *hp_cost > 0,
         // Reduces HP regen for gold (may go negative → a drain) — self-damage.
-        ModEffect::TradeRegenForGold(regen_cost, _) => regen_cost > 0,
+        ModEffect::TradeRegenForGold(regen_cost, _) => *regen_cost > 0,
         _ => false,
-    }
+    })
 }
 
 /// A self-imposed playstyle constraint the bot will honor while buying, so the
@@ -74,13 +77,13 @@ impl Challenge {
                 content::attack_scope_id(content::WEAPONS[off.def as usize].attack) == *class
             }
             (Challenge::NoEconomy, OfferKind::Modifier) => {
-                !content::MODIFIERS[off.def as usize].effect.is_economy()
+                !content::MODIFIERS[off.def as usize].is_economy()
             }
             // Pure-economy: forbid ALL weapons and every non-economy modifier; the
             // only permitted purchase is an economy/gold modifier.
             (Challenge::EcoOnly, OfferKind::Weapon) => false,
             (Challenge::EcoOnly, OfferKind::Modifier) => {
-                content::MODIFIERS[off.def as usize].effect.is_economy()
+                content::MODIFIERS[off.def as usize].is_economy()
             }
             _ => true,
         }
@@ -231,7 +234,7 @@ impl Bot {
             } else if round <= ECON_LAST_ROUND {
                 if let Some(slot) = self.cheapest_where(s, |o| {
                     matches!(o.kind, OfferKind::Modifier)
-                        && content::MODIFIERS[o.def as usize].effect.is_economy()
+                        && content::MODIFIERS[o.def as usize].is_economy()
                 }) {
                     self.cooldown = 6;
                     return Input::BuyOffer { slot: slot as u8 };

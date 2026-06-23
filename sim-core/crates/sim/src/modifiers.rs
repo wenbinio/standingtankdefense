@@ -87,9 +87,11 @@ impl Modifiers {
         on_hit
     }
 
-    /// Fold a purchased modifier in (applies its base `effect`).
+    /// Fold a purchased modifier in (applies each of its base `effects`, in order).
     pub fn apply(&mut self, def: &ModifierDef, economy: &mut Economy, tank: &mut Tank) {
-        self.apply_effect(def.effect, economy, tank);
+        for &effect in def.effects {
+            self.apply_effect(effect, economy, tank);
+        }
     }
 
     /// Apply a single [`ModEffect`] (used both for a modifier's base effect and
@@ -204,7 +206,10 @@ mod tests {
     }
 
     fn modifier(effect: ModEffect) -> ModifierDef {
-        ModifierDef { name: "t", rarity: 0, cost: 0, effect, ramp: None }
+        // A single-effect def matching the catalog's one-effect entries. Leaks a
+        // 'static slice so the test def can hold `effects: &'static [ModEffect]`.
+        let effects: &'static [ModEffect] = Box::leak(Box::new([effect]));
+        ModifierDef { name: "t", rarity: 0, cost: 0, effects, ramp: None }
     }
 
     #[test]
@@ -273,7 +278,7 @@ mod tests {
         let idx = content::MODIFIERS
             .iter()
             .position(|md| md.ramp.is_some()
-                && matches!(md.effect, ModEffect::DamageGlobalPct(2, 100)))
+                && md.effects.iter().any(|e| matches!(e, ModEffect::DamageGlobalPct(2, 100))))
             .expect("a +2%/+1% global-damage ramp exists") as u16;
 
         let mut s = ArenaState::new(1, 0);
@@ -297,17 +302,24 @@ mod tests {
     }
 
     fn modifier_idx(pred: impl Fn(ModEffect) -> bool) -> u16 {
-        content::MODIFIERS.iter().position(|m| pred(m.effect)).expect("catalog item exists") as u16
+        content::MODIFIERS
+            .iter()
+            .position(|m| m.effects.iter().any(|&e| pred(e)))
+            .expect("catalog item exists") as u16
     }
 
     #[test]
     fn trade_maxhp_for_gold_reduces_maxhp_and_grants_scored_gold() {
         let mut s = ArenaState::new(1, 0);
         let idx = modifier_idx(|e| matches!(e, ModEffect::TradeMaxHpForGold(..)));
-        let (hp_cost, gold_gain) = match content::MODIFIERS[idx as usize].effect {
-            ModEffect::TradeMaxHpForGold(h, g) => (h, g),
-            _ => unreachable!(),
-        };
+        let (hp_cost, gold_gain) = content::MODIFIERS[idx as usize]
+            .effects
+            .iter()
+            .find_map(|e| match e {
+                ModEffect::TradeMaxHpForGold(h, g) => Some((*h, *g)),
+                _ => None,
+            })
+            .unwrap();
         let max0 = s.tank.max_hp;
         let gold0 = s.economy.gold;
         // Clamp path: set HP near the post-trade max so the clamp is exercised.
@@ -323,10 +335,14 @@ mod tests {
     fn trade_regen_for_gold_can_go_negative() {
         let mut s = ArenaState::new(1, 0);
         let idx = modifier_idx(|e| matches!(e, ModEffect::TradeRegenForGold(..)));
-        let (regen_cost, gold_gain) = match content::MODIFIERS[idx as usize].effect {
-            ModEffect::TradeRegenForGold(r, g) => (r, g),
-            _ => unreachable!(),
-        };
+        let (regen_cost, gold_gain) = content::MODIFIERS[idx as usize]
+            .effects
+            .iter()
+            .find_map(|e| match e {
+                ModEffect::TradeRegenForGold(r, g) => Some((*r, *g)),
+                _ => None,
+            })
+            .unwrap();
         s.tank.hp_regen_per_tick = 0;
         let gold0 = s.economy.gold;
         s.buy_modifier(idx);

@@ -414,7 +414,7 @@ mod tests {
         let mut s = ArenaState::new(7, 0);
         let idx = content::MODIFIERS
             .iter()
-            .position(|m| matches!(m.effect, content::ModEffect::GrantVulnPulse(..)))
+            .position(|m| m.effects.iter().any(|e| matches!(e, content::ModEffect::GrantVulnPulse(..))))
             .expect("a Vulnerability Pulse modifier exists") as u16;
         s.buy_modifier(idx);
         assert_eq!(s.vuln_pulses.len(), 1, "pulse registered");
