@@ -346,6 +346,29 @@ pub enum ModEffect {
     /// once per kill in `collect_bounties`, routed through `Tank::restore_mana`
     /// (cap-respecting).
     ManaOnKill(i64),
+    // ---- EXPANSION E2 (four exotic mechanics) --------------------------------
+    /// SHIELD-BREAK STUN `(range, stun_ticks)` (source: Energy Pulse). When the
+    /// Mana Shield transitions `>0 → 0` from a hit, stun every enemy within `range`
+    /// for `stun_ticks`. Sets `tank.shieldbreak_stun_range/_ticks`; the down-edge is
+    /// detected in `defense::hit_tank` and the AoE applied (stable id order) in
+    /// `defense::shield_break_stun`.
+    ShieldBreakStun(i64, i64),
+    /// SPIKES POISON `(dps_per_tick, ticks)` (source: Poison Armor). When Spikes
+    /// retaliation lands on an enemy, ALSO apply this Poison DoT to it (reuses the
+    /// existing poison status). Sets `tank.spikes_poison_dps/_ticks`.
+    SpikesPoison(i64, i64),
+    /// STACKING SPIKES `(per_stack, max_stacks)` (source: Bloody Spikes). Each landed
+    /// hit grows `tank.spikes_stacks` by 1 up to `max_stacks`; the bonus spikes
+    /// damage is `per_stack × spikes_stacks`. Resets at the round boundary. Sets
+    /// `tank.spikes_stack_per` and `tank.spikes_stacks_max`.
+    StackingSpikes(i64, i64),
+    /// DAMAGE/POISON AURA `(range, cadence_ticks, damage)` (source: Blight Aura).
+    /// Every `cadence_ticks` (integer; NOT wall-clock), deal `damage` and apply the
+    /// tank's `aura_poison_*` DoT to all enemies within `range` (stable id order).
+    /// Sets `tank.aura_range/_cadence/_damage`; the per-tank `aura_tick` counter
+    /// drives the cadence in `combat::tick_aura`. The poison rider is set alongside
+    /// this effect in `buy_modifier` (the `aura_poison_*` fields).
+    DamageAura(i64, i64, i64),
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
@@ -424,6 +447,10 @@ impl ModEffect {
             ModEffect::DamagePerBountyPct(n, d) => (41, n, d, 0),
             ModEffect::ShieldActiveDamagePct(n, d) => (42, n, d, 0),
             ModEffect::ManaOnKill(n) => (43, n, 0, 0),
+            ModEffect::ShieldBreakStun(r, t) => (44, r, t, 0),
+            ModEffect::SpikesPoison(dps, t) => (45, dps, t, 0),
+            ModEffect::StackingSpikes(per, max) => (46, per, max, 0),
+            ModEffect::DamageAura(r, c, d) => (47, r, c, d),
         }
     }
 
@@ -494,6 +521,10 @@ impl ModEffect {
             41 => ModEffect::DamagePerBountyPct(a, b),
             42 => ModEffect::ShieldActiveDamagePct(a, b),
             43 => ModEffect::ManaOnKill(a),
+            44 => ModEffect::ShieldBreakStun(a, b),
+            45 => ModEffect::SpikesPoison(a, b),
+            46 => ModEffect::StackingSpikes(a, b),
+            47 => ModEffect::DamageAura(a, b, c),
             _ => return None,
         })
     }
@@ -817,6 +848,44 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // half restores 15 to the shield per kill (cap-respecting). rarity 2 / cost 3000.
     ModifierDef { name: "Maw of Death", rarity: 2, cost: 3000,
         effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ManaOnKill(15)], ramp: None },
+    // EXPANSION batch E2 — four MEDIUM-RISK exotic mechanics from the source map.
+    // The source prices upgrades via a separate in-game gold system with no per-item
+    // cost in the catalog, so cost/rarity follow the batch guidance (rarity 2-3 /
+    // cost 3000-5000) — flagged as a judgement call. Each is ADD-only; no existing
+    // entry's effects are touched.
+    // Energy Pulse (A0F0/F1/F2): "+2000 Mana Shield | +0.5 s of Stun to enemies in
+    // 1200 range when the Mana Shield de-activates." The shield half uses Moonwell's
+    // 2000→10/tick regen ratio; the stun half fires on the shield's >0→0 down-edge
+    // (range 1200 source units; 0.5 s = 15 ticks @ 30 Hz). rarity 2 / cost 3000.
+    ModifierDef { name: "Energy Pulse", rarity: 2, cost: 3000,
+        effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ShieldBreakStun(1200, 15)], ramp: None },
+    // Poison Armor (A0DE/F/G): "+10 Armor | +40 Poison damage per second for 3 s to
+    // an enemy when damaged." Modeled as flat armor + a Spikes-applied Poison DoT on
+    // the reflected attacker (reuses the existing poison status). Source "40/s for
+    // 3 s": at 30 Hz that is 40/30 ≈ 1.33/tick; rounded UP to an integer 2/tick over
+    // 90 ticks (≈60/s) so the DoT is integer-meaningful — flagged as a judgement
+    // call. Pairs with a small flat Spikes so retaliation can land the poison.
+    // rarity 1 / cost 1500.
+    ModifierDef { name: "Poison Armor", rarity: 1, cost: 1500,
+        effects: &[ModEffect::Armor(10), ModEffect::SpikesFlat(40), ModEffect::SpikesPoison(2, 90)], ramp: None },
+    // Bloody Spikes (A0KT): "+80 Spikes Damage | +10 Spikes damage per second to an
+    // enemy when damaged, stacking; each stack adds +100% more." The source is a
+    // per-second stacking DoT with no cap; here it is adapted to the per-HIT Spikes
+    // model as an accumulating flat bonus: each landed hit adds one stack (capped at
+    // 25, matching the Frost-stack ceiling) and the bonus spikes damage is
+    // `20 × stacks` (up to +500). Resets at the round boundary (matching the
+    // Spiky/Growing-Spikes "resets when a new shop is made"). rarity 2 / cost 3000 —
+    // flagged as a judgement call for the per-hit adaptation + cap/reset.
+    ModifierDef { name: "Bloody Spikes", rarity: 2, cost: 3000,
+        effects: &[ModEffect::SpikesFlat(80), ModEffect::StackingSpikes(20, 25)], ramp: None },
+    // Blight Aura (A0CP/T/U): "+200 HP Regen | Deal 200 Poison damage to all enemies
+    // in 600 range every 1 second." Modeled as a periodic AoE: every 30 ticks (1 s @
+    // 30 Hz) deal 200 damage AND apply a Poison DoT (2/tick × 90 ticks, mirroring
+    // Poison Armor's DoT) to every enemy within 600 source units, in stable id order.
+    // The +200 HP Regen half is modeled too (Repair-Crew-style flat regen).
+    // rarity 3 / cost 5000.
+    ModifierDef { name: "Blight Aura", rarity: 3, cost: 5000,
+        effects: &[ModEffect::HpRegen(200), ModEffect::DamageAura(600, 30, 200)], ramp: None },
 ];
 
 /// The weapon the tank starts with (index into [`WEAPONS`]).

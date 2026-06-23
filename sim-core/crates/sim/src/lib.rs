@@ -53,6 +53,11 @@ pub fn step(s: &mut ArenaState, inp: Input) {
         s.round = new_round;
         shop::generate_offers(s);
         economy::on_round_start(s);
+        // Stacking spikes (source: Bloody Spikes) reset to 0 at the round boundary
+        // ("resets when a new shop is made available"). Deterministic: keyed purely
+        // off the round transition (integer tick). At round 0 the counter is already
+        // 0, so this is a no-op there; from round 1 on it clears the prior round.
+        s.tank.spikes_stacks = 0;
     }
     // 2. Player input (buy / reroll / clear).
     input::apply(s, inp);
@@ -72,8 +77,14 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     combat::enemy_ranged_attacks(s);
     // 6b. Spikes: if the tank was hit, retaliate against nearby enemies.
     defense::spikes(s);
+    // 6b'. Shield-break stun (Energy Pulse): if the Mana Shield broke this tick,
+    // stun enemies in range. Runs after `spikes` (which consumes the hit flag) but
+    // before hazards/auras; the break flag is set by `hit_tank` during combat.
+    defense::shield_break_stun(s);
     // 6c. Hazards (land mines / burning oil) pulse damage to enemies in range.
     combat::tick_hazards(s);
+    // 6c'. Damage/poison aura (Blight Aura): periodic AoE on its integer cadence.
+    combat::tick_aura(s);
     // 6d. Summoned allies (skeletons / infernals) move and strike enemies.
     combat::tick_minions(s);
     // 7. Status effects: poison DoT, frost/stun decay (poison kills → pending_kills).
@@ -120,6 +131,22 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_fixed(s.tank.missing_hp_heal_pct);
     c.write_u32(s.tank.revives);
     c.write_i64(s.tank.revive_bonus_hp);
+    // EXPANSION E2 exotic-mechanic tank state. The dynamic counters (`spikes_stacks`,
+    // `aura_tick`) MUST be checksummed (they drive behavior and change per tick); the
+    // config fields are included alongside for a clean snapshot↔checksum mirror.
+    c.write_i64(s.tank.shieldbreak_stun_range);
+    c.write_u32(s.tank.shieldbreak_stun_ticks);
+    c.write_i64(s.tank.spikes_poison_dps);
+    c.write_u32(s.tank.spikes_poison_ticks);
+    c.write_i64(s.tank.spikes_stack_per);
+    c.write_u32(s.tank.spikes_stacks);
+    c.write_u32(s.tank.spikes_stacks_max);
+    c.write_i64(s.tank.aura_range);
+    c.write_u32(s.tank.aura_cadence);
+    c.write_i64(s.tank.aura_damage);
+    c.write_i64(s.tank.aura_poison_dps);
+    c.write_u32(s.tank.aura_poison_ticks);
+    c.write_u32(s.tank.aura_tick);
 
     c.write_i64(s.economy.gold);
     c.write_i64(s.economy.income_per_tick);

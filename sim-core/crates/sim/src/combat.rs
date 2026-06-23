@@ -574,6 +574,60 @@ pub(crate) fn tick_hazards(s: &mut ArenaState) {
     }
 }
 
+/// Phase: periodic damage/poison AURA centered on the tank (source: Blight Aura).
+/// A per-tank integer counter (`tank.aura_tick`) advances every tick; each time it
+/// reaches the cadence it RESETS to 0 and the aura fires: deal `aura_damage`
+/// (× armor matrix × status vulnerability) AND apply the tank's `aura_poison_*`
+/// Poison DoT to every non-boss enemy within `aura_range`, in STABLE id order (the
+/// live `enemies` vec is id-ordered). The cadence is a pure integer count of ticks
+/// (`aura_cadence`), NOT wall-clock. Aura damage is a player source (scoreboard /
+/// Bloodmoney) and kills route through the shared death path (`reap_dead`), so
+/// bounty and Fire explosions still fire. Integer/Fixed only; no RNG. A no-op when
+/// the aura is unconfigured (`aura_cadence == 0`).
+pub(crate) fn tick_aura(s: &mut ArenaState) {
+    if s.tank.aura_cadence == 0 {
+        return;
+    }
+    // Advance the integer cadence counter; fire (and reset) on the boundary.
+    s.tank.aura_tick += 1;
+    if s.tank.aura_tick < s.tank.aura_cadence {
+        return;
+    }
+    s.tank.aura_tick = 0;
+
+    let dmg = s.tank.aura_damage;
+    let range = Fixed::from_int(s.tank.aura_range);
+    let r2 = range.mul(range);
+    let cond = CondDamage::of(s);
+    let tank_pos = s.tank.pos;
+    let poison = if s.tank.aura_poison_dps > 0 && s.tank.aura_poison_ticks > 0 {
+        content::StatusOnHit {
+            poison_dps: s.tank.aura_poison_dps,
+            poison_ticks: s.tank.aura_poison_ticks,
+            ..content::StatusOnHit::NONE
+        }
+    } else {
+        content::StatusOnHit::NONE
+    };
+    let mut total: i64 = 0;
+    let mut any = false;
+    let mut accum = AbilityAccum::default();
+    // `s.enemies` is id-ordered ⇒ this AoE pass is run-to-run stable.
+    for e in s.enemies.iter_mut() {
+        if tank_pos.dist_sq(e.pos) <= r2 {
+            total += apply_weapon_hit(
+                e, dmg, content::DMG_MAGIC, Fixed::ONE, cond, &poison,
+                WeaponAbility::None, tank_pos, &mut accum,
+            );
+            any = true;
+        }
+    }
+    s.record_player_damage(total);
+    if any {
+        crate::status::reap_dead(s);
+    }
+}
+
 /// Tuning for summoned allies (skeletons / infernals).
 const MAX_MINIONS: usize = 16;     // global cap on living minions
 const MINION_LIFETIME: u32 = 450;  // ~15s before a minion vanishes
@@ -1799,5 +1853,78 @@ mod tests {
         assert_eq!(a.minions, b.minions, "minion movement/attacks are deterministic");
         assert_eq!(a.enemies, b.enemies);
         assert_eq!(crate::checksum(&a), crate::checksum(&b));
+    }
+
+    // ---- EXPANSION E2: damage/poison aura (Blight Aura) ----------------------
+
+    fn aura_state() -> ArenaState {
+        let mut s = blank_state();
+        s.weapons.clear();
+        s.tank.aura_range = 600;
+        s.tank.aura_cadence = 30; // fire every 30 ticks
+        s.tank.aura_damage = 200;
+        s.tank.aura_poison_dps = 2;
+        s.tank.aura_poison_ticks = 90;
+        s
+    }
+
+    #[test]
+    fn aura_fires_only_on_its_integer_cadence_and_hits_only_in_range() {
+        let mut s = aura_state();
+        // One enemy in range (≤600), one outside. Magic vs armor 0 → ×1 matrix.
+        let near = mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(500), Fixed::ZERO));
+        let far = mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(1000), Fixed::ZERO));
+
+        // 29 ticks below the cadence: counter climbs, no fire.
+        for _ in 0..29 {
+            tick_aura(&mut s);
+        }
+        assert_eq!(s.tank.aura_tick, 29, "counter advanced but not yet fired");
+        assert_eq!(s.enemies.iter().find(|e| e.id == near).unwrap().hp, 1_000_000, "no damage pre-cadence");
+
+        // The 30th call fires: counter resets, in-range enemy takes damage + poison.
+        tick_aura(&mut s);
+        assert_eq!(s.tank.aura_tick, 0, "counter reset on fire");
+        let n = s.enemies.iter().find(|e| e.id == near).unwrap();
+        assert_eq!(n.hp, 1_000_000 - 200, "in-range enemy took aura damage");
+        assert_eq!(n.status.poison_dps, 2, "in-range enemy poisoned");
+        assert_eq!(n.status.poison_ticks, 90);
+        let f = s.enemies.iter().find(|e| e.id == far).unwrap();
+        assert_eq!(f.hp, 1_000_000, "out-of-range enemy untouched");
+        assert_eq!(f.status.poison_dps, 0, "out-of-range enemy not poisoned");
+    }
+
+    #[test]
+    fn aura_is_a_noop_when_unconfigured() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        // aura_cadence == 0 (default) ⇒ disabled.
+        mk_enemy(&mut s, 0, 1000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        for _ in 0..120 {
+            tick_aura(&mut s);
+        }
+        assert_eq!(s.enemies[0].hp, 1000, "no aura ⇒ no damage");
+        assert_eq!(s.tank.aura_tick, 0, "counter does not advance when disabled");
+    }
+
+    #[test]
+    fn aura_is_deterministic_across_two_runs_via_checksum() {
+        let build = || {
+            let mut s = aura_state();
+            // Several enemies at varied positions, inserted out of spatial order so a
+            // stable id-ordered pass is what guarantees the match.
+            mk_enemy(&mut s, 0, 5000, Vec2::new(Fixed::from_int(550), Fixed::ZERO));
+            mk_enemy(&mut s, 0, 5000, Vec2::new(Fixed::from_int(100), Fixed::from_int(200)));
+            mk_enemy(&mut s, 0, 5000, Vec2::new(Fixed::from_int(2000), Fixed::ZERO)); // far
+            for _ in 0..95 {
+                tick_aura(&mut s);
+                s.tick += 1;
+            }
+            s
+        };
+        let a = build();
+        let b = build();
+        assert_eq!(a.enemies, b.enemies, "aura AoE identical across runs");
+        assert_eq!(crate::checksum(&a), crate::checksum(&b), "checksum stable across runs");
     }
 }

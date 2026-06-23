@@ -101,7 +101,7 @@ const WEAPON_TEXT: [(&str, &str); 86] = [
     ("The last rite the Pale Wardens kept for what's coming: it pins a thing where it stands and waits beside it.", "Fast epic normal single-target. Roots the target in place."),  // 85
 ];
 
-const MODIFIER_TEXT: [(&str, &str); 87] = [
+const MODIFIER_TEXT: [(&str, &str); 91] = [
     ("Foundry stamps this kit \"general issue,\" the catch-all crate the Wardens hand out when nothing specialized survived the haul from Ashmark.", "+10% to all weapon damage."),  // 0
     ("Hexwrights ground these heads to a finer point than the Foundry would risk, and the Wardens never asked how.", "Improved Piercing Attacks: +10% piercing damage."),  // 1
     ("Recovered from the Ashmark siege-works, calibrated for walls that fell the night the line broke.", "Improved Siege Attacks: +10% siege damage."),  // 2
@@ -189,6 +189,10 @@ const MODIFIER_TEXT: [(&str, &str); 87] = [
     ("A Greycoat quartermaster's signet, worn smooth on the corpse-ledger; the richer the bounty it counts, the meaner the line shoots.", "Golden Ring: +200% kill bounty, +1% damage per 50% bounty."),  // 84
     ("A Hexwright sigil burned into the borrowed skin; while the shield holds, every shot carries a little of that stolen fire.", "Arcane Mark: +4000 mana shield, +20% damage while it holds."),  // 85
     ("The Conclave fed this thing on the dying and it learned to drink; each corpse on the line tops its borrowed skin back up.", "Maw of Death: +2000 mana shield, +15 shield per enemy killed."),  // 86
+    ("Hexwright shielding wound so tight that when it finally fails it fails outward, a white concussion that lays the whole front rank flat.", "Energy Pulse: +2000 mana shield; when it breaks, stun all enemies in 1200 for 0.5s."),  // 87
+    ("Greycoat sickness ground into the welds, so the swing that draws the tank's blood draws its own rot back.", "Poison Armor: +10 armor, +40 spikes; retaliation also poisons."),  // 88
+    ("Each blow against the hull breaks off another barb into it; the longer the line presses, the crueler the welcome grows, until the round resets the count.", "Bloody Spikes: +80 spikes; retaliation stacks more damage each hit (resets each round)."),  // 89
+    ("A Hexwright rot-totem bolted to the tank, breathing a slow green ruin into the ground around it that the close-pressed never leave clean.", "Blight Aura: +200 regen; pulse 200 poison damage in 600 every second."),  // 90
 ];
 
 #[cfg(test)]

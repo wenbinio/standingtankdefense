@@ -114,6 +114,38 @@ pub struct Tank {
     pub revives: u32,
     /// Max-HP granted (and HP repaired to) when a revive is consumed.
     pub revive_bonus_hp: i64,
+
+    // ---- EXPANSION E2 (exotic mechanics) -------------------------------------
+    /// Shield-break stun (source: Energy Pulse). When the Mana Shield transitions
+    /// `>0 → 0` because of a hit, stun every enemy within `shieldbreak_stun_range`
+    /// for `shieldbreak_stun_ticks`. `range == 0` ⇒ disabled. Both feed the
+    /// checksum (snapshot-serialized).
+    pub shieldbreak_stun_range: i64,
+    pub shieldbreak_stun_ticks: u32,
+    /// Spikes-applied DoT (source: Poison Armor — spikes ALSO poison the reflected
+    /// attacker). When Spikes retaliation lands on an enemy, apply this Poison DoT
+    /// to it (reusing the existing poison status). `dps == 0` ⇒ disabled.
+    pub spikes_poison_dps: i64,
+    pub spikes_poison_ticks: u32,
+    /// Stacking spikes (source: Bloody Spikes — spikes damage accumulates per hit).
+    /// Each landed hit grows `spikes_stacks` by 1 up to `spikes_stacks_max`; the
+    /// bonus spikes damage is `spikes_stack_per × spikes_stacks`. Reset to 0 at the
+    /// round boundary (matching the source's "resets when a new shop is made").
+    /// `spikes_stack_per == 0` ⇒ no stacking. `spikes_stacks` feeds the checksum.
+    pub spikes_stack_per: i64,
+    pub spikes_stacks: u32,
+    pub spikes_stacks_max: u32,
+    /// Periodic damage/poison aura (source: Blight Aura). Every `aura_cadence`
+    /// ticks (integer; NOT wall-clock), deal `aura_damage` and apply a Poison DoT
+    /// to all enemies within `aura_range`. `aura_tick` is the per-tank cadence
+    /// counter (snapshot-serialized, feeds the checksum). `aura_cadence == 0` ⇒
+    /// disabled.
+    pub aura_range: i64,
+    pub aura_cadence: u32,
+    pub aura_damage: i64,
+    pub aura_poison_dps: i64,
+    pub aura_poison_ticks: u32,
+    pub aura_tick: u32,
 }
 
 impl Tank {
@@ -431,6 +463,11 @@ pub struct ArenaState {
     /// Transient: always `false` at a tick boundary, so it is excluded from the
     /// checksum/snapshot.
     pub tank_hit_this_tick: bool,
+    /// Set when the Mana Shield transitioned `>0 → 0` from a hit this tick (drives
+    /// the shield-break stun pulse — source: Energy Pulse). Transient: consumed and
+    /// cleared within the same tick (in `defense::shield_break_stun`), so it is
+    /// always `false` at a tick boundary and excluded from the checksum/snapshot.
+    pub shield_broke_this_tick: bool,
 
     pub next_entity_id: u32,
     pub dead: bool,
@@ -497,6 +534,19 @@ impl ArenaState {
                 missing_hp_heal_pct: Fixed::ZERO,
                 revives: 0,
                 revive_bonus_hp: 0,
+                shieldbreak_stun_range: 0,
+                shieldbreak_stun_ticks: 0,
+                spikes_poison_dps: 0,
+                spikes_poison_ticks: 0,
+                spikes_stack_per: 0,
+                spikes_stacks: 0,
+                spikes_stacks_max: 0,
+                aura_range: 0,
+                aura_cadence: 0,
+                aura_damage: 0,
+                aura_poison_dps: 0,
+                aura_poison_ticks: 0,
+                aura_tick: 0,
             },
             weapons: Vec::new(),
             enemies: Vec::new(),
@@ -522,6 +572,7 @@ impl ArenaState {
             vuln_pulses: Vec::new(),
             pending_perk: None,
             tank_hit_this_tick: false,
+            shield_broke_this_tick: false,
             next_entity_id: 1,
             dead: false,
             death_tick: None,

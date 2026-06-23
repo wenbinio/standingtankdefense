@@ -242,6 +242,45 @@ impl Modifiers {
                 let inc = Fixed::from_ratio(n, d).scale_i64(tank.mana_regen_per_tick);
                 tank.mana_regen_per_tick = (tank.mana_regen_per_tick + inc).clamp(-STAT_CEIL, STAT_CEIL);
             }
+            // EXPANSION E2 — plain tank-field setters (no aggregate; integer only).
+            // Shield-break stun (Energy Pulse): arm the pulse range/duration. Keep the
+            // STRONGER of any stacked copies so two Energy Pulses don't shrink the
+            // window.
+            ModEffect::ShieldBreakStun(r, t) => {
+                tank.shieldbreak_stun_range = tank.shieldbreak_stun_range.max(r);
+                tank.shieldbreak_stun_ticks = tank.shieldbreak_stun_ticks.max(t as u32);
+            }
+            // Spikes poison (Poison Armor): keep whichever DoT deals more total
+            // remaining damage (mirrors the poison-application rule in `status`).
+            ModEffect::SpikesPoison(dps, t) => {
+                let existing = tank.spikes_poison_dps.saturating_mul(tank.spikes_poison_ticks as i64);
+                let incoming = dps.saturating_mul(t);
+                if incoming >= existing {
+                    tank.spikes_poison_dps = dps;
+                    tank.spikes_poison_ticks = t as u32;
+                }
+            }
+            // Stacking spikes (Bloody Spikes): set the per-stack bonus and the cap.
+            // Additive per-stack, max cap takes the larger of stacked copies.
+            ModEffect::StackingSpikes(per, max) => {
+                tank.spikes_stack_per += per;
+                tank.spikes_stacks_max = tank.spikes_stacks_max.max(max as u32);
+            }
+            // Damage/poison aura (Blight Aura): arm the emitter. Keep the wider range,
+            // shorter (more frequent) cadence, and larger damage of any stacked
+            // copies; the poison rider mirrors Poison Armor's DoT (2/tick × 90).
+            ModEffect::DamageAura(r, c, d) => {
+                tank.aura_range = tank.aura_range.max(r);
+                tank.aura_damage += d;
+                let c = c as u32;
+                tank.aura_cadence = if tank.aura_cadence == 0 {
+                    c
+                } else {
+                    tank.aura_cadence.min(c)
+                };
+                tank.aura_poison_dps = tank.aura_poison_dps.max(2);
+                tank.aura_poison_ticks = tank.aura_poison_ticks.max(90);
+            }
             // Registered as per-arena trigger / purchase-flow state in
             // `buy_modifier`; they have no aggregate contribution here. The
             // HP/regen→gold trades need the full ArenaState (gold scoreboard) and
@@ -538,5 +577,46 @@ mod tests {
         assert_eq!(s.modifiers, snap.0);
         assert_eq!(s.economy, snap.1);
         assert_eq!(s.tank, snap.2);
+    }
+
+    // ---- EXPANSION E2: catalog wiring ---------------------------------------
+
+    #[test]
+    fn e2_catalog_entries_wire_their_tank_fields() {
+        // Energy Pulse arms the shield-break stun (range 1200, 15 ticks) + a shield.
+        let mut s = ArenaState::new(1, 0);
+        let ep = modifier_idx(|e| matches!(e, ModEffect::ShieldBreakStun(..)));
+        s.buy_modifier(ep);
+        assert_eq!(s.tank.shieldbreak_stun_range, 1200);
+        assert_eq!(s.tank.shieldbreak_stun_ticks, 15);
+        assert!(s.tank.mana_shield > 0, "Energy Pulse grants a shield pool");
+
+        // Poison Armor arms the spikes poison DoT (+ armor + flat spikes).
+        let pa = modifier_idx(|e| matches!(e, ModEffect::SpikesPoison(..)));
+        let mut s = ArenaState::new(1, 0);
+        let armor0 = s.tank.armor;
+        s.buy_modifier(pa);
+        assert_eq!(s.tank.spikes_poison_dps, 2);
+        assert_eq!(s.tank.spikes_poison_ticks, 90);
+        assert!(s.tank.armor > armor0 && s.tank.spikes_damage > 0);
+
+        // Bloody Spikes arms the stacking spikes (per-stack 20, cap 25).
+        let bs = modifier_idx(|e| matches!(e, ModEffect::StackingSpikes(..)));
+        let mut s = ArenaState::new(1, 0);
+        s.buy_modifier(bs);
+        assert_eq!(s.tank.spikes_stack_per, 20);
+        assert_eq!(s.tank.spikes_stacks_max, 25);
+        assert!(s.tank.spikes_damage >= 80, "flat spikes applied too");
+
+        // Blight Aura arms the periodic AoE (range 600, cadence 30, dmg 200) + poison.
+        let ba = modifier_idx(|e| matches!(e, ModEffect::DamageAura(..)));
+        let mut s = ArenaState::new(1, 0);
+        s.buy_modifier(ba);
+        assert_eq!(s.tank.aura_range, 600);
+        assert_eq!(s.tank.aura_cadence, 30);
+        assert_eq!(s.tank.aura_damage, 200);
+        assert_eq!(s.tank.aura_poison_dps, 2);
+        assert_eq!(s.tank.aura_poison_ticks, 90);
+        assert_eq!(s.tank.aura_tick, 0, "cadence counter starts at 0");
     }
 }

@@ -14,7 +14,7 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 18;
+pub const SNAPSHOT_VERSION: u32 = 19;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -179,6 +179,20 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.fixed(s.tank.missing_hp_heal_pct);
     w.u32(s.tank.revives);
     w.i64(s.tank.revive_bonus_hp);
+    // EXPANSION E2 exotic-mechanic tank state (mirrors the checksum order).
+    w.i64(s.tank.shieldbreak_stun_range);
+    w.u32(s.tank.shieldbreak_stun_ticks);
+    w.i64(s.tank.spikes_poison_dps);
+    w.u32(s.tank.spikes_poison_ticks);
+    w.i64(s.tank.spikes_stack_per);
+    w.u32(s.tank.spikes_stacks);
+    w.u32(s.tank.spikes_stacks_max);
+    w.i64(s.tank.aura_range);
+    w.u32(s.tank.aura_cadence);
+    w.i64(s.tank.aura_damage);
+    w.i64(s.tank.aura_poison_dps);
+    w.u32(s.tank.aura_poison_ticks);
+    w.u32(s.tank.aura_tick);
 
     // weapons
     w.len(s.weapons.len());
@@ -395,6 +409,19 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         missing_hp_heal_pct: r.fixed()?,
         revives: r.u32()?,
         revive_bonus_hp: r.i64()?,
+        shieldbreak_stun_range: r.i64()?,
+        shieldbreak_stun_ticks: r.u32()?,
+        spikes_poison_dps: r.i64()?,
+        spikes_poison_ticks: r.u32()?,
+        spikes_stack_per: r.i64()?,
+        spikes_stacks: r.u32()?,
+        spikes_stacks_max: r.u32()?,
+        aura_range: r.i64()?,
+        aura_cadence: r.u32()?,
+        aura_damage: r.i64()?,
+        aura_poison_dps: r.i64()?,
+        aura_poison_ticks: r.u32()?,
+        aura_tick: r.u32()?,
     };
 
     let mut weapons = Vec::new();
@@ -617,6 +644,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         vuln_pulses,
         pending_perk,
         tank_hit_this_tick: false,
+        shield_broke_this_tick: false,
         next_entity_id,
         dead,
         death_tick,
@@ -659,6 +687,29 @@ mod tests {
         let s = ArenaState::new(0xDEAD_BEEF, 3);
         let back = deserialize(&serialize(&s)).unwrap();
         assert_eq!(s, back);
+    }
+
+    #[test]
+    fn roundtrip_preserves_e2_exotic_tank_state() {
+        // Set every EXPANSION E2 field (incl. the dynamic counters) to non-default
+        // values and confirm the snapshot/checksum round-trips them.
+        let mut s = ArenaState::new(0xE2E2, 1);
+        s.tank.shieldbreak_stun_range = 1200;
+        s.tank.shieldbreak_stun_ticks = 15;
+        s.tank.spikes_poison_dps = 2;
+        s.tank.spikes_poison_ticks = 90;
+        s.tank.spikes_stack_per = 20;
+        s.tank.spikes_stacks = 7;
+        s.tank.spikes_stacks_max = 25;
+        s.tank.aura_range = 600;
+        s.tank.aura_cadence = 30;
+        s.tank.aura_damage = 200;
+        s.tank.aura_poison_dps = 2;
+        s.tank.aura_poison_ticks = 90;
+        s.tank.aura_tick = 17;
+        let back = deserialize(&serialize(&s)).unwrap();
+        assert_eq!(s, back);
+        assert_eq!(checksum(&s), checksum(&back));
     }
 
     #[test]

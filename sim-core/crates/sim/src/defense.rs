@@ -45,8 +45,47 @@ pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) {
         let absorbed = remaining.min(s.tank.mana_shield);
         s.tank.mana_shield -= absorbed;
         remaining -= absorbed;
+        // Shield-break stun (source: Energy Pulse): detect the `>0 → 0` DOWN-EDGE
+        // here, at the moment the shield absorbs the hit that depletes it. The pulse
+        // itself (iterate enemies in range, stun them in stable id order) is deferred
+        // to `shield_break_stun` so this borrow-only path stays free of the enemy
+        // loop. Armed only when the pulse is configured (`range > 0`).
+        if s.tank.mana_shield == 0 && s.tank.shieldbreak_stun_range > 0 {
+            s.shield_broke_this_tick = true;
+        }
     }
     s.tank.hp -= remaining;
+}
+
+/// Shield-break stun pulse (source: Energy Pulse). If the Mana Shield transitioned
+/// `>0 → 0` from a hit this tick, stun every non-boss enemy within
+/// `shieldbreak_stun_range` for `shieldbreak_stun_ticks`, then consume the flag.
+/// Iterates enemies in STABLE id order (the live `enemies` vec is id-ordered) so
+/// the result is run-to-run identical. Integer/Fixed only; no RNG. Reuses the
+/// existing stun status (`stun_ticks`, takes the longer remaining).
+pub(crate) fn shield_break_stun(s: &mut ArenaState) {
+    let broke = s.shield_broke_this_tick;
+    s.shield_broke_this_tick = false;
+    if !broke {
+        return;
+    }
+    let ticks = s.tank.shieldbreak_stun_ticks;
+    if ticks == 0 {
+        return;
+    }
+    let range = Fixed::from_int(s.tank.shieldbreak_stun_range);
+    let r2 = range.mul(range);
+    let tank_pos = s.tank.pos;
+    // `s.enemies` is maintained in id order by every spawn/reap path, so this loop
+    // is already stable-id-ordered; stun is order-independent regardless.
+    for e in s.enemies.iter_mut() {
+        if content::ENEMIES[e.def as usize].boss {
+            continue;
+        }
+        if tank_pos.dist_sq(e.pos) <= r2 {
+            e.status.stun_ticks = e.status.stun_ticks.max(ticks);
+        }
+    }
 }
 
 /// Spikes retaliation: if the tank was hit this tick, deal its (multiplied)
@@ -58,20 +97,49 @@ pub(crate) fn spikes(s: &mut ArenaState) {
     if !hit {
         return;
     }
-    let dmg = s.tank.spikes_mult.scale_i64(s.tank.spikes_damage);
+    // Stacking spikes (source: Bloody Spikes): each landed hit grows the stack
+    // counter by 1 up to the cap; the bonus spikes damage is `per × stacks`. This
+    // grows BEFORE the retaliation so the hit that triggered the stack benefits from
+    // it (the source applies the new stack immediately). Integer only; resets at the
+    // round boundary (see `economy`/round phase). A no-op when `spikes_stack_per == 0`.
+    let mut stack_bonus: i64 = 0;
+    if s.tank.spikes_stack_per > 0 {
+        if s.tank.spikes_stacks < s.tank.spikes_stacks_max {
+            s.tank.spikes_stacks += 1;
+        }
+        stack_bonus = s.tank.spikes_stack_per.saturating_mul(s.tank.spikes_stacks as i64);
+    }
+    // Spikes damage = (flat + stacking bonus) × multiplier.
+    let base = s.tank.spikes_damage.saturating_add(stack_bonus);
+    let dmg = s.tank.spikes_mult.scale_i64(base);
     if dmg <= 0 {
         return;
     }
     let range = Fixed::from_int(SPIKES_RANGE);
     let r2 = range.mul(range);
     let tank_pos = s.tank.pos;
+    // Spikes-applied Poison DoT (source: Poison Armor) — applied to every enemy the
+    // retaliation lands on, reusing the existing poison status (stronger-DoT rule).
+    let poison = if s.tank.spikes_poison_dps > 0 && s.tank.spikes_poison_ticks > 0 {
+        Some(content::StatusOnHit {
+            poison_dps: s.tank.spikes_poison_dps,
+            poison_ticks: s.tank.spikes_poison_ticks,
+            ..content::StatusOnHit::NONE
+        })
+    } else {
+        None
+    };
     let mut survivors = Vec::with_capacity(s.enemies.len());
     let mut spikes_dealt: i64 = 0;
+    // `s.enemies` is id-ordered, so this retaliation pass is stable across runs.
     for mut e in std::mem::take(&mut s.enemies) {
         let boss = content::ENEMIES[e.def as usize].boss;
         if !boss && tank_pos.dist_sq(e.pos) <= r2 {
             e.hp -= dmg;
             spikes_dealt += dmg;
+            if let Some(p) = &poison {
+                crate::status::apply_on_hit(&mut e, p);
+            }
         }
         if e.hp <= 0 {
             s.pending_kills.push(e.def);
@@ -379,5 +447,122 @@ mod tests {
         }
         assert_eq!(s.tank.mana_shield, 100, "shield capped at max");
         assert_eq!(s.tank.hp, s.tank.max_hp, "hp capped at max");
+    }
+
+    // ---- EXPANSION E2: shield-break stun (Energy Pulse) ---------------------
+
+    #[test]
+    fn shield_break_stun_fires_on_the_down_edge_and_stuns_only_in_range() {
+        // Tank with a 300 shield and the pulse armed (range 500, 15-tick stun).
+        let mut s = fresh();
+        s.tank.mana_shield = 300;
+        s.tank.mana_shield_max = 300;
+        s.tank.shieldbreak_stun_range = 500;
+        s.tank.shieldbreak_stun_ticks = 15;
+        // Two enemies: one in range (≤500), one outside.
+        s.enemies = vec![enemy_at(1, 1000, 400), enemy_at(2, 1000, 1000)];
+
+        // A hit that does NOT deplete the shield → no break, no stun.
+        hit_tank(&mut s, 100); // 100 absorbed, shield 200 left
+        assert!(!s.shield_broke_this_tick, "shield still up → no break edge");
+        shield_break_stun(&mut s);
+        assert_eq!(s.enemies[0].status.stun_ticks, 0, "no stun while shield holds");
+
+        // A hit that depletes the shield → the >0→0 down-edge fires the pulse.
+        hit_tank(&mut s, 9999); // drains the remaining 200 to 0
+        assert!(s.shield_broke_this_tick, "shield broke this tick");
+        shield_break_stun(&mut s);
+        assert!(!s.shield_broke_this_tick, "break flag consumed");
+        assert_eq!(s.enemies[0].status.stun_ticks, 15, "in-range enemy stunned");
+        assert_eq!(s.enemies[1].status.stun_ticks, 0, "out-of-range enemy not stunned");
+    }
+
+    #[test]
+    fn shield_break_stun_does_not_fire_when_shield_already_zero() {
+        // Shield already at 0 → a hit lands on HP, no >0→0 transition, no stun.
+        let mut s = fresh();
+        s.tank.mana_shield = 0;
+        s.tank.mana_shield_max = 300;
+        s.tank.shieldbreak_stun_range = 500;
+        s.tank.shieldbreak_stun_ticks = 15;
+        s.enemies = vec![enemy_at(1, 1000, 100)];
+        hit_tank(&mut s, 500);
+        assert!(!s.shield_broke_this_tick, "no shield to break ⇒ no edge");
+        shield_break_stun(&mut s);
+        assert_eq!(s.enemies[0].status.stun_ticks, 0, "no stun when shield was already 0");
+    }
+
+    #[test]
+    fn shield_break_stun_is_deterministic_across_two_runs() {
+        // Same setup run twice must produce identical enemy state (stable id order).
+        let build = || {
+            let mut s = fresh();
+            s.tank.mana_shield = 100;
+            s.tank.mana_shield_max = 100;
+            s.tank.shieldbreak_stun_range = 600;
+            s.tank.shieldbreak_stun_ticks = 15;
+            s.enemies = vec![
+                enemy_at(3, 1000, 200),
+                enemy_at(1, 1000, 300),
+                enemy_at(2, 1000, 5000), // out of range
+            ];
+            s
+        };
+        let mut a = build();
+        let mut b = build();
+        hit_tank(&mut a, 9999);
+        hit_tank(&mut b, 9999);
+        shield_break_stun(&mut a);
+        shield_break_stun(&mut b);
+        assert_eq!(a.enemies, b.enemies, "AoE stun identical across runs");
+        assert_eq!(a.enemies[0].status.stun_ticks, 15);
+        assert_eq!(a.enemies[2].status.stun_ticks, 0, "far enemy untouched");
+    }
+
+    // ---- EXPANSION E2: spikes poison + stacking spikes ----------------------
+
+    #[test]
+    fn spikes_apply_poison_to_the_reflected_attacker() {
+        let mut s = fresh();
+        s.tank.spikes_damage = 100;
+        s.tank.spikes_poison_dps = 2;
+        s.tank.spikes_poison_ticks = 90;
+        s.enemies = vec![enemy_at(1, 1000, 100), enemy_at(2, 1000, 1000)]; // near, far
+        hit_tank(&mut s, 100);
+        spikes(&mut s);
+        // Near enemy took spikes AND the poison DoT.
+        assert_eq!(s.enemies[0].hp, 900, "near enemy took 100 spikes");
+        assert_eq!(s.enemies[0].status.poison_dps, 2, "near enemy poisoned");
+        assert_eq!(s.enemies[0].status.poison_ticks, 90);
+        // Far enemy untouched (out of spikes range).
+        assert_eq!(s.enemies[1].hp, 1000);
+        assert_eq!(s.enemies[1].status.poison_dps, 0, "far enemy not poisoned");
+    }
+
+    #[test]
+    fn stacking_spikes_accumulate_to_the_cap_then_respect_the_reset() {
+        // per-stack 20, cap 3 → bonus grows 20,40,60 then holds at 60.
+        let mut s = fresh();
+        s.tank.spikes_damage = 0; // isolate the stacking bonus
+        s.tank.spikes_stack_per = 20;
+        s.tank.spikes_stacks_max = 3;
+        s.enemies = vec![enemy_at(1, 1_000_000, 100)];
+
+        let hit_and_spike = |s: &mut ArenaState| {
+            hit_tank(s, 100);
+            let before = s.enemies[0].hp;
+            spikes(s);
+            before - s.enemies[0].hp // damage dealt this retaliation
+        };
+        assert_eq!(hit_and_spike(&mut s), 20, "stack 1 ⇒ 20 spikes");
+        assert_eq!(s.tank.spikes_stacks, 1);
+        assert_eq!(hit_and_spike(&mut s), 40, "stack 2 ⇒ 40 spikes");
+        assert_eq!(hit_and_spike(&mut s), 60, "stack 3 ⇒ 60 spikes (cap)");
+        assert_eq!(hit_and_spike(&mut s), 60, "stays at cap, no further growth");
+        assert_eq!(s.tank.spikes_stacks, 3, "stacks capped at max");
+
+        // Reset (the round boundary clears it): a fresh stack starts at 20 again.
+        s.tank.spikes_stacks = 0;
+        assert_eq!(hit_and_spike(&mut s), 20, "after reset, stack 1 ⇒ 20 again");
     }
 }
