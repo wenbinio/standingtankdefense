@@ -5,8 +5,27 @@
 //! Latency is measured in driver iterations: a message sent on step `S` over a
 //! link with delay `d` is delivered when the hub reaches step `S + d + 1`. A
 //! "stall" holds a source's messages until a given step.
+//!
+//! ## Chaos injection (M5)
+//! On top of the baseline delay/stall the hub can model an *adverse* link per
+//! source peer, all driven by ONE explicitly-seeded PRNG so every run is
+//! byte-reproducible (no wall-clock, no `std` randomness):
+//! - [`Hub::set_loss`] drops a `permille` fraction of a peer's outbound messages
+//!   (modelling packet loss the protocol must recover from via digest→snapshot).
+//! - [`Hub::set_jitter`] varies each message's one-way delay by `0..=max` steps.
+//! - [`Hub::set_reorder`] adds a bounded random extra delay within a small
+//!   window, so messages from a peer can arrive out of their send order (the
+//!   delivery sort is stable on `(deliver_at, seq)`, so equal-step messages keep
+//!   send order; the random per-message offset is what crosses them).
+//!
+//! The chaos RNG is consumed once per message in the order [`Hub::send`] is
+//! called (the driver sends participants in a fixed order each step), so the
+//! whole stream is a pure function of the seed and the traffic. A hub with no
+//! chaos knobs set never touches the RNG, so existing delay/stall tests are
+//! unaffected.
 
 use crate::transport::{Inbound, Outbound, PeerId, Transport};
+use determinism::Rng;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -26,11 +45,41 @@ pub struct Hub {
     inboxes: BTreeMap<u32, Vec<Inbound>>,
     delay: BTreeMap<u32, u32>,
     stalled_until: BTreeMap<u32, u32>,
+    /// Per-peer packet-loss rate in permille (0..=1000) for messages SENT BY peer.
+    loss: BTreeMap<u32, u32>,
+    /// Per-peer extra max one-way delay (jitter) for messages SENT BY peer; each
+    /// message gets a random `0..=max` added to its delivery step.
+    jitter: BTreeMap<u32, u32>,
+    /// Per-peer reorder window for messages SENT BY peer; each message gets a
+    /// random `0..=window` added to its delivery step, independently of jitter,
+    /// so same-step messages can swap order.
+    reorder: BTreeMap<u32, u32>,
+    /// The single seeded chaos PRNG. Only consumed when a chaos knob is active
+    /// for the sending peer, so a chaos-free hub stays byte-identical to before.
+    chaos: Rng,
+    /// Whether ANY chaos knob has been configured. Guards the chaos path so the
+    /// RNG is never touched on a clean hub (keeps existing tests bit-stable).
+    chaos_active: bool,
 }
 
 impl Hub {
     pub fn new() -> Hub {
         Hub::default()
+    }
+
+    /// Build a hub with its chaos PRNG seeded explicitly. Use this (not [`new`])
+    /// whenever loss/jitter/reorder is injected, so the whole run reproduces from
+    /// `seed`. A hub built with [`new`] uses seed 0; harmless until a knob is set.
+    pub fn with_chaos_seed(seed: u64) -> Hub {
+        Hub {
+            chaos: Rng::from_seed(seed),
+            ..Hub::default()
+        }
+    }
+
+    /// (Re)seed the chaos PRNG. Lets a test reset the chaos stream between runs.
+    pub fn seed_chaos(&mut self, seed: u64) {
+        self.chaos = Rng::from_seed(seed);
     }
 
     /// Current driver step.
@@ -48,6 +97,41 @@ impl Hub {
         self.stalled_until.insert(peer.0, until);
     }
 
+    /// Drop a `permille`/1000 fraction of messages SENT BY `peer` (seeded). Models
+    /// packet loss; the protocol must recover via digest→snapshot. `0` = lossless,
+    /// `1000` = a fully black-holed link.
+    pub fn set_loss(&mut self, peer: PeerId, permille: u32) {
+        self.loss.insert(peer.0, permille.min(1000));
+        self.chaos_active = true;
+    }
+
+    /// Vary the one-way delay of messages SENT BY `peer` by a seeded `0..=max`
+    /// extra steps. `0` disables jitter for the peer.
+    pub fn set_jitter(&mut self, peer: PeerId, max: u32) {
+        self.jitter.insert(peer.0, max);
+        self.chaos_active = true;
+    }
+
+    /// Reorder messages SENT BY `peer` within a small `window`: each message gets
+    /// a seeded `0..=window` extra delay, so same-step messages can swap order.
+    /// `window == 0` disables reorder for the peer.
+    pub fn set_reorder(&mut self, peer: PeerId, window: u32) {
+        self.reorder.insert(peer.0, window);
+        self.chaos_active = true;
+    }
+
+    /// Drop ALL chaos knobs (loss/jitter/reorder) on every peer, healing every
+    /// link back to a clean (delay/stall-only) state. The chaos RNG is NOT
+    /// reseeded, so a post-heal run continues the same deterministic stream.
+    /// Lets a test model a transient outage that then recovers — the recovery
+    /// (digest→snapshot reconvergence) is exactly what M5 asserts survives.
+    pub fn clear_chaos(&mut self) {
+        self.loss.clear();
+        self.jitter.clear();
+        self.reorder.clear();
+        self.chaos_active = false;
+    }
+
     fn delay_of(&self, peer: PeerId) -> u32 {
         *self.delay.get(&peer.0).unwrap_or(&0)
     }
@@ -58,8 +142,36 @@ impl Hub {
         // hub reaches step R + d + 1. A stall holds the release step to `until`.
         let stall = *self.stalled_until.get(&from.0).unwrap_or(&0);
         let release = self.step.max(stall);
-        let deliver_at = release + self.delay_of(from) + 1;
+        let base_deliver_at = release + self.delay_of(from) + 1;
+
+        // Chaos knobs for this source (all 0/absent ⇒ the clean path below).
+        let loss = self.loss.get(&from.0).copied().unwrap_or(0);
+        let jitter = self.jitter.get(&from.0).copied().unwrap_or(0);
+        let reorder = self.reorder.get(&from.0).copied().unwrap_or(0);
+        let chaotic = self.chaos_active && (loss > 0 || jitter > 0 || reorder > 0);
+
         for o in outs {
+            let mut deliver_at = base_deliver_at;
+            if chaotic {
+                // Roll the seeded chaos RNG ONCE per message, in this fixed order
+                // (loss, then jitter, then reorder), so the stream is a pure
+                // function of (seed, traffic). Loss is decided first; jitter and
+                // reorder rolls are still consumed on a dropped message so the
+                // per-message RNG advance is independent of the drop outcome.
+                let dropped = loss > 0 && self.chaos.below(1000) < loss;
+                if jitter > 0 {
+                    deliver_at += self.chaos.below(jitter + 1);
+                }
+                if reorder > 0 {
+                    deliver_at += self.chaos.below(reorder + 1);
+                }
+                if dropped {
+                    // Reliable channels would retransmit in production; here the
+                    // drop is permanent and recovery is the digest→snapshot path.
+                    self.seq += 1; // keep seq monotonic so ordering stays stable
+                    continue;
+                }
+            }
             self.inflight.push(InFlight {
                 deliver_at,
                 seq: self.seq,
@@ -178,6 +290,121 @@ mod tests {
         }
         h.advance(); // step 6 > stall 5
         assert_eq!(h.take(PeerId(0)).len(), 1);
+    }
+
+    /// Loss eventually drops some — but not all — of a stream of messages, and
+    /// the count is a deterministic function of the seed (same seed ⇒ same drops).
+    #[test]
+    fn loss_drops_a_seeded_fraction() {
+        fn delivered(seed: u64) -> usize {
+            let mut h = Hub::with_chaos_seed(seed);
+            h.set_loss(PeerId(0), 400); // ~40%
+            let n = 1000;
+            for _ in 0..n {
+                h.send(PeerId(0), vec![out(1)]);
+            }
+            // Flush everything in flight.
+            h.advance();
+            h.take(PeerId(1)).len()
+        }
+        let a = delivered(0xABC);
+        let b = delivered(0xABC);
+        assert_eq!(a, b, "loss must be reproducible for a fixed seed");
+        assert!(a > 0 && a < 1000, "≈40% loss should drop some, keep some: {a}");
+        // Roughly in the expected band (wide tolerance — this is a spot check).
+        assert!((400..=800).contains(&a), "delivered {a} not near ~60% of 1000");
+        // A different seed yields a different (but still partial) drop pattern.
+        assert!(delivered(0x999) > 0);
+    }
+
+    /// Full loss (1000‰) black-holes the link entirely.
+    #[test]
+    fn full_loss_delivers_nothing() {
+        let mut h = Hub::with_chaos_seed(1);
+        h.set_loss(PeerId(0), 1000);
+        for _ in 0..50 {
+            h.send(PeerId(0), vec![out(1)]);
+        }
+        h.advance();
+        assert!(h.take(PeerId(1)).is_empty(), "a 1000‰ link delivers nothing");
+    }
+
+    /// Jitter keeps every message (no loss) but spreads deliveries across a few
+    /// steps; total delivered count is conserved.
+    #[test]
+    fn jitter_preserves_all_messages() {
+        let mut h = Hub::with_chaos_seed(7);
+        h.set_jitter(PeerId(0), 4);
+        let n = 200u32;
+        for _ in 0..n {
+            h.send(PeerId(0), vec![out(1)]);
+        }
+        // Drain over enough steps to clear base delay (1) + max jitter (4).
+        let mut total = 0;
+        for _ in 0..10 {
+            h.advance();
+            total += h.take(PeerId(1)).len();
+        }
+        assert_eq!(total as u32, n, "jitter must not drop or duplicate messages");
+    }
+
+    /// Reorder makes same-step messages arrive out of send order for at least one
+    /// message, deterministically. We tag each message by its payload byte and
+    /// check the delivered sequence is a permutation that is NOT sorted.
+    #[test]
+    fn reorder_permutes_within_window() {
+        fn tagged(to: u32, tag: u8) -> Outbound {
+            Outbound { to: PeerId(to), channel: Channel::Control, bytes: vec![tag] }
+        }
+        let mut h = Hub::with_chaos_seed(0xD15);
+        h.set_reorder(PeerId(0), 3);
+        // Send a burst of tagged messages on ONE step.
+        let burst: Vec<Outbound> = (0..16u8).map(|i| tagged(1, i)).collect();
+        h.send(PeerId(0), burst);
+        // Drain across the reorder window.
+        let mut got: Vec<u8> = Vec::new();
+        for _ in 0..6 {
+            h.advance();
+            for inb in h.take(PeerId(1)) {
+                got.push(inb.bytes[0]);
+            }
+        }
+        assert_eq!(got.len(), 16, "no message lost under reorder");
+        let mut sorted = got.clone();
+        sorted.sort();
+        assert_eq!(sorted, (0..16u8).collect::<Vec<_>>(), "every tag delivered once");
+        assert_ne!(got, sorted, "reorder must actually permute the send order");
+    }
+
+    /// `clear_chaos` heals a black-holed link: messages flow again afterwards.
+    #[test]
+    fn clear_chaos_heals_the_link() {
+        let mut h = Hub::with_chaos_seed(5);
+        h.set_loss(PeerId(0), 1000);
+        h.send(PeerId(0), vec![out(1)]);
+        h.advance();
+        assert!(h.take(PeerId(1)).is_empty(), "fully lossy before heal");
+        h.clear_chaos();
+        h.send(PeerId(0), vec![out(1)]);
+        h.advance();
+        assert_eq!(h.take(PeerId(1)).len(), 1, "link delivers again after clear_chaos");
+    }
+
+    /// A hub with NO chaos knobs set behaves exactly like the legacy hub: the
+    /// chaos RNG is never consumed, so plain delay/stall semantics are intact.
+    #[test]
+    fn no_chaos_is_a_clean_link() {
+        let mut h = Hub::with_chaos_seed(123);
+        h.set_delay(PeerId(0), 2);
+        for _ in 0..5 {
+            h.send(PeerId(0), vec![out(1)]);
+        }
+        // delay 2 ⇒ delivered at step 3; nothing before.
+        h.advance();
+        h.advance();
+        assert!(h.take(PeerId(1)).is_empty());
+        h.advance();
+        assert_eq!(h.take(PeerId(1)).len(), 5, "clean link delivers all, on time");
     }
 
     // Drive two participants purely through the `Transport` trait (no direct

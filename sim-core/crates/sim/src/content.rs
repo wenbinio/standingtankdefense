@@ -757,7 +757,7 @@ pub static MODIFIERS: &[ModifierDef] = &[
         ramp: Some(RampSpec { effect: ModEffect::ManaShield(400, 4), interval_ticks: RAMP_PER_ROUND }) },
     // Improved Masonry (A001): "+500 Max HP".
     ModifierDef { name: "Improved Masonry", rarity: 0, cost: 500, effects: &[ModEffect::MaxHp(500)], ramp: None },
-    ModifierDef { name: "Improved Piercing Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 10, 100)], ramp: None },
+    ModifierDef { name: "Greater Piercing Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 10, 100)], ramp: None },
     ModifierDef { name: "Improved Normal Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_NORMAL, 10, 100)], ramp: None },
     ModifierDef { name: "Improved Siege Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 10, 100)], ramp: None },
     ModifierDef { name: "Improved Chaos Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_CHAOS, 10, 100)], ramp: None },
