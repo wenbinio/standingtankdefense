@@ -22,7 +22,7 @@ pub struct RenderView {
     pub tank: RenderTank,
     pub enemies: Vec<RenderEnemy>,
     pub projectiles: Vec<RenderPoint>,
-    /// Summoned allies (skeletons / infernals) to draw.
+    /// Summoned allies (Larvae / Spores) to draw.
     pub minions: Vec<RenderMinion>,
     pub economy: RenderEconomy,
     pub shop: Vec<RenderOffer>,
@@ -59,7 +59,7 @@ pub struct RenderTank {
     pub revives: u32,
 }
 
-/// A summoned ally to render (`kind`: 0 skeleton, 1 infernal).
+/// A summoned ally to render (`kind`: 0 larvae, 1 spores).
 #[derive(Clone, Copy, Debug)]
 pub struct RenderMinion {
     pub x: i64,

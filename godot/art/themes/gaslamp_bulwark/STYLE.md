@@ -39,6 +39,9 @@ All characters/creatures/war-machines (player tank, enemies, the boss) are drawn
 
 The boss stays the biggest, most menacing silhouette — but a chibi menace:
 oversized angry eye, fat round body bristling with stubby bone spikes, tiny feet.
+The boss is **The Hippocrate**, a doctor-hippo: blood-flecked white coat, a
+head-mirror, an absurdly oversized syringe or bone-saw, a clipboard he never
+reads — the "first, do no harm" oath worn as armour by the deadliest thing here.
 
 ## Camera & facing convention (LOCKED — every sprite obeys)
 
@@ -117,3 +120,8 @@ and glow color. Keep item interiors neutral so the rarity color reads instantly.
 - No gradient soup, no photoreal noise/textures, no hairline 1px detail.
 - Don't mix team energy colors (no blue glow on enemies, no red glow on allies).
 - Don't let glow halos touch the silhouette edge so they survive the margin.
+
+
+## Default defender skin
+
+- The default defender skin is a **hermit-crab fortress** (an immobile crab hauling a fortified shell-keep), with a **war-tortoise** alternate skin. Both read as the same emplaced "Hermit-Crab Fortress" tank silhouette; no new art is drawn here.

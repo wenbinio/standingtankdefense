@@ -11,7 +11,7 @@ const SAVE_PATH := "user://profile.cfg"
 # default player_tank.svg). `unlock` = "" means unlocked by default; otherwise
 # it names the achievement that grants it.
 const SKINS: Array[Dictionary] = [
-	{"id": "ol_reliable",     "name": "Ol' Reliable",     "file": "",                            "unlock": "",             "blurb": "The trusty, dusty starter cannon."},
+	{"id": "ol_reliable",     "name": "Hermit-Crab Fortress", "file": "",                        "unlock": "",             "blurb": "The default defender: a dug-in crab-keep (war-tortoise alt skin)."},
 	# Purist skins — one per weapon attack-class (buy only that class).
 	{"id": "deadeye",         "name": "Deadeye Dan",      "file": "skins/deadeye.svg",           "unlock": "purist_single","blurb": "One-eyed single-shot sniper."},
 	{"id": "spicy_meatball",  "name": "Spicy Meatball",   "file": "skins/spicy_meatball.svg",    "unlock": "purist_splash","blurb": "Splash-only. BELCHES fire."},

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <!-- Standing Tank Defense - ENEMY "Bandit Rider" (mounted human bandit, fastest unit) -->
+  <!-- Standing Tank Defense - ENEMY "Honk" (mounted human bandit, fastest unit) -->
   <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
   <!-- HEAVILY CHIBI: a fat round dire-beast mount lunging north (big snarl head, tiny running -->
   <!-- legs) with a tiny hooded bandit perched on its back, stubby raised blade, billow-cloak. -->
@@ -71,7 +71,7 @@
     <circle cx="54" cy="36" r="3.2" fill="#ff5a3c" stroke="#101218" stroke-width="2"/>
   </g>
 
-  <!-- ===================== HOODED BANDIT RIDER (perched on the back) ===================== -->
+  <!-- ===================== HOODED HONK (perched on the back) ===================== -->
   <!-- billowing cloak streaming south -->
   <path d="M36 62 C32 76 40 84 48 86 C56 84 64 76 60 62 C56 68 40 68 36 62 Z"
         fill="#7a3a30" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>

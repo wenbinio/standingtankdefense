@@ -253,7 +253,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u32(h.ticks_left);
     }
 
-    // minions (summoned skeletons / infernals)
+    // minions (summoned Larvae / Spores)
     w.len(s.minions.len());
     for m in &s.minions {
         w.id(m.id);

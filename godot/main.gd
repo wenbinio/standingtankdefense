@@ -26,7 +26,7 @@ var _font_head: Font = null
 
 var tex := {}
 var enemy_tex := []           # by kind: 0 grunt, 1 steam, 2 boss
-var minion_tex := []          # summoned allies: 0 skeleton, 1 infernal
+var minion_tex := []          # summoned allies: 0 larvae, 1 spores
 var frame_tex := []           # by rarity 0..3
 
 # --- juice / lighting (render-only) ---------------------------------------
@@ -174,20 +174,20 @@ func _load_textures() -> void:
 		"panel":  ArtTheme.tex("ui/panel.svg"),
 	}
 	enemy_tex = [
-		ArtTheme.tex("enemies/fel_orc_grunt.svg"),    # 0 grunt
-		ArtTheme.tex("enemies/steam_tank.svg"),       # 1 steam tank
-		ArtTheme.tex("enemies/samwise.svg"),          # 2 boss
-		ArtTheme.tex("enemies/fel_orc_peon.svg"),     # 3 peon
-		ArtTheme.tex("enemies/fel_orc_raider.svg"),   # 4 raider
-		ArtTheme.tex("enemies/bandit_rider.svg"),     # 5 bandit rider
-		ArtTheme.tex("enemies/mountain_giant.svg"),   # 6 mountain giant
-		ArtTheme.tex("enemies/fel_orc_warlock.svg"),  # 7 warlock
-		ArtTheme.tex("enemies/poisonspitter.svg"),    # 8 poisonspitter
-		ArtTheme.tex("enemies/firebreather.svg"),     # 9 firebreather
-		ArtTheme.tex("enemies/icebreather.svg"),      # 10 icebreather
-		ArtTheme.tex("enemies/target_dummy.svg"),     # 11 target dummy
+		ArtTheme.tex("enemies/squeakzilla_rat.svg"),  # 0 Squeakzilla
+		ArtTheme.tex("enemies/fanged_death.svg"),     # 1 Fanged Death
+		ArtTheme.tex("enemies/boss_hippo.svg"),       # 2 boss (The Hippocrate)
+		ArtTheme.tex("enemies/doomduck.svg"),         # 3 Doomduck
+		ArtTheme.tex("enemies/bacon_warthog.svg"),    # 4 Bacon
+		ArtTheme.tex("enemies/bandit_rider.svg"),     # 5 Honk
+		ArtTheme.tex("enemies/bonk_golem.svg"),       # 6 Bonk
+		ArtTheme.tex("enemies/noperope_cobra.svg"),   # 7 Nope Rope
+		ArtTheme.tex("enemies/poisonspitter.svg"),    # 8 Croak
+		ArtTheme.tex("enemies/firebreather.svg"),     # 9 Spicy
+		ArtTheme.tex("enemies/icebreather.svg"),      # 10 Popsicle
+		ArtTheme.tex("enemies/target_dummy.svg"),     # 11 Dodo
 	]
-	minion_tex = [ArtTheme.tex("minions/skeleton.svg"), ArtTheme.tex("minions/infernal.svg")]
+	minion_tex = [ArtTheme.tex("minions/larvae.svg"), ArtTheme.tex("minions/spores.svg")]
 	frame_tex = [ArtTheme.tex("ui/frame_common.svg"), ArtTheme.tex("ui/frame_uncommon.svg"),
 		ArtTheme.tex("ui/frame_rare.svg"), ArtTheme.tex("ui/frame_epic.svg")]
 	_spark_tex = ArtTheme.tex("fx/hit_spark.svg")
@@ -337,7 +337,7 @@ func _update_menace_light() -> void:
 			score = 3
 		elif k == 9 or k == 10:   # fire-/ice-breather
 			score = 2
-		elif k == 6:              # mountain giant
+		elif k == 6:              # Bonk
 			score = 1
 		if score > best_score:
 			best_score = score
@@ -473,7 +473,7 @@ func _draw() -> void:
 		var mod := Color(2.4, 2.4, 2.4) if _flash.has(id) else Color.WHITE
 		_blit(tx, _to_screen(ep[i].x, ep[i].y) + Vector2(0, bob) + sh, size, mod)
 
-	# summoned allies (skeletons / infernals) — drawn beneath the tank
+	# summoned allies (Larvae / Spores) — drawn beneath the tank
 	var mp: PackedVector2Array = sim.minions_pos()
 	var mk: PackedByteArray = sim.minions_kind()
 	for i in mp.size():

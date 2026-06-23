@@ -628,7 +628,7 @@ pub(crate) fn tick_aura(s: &mut ArenaState) {
     }
 }
 
-/// Tuning for summoned allies (skeletons / infernals).
+/// Tuning for summoned allies (Larvae / Spores).
 const MAX_MINIONS: usize = 16;     // global cap on living minions
 const MINION_LIFETIME: u32 = 450;  // ~15s before a minion vanishes
 const MINION_ATTACK_CD: u32 = 30;  // ticks between a minion's strikes (~1/s)
@@ -1073,7 +1073,7 @@ mod tests {
         // pins it with NO damage; a cadence tick deals one (scaled) contact hit.
         // Use the boss-phase tick so the ×11 multiplier (and a real cadence) apply.
         let cadence = content::BOSS_CONTACT_CADENCE;
-        let boss_def = content::SAMWISE;
+        let boss_def = content::BOSS;
         let raw = content::ENEMIES[boss_def as usize].contact_damage;
 
         // Off-cadence tick: boss arrives, plants, deals nothing.
@@ -1269,7 +1269,7 @@ mod tests {
         let mut s = blank_state();
         s.weapons.clear();
         let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
-        let bid = mk_enemy(&mut s, content::SAMWISE, 10_000_000, pos);
+        let bid = mk_enemy(&mut s, content::BOSS, 10_000_000, pos);
         let _ = bid;
         let pid = s.alloc_entity_id();
         s.projectiles.push(Projectile {
@@ -1305,17 +1305,17 @@ mod tests {
 
     #[test]
     fn ranged_enemy_damages_tank_at_range() {
-        // A Firebreather (ranged) sitting within its standoff range should pelt
+        // A Spicy (ranged) sitting within its standoff range should pelt
         // the tank without ever reaching it.
         let mut s = blank_state();
         s.weapons.clear();
-        let fb = enemy_def_idx("Firebreather");
+        let fb = enemy_def_idx("Spicy");
         let edef = &content::ENEMIES[fb as usize];
         let (range, cd, dmg) = match edef.ability {
             content::EnemyAbility::RangedAttack { range, cooldown_ticks, damage, .. } => {
                 (range, cooldown_ticks, damage)
             }
-            _ => panic!("Firebreather must be a ranged attacker"),
+            _ => panic!("Spicy must be a ranged attacker"),
         };
         // Place it well inside range but not at the origin.
         let pos = Vec2::new(Fixed::from_int(range - 50), Fixed::ZERO);
@@ -1335,7 +1335,7 @@ mod tests {
     fn ranged_enemy_out_of_range_does_not_fire() {
         let mut s = blank_state();
         s.weapons.clear();
-        let fb = enemy_def_idx("Firebreather");
+        let fb = enemy_def_idx("Spicy");
         let edef = &content::ENEMIES[fb as usize];
         let range = match edef.ability {
             content::EnemyAbility::RangedAttack { range, .. } => range,
@@ -1358,7 +1358,7 @@ mod tests {
         let build = || {
             let mut s = blank_state();
             s.weapons.clear();
-            let fb = enemy_def_idx("Poisonspitter");
+            let fb = enemy_def_idx("Croak");
             mk_enemy(&mut s, fb, 1000, Vec2::new(Fixed::from_int(200), Fixed::ZERO));
             s
         };
@@ -1376,9 +1376,9 @@ mod tests {
 
     #[test]
     fn fortified_armor_reduces_damage() {
-        // Mountain Giant is Fortified (armor class 2). Piercing is heavily
-        // resisted; Siege is amplified — relative to a Light-armored grunt.
-        let giant = enemy_def_idx("Mountain Giant");
+        // Bonk is Fortified (armor class 2). Piercing is heavily
+        // resisted; Siege is amplified — relative to a Light-armored swarm unit.
+        let giant = enemy_def_idx("Bonk");
         let gdef = &content::ENEMIES[giant as usize];
         assert_eq!(gdef.armor_class, content::ARMOR_FORTIFIED);
 
@@ -1590,13 +1590,13 @@ mod tests {
 
     #[test]
     fn knockback_pushes_enemy_away_from_tank() {
-        // Wind Spear: SingleTarget Knockback(300). Enemy on +x axis is pushed out.
+        // Slap: SingleTarget Knockback(300). Enemy on +x axis is pushed out.
         let mut s = blank_state();
-        only_weapon(&mut s, "Wind Spear");
+        only_weapon(&mut s, "Slap");
         let pos = Vec2::new(Fixed::from_int(400), Fixed::ZERO);
         let eid = mk_enemy(&mut s, 0, 100_000_000, pos); // survives the hit
         let pid = s.alloc_entity_id();
-        let wd = &content::WEAPONS[weapon_idx("Wind Spear") as usize];
+        let wd = &content::WEAPONS[weapon_idx("Slap") as usize];
         s.projectiles.push(Projectile {
             id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
             damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
@@ -1611,13 +1611,13 @@ mod tests {
 
     #[test]
     fn root_immobilizes_the_enemy() {
-        // Entangler: SingleTarget Root(30). Rooted enemy is immobile (and poisoned).
+        // Tangle: SingleTarget Root(30). Rooted enemy is immobile (and poisoned).
         let mut s = blank_state();
-        only_weapon(&mut s, "Entangler");
+        only_weapon(&mut s, "Tangle");
         let pos = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
         let eid = mk_enemy(&mut s, 0, 100_000_000, pos);
         let pid = s.alloc_entity_id();
-        let wd = &content::WEAPONS[weapon_idx("Entangler") as usize];
+        let wd = &content::WEAPONS[weapon_idx("Tangle") as usize];
         s.projectiles.push(Projectile {
             id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
             damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
@@ -1657,10 +1657,10 @@ mod tests {
 
     #[test]
     fn hazard_is_placed_and_damages_over_time() {
-        // Goblin Land Mines: Wave Hazard(dmg 1000, radius 200, 90 ticks). Firing
+        // Boom Bloom: Wave Hazard(dmg 1000, radius 200, 90 ticks). Firing
         // drops a hazard at the first damaged enemy; it then pulses each tick.
         let mut s = blank_state();
-        only_weapon(&mut s, "Goblin Land Mines");
+        only_weapon(&mut s, "Boom Bloom");
         let pos = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
         // A high-hp enemy so it survives the wave and the hazard can keep hitting.
         mk_enemy(&mut s, 0, 1_000_000_000, pos);
@@ -1698,10 +1698,10 @@ mod tests {
 
     #[test]
     fn summon_ability_is_inert_for_now() {
-        // Inferno Stone carries the deferred Summon variant; it must not crash and
+        // Shroom Doom carries the deferred Summon variant; it must not crash and
         // behaves as pure damage (no extra entities spawned).
         let mut s = blank_state();
-        only_weapon(&mut s, "Inferno Stone");
+        only_weapon(&mut s, "Shroom Doom");
         for i in 0..3 {
             mk_enemy(&mut s, 0, 100_000_000, Vec2::new(Fixed::from_int(100 + i * 20), Fixed::ZERO));
         }
@@ -1715,7 +1715,7 @@ mod tests {
     fn ability_effects_are_deterministic() {
         let build = || {
             let mut s = blank_state();
-            only_weapon(&mut s, "Wind Spear");
+            only_weapon(&mut s, "Slap");
             for i in 0..4 {
                 mk_enemy(&mut s, 0, 100_000_000, Vec2::new(Fixed::from_int(120 + i * 7), Fixed::from_int(i)));
             }

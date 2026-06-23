@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - ENEMY "Doomduck" (scrawny weak chaff, smaller than grunt) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- HEAVILY CHIBI: small round rot-green head/body, big cute-angry eyes, ONE chipped tusk, -->
+  <!-- tiny crude stake held close, tiny stubby feet. Smaller/slighter than the grunt. -->
+  <defs>
+    <filter id="pe_menace" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ground shadow (small, scrawny) -->
+  <ellipse cx="48" cy="84" rx="22" ry="7" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- ===================== TINY STUBBY FEET ===================== -->
+  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <path d="M40 76 C37 84 39 88 44 87 C47 86 47 80 46 76 Z" fill="#1f3322"/>
+    <path d="M50 76 C53 84 51 88 46 87 C43 86 43 80 44 76 Z" fill="#1f3322"/>
+  </g>
+
+  <!-- ===================== CRUDE STAKE (tiny, held close, raised north) ===================== -->
+  <rect x="68" y="34" width="5" height="30" rx="2.5" fill="#3a2a16" stroke="#101218" stroke-width="3" stroke-linejoin="round" transform="rotate(8 70 49)"/>
+  <!-- lashed bone shard tip -->
+  <path d="M67 36 L70 24 L74 36 Z" fill="#d9d2b0" stroke="#101218" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- stubby arm to the stake -->
+  <path d="M60 54 C68 52 71 49 70 45 C64 47 59 50 57 54 Z"
+        fill="#5e8c3a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+
+  <!-- ===================== SMALL ROUND BODY (slighter mass, leaning forward) ===================== -->
+  <!-- body shadow base -->
+  <path d="M48 40 C68 40 73 56 70 68 C66 78 57 80 48 80 C39 80 30 78 26 68 C23 56 28 40 48 40 Z"
+        fill="#1f3322" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- main flesh fill -->
+  <path d="M48 42 C66 42 70 56 67 67 C63 75 56 77 48 77 C40 77 33 75 29 67 C26 56 30 42 48 42 Z"
+        fill="#5e8c3a" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+  <!-- inner shadow (lower half) -->
+  <path d="M67 67 C63 75 56 77 48 77 C40 77 33 75 29 67 C35 72 41 73 48 73 C55 73 61 72 67 67 Z"
+        fill="#1f3322" opacity="0.85"/>
+  <!-- forward rim light -->
+  <path d="M48 42 C63 42 68 52 66 60 C59 51 54 49 48 49 C42 49 37 51 30 60 C28 52 33 42 48 42 Z"
+        fill="#a6d65e" opacity="0.55"/>
+
+  <!-- exposed rib hint (malnourished, one chunky seam) -->
+  <path d="M40 70 C44 72 52 72 56 70" fill="none" stroke="#1f3322" stroke-width="2.5" opacity="0.7" stroke-linecap="round"/>
+
+  <!-- chunky stubby left fist -->
+  <path d="M29 60 C22 62 21 67 25 69 C31 67 34 64 35 61 Z"
+        fill="#5e8c3a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+
+  <!-- ===================== OVERSIZED FEATURES (weak read) ===================== -->
+  <!-- ONE chipped bone tusk (asymmetric, weak) -->
+  <path d="M41 65 L37 53 L47 63 Z" fill="#d9d2b0" stroke="#101218" stroke-width="2.8" stroke-linejoin="round"/>
+
+  <!-- big cute-but-dim menace eyes (smaller halo than grunt) -->
+  <g>
+    <circle cx="41" cy="58" r="6.5" fill="#ff5a3c" filter="url(#pe_menace)"/>
+    <circle cx="41" cy="58" r="5" fill="#ff5a3c" stroke="#101218" stroke-width="2.2"/>
+    <circle cx="39.5" cy="56.5" r="1.6" fill="#ffd0c2"/>
+    <circle cx="55" cy="59" r="6.5" fill="#ff5a3c" filter="url(#pe_menace)"/>
+    <circle cx="55" cy="59" r="5" fill="#ff5a3c" stroke="#101218" stroke-width="2.2"/>
+    <circle cx="53.5" cy="57.5" r="1.6" fill="#ffd0c2"/>
+  </g>
+  <!-- weak slanted brows (cute-tired) -->
+  <g stroke="#101218" stroke-width="3.5" stroke-linecap="round">
+    <line x1="35" y1="50" x2="46" y2="53"/>
+    <line x1="62" y1="51" x2="51" y2="54"/>
+  </g>
+</svg>

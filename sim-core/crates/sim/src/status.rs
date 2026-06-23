@@ -496,7 +496,7 @@ mod tests {
     #[test]
     fn boss_is_immune_to_poison() {
         let mut s = arena_with(vec![{
-            let mut e = enemy(content::SAMWISE, 1000);
+            let mut e = enemy(content::BOSS, 1000);
             e.status.poison_dps = 100;
             e.status.poison_ticks = 5;
             e

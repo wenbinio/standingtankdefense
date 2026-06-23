@@ -47,9 +47,9 @@ pub enum WeaponAbility {
     /// max) for each enemy this attack damages (the source's mana-restore weapons).
     ManaDrain { per_hit: i64 },
     /// Knockback: shove each damaged enemy `dist` units directly away from the
-    /// tank (the source's Wind Spear "Knockback (300)").
+    /// tank (Slap's "Knockback (300)").
     Knockback { dist: i64 },
-    /// Root: immobilize each damaged enemy for `ticks` (the source's Entangler
+    /// Root: immobilize each damaged enemy for `ticks` (Tangle's
     /// "Root" — modeled as a stun that does NOT scale with +% Stun Duration, so
     /// it is applied directly rather than through the on-hit stun path).
     Root { ticks: u32 },
@@ -58,13 +58,13 @@ pub enum WeaponAbility {
     /// damage taken by N%, stacking" weapons).
     VulnOnHit { stacks: u16 },
     /// Hazard placement: drop a persistent damaging area at the position of the
-    /// first enemy this attack damages (the source's Goblin Land Mines / burning
-    /// oil). The hazard pulses `dmg` to enemies within `radius` each tick for
+    /// first enemy this attack damages (Boom Bloom's mine field / scorched
+    /// ground). The hazard pulses `dmg` to enemies within `radius` each tick for
     /// `ticks` ticks.
     Hazard { dmg: i64, radius: i64, ticks: u32 },
     /// Summon: when this weapon's hit KILLS an enemy, raise a temporary ally
-    /// (the source's skeleton/infernal raisers) from the corpse, up to a global
-    /// cap. `kind` selects the sprite (0 skeleton, 1 infernal); `hp` and `damage`
+    /// (Squirm's Larvae / Shroom Doom's Spores) from the corpse, up to a global
+    /// cap. `kind` selects the sprite (0 larvae, 1 spores); `hp` and `damage`
     /// seed the minion. An Area weapon that wipes a pack raises several at once.
     Summon { kind: u8, hp: i64, damage: i64 },
 }
@@ -147,20 +147,20 @@ pub struct WeaponDef {
 /// does not change existing kinds.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Archetype {
-    /// Cheap, fast-spawning chaff (Peon / Grunt).
+    /// Cheap, fast-spawning chaff (Doomduck / Squeakzilla).
     Swarm,
-    /// Slow, high-HP, often armored (Steam Tank / Mountain Giant).
+    /// Slow, high-HP, often armored (Fanged Death / Bonk).
     Tank,
-    /// Fast melee rusher (Raider / Bandit Rider).
+    /// Fast melee rusher (Bacon / Honk).
     Fast,
-    /// Stationary-ish ranged caster (Warlock).
+    /// Stationary-ish ranged caster (Nope Rope).
     Caster,
     /// Approaches to a standoff range then attacks the tank at range
-    /// (the breather / spitter family).
+    /// (the Croak / Spicy / Popsicle family).
     Ranged,
-    /// The end boss (Hungry Hungry Happypotamus) — immune to weapon fire.
+    /// The end boss (The Hippocrate) — immune to weapon fire.
     Boss,
-    /// Inert practice dummy (Target Dummy) — never moves, no contact.
+    /// Inert practice dummy (Dodo) — never moves, no contact.
     Inert,
 }
 
@@ -196,15 +196,15 @@ pub struct EnemyDef {
     pub archetype: Archetype,
     /// Special ability (enemy-side); `EnemyAbility::None` for plain melee.
     pub ability: EnemyAbility,
-    /// A boss (e.g. Hungry Hungry Happypotamus) — immune to weapon fire; only
+    /// A boss (e.g. The Hippocrate) — immune to weapon fire; only
     /// `Clear` damages it.
     pub boss: bool,
 }
 
 /// Armor classes (columns of [`damage_multiplier`]'s matrix).
 pub const ARMOR_LIGHT: u8 = 0; // most chaff (full piercing, neutral else)
-pub const ARMOR_MEDIUM: u8 = 1; // Steam Tank (magic-weak, siege-resistant)
-pub const ARMOR_FORTIFIED: u8 = 2; // Mountain Giant — tanky vs everything but Siege
+pub const ARMOR_MEDIUM: u8 = 1; // Fanged Death (magic-weak, siege-resistant)
+pub const ARMOR_FORTIFIED: u8 = 2; // Bonk — tanky vs everything but Siege
 
 #[derive(Clone, Copy, Debug)]
 pub struct WaveSpawn {
@@ -567,8 +567,8 @@ impl ModifierDef {
 }
 
 /// M4 modifier catalog. CONTENT-FIDELITY pass: entries that map to a source
-/// upgrade (`research/tower-survivors-map/raw/war3map.wts`) carry the REAL WC3
-/// upgrade name, and bundled multi-effect source upgrades are re-bundled into one
+/// upgrade (see the extraction under `research/`) carry the source upgrade's
+/// name, and bundled multi-effect source upgrades are re-bundled into one
 /// `ModifierDef { effects: &[…] }` (effects apply in slice order). Some source
 /// secondaries need combat/defense mechanics not yet built — those keep the NAME
 /// + the modelable PRIMARY effect, with a `// TODO(M1c/M2/M3)` note for the
@@ -730,8 +730,8 @@ pub static MODIFIERS: &[ModifierDef] = &[
     ModifierDef { name: "Refined Explosives", rarity: 2, cost: 3000, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 100, 100), ModEffect::DamagePerWeapon(1, DMG_SIEGE as i64, 1)], ramp: None },
     // Stacking damage generator (`docs/06` #5): the Death Engine weapon's Chaos
     // damage scales +10% per Death Engine owned (self-referential count).
-    // representative self-referential generator (the source's "Death Generator"
-    // weapon does +10% per copy; this models that as a +Chaos-per-Death-Engine
+    // representative self-referential generator (a self-scaling generator weapon
+    // does +10% per copy; this models that as a +Chaos-per-Death-Engine
     // modifier keyed to the stable Death Engine weapon index — kept, ramp test
     // depends on it).
     ModifierDef { name: "Overclocked Death Engine (+10% Chaos per Death Engine)", rarity: 2, cost: 3000, effects: &[ModEffect::DamagePerWeapon(DEATH_ENGINE as i64, DMG_CHAOS as i64, 10)], ramp: None },
@@ -1097,7 +1097,7 @@ pub static WEAPONS: &[WeaponDef] = &[
     WeaponDef { name: "Throwing Axes", rarity: 0, cost: 500, damage: 55, damage_type: DMG_PIERCING, attack: Attack::Bounce(3), cooldown_ticks: 21, range: 300, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
     WeaponDef { name: "Chaos Skulls", rarity: 0, cost: 500, damage: 50, damage_type: DMG_CHAOS, attack: Attack::Bounce(3), cooldown_ticks: 21, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
     // --- HIGH-CEILING RARES/EPICS: big payoff, real risk (slow / point-blank / setup) ---
-    WeaponDef { name: "Chaos Heart", rarity: 2, cost: 3000, damage: 1100, damage_type: DMG_CHAOS, attack: Attack::Wave(300), cooldown_ticks: 75, range: 300, proj_speed: 0, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 40 } },  // exotic: Heal (base only); point-blank board-wipe, slow
+    WeaponDef { name: "Suckula", rarity: 2, cost: 3000, damage: 1100, damage_type: DMG_CHAOS, attack: Attack::Wave(300), cooldown_ticks: 75, range: 300, proj_speed: 0, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 40 } },  // exotic: Heal (base only); point-blank board-wipe, slow
     WeaponDef { name: "Missile Barrage", rarity: 3, cost: 5000, damage: 1400, damage_type: DMG_PIERCING, attack: Attack::Barrage(8), cooldown_ticks: 75, range: 1200, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 90 }, ability: WeaponAbility::None },  // HIGH-CEILING: 8×1400 stun-volley, swingy on small boards
     WeaponDef { name: "Seeker Axe", rarity: 0, cost: 500, damage: 60, damage_type: DMG_PIERCING, attack: Attack::Bounce(3), cooldown_ticks: 27, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
     WeaponDef { name: "Steam Cannon", rarity: 1, cost: 1500, damage: 320, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 30, range: 300, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 15 }, ability: WeaponAbility::None },
@@ -1105,7 +1105,7 @@ pub static WEAPONS: &[WeaponDef] = &[
     WeaponDef { name: "Impaler", rarity: 1, cost: 1500, damage: 240, damage_type: DMG_PIERCING, attack: Attack::SingleTarget, cooldown_ticks: 15, range: 600, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 22 }, ability: WeaponAbility::None },
     WeaponDef { name: "Chaos Swarm", rarity: 0, cost: 500, damage: 105, damage_type: DMG_CHAOS, attack: Attack::Splash(300), cooldown_ticks: 30, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
     WeaponDef { name: "Catapult", rarity: 1, cost: 1500, damage: 380, damage_type: DMG_SIEGE, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Wind Spear", rarity: 3, cost: 5000, damage: 2600, damage_type: DMG_PIERCING, attack: Attack::SingleTarget, cooldown_ticks: 21, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Knockback { dist: 300 } },  // exotic: Knockback (base only); GLASS-CANNON nuke, single-target only
+    WeaponDef { name: "Slap", rarity: 3, cost: 5000, damage: 2600, damage_type: DMG_PIERCING, attack: Attack::SingleTarget, cooldown_ticks: 21, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Knockback { dist: 300 } },  // exotic: Knockback (base only); GLASS-CANNON nuke, single-target only
     WeaponDef { name: "Crippler", rarity: 2, cost: 3000, damage: 1150, damage_type: DMG_PIERCING, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 8 } },  // exotic: permanent (base only)
     WeaponDef { name: "Lifeleecher", rarity: 2, cost: 3000, damage: 850, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 40 } },  // exotic: Heal (base only)
     WeaponDef { name: "Spell Glaive", rarity: 1, cost: 1500, damage: 260, damage_type: DMG_MAGIC, attack: Attack::Bounce(4), cooldown_ticks: 36, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
@@ -1134,7 +1134,7 @@ pub static WEAPONS: &[WeaponDef] = &[
     WeaponDef { name: "Liquid Fire Hurler", rarity: 1, cost: 1500, damage: 210, damage_type: DMG_SIEGE, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 4, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 3 } },  // exotic: damage taken (base only); fast fire stacker
     WeaponDef { name: "Boulder Toss", rarity: 2, cost: 3000, damage: 980, damage_type: DMG_NORMAL, attack: Attack::Splash(300), cooldown_ticks: 45, range: 300, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: reduce enemy (base only)
     WeaponDef { name: "Bloody Spikes", rarity: 3, cost: 5000, damage: 2200, damage_type: DMG_NORMAL, attack: Attack::Wave(300), cooldown_ticks: 36, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 30 }, ability: WeaponAbility::None },  // HIGH-CEILING wave nuke, point-blank
-    WeaponDef { name: "Inferno Stone", rarity: 3, cost: 5000, damage: 3200, damage_type: DMG_CHAOS, attack: Attack::Area(300), cooldown_ticks: 90, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 60, stun_ticks: 60 }, ability: WeaponAbility::Summon { kind: 1, hp: 1500, damage: 600 } },  // BOOM-OR-BUST: huge nuke + 60 fire, very slow cd; wiping a pack RAISES a host of infernals
+    WeaponDef { name: "Shroom Doom", rarity: 3, cost: 5000, damage: 3200, damage_type: DMG_CHAOS, attack: Attack::Area(300), cooldown_ticks: 90, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 60, stun_ticks: 60 }, ability: WeaponAbility::Summon { kind: 1, hp: 1500, damage: 600 } },  // BOOM-OR-BUST: huge nuke + 60 fire, very slow cd; wiping a pack RAISES a host of Spores
     WeaponDef { name: "Flame Generator", rarity: 3, cost: 5000, damage: 1700, damage_type: DMG_MAGIC, attack: Attack::Area(300), cooldown_ticks: 60, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 200, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 4 } },  // exotic: damage taken (base only); FIRE PAYOFF ENGINE: drenches packs in 200 fire each pulse → explode-chain ceiling is enormous
     WeaponDef { name: "Firebreather", rarity: 1, cost: 1500, damage: 180, damage_type: DMG_PIERCING, attack: Attack::Splash(150), cooldown_ticks: 15, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 5, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only); rapid fire stacker
     WeaponDef { name: "Lavaspitter", rarity: 3, cost: 5000, damage: 1800, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 150, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only); long-range fire payoff
@@ -1146,16 +1146,16 @@ pub static WEAPONS: &[WeaponDef] = &[
     WeaponDef { name: "Blaster", rarity: 1, cost: 1500, damage: 210, damage_type: DMG_SIEGE, attack: Attack::SingleTarget, cooldown_ticks: 15, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only)
     WeaponDef { name: "Bandit Sniper", rarity: 1, cost: 1500, damage: 240, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 18, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only)
     WeaponDef { name: "Bombs", rarity: 1, cost: 1500, damage: 300, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 30, range: 300, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 15 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Death Coil", rarity: 1, cost: 1500, damage: 300, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 10 } },  // exotic: damage taken (base only)
+    WeaponDef { name: "Sting", rarity: 1, cost: 1500, damage: 300, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 10 } },  // exotic: damage taken (base only)
     WeaponDef { name: "Chaos Skull Bomb", rarity: 2, cost: 3000, damage: 720, damage_type: DMG_CHAOS, attack: Attack::Splash(300), cooldown_ticks: 45, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 45 }, ability: WeaponAbility::None },
     WeaponDef { name: "Icebreather", rarity: 2, cost: 3000, damage: 760, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 45, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 2, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 4 } },  // exotic: explode (base only)
     WeaponDef { name: "Frostwave", rarity: 2, cost: 3000, damage: 720, damage_type: DMG_MAGIC, attack: Attack::Wave(150), cooldown_ticks: 45, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 3, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },
     WeaponDef { name: "Flamewave", rarity: 1, cost: 1500, damage: 360, damage_type: DMG_NORMAL, attack: Attack::Wave(200), cooldown_ticks: 45, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 20, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 6 } },  // exotic: damage taken (base only)
     WeaponDef { name: "Chaotic Spirit Bolt", rarity: 1, cost: 1500, damage: 190, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 40 } },  // exotic: Heal (base only); fast cheap floor
     WeaponDef { name: "Manabolt", rarity: 1, cost: 1500, damage: 320, damage_type: DMG_MAGIC, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::ManaDrain { per_hit: 80 } },  // exotic: drain (base only); fast long-range
-    WeaponDef { name: "Death Generator", rarity: 3, cost: 5000, damage: 1300, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 18, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Summon { kind: 0, hp: 500, damage: 250 } },  // steady high-rarity anchor; every kill RAISES a skeleton
+    WeaponDef { name: "Squirm", rarity: 3, cost: 5000, damage: 1300, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 18, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Summon { kind: 0, hp: 500, damage: 250 } },  // steady high-rarity anchor; every kill RAISES a Larva
     WeaponDef { name: "Immolation Aura", rarity: 0, cost: 500, damage: 75, damage_type: DMG_MAGIC, attack: Attack::Wave(150), cooldown_ticks: 12, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 2, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 3 } },  // exotic: damage taken (base only); cheap point-blank pulse
-    WeaponDef { name: "Goblin Land Mines", rarity: 3, cost: 5000, damage: 2600, damage_type: DMG_SIEGE, attack: Attack::Wave(200), cooldown_ticks: 45, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 90 }, ability: WeaponAbility::Hazard { dmg: 1000, radius: 200, ticks: 90 } },  // exotic: land mine (base only); point-blank stun-wave nuke
+    WeaponDef { name: "Boom Bloom", rarity: 3, cost: 5000, damage: 2600, damage_type: DMG_SIEGE, attack: Attack::Wave(200), cooldown_ticks: 45, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 90 }, ability: WeaponAbility::Hazard { dmg: 1000, radius: 200, ticks: 90 } },  // exotic: mine field (base only); point-blank stun-wave nuke
     WeaponDef { name: "Quill Burst", rarity: 1, cost: 1500, damage: 340, damage_type: DMG_PIERCING, attack: Attack::Splash(300), cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 10 } },  // exotic: damage taken (base only)
     WeaponDef { name: "Arcane Burst", rarity: 1, cost: 1500, damage: 360, damage_type: DMG_MAGIC, attack: Attack::Splash(300), cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 10 } },  // exotic: damage taken (base only)
     WeaponDef { name: "Meteor Barrage", rarity: 3, cost: 5000, damage: 3400, damage_type: DMG_SIEGE, attack: Attack::Barrage(8), cooldown_ticks: 120, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },  // BOOM-OR-BUST: 8×3400 meteor volley on a very long cooldown — feast (whole-screen wipe) or famine (caught reloading)
@@ -1165,17 +1165,17 @@ pub static WEAPONS: &[WeaponDef] = &[
     WeaponDef { name: "Lightning Generator", rarity: 2, cost: 3000, damage: 780, damage_type: DMG_MAGIC, attack: Attack::SingleTarget, cooldown_ticks: 30, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::ManaDrain { per_hit: 20 } },  // exotic: Mana (base only)
     WeaponDef { name: "Flame Nova", rarity: 1, cost: 1500, damage: 220, damage_type: DMG_CHAOS, attack: Attack::Area(300), cooldown_ticks: 36, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 20, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 6 } },  // exotic: damage taken (base only); fire-payoff AoE
     WeaponDef { name: "Shocker", rarity: 1, cost: 1500, damage: 130, damage_type: DMG_SIEGE, attack: Attack::Area(300), cooldown_ticks: 18, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 60 }, ability: WeaponAbility::None },  // fast perma-stun aura
-    WeaponDef { name: "Entangler", rarity: 3, cost: 5000, damage: 1300, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 12, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Root { ticks: 30 } },  // exotic: Root (base only); fast steady epic anchor
+    WeaponDef { name: "Tangle", rarity: 3, cost: 5000, damage: 1300, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 12, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Root { ticks: 30 } },  // exotic: Root (base only); fast steady epic anchor
     // GEN-WEAPONS-END
 ];
 
 /// Enemy catalog. Indices 0/1/2 are STABLE (render maps sprites by index, the
-/// boss is index 2 via `SAMWISE`); new roster rows are appended at 3+.
+/// boss is index 2 via `BOSS`); new roster rows are appended at 3+.
 /// Stats adapted from the source map (`docs/appendix-A-map-extraction.md §A.1`).
 pub static ENEMIES: &[EnemyDef] = &[
-    // 0 — Fel Orc Grunt: the baseline swarm melee.
+    // 0 — Squeakzilla: the baseline swarm melee.
     EnemyDef {
-        name: "Fel Orc Grunt",
+        name: "Squeakzilla",
         base_hp: 200,
         move_speed: 8,
         contact_damage: 500,
@@ -1185,9 +1185,9 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::None,
         boss: false,
     },
-    // 1 — Steam Tank: slow, medium-armored bruiser.
+    // 1 — Fanged Death: slow, medium-armored bruiser.
     EnemyDef {
-        name: "Steam Tank",
+        name: "Fanged Death",
         base_hp: 1200,
         move_speed: 4,
         contact_damage: 1500,
@@ -1197,7 +1197,8 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::None,
         boss: false,
     },
-    // 2 — Hungry Hungry Happypotamus: the 30-min END-GAME boss. Fixed huge HP,
+    // 2 — The Hippocrate: a doctor-hippo who swore to "first, do no harm" — he lied.
+    //     The 30-min END-GAME boss. Fixed huge HP,
     // immune to weapon fire; only `Clear` hurts it (CLEAR_DAMAGE = 3M/use ⇒ ~11
     // Clears to kill its 33M HP). It does NOT self-destruct: when it reaches the
     // tank it PLANTS and grinds with a CADENCED contact hit (every
@@ -1206,10 +1207,10 @@ pub static ENEMIES: &[EnemyDef] = &[
     // multi-Clear RACE: the player must out-Clear the boss's DPS (while the dense
     // escort piles on) before being ground down, instead of the old single
     // dodge-coin-flip on one 1.1M burst. After 30 min of player scaling this is the
-    // real climax wall MOST runs end at, not a pushover. (Const id stays SAMWISE;
+    // real climax wall MOST runs end at, not a pushover. (Const id stays BOSS;
     // sprite key unchanged.)
     EnemyDef {
-        name: "Hungry Hungry Happypotamus",
+        name: "The Hippocrate",
         base_hp: 33_000_000,
         move_speed: 3,
         contact_damage: 45_000,
@@ -1219,9 +1220,9 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::None,
         boss: true,
     },
-    // 3 — Fel Orc Peon: cheapest, weakest chaff — early swarm filler.
+    // 3 — Doomduck: cheapest, weakest chaff — early swarm filler.
     EnemyDef {
-        name: "Fel Orc Peon",
+        name: "Doomduck",
         base_hp: 120,
         move_speed: 8,
         contact_damage: 350,
@@ -1231,9 +1232,9 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::None,
         boss: false,
     },
-    // 4 — Fel Orc Raider: fast melee rusher (reaches the tank quickly).
+    // 4 — Bacon: fast melee rusher (reaches the tank quickly).
     EnemyDef {
-        name: "Fel Orc Raider",
+        name: "Bacon",
         base_hp: 260,
         move_speed: 16,
         contact_damage: 700,
@@ -1243,9 +1244,9 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::None,
         boss: false,
     },
-    // 5 — Bandit Rider: even faster, glassier melee.
+    // 5 — Honk: even faster, glassier melee.
     EnemyDef {
-        name: "Bandit Rider",
+        name: "Honk",
         base_hp: 180,
         move_speed: 22,
         contact_damage: 600,
@@ -1255,9 +1256,9 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::None,
         boss: false,
     },
-    // 6 — Mountain Giant: very tanky, Fortified armor (only Siege bites hard).
+    // 6 — Bonk: very tanky, Fortified armor (only Siege bites hard).
     EnemyDef {
-        name: "Mountain Giant",
+        name: "Bonk",
         base_hp: 4000,
         move_speed: 3,
         contact_damage: 2200,
@@ -1267,10 +1268,10 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::None,
         boss: false,
     },
-    // 7 — Fel Orc Warlock: a caster that stands off at long range and pelts the
+    // 7 — Nope Rope: a caster that stands off at long range and pelts the
     // tank with magic bolts.
     EnemyDef {
-        name: "Fel Orc Warlock",
+        name: "Nope Rope",
         base_hp: 320,
         move_speed: 6,
         contact_damage: 200,
@@ -1280,9 +1281,9 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::RangedAttack { range: 900, cooldown_ticks: 45, damage: 250, damage_type: DMG_MAGIC },
         boss: false,
     },
-    // 8 — Poisonspitter: ranged spitter; light, frequent piercing spit.
+    // 8 — Croak: ranged spitter; light, frequent piercing spit.
     EnemyDef {
-        name: "Poisonspitter",
+        name: "Croak",
         base_hp: 300,
         move_speed: 6,
         contact_damage: 200,
@@ -1292,9 +1293,9 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::RangedAttack { range: 700, cooldown_ticks: 30, damage: 180, damage_type: DMG_PIERCING },
         boss: false,
     },
-    // 9 — Firebreather: ranged breather; harder-hitting chaos breath at standoff.
+    // 9 — Spicy: ranged breather; harder-hitting chaos breath at standoff.
     EnemyDef {
-        name: "Firebreather",
+        name: "Spicy",
         base_hp: 600,
         move_speed: 5,
         contact_damage: 300,
@@ -1304,9 +1305,9 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::RangedAttack { range: 600, cooldown_ticks: 36, damage: 420, damage_type: DMG_CHAOS },
         boss: false,
     },
-    // 10 — Icebreather: slow, durable ranged breather with siege breath.
+    // 10 — Popsicle: slow, durable ranged breather with siege breath.
     EnemyDef {
-        name: "Icebreather",
+        name: "Popsicle",
         base_hp: 900,
         move_speed: 4,
         contact_damage: 350,
@@ -1316,9 +1317,9 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::RangedAttack { range: 650, cooldown_ticks: 48, damage: 500, damage_type: DMG_SIEGE },
         boss: false,
     },
-    // 11 — Target Dummy: inert practice target — never moves, no contact, easy bounty.
+    // 11 — Dodo: inert practice target — never moves, no contact, easy bounty.
     EnemyDef {
-        name: "Target Dummy",
+        name: "Dodo",
         base_hp: 800,
         move_speed: 0,
         contact_damage: 0,
@@ -1331,7 +1332,7 @@ pub static ENEMIES: &[EnemyDef] = &[
 ];
 
 /// Index of the boss enemy def.
-pub const SAMWISE: u16 = 2;
+pub const BOSS: u16 = 2;
 
 // Match timeline (ticks @ 30 Hz). The HP/damage curve (`enemy_hp_mult`) is a
 // STEPPED "RAMP" on a strict 3-MINUTE cadence: every interval is gentle climb →
@@ -1344,7 +1345,7 @@ pub const SCALE_STEP_1_TICK: u32 = 10 * 60 * 30; // 18000 — 10 min (roster ref
 pub const SCALE_STEP_2_TICK: u32 = 15 * 60 * 30; // 27000 — 15 min (roster reference)
 pub const CLIFF_20_TICK: u32 = 20 * 60 * 30; // 36000 — 20 min (roster surge gate)
 pub const CLIFF_25_TICK: u32 = 25 * 60 * 30; // 45000 — 25 min (roster surge gate)
-/// The end-game boss ("Hungry Hungry Happypotamus") spawns here; normal waves
+/// The end-game boss ("The Hippocrate") spawns here; normal waves
 /// stop. Moved from 15 min to 30 min — it is the climax most runs end at.
 pub const BOSS_SPAWN_TICK: u32 = 30 * 60 * 30; // 54000 — 30 min
 
@@ -1464,20 +1465,20 @@ pub fn enemy_hp_mult(tick: u32) -> Fixed {
 /// Ticks per in-game minute at 30 Hz (gate-time helper for the schedule).
 const MIN: u32 = 60 * 30;
 
-/// Boss-phase ESCORT swarm (30 min+): spawned alongside Hungry Hungry
-/// Happypotamus by `waves::spawn` at the peak ×11 HP tier. A relentless grunt/raider/
+/// Boss-phase ESCORT swarm (30 min+): spawned alongside The Hippocrate
+/// by `waves::spawn` at the peak ×11 HP tier. A relentless swarm/rusher/
 /// bruiser flood whose job is contact-damage VOLUME and keeping the player's Clear
 /// cycling (every Clear also chips the Clear-only boss). Tuned so the boss phase is
 /// the wall MOST runs end at — survivable only by a genuinely prepared snowball.
 pub static BOSS_ESCORT: &[WaveSpawn] = &[
-    WaveSpawn { enemy: 0, cadence_ticks: 4, start_tick: BOSS_SPAWN_TICK },  // Fel Orc Grunt — dense floor (was 5)
-    WaveSpawn { enemy: 4, cadence_ticks: 12, start_tick: BOSS_SPAWN_TICK }, // Fel Orc Raider — fast pressure (was 18)
-    WaveSpawn { enemy: 5, cadence_ticks: 15, start_tick: BOSS_SPAWN_TICK }, // Bandit Rider — very fast (was 22)
-    WaveSpawn { enemy: 1, cadence_ticks: 45, start_tick: BOSS_SPAWN_TICK }, // Steam Tank — periodic bruiser (was 60)
+    WaveSpawn { enemy: 0, cadence_ticks: 4, start_tick: BOSS_SPAWN_TICK },  // Squeakzilla — dense floor (was 5)
+    WaveSpawn { enemy: 4, cadence_ticks: 12, start_tick: BOSS_SPAWN_TICK }, // Bacon — fast pressure (was 18)
+    WaveSpawn { enemy: 5, cadence_ticks: 15, start_tick: BOSS_SPAWN_TICK }, // Honk — very fast (was 22)
+    WaveSpawn { enemy: 1, cadence_ticks: 45, start_tick: BOSS_SPAWN_TICK }, // Fanged Death — periodic bruiser (was 60)
 ];
 
 /// Match wave schedule: an ESCALATING mix. Early ticks are the original Grunt +
-/// Steam-Tank baseline (entries 0/1, ungated); progressively richer/deadlier
+/// Fanged-Death baseline (entries 0/1, ungated); progressively richer/deadlier
 /// roster entries gate in over the match via `start_tick`. Entries are processed
 /// in catalog order every tick (stable `rng_spawn` draw sequence). The boss tick
 /// stops all of this (handled in `waves::spawn`). HP scales via `enemy_hp_mult`.
@@ -1490,10 +1491,10 @@ pub static BOSS_ESCORT: &[WaveSpawn] = &[
 /// within what even a small arsenal can hold. These are the PRIMARY early-game knob;
 /// raising any cadence (slower spawns) gentles the opening, lowering it makes it
 /// deadlier. Integer ticks — deterministic, no floats. (Balance pass: see `docs/06`.)
-pub const EARLY_GRUNT_CADENCE: u32 = 18; // Fel Orc Grunt swarm floor (was 6)
-pub const EARLY_PEON_CADENCE: u32 = 45; // Fel Orc Peon trickle (was 18)
-pub const EARLY_RAIDER_CADENCE: u32 = 95; // Fel Orc Raider rush (was 55)
-pub const EARLY_BANDIT_CADENCE: u32 = 130; // Bandit Rider rush (was 100)
+pub const EARLY_GRUNT_CADENCE: u32 = 18; // Squeakzilla swarm floor (was 6)
+pub const EARLY_PEON_CADENCE: u32 = 45; // Doomduck trickle (was 18)
+pub const EARLY_RAIDER_CADENCE: u32 = 95; // Bacon rush (was 55)
+pub const EARLY_BANDIT_CADENCE: u32 = 130; // Honk rush (was 100)
 
 pub static WAVE_M0: &[WaveSpawn] = &[
     // --- baseline (from the start) ---
@@ -1505,43 +1506,43 @@ pub static WAVE_M0: &[WaveSpawn] = &[
     // 10 s Clear, and the fast-rusher streams (Raider/Bandit) arrive inside that
     // cooldown, so leak accumulates. Cadences come from the `EARLY_*_CADENCE`
     // constants above (the primary early-game knob).
-    WaveSpawn { enemy: 0, cadence_ticks: EARLY_GRUNT_CADENCE, start_tick: 0 }, // Fel Orc Grunt — swarm floor
-    WaveSpawn { enemy: 1, cadence_ticks: 95, start_tick: 0 }, // Steam Tank — periodic bruiser (slow, 1500 contact)
-    // --- early escalation (≈12s+): cheap peons stream in early ---
-    WaveSpawn { enemy: 3, cadence_ticks: EARLY_PEON_CADENCE, start_tick: MIN / 5 }, // Fel Orc Peon
-    WaveSpawn { enemy: 11, cadence_ticks: 600, start_tick: MIN / 2 }, // Target Dummy (rare, inert)
+    WaveSpawn { enemy: 0, cadence_ticks: EARLY_GRUNT_CADENCE, start_tick: 0 }, // Squeakzilla — swarm floor
+    WaveSpawn { enemy: 1, cadence_ticks: 95, start_tick: 0 }, // Fanged Death — periodic bruiser (slow, 1500 contact)
+    // --- early escalation (≈12s+): cheap chaff streams in early ---
+    WaveSpawn { enemy: 3, cadence_ticks: EARLY_PEON_CADENCE, start_tick: MIN / 5 }, // Doomduck
+    WaveSpawn { enemy: 11, cadence_ticks: 600, start_tick: MIN / 2 }, // Dodo (rare, inert)
     // --- ≈25s: fast melee rushers — the core of the eco-rush punish. Raiders are
     //     fast (speed 16) and hit hard (700 contact), so they reach the tank inside
     //     the Clear cooldown and a weaponless tank can't keep them off. ---
-    WaveSpawn { enemy: 4, cadence_ticks: EARLY_RAIDER_CADENCE, start_tick: 5 * MIN / 12 }, // Fel Orc Raider
-    // --- ≈1 min: a second peon trickle thickens the wall ---
-    WaveSpawn { enemy: 3, cadence_ticks: 70, start_tick: MIN }, // Fel Orc Peon (second stream from 1 min)
+    WaveSpawn { enemy: 4, cadence_ticks: EARLY_RAIDER_CADENCE, start_tick: 5 * MIN / 12 }, // Bacon
+    // --- ≈1 min: a second chaff trickle thickens the wall ---
+    WaveSpawn { enemy: 3, cadence_ticks: 70, start_tick: MIN }, // Doomduck (second stream from 1 min)
     // --- ≈45 s: even faster bandit rushers pile on (pulled early — fastest enemy,
     //     arrives inside the Clear cooldown, so it's the main eco-rush punisher) ---
-    WaveSpawn { enemy: 5, cadence_ticks: EARLY_BANDIT_CADENCE, start_tick: 3 * MIN / 4 }, // Bandit Rider (very fast)
+    WaveSpawn { enemy: 5, cadence_ticks: EARLY_BANDIT_CADENCE, start_tick: 3 * MIN / 4 }, // Honk (very fast)
     // --- ≈90 s: ranged spitters start pelting from STANDOFF. Pulled early on the
     //     balance pass: standoff DPS (it pelts without reaching the tank, and a
     //     weaponless tank can't kill it between Clears) is what closes the eco-rush
     //     stalemate — it breaks the "Clear keeps the board empty forever" loophole
     //     so a naked tank reliably dies by ≤3600, while a real build just shoots it. ---
-    WaveSpawn { enemy: 8, cadence_ticks: 120, start_tick: 3 * MIN / 2 }, // Poisonspitter (ranged, early standoff)
+    WaveSpawn { enemy: 8, cadence_ticks: 120, start_tick: 3 * MIN / 2 }, // Croak (ranged, early standoff)
     // --- ≈4 min: casters + heavier ranged breath ---
-    WaveSpawn { enemy: 7, cadence_ticks: 180, start_tick: 4 * MIN }, // Fel Orc Warlock (caster)
-    WaveSpawn { enemy: 9, cadence_ticks: 200, start_tick: 4 * MIN }, // Firebreather (ranged)
-    // --- ≈6 min: fortified giants + slow ice breath, the late-game wall ---
-    WaveSpawn { enemy: 6, cadence_ticks: 300, start_tick: 6 * MIN }, // Mountain Giant (Fortified)
-    WaveSpawn { enemy: 10, cadence_ticks: 240, start_tick: 6 * MIN }, // Icebreather (ranged)
+    WaveSpawn { enemy: 7, cadence_ticks: 180, start_tick: 4 * MIN }, // Nope Rope (caster)
+    WaveSpawn { enemy: 9, cadence_ticks: 200, start_tick: 4 * MIN }, // Spicy (ranged)
+    // --- ≈6 min: fortified bruisers + slow ice breath, the late-game wall ---
+    WaveSpawn { enemy: 6, cadence_ticks: 300, start_tick: 6 * MIN }, // Bonk (Fortified)
+    WaveSpawn { enemy: 10, cadence_ticks: 240, start_tick: 6 * MIN }, // Popsicle (ranged)
     // --- POST-15 CLIFF SURGES: discrete roster jumps coinciding with the HP cliffs
     //     so each step is felt as MORE enemies AND tougher enemies, not just an HP
     //     bump. Telegraphed by the HP ramp in `enemy_hp_mult` landing at the same
     //     tick. These keep a snowballing player pressured between/at the cliffs.
     // Cliff #2 @20 min: a heavy fortified surge + extra fast rushers.
-    WaveSpawn { enemy: 6, cadence_ticks: 150, start_tick: CLIFF_20_TICK }, // Mountain Giant (surge, was 300)
-    WaveSpawn { enemy: 5, cadence_ticks: 60, start_tick: CLIFF_20_TICK },  // Bandit Rider (fast surge)
-    // Cliff #3 @25 min: relentless breathers + a grunt flood into the boss.
-    WaveSpawn { enemy: 9, cadence_ticks: 90, start_tick: CLIFF_25_TICK },  // Firebreather (surge)
-    WaveSpawn { enemy: 10, cadence_ticks: 100, start_tick: CLIFF_25_TICK }, // Icebreather (surge)
-    WaveSpawn { enemy: 0, cadence_ticks: 8, start_tick: CLIFF_25_TICK },   // Fel Orc Grunt (pre-boss flood)
+    WaveSpawn { enemy: 6, cadence_ticks: 150, start_tick: CLIFF_20_TICK }, // Bonk (surge, was 300)
+    WaveSpawn { enemy: 5, cadence_ticks: 60, start_tick: CLIFF_20_TICK },  // Honk (fast surge)
+    // Cliff #3 @25 min: relentless breathers + a swarm flood into the boss.
+    WaveSpawn { enemy: 9, cadence_ticks: 90, start_tick: CLIFF_25_TICK },  // Spicy (surge)
+    WaveSpawn { enemy: 10, cadence_ticks: 100, start_tick: CLIFF_25_TICK }, // Popsicle (surge)
+    WaveSpawn { enemy: 0, cadence_ticks: 8, start_tick: CLIFF_25_TICK },   // Squeakzilla (pre-boss flood)
 ];
 
 /// Enemies spawn on this ring and march toward the tank. The eight angular
@@ -1576,9 +1577,9 @@ const fn v(x: i64, y: i64) -> Vec2 {
 pub const NUM_ARMOR_CLASSES: usize = 3;
 
 /// Armor/damage matrix: `DAMAGE_MATRIX[damage_type][armor_class]` as a Fixed
-/// multiplier (adapted from `war3mapMisc.txt`). Three armor classes:
-/// 0 Light, 1 Medium, 2 Fortified. Fortified shrugs off everything except Siege
-/// (classic WC3): Siege bites HARD, Piercing/Magic/Normal/Chaos are reduced.
+/// multiplier (adapted from the source extraction). Three armor classes:
+/// 0 Light, 1 Medium, 2 Fortified. Fortified shrugs off everything except Siege:
+/// Siege bites HARD, Piercing/Magic/Normal/Chaos are reduced.
 pub fn damage_multiplier(damage_type: u8, armor_class: u8) -> Fixed {
     // rows = Normal, Piercing, Magic, Siege, Chaos ; cols = Light, Medium, Fortified
     const M: [[(i64, i64); NUM_ARMOR_CLASSES]; 5] = [

@@ -9,14 +9,14 @@ const N := 8                  # players in the demo match
 # Relative paths under a theme folder (the locked art filename contract), in
 # enemy-kind order for the cached enemy set and minion-kind order for minions.
 const ENEMY_REL := [
-	"enemies/fel_orc_grunt.svg", "enemies/steam_tank.svg",
-	"enemies/samwise.svg", "enemies/fel_orc_peon.svg",
-	"enemies/fel_orc_raider.svg", "enemies/bandit_rider.svg",
-	"enemies/mountain_giant.svg", "enemies/fel_orc_warlock.svg",
+	"enemies/squeakzilla_rat.svg", "enemies/fanged_death.svg",
+	"enemies/boss_hippo.svg", "enemies/doomduck.svg",
+	"enemies/bacon_warthog.svg", "enemies/bandit_rider.svg",
+	"enemies/bonk_golem.svg", "enemies/noperope_cobra.svg",
 	"enemies/poisonspitter.svg", "enemies/firebreather.svg",
 	"enemies/icebreather.svg", "enemies/target_dummy.svg",
 ]
-const MINION_REL := ["minions/skeleton.svg", "minions/infernal.svg"]
+const MINION_REL := ["minions/larvae.svg", "minions/spores.svg"]
 
 var m
 

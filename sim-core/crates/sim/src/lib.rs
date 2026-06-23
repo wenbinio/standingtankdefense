@@ -85,7 +85,7 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     combat::tick_hazards(s);
     // 6c'. Damage/poison aura (Blight Aura): periodic AoE on its integer cadence.
     combat::tick_aura(s);
-    // 6d. Summoned allies (skeletons / infernals) move and strike enemies.
+    // 6d. Summoned allies (Larvae / Spores) move and strike enemies.
     combat::tick_minions(s);
     // 7. Status effects: poison DoT, frost/stun decay (poison kills → pending_kills).
     status::tick(s);

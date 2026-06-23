@@ -107,7 +107,7 @@ fn main() {
 
         let boss_now = s.enemies.iter().any(|e| content::ENEMIES[e.def as usize].boss);
         if boss_now && !prev_boss {
-            push(&mut log, "*** BOSS: Samwise has arrived! ***".to_string());
+            push(&mut log, "*** BOSS: The Hippocrate has arrived! Bedside manner: terminal. ***".to_string());
         }
         prev_boss = boss_now;
 

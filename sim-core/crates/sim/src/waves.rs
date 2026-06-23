@@ -8,7 +8,7 @@ use crate::state::*;
 /// `s.alloc_entity_id()`; push to `s.enemies` (keep id order). Set hp from
 /// `EnemyDef::base_hp`.
 pub(crate) fn spawn(s: &mut ArenaState) {
-    // Boss phase (30 min+): spawn Hungry Hungry Happypotamus exactly once at
+    // Boss phase (30 min+): spawn The Hippocrate exactly once at
     // the boss tick. The boss uses its fixed HP (no scaling) and is immune to
     // weapon fire — only `Clear` damages it (handled in combat). UNLIKE the old
     // design, normal waves do NOT fully stop: a relentless ESCORT swarm keeps
@@ -18,10 +18,10 @@ pub(crate) fn spawn(s: &mut ArenaState) {
     //      boss, so the boss is a real MULTI-CLEAR FIGHT rather than a stalemate,
     //   3) it makes the boss the wall most runs end at instead of a victory lap.
     if s.tick == content::BOSS_SPAWN_TICK {
-        let edef = &content::ENEMIES[content::SAMWISE as usize];
+        let edef = &content::ENEMIES[content::BOSS as usize];
         let id = s.alloc_entity_id();
         s.enemies
-            .push(Enemy::new(id, content::SAMWISE, edef.base_hp, content::SPAWN_RING[0]));
+            .push(Enemy::new(id, content::BOSS, edef.base_hp, content::SPAWN_RING[0]));
         // fall through: the escort swarm below also spawns on this tick.
     }
     if s.tick >= content::BOSS_SPAWN_TICK {
@@ -79,9 +79,9 @@ mod tests {
 
     #[test]
     fn spawns_on_cadence_for_first_wave_entry() {
-        // WAVE_M0[0]: Fel Orc Grunt at `EARLY_GRUNT_CADENCE` (18); WAVE_M0[1]: Steam
-        // Tank at 95. The grunt cadence fires only the grunt entry (all gated entries
-        // — peon/raider/etc — start well after, and 18 % 95 != 0).
+        // WAVE_M0[0]: Squeakzilla at `EARLY_GRUNT_CADENCE` (18); WAVE_M0[1]: Fanged
+        // Death at 95. The swarm cadence fires only the swarm entry (all gated entries
+        // — chaff/rusher/etc — start well after, and 18 % 95 != 0).
         let g = content::EARLY_GRUNT_CADENCE;
         let mut s = blank_state();
         s.tick = g; // g % g == 0, g % 95 != 0
@@ -89,7 +89,7 @@ mod tests {
         spawn(&mut s);
         assert_eq!(s.enemies.len(), before + 1, "exactly one enemy (entry 0)");
         assert_eq!(s.enemies[0].def, 0);
-        // hp from EnemyDef::base_hp (Fel Orc Grunt = 200).
+        // hp from EnemyDef::base_hp (Squeakzilla = 200).
         assert_eq!(s.enemies[0].hp, 200);
     }
 
@@ -110,7 +110,7 @@ mod tests {
         assert_eq!(s.enemies.len(), 2);
         assert_eq!(s.enemies[0].def, 0);
         assert_eq!(s.enemies[1].def, 1);
-        assert_eq!(s.enemies[1].hp, 1200); // Steam Tank base_hp
+        assert_eq!(s.enemies[1].hp, 1200); // Fanged Death base_hp
     }
 
     #[test]
@@ -250,7 +250,7 @@ mod tests {
             .filter(|e| content::ENEMIES[e.def as usize].boss)
             .count();
         assert_eq!(bosses, 1, "exactly one boss spawns at the boss tick");
-        assert!(s.enemies.iter().any(|e| e.def == content::SAMWISE));
+        assert!(s.enemies.iter().any(|e| e.def == content::BOSS));
 
         // The boss spawns ONLY once: at a later boss-phase tick no second boss
         // appears, but the escort swarm keeps coming (the climax is a real fight).
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn every_roster_enemy_spawns_over_the_match() {
         // Walk the whole pre-boss timeline; collect every enemy def that spawns.
-        // Every catalog enemy except the boss (the Happypotamus, which arrives via the
+        // Every catalog enemy except the boss (The Hippocrate, which arrives via the
         // dedicated boss tick) must appear via the escalating WAVE_M0 schedule.
         let mut s = blank_state();
         let mut seen = std::collections::BTreeSet::new();
@@ -295,14 +295,14 @@ mod tests {
         let mut bs = blank_state();
         bs.tick = content::BOSS_SPAWN_TICK;
         spawn(&mut bs);
-        assert_eq!(bs.enemies[0].def, content::SAMWISE);
+        assert_eq!(bs.enemies[0].def, content::BOSS);
     }
 
     #[test]
     fn gated_entries_dormant_until_start_tick() {
-        // The Fel Orc Peon (def 3) is gated; before its start_tick it must not
+        // The Doomduck (def 3) is gated; before its start_tick it must not
         // spawn even on a tick divisible by its cadence.
-        let peon = content::ENEMIES.iter().position(|e| e.name == "Fel Orc Peon").unwrap() as u16;
+        let peon = content::ENEMIES.iter().position(|e| e.name == "Doomduck").unwrap() as u16;
         let ws = content::WAVE_M0.iter().find(|w| w.enemy == peon).unwrap();
         assert!(ws.start_tick > 0, "peon entry is gated");
         // Largest cadence-multiple strictly below the gate.

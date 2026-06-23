@@ -4,7 +4,7 @@ use crate::shop;
 use crate::state::*;
 
 /// Damage dealt to every enemy by a `Clear`. Large but FINITE: it wipes normal
-/// enemies instantly, but the boss (Hungry Hungry Happypotamus, ~33M HP) takes
+/// enemies instantly, but the boss (The Hippocrate, ~33M HP) takes
 /// ~11 Clears — and `Clear` is the ONLY thing that can hurt the boss.
 const CLEAR_DAMAGE: i64 = 3_000_000;
 /// Cooldown (in ticks) imposed after a `Clear`.
@@ -341,8 +341,8 @@ mod tests {
         s.tick = 0;
         s.tank.clear_cooldown_end = 0;
         let _ = Fixed::ONE;
-        let boss_hp = content::ENEMIES[content::SAMWISE as usize].base_hp;
-        s.enemies = vec![mk_enemy(10, content::SAMWISE, boss_hp)];
+        let boss_hp = content::ENEMIES[content::BOSS as usize].base_hp;
+        s.enemies = vec![mk_enemy(10, content::BOSS, boss_hp)];
 
         apply(&mut s, Input::Clear);
         assert_eq!(s.enemies.len(), 1, "boss survives a single Clear");
@@ -354,6 +354,6 @@ mod tests {
             apply(&mut s, Input::Clear);
         }
         assert!(s.enemies.is_empty(), "boss dies after enough Clears");
-        assert_eq!(s.pending_kills.last(), Some(&content::SAMWISE));
+        assert_eq!(s.pending_kills.last(), Some(&content::BOSS));
     }
 }

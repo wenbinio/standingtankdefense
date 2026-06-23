@@ -231,8 +231,8 @@ impl Enemy {
     }
 }
 
-/// A persistent damaging area dropped by a weapon ability (the source's Goblin
-/// Land Mines / burning oil). Each tick it pulses `dmg` to every non-boss enemy
+/// A persistent damaging area dropped by a weapon ability (Boom Bloom's mine
+/// field / scorched ground). Each tick it pulses `dmg` to every non-boss enemy
 /// within `radius`, for `ticks_left` ticks, then expires. Fully deterministic:
 /// fixed integer fields, stable id order, no RNG. Damage routes through the
 /// shared death path so kills award bounty and Fire deaths still explode.
@@ -249,8 +249,8 @@ pub struct Hazard {
     pub ticks_left: u32,
 }
 
-/// A temporary ALLY summoned by a weapon (the source's raised skeleton /
-/// summoned infernal). Each tick it walks toward the nearest non-boss enemy and
+/// A temporary ALLY summoned by a weapon (a raised Larva /
+/// Spore). Each tick it walks toward the nearest non-boss enemy and
 /// strikes it when in reach; it expires at `expire_tick`. Damage routes through
 /// the shared death path so its kills award bounty and trigger Fire explosions.
 /// Fully deterministic: fixed/integer fields, stable id order, no RNG.
@@ -258,7 +258,7 @@ pub struct Hazard {
 pub struct Minion {
     pub id: EntityId,
     pub pos: Vec2,
-    /// Render kind: 0 = skeleton, 1 = infernal.
+    /// Render kind: 0 = larva, 1 = spore.
     pub kind: u8,
     /// Reserved for future enemy retaliation; minions are lifetime-bounded today.
     pub hp: i64,
@@ -446,7 +446,7 @@ pub struct ArenaState {
     /// Persistent damaging areas (land mines / burning oil) from weapon
     /// abilities. Stored in id order; ticked in `combat::tick_hazards`.
     pub hazards: Vec<Hazard>,
-    /// Summoned allies (skeletons / infernals). Stored in id order; ticked in
+    /// Summoned allies (Larvae / Spores). Stored in id order; ticked in
     /// `combat::tick_minions`.
     pub minions: Vec<Minion>,
     pub economy: Economy,

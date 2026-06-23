@@ -114,7 +114,7 @@ impl StSim {
         a
     }
 
-    /// Per-enemy catalog kind index (0 grunt · 1 steam tank · 2 samwise),
+    /// Per-enemy catalog kind index (0 Squeakzilla · 1 Fanged Death · 2 boss),
     /// parallel to `enemies_pos()` — selects the sprite.
     #[func]
     fn enemies_kind(&self) -> PackedByteArray {
@@ -172,7 +172,7 @@ impl StSim {
         a
     }
 
-    /// Per-minion sprite kind (0 skeleton · 1 infernal), parallel to `minions_pos`.
+    /// Per-minion sprite kind (0 larvae · 1 spores), parallel to `minions_pos`.
     #[func]
     fn minions_kind(&self) -> PackedByteArray {
         let mut a = PackedByteArray::new();
@@ -436,7 +436,7 @@ impl StMatch {
         a
     }
 
-    /// Summoned-ally sprite kinds for player `i` (0 skeleton · 1 infernal).
+    /// Summoned-ally sprite kinds for player `i` (0 larvae · 1 spores).
     #[func]
     fn minions_kind(&self, i: i64) -> PackedByteArray {
         let mut a = PackedByteArray::new();

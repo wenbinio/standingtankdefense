@@ -90,7 +90,7 @@ the murk. Natural / heroic proportions — deliberately NOT chibi.
   all sides so glow/shadow never clips.
 - **Ground shadow:** standing subjects get a soft elliptical dark (`shadow_cast`) ground
   shadow under the pivot.
-- **Canvas sizes (S):** player tank = **192**; Samwise (boss) = **320**; (full set later:
+- **Canvas sizes (S):** player tank = **192**; The Hippocrate (boss) = **320**; (full set later:
   normal enemies 96, projectiles 48, fx 128, ui icons 48–64, frames 96, panel 320×96,
   env 1024).
 - **Self-contained SVG only.** No raster, no external fonts/images/links. Must be well-formed
@@ -119,3 +119,8 @@ the murk. Natural / heroic proportions — deliberately NOT chibi.
 - No glow on non-emissive surfaces; no rotation baked into sprites.
 - No floats-into-bright backgrounds; the stage stays dark and calm.
 - Never mix team glow temperatures (ally cold / enemy warm only).
+
+
+## Default defender skin
+
+- The default defender skin is a **hermit-crab fortress** (an immobile crab hauling a fortified shell-keep), with a **war-tortoise** alternate skin. Both read as the same emplaced "Hermit-Crab Fortress" tank silhouette; no new art is drawn here.

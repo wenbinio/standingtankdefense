@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - MINION "Spores" (ally, from Shroom Doom) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- HEAVILY CHIBI: big round charred volcanic-rock body (~65% canvas) with magma cracks, -->
+  <!-- stubby horns, ONE big cyan ally eye + cyan binding-ring, tiny clawed feet. ~1.7 heads. -->
+  <!-- ALLY read: a bound summon ringed/cored in cool aether-blue (blue = OURS) despite the fire. -->
+  <defs>
+    <filter id="if_cyan" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="2.4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+    <filter id="if_magma" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.4" result="m"/>
+      <feMerge><feMergeNode in="m"/><feMergeNode in="m"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ground shadow under pivot (faint cyan-tinged, bound summon) -->
+  <ellipse cx="48" cy="84" rx="28" ry="9" fill="#0b0d14" opacity="0.45"/>
+  <ellipse cx="48" cy="85" rx="18" ry="5" fill="#0e3a4a" opacity="0.35"/>
+
+  <!-- ===================== TINY STUBBY CLAWED FEET (peeking under big body) ===================== -->
+  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <path d="M37 76 C34 84 36 88 41 87 C45 86 45 80 44 76 Z" fill="#2a1c18"/>
+    <path d="M52 76 C55 84 53 88 48 87 C44 86 44 80 45 76 Z" fill="#2a1c18"/>
+  </g>
+
+  <!-- ===================== CHARRED STUBBY CLAW-ARM (held close, faces UP) ===================== -->
+  <path d="M62 56 C70 54 75 50 73 46 C66 47 60 52 58 56 Z"
+        fill="#3a2620" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+  <!-- blunt little claw tips -->
+  <g fill="#1a1210" stroke="#101218" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M71 47 L78 40 L74 49 Z"/>
+    <path d="M68 50 L74 45 L71 52 Z"/>
+  </g>
+
+  <!-- ===================== STUBBY BACKSWEPT HORNS (frame the head) ===================== -->
+  <g fill="#2a1c18" stroke="#101218" stroke-width="3.5" stroke-linejoin="round">
+    <path d="M34 32 L24 18 L40 28 Z"/>
+    <path d="M62 32 L72 18 L56 28 Z"/>
+  </g>
+
+  <!-- ===================== BIG ROUND CHARRED-ROCK BODY (dominant mass) ===================== -->
+  <!-- body base/shadow (big bubble) -->
+  <path d="M48 30 C72 30 80 50 76 66 C72 80 60 82 48 82 C36 82 24 80 20 66 C16 50 24 30 48 30 Z"
+        fill="#2a1c18" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- main charred rock fill -->
+  <path d="M48 32 C70 32 77 50 73 65 C69 77 59 79 48 79 C37 79 27 77 23 65 C19 50 26 32 48 32 Z"
+        fill="#3a2620" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- inner shadow on away (lower) half -->
+  <path d="M73 65 C69 77 59 79 48 79 C37 79 27 77 23 65 C32 71 40 73 48 73 C56 73 64 71 73 65 Z"
+        fill="#2a1c18" opacity="0.9"/>
+  <!-- forward rim light (camera-facing top edge) -->
+  <path d="M48 32 C66 32 73 46 71 56 C62 46 56 43 48 43 C40 43 34 46 25 56 C23 46 30 32 48 32 Z"
+        fill="#5a4038" opacity="0.6"/>
+
+  <!-- MAGMA CRACKS across the body (warm body texture, not the team tell) -->
+  <g stroke="#ff7a2e" stroke-width="2.6" stroke-linecap="round" fill="none" filter="url(#if_magma)" opacity="0.9">
+    <path d="M30 50 L36 58 L31 66"/>
+    <path d="M66 50 L60 58 L65 66"/>
+    <path d="M48 70 L48 76"/>
+  </g>
+  <g stroke="#ffd27a" stroke-width="1.1" stroke-linecap="round" fill="none" opacity="0.9">
+    <path d="M30 50 L36 58 L31 66"/>
+    <path d="M66 50 L60 58 L65 66"/>
+  </g>
+
+  <!-- chunky stubby left claw-arm (held close) -->
+  <path d="M27 58 C19 60 17 66 22 69 C29 67 33 63 34 59 Z"
+        fill="#3a2620" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- ===================== CHEST CYAN BINDING RING + CORE (ally tell, dominant focal) ===================== -->
+  <circle cx="48" cy="62" r="11" fill="none" stroke="#3fa9ff" stroke-width="3" filter="url(#if_cyan)" opacity="0.8"/>
+  <circle cx="48" cy="62" r="11" fill="none" stroke="#3fa9ff" stroke-width="2" opacity="0.95"/>
+  <circle cx="48" cy="62" r="6.5" fill="#3fa9ff" filter="url(#if_cyan)"/>
+  <circle cx="48" cy="62" r="4.3" fill="#3fa9ff" stroke="#101218" stroke-width="2.5"/>
+  <circle cx="46.5" cy="60.5" r="1.5" fill="#bcd6f2"/>
+
+  <!-- chunky brow ridge over the eye -->
+  <path d="M30 38 C38 32 58 32 66 38 C58 36 38 36 30 38 Z"
+        fill="#2a1c18" stroke="#101218" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- ===================== HUGE CUTE CYAN EYE (oversized ally feature, overrides fire) ===================== -->
+  <g>
+    <circle cx="40" cy="44" r="8.5" fill="#3fa9ff" filter="url(#if_cyan)"/>
+    <circle cx="40" cy="44" r="6.5" fill="#101218" stroke="#3fa9ff" stroke-width="2.5"/>
+    <circle cx="40" cy="44" r="3" fill="#3fa9ff"/>
+    <circle cx="38.5" cy="42.5" r="1.4" fill="#bcd6f2"/>
+    <circle cx="57" cy="45" r="8.5" fill="#3fa9ff" filter="url(#if_cyan)"/>
+    <circle cx="57" cy="45" r="6.5" fill="#101218" stroke="#3fa9ff" stroke-width="2.5"/>
+    <circle cx="57" cy="45" r="3" fill="#3fa9ff"/>
+    <circle cx="55.5" cy="43.5" r="1.4" fill="#bcd6f2"/>
+  </g>
+
+  <!-- ===================== GLOWING MOLTEN MAW (lower face, warm) ===================== -->
+  <path d="M40 54 C44 52 52 52 56 54 C54 60 42 60 40 54 Z"
+        fill="#1a0e08" stroke="#101218" stroke-width="2.5"/>
+  <path d="M42 55 C45 54 51 54 54 55 C52 58 44 58 42 55 Z"
+        fill="#ff7a2e" filter="url(#if_magma)"/>
+  <!-- stubby blunt lower fangs -->
+  <g fill="#3a2620" stroke="#101218" stroke-width="2" stroke-linejoin="round">
+    <path d="M44 56 L46 61 L48 56 Z"/>
+    <path d="M48 56 L50 61 L52 56 Z"/>
+  </g>
+</svg>

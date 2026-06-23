@@ -1,6 +1,6 @@
 //! M4 systems-integration: drive the FULL `step()` pipeline (all 11 phases —
 //! shop, input, spawning with scaling, all attack types, status ticking,
-//! defensive layer, economy, boss) for an entire match to the Samwise spawn,
+//! defensive layer, economy, boss) for an entire match to the boss spawn,
 //! and prove the whole thing composes deterministically without panic
 //! (overflow-checks are on, so this also guards the large-number paths).
 
@@ -40,6 +40,6 @@ fn full_match_arc_is_deterministic_and_reaches_the_boss() {
     let a = run_to_boss();
     let b = run_to_boss();
     assert_eq!(a.0, b.0, "the full match arc must be byte-deterministic");
-    assert!(a.1, "Samwise must be present after the boss tick");
+    assert!(a.1, "the boss must be present after the boss tick");
     assert!(a.2 > 1, "the scripted buys should have added weapons");
 }

@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Standing Tank Defense - MINION "Larva" (ally, from Squirm) -->
+  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
+  <!-- HEAVILY CHIBI: big round bone skull/body (~65% canvas), HUGE cute cyan ally eye-sockets, -->
+  <!-- stubby bone arm w/ tiny shard-blade, tiny stubby feet. ~1.7 heads tall. -->
+  <!-- ALLY read: cool aether-blue glow in sockets + chest rune (blue = ours). -->
+  <defs>
+    <filter id="bk_glow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ground shadow under pivot -->
+  <ellipse cx="48" cy="84" rx="27" ry="9" fill="#0b0d14" opacity="0.45"/>
+
+  <!-- ===================== TINY STUBBY BONE FEET (peeking under big body) ===================== -->
+  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
+    <path d="M37 76 C34 84 36 88 41 87 C45 86 45 80 44 76 Z" fill="#9c9678"/>
+    <path d="M52 76 C55 84 53 88 48 87 C44 86 44 80 45 76 Z" fill="#9c9678"/>
+  </g>
+
+  <!-- ===================== TINY SHARD-BONE BLADE (held close, faces UP) ===================== -->
+  <!-- short stubby grip -->
+  <rect x="70" y="44" width="6" height="20" rx="3" fill="#9c9678" stroke="#101218" stroke-width="3.5" stroke-linejoin="round" transform="rotate(14 73 54)"/>
+  <!-- blunt little shard blade -->
+  <path d="M66 42 L74 22 L82 42 L78 46 L74 38 L70 46 Z"
+        fill="#d9d2b0" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M74 22 L82 42 L78 42 L74 30 Z" fill="#9c9678" opacity="0.85"/>
+  <path d="M66 42 L74 22 L73 30 L69 42 Z" fill="#e8e3d2" opacity="0.6"/>
+
+  <!-- stubby little bone arm reaching to blade -->
+  <path d="M62 56 C70 54 74 52 73 48 C66 49 60 52 58 56 Z"
+        fill="#d9d2b0" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- ===================== BIG ROUND RIBCAGE BODY (dominant mass) ===================== -->
+  <!-- body base/shadow (big bubble) -->
+  <path d="M48 38 C70 38 76 54 72 68 C68 80 58 82 48 82 C38 82 28 80 24 68 C20 54 26 38 48 38 Z"
+        fill="#9c9678" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- main bone fill -->
+  <path d="M48 40 C68 40 73 54 69 67 C65 77 57 79 48 79 C39 79 31 77 27 67 C23 54 28 40 48 40 Z"
+        fill="#d9d2b0" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- inner shadow on away (lower) half -->
+  <path d="M69 67 C65 77 57 79 48 79 C39 79 31 77 27 67 C34 73 41 75 48 75 C55 75 62 73 69 67 Z"
+        fill="#9c9678" opacity="0.9"/>
+  <!-- forward rim light (camera-facing top edge) -->
+  <path d="M48 40 C66 40 71 50 69 60 C62 50 56 47 48 47 C40 47 34 50 27 60 C25 50 30 40 48 40 Z"
+        fill="#e8e3d2" opacity="0.6"/>
+  <!-- chunky rib slats (few, bold) -->
+  <g stroke="#101218" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.85">
+    <path d="M34 58 C40 55 56 55 62 58"/>
+    <path d="M33 68 C40 65 56 65 63 68"/>
+  </g>
+
+  <!-- chunky stubby left bone arm (held close) -->
+  <path d="M27 58 C19 60 17 66 22 69 C29 67 33 63 34 59 Z"
+        fill="#d9d2b0" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- ===================== CHEST AETHER RUNE (ally cyan core) ===================== -->
+  <circle cx="48" cy="63" r="7" fill="#3fa9ff" filter="url(#bk_glow)"/>
+  <circle cx="48" cy="63" r="4.5" fill="#3fa9ff" stroke="#101218" stroke-width="2.5"/>
+  <circle cx="46.5" cy="61.5" r="1.6" fill="#bcd6f2"/>
+
+  <!-- ===================== BIG ROUND CHIBI SKULL (dominant front face) ===================== -->
+  <path d="M48 18 C66 18 74 30 74 42 C74 54 64 60 48 60 C32 60 22 54 22 42 C22 30 30 18 48 18 Z"
+        fill="#d9d2b0" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
+  <!-- skull inner shadow (away/lower half) -->
+  <path d="M74 42 C74 54 64 60 48 60 C32 60 22 54 22 42 C30 50 39 52 48 52 C57 52 66 50 74 42 Z"
+        fill="#9c9678" opacity="0.85"/>
+  <!-- skull forward rim light -->
+  <path d="M48 18 C66 18 72 28 71 38 C62 28 56 25 48 25 C40 25 34 28 25 38 C24 28 30 18 48 18 Z"
+        fill="#e8e3d2" opacity="0.65"/>
+
+  <!-- chunky brow ridge over the sockets -->
+  <path d="M30 34 C38 28 58 28 66 34 C58 32 38 32 30 34 Z"
+        fill="#9c9678" stroke="#101218" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- ===================== HUGE CUTE CYAN EYE-SOCKETS (oversized ally feature) ===================== -->
+  <g>
+    <circle cx="39" cy="40" r="8.5" fill="#3fa9ff" filter="url(#bk_glow)"/>
+    <circle cx="39" cy="40" r="6.5" fill="#101218" stroke="#3fa9ff" stroke-width="2.5"/>
+    <circle cx="39" cy="40" r="3" fill="#3fa9ff"/>
+    <circle cx="37.5" cy="38.5" r="1.4" fill="#bcd6f2"/>
+    <circle cx="57" cy="40" r="8.5" fill="#3fa9ff" filter="url(#bk_glow)"/>
+    <circle cx="57" cy="40" r="6.5" fill="#101218" stroke="#3fa9ff" stroke-width="2.5"/>
+    <circle cx="57" cy="40" r="3" fill="#3fa9ff"/>
+    <circle cx="55.5" cy="38.5" r="1.4" fill="#bcd6f2"/>
+  </g>
+
+  <!-- ===================== CHUNKY GRINNING TEETH (lower skull) ===================== -->
+  <path d="M40 50 C44 48 52 48 56 50 C54 56 42 56 40 50 Z"
+        fill="#101218" stroke="#101218" stroke-width="2"/>
+  <g stroke="#d9d2b0" stroke-width="2.5" stroke-linecap="round">
+    <line x1="44" y1="50" x2="44" y2="54"/>
+    <line x1="48" y1="50" x2="48" y2="55"/>
+    <line x1="52" y1="50" x2="52" y2="54"/>
+  </g>
+</svg>

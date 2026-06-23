@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+  <!-- Standing Tank Defense - GRIMDARK BOSS "HIPPOCLYSM, the End-Game Wall" -->
+  <!-- High 3/4 top-down. Facing UP (north, -Y). No baked rotation. Centered, ~8% margin. -->
+  <!-- Massive visceral horror: diseased flesh, exposed bone, ember-glow eyes, blood gore. -->
+  <!-- Painterly volume; menacing screen-dominating silhouette; WARM enemy glow read. -->
+  <defs>
+    <!-- diseased flesh mass volume (warm key upper-front) -->
+    <radialGradient id="s_flesh" cx="44%" cy="32%" r="85%">
+      <stop offset="0%"  stop-color="#8A9468"/>
+      <stop offset="45%" stop-color="#5C6B4A"/>
+      <stop offset="100%" stop-color="#222A1A"/>
+    </radialGradient>
+    <!-- hunched back hump (darker, away) -->
+    <radialGradient id="s_hump" cx="50%" cy="35%" r="80%">
+      <stop offset="0%"  stop-color="#6E7B52"/>
+      <stop offset="60%" stop-color="#3D472D"/>
+      <stop offset="100%" stop-color="#181E10"/>
+    </radialGradient>
+    <!-- exposed bone -->
+    <linearGradient id="s_bone" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#E6E0CC"/>
+      <stop offset="50%" stop-color="#C9C1A8"/>
+      <stop offset="100%" stop-color="#74705C"/>
+    </linearGradient>
+    <!-- ember eye core -->
+    <radialGradient id="s_ember" cx="50%" cy="45%" r="60%">
+      <stop offset="0%"  stop-color="#FFE7B0"/>
+      <stop offset="35%" stop-color="#FF7A2E"/>
+      <stop offset="100%" stop-color="#5A1D06"/>
+    </radialGradient>
+    <!-- maw / gore -->
+    <radialGradient id="s_maw" cx="50%" cy="30%" r="70%">
+      <stop offset="0%"  stop-color="#6E1F1C"/>
+      <stop offset="70%" stop-color="#350C0B"/>
+      <stop offset="100%" stop-color="#0A0B0F"/>
+    </radialGradient>
+    <filter id="ember_glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <filter id="s_ao" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow under the bulk -->
+  <ellipse cx="160" cy="268" rx="120" ry="34" fill="#06070A" opacity="0.6"/>
+  <ellipse cx="160" cy="270" rx="84" ry="20" fill="#06070A" opacity="0.5"/>
+
+  <!-- ================= HUNCHED BACK / HUMP (behind, lower in frame = away/south) ================= -->
+  <path d="M160 250
+           C92 250 56 216 56 168
+           C56 122 96 100 160 100
+           C224 100 264 122 264 168
+           C264 216 228 250 160 250 Z"
+        fill="url(#s_hump)" stroke="#0A0B0F" stroke-width="5" stroke-linejoin="round"/>
+  <!-- AO trench under the hump -->
+  <path d="M56 168 C56 216 92 250 160 250 C228 250 264 216 264 168
+           C264 200 220 224 160 224 C100 224 56 200 56 168 Z"
+        fill="#06070A" opacity="0.55" filter="url(#s_ao)"/>
+
+  <!-- exposed spine ridge of bone poking from the hump (toward north/up) -->
+  <g stroke="#5A5848" stroke-width="2">
+    <path d="M150 118 L160 96 L170 118 Z" fill="url(#s_bone)"/>
+    <path d="M132 130 L142 110 L150 132 Z" fill="url(#s_bone)"/>
+    <path d="M170 132 L178 110 L188 130 Z" fill="url(#s_bone)"/>
+  </g>
+
+  <!-- ================= SHOULDER MASSES (hulking, to either side, forward) ================= -->
+  <!-- left shoulder -->
+  <ellipse cx="86" cy="158" rx="50" ry="56" fill="url(#s_flesh)" stroke="#0A0B0F" stroke-width="5"/>
+  <!-- right shoulder -->
+  <ellipse cx="234" cy="158" rx="50" ry="56" fill="url(#s_flesh)" stroke="#0A0B0F" stroke-width="5"/>
+  <!-- AO seam where shoulders meet head -->
+  <ellipse cx="118" cy="170" rx="20" ry="34" fill="#06070A" opacity="0.4" filter="url(#s_ao)"/>
+  <ellipse cx="202" cy="170" rx="20" ry="34" fill="#06070A" opacity="0.4" filter="url(#s_ao)"/>
+
+  <!-- bone plates erupting from shoulders (claws/spines) -->
+  <g stroke="#5A5848" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M60 122 L48 92 L74 116 Z" fill="url(#s_bone)"/>
+    <path d="M88 110 L92 80 L106 108 Z" fill="url(#s_bone)"/>
+    <path d="M260 122 L272 92 L246 116 Z" fill="url(#s_bone)"/>
+    <path d="M232 110 L228 80 L214 108 Z" fill="url(#s_bone)"/>
+  </g>
+  <!-- single warm rim on lit shoulder tops -->
+  <path d="M50 150 C56 122 78 110 100 114" fill="none" stroke="#8A9468" stroke-width="5" opacity="0.5" stroke-linecap="round"/>
+  <path d="M270 150 C264 122 242 110 220 114" fill="none" stroke="#6E7B52" stroke-width="5" opacity="0.5" stroke-linecap="round"/>
+
+  <!-- dried-blood gore streaks (sparse) on shoulders -->
+  <path d="M86 188 C82 204 88 218 84 230" fill="none" stroke="#6E1F1C" stroke-width="6" opacity="0.7" stroke-linecap="round"/>
+  <path d="M234 190 C238 206 232 220 236 232" fill="none" stroke="#6E1F1C" stroke-width="5" opacity="0.6" stroke-linecap="round"/>
+
+  <!-- ================= HEAD / SKULL MASS (center, forward = north) ================= -->
+  <!-- fleshy lower head -->
+  <path d="M160 132
+           C200 132 218 158 218 190
+           C218 222 192 244 160 244
+           C128 244 102 222 102 190
+           C102 158 120 132 160 132 Z"
+        fill="url(#s_flesh)" stroke="#0A0B0F" stroke-width="5" stroke-linejoin="round"/>
+  <!-- AO under brow -->
+  <ellipse cx="160" cy="178" rx="46" ry="20" fill="#06070A" opacity="0.45" filter="url(#s_ao)"/>
+
+  <!-- exposed bone brow / skull cap over the eyes (toward north) -->
+  <path d="M112 168
+           C120 140 200 140 208 168
+           C198 154 122 154 112 168 Z"
+        fill="url(#s_bone)" stroke="#5A5848" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M118 164 C140 150 180 150 202 164" fill="none" stroke="#E6E0CC" stroke-width="3" opacity="0.6"/>
+
+  <!-- ================= EMBER EYES (enemy WARM glow read) ================= -->
+  <g>
+    <circle cx="136" cy="184" r="20" fill="#FF7A2E" opacity="0.7" filter="url(#ember_glow)"/>
+    <circle cx="184" cy="184" r="20" fill="#FF7A2E" opacity="0.7" filter="url(#ember_glow)"/>
+    <!-- sunken sockets -->
+    <ellipse cx="136" cy="184" rx="15" ry="13" fill="#0A0B0F"/>
+    <ellipse cx="184" cy="184" rx="15" ry="13" fill="#0A0B0F"/>
+    <circle cx="136" cy="184" r="8" fill="url(#s_ember)"/>
+    <circle cx="184" cy="184" r="8" fill="url(#s_ember)"/>
+    <circle cx="133" cy="181" r="2.5" fill="#FFE7B0"/>
+    <circle cx="181" cy="181" r="2.5" fill="#FFE7B0"/>
+  </g>
+
+  <!-- ================= GAPING MAW (lower head, toward viewer) ================= -->
+  <path d="M132 210 C148 204 172 204 188 210 C182 232 138 232 132 210 Z"
+        fill="url(#s_maw)" stroke="#0A0B0F" stroke-width="3"/>
+  <!-- bone teeth ring -->
+  <g fill="url(#s_bone)" stroke="#5A5848" stroke-width="1">
+    <path d="M138 212 L142 224 L146 212 Z"/>
+    <path d="M150 214 L154 228 L158 214 Z"/>
+    <path d="M162 214 L166 228 L170 214 Z"/>
+    <path d="M174 212 L178 224 L182 212 Z"/>
+    <!-- upper fangs -->
+    <path d="M144 210 L148 200 L152 210 Z"/>
+    <path d="M168 210 L172 200 L176 210 Z"/>
+  </g>
+  <!-- fresh blood at the maw -->
+  <path d="M156 228 C158 238 162 242 160 250" fill="none" stroke="#6E1F1C" stroke-width="4" opacity="0.75" stroke-linecap="round"/>
+
+  <!-- a few warm rim catches on lit forward flesh edges (single accent per region) -->
+  <path d="M108 178 C112 156 130 144 150 144" fill="none" stroke="#8A9468" stroke-width="4" opacity="0.45" stroke-linecap="round"/>
+</svg>
