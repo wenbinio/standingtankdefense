@@ -28,7 +28,7 @@ extends RefCounted
 
 # --- tunables -------------------------------------------------------------
 const SHAKE_DECAY := 1.8           # trauma units per second bled off
-const SHAKE_MAX_PIXELS := 22.0
+const SHAKE_MAX_PIXELS := 12.0
 const GRAVITY := 520.0             # px/s^2 for spark fall (screen space)
 const DRAG := 2.6                  # velocity damping per second
 
@@ -70,7 +70,7 @@ func burst_sparks(p: Vector2, color: Color, count := 8, speed := 240.0, life := 
 func kill_burst(p: Vector2, color: Color) -> void:
 	burst_sparks(p, color, 14, 300.0, 0.45)
 	shockwave(p, Color(color.r, color.g, color.b, 0.9), 64.0, 0.35)
-	add_shake(0.22)
+	add_shake(0.12)
 
 # Expanding ring. `maxr` is the outer radius in pixels at end of life.
 func shockwave(p: Vector2, color: Color, max_radius := 80.0, life := 0.4) -> void:

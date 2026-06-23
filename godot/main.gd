@@ -390,7 +390,7 @@ func _update_juice() -> void:
 	var pc: int = ppos.size()
 	if pc > _prev_proj:
 		_muzzle = 5
-		fx.add_shake(0.05)   # tiny recoil kick on fire
+		fx.add_shake(0.025)   # tiny recoil kick on fire
 	_prev_proj = pc
 	for id in _flash.keys():
 		_flash[id] -= 1
@@ -404,7 +404,7 @@ func _update_juice() -> void:
 
 	# Clear (Space) is a big event: shockwave already drawn; add shake + flash.
 	if clear_fx == 18:
-		fx.add_shake(0.5)
+		fx.add_shake(0.35)
 		fx.add_flash(Color(0.7, 0.85, 1.0, 0.35), 0.22)
 		fx.add_hitstop(0.05)
 
