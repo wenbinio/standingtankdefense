@@ -1234,21 +1234,24 @@ pub const WARN_TICKS: u32 = RAMP_INTERVAL - GENTLE_TICKS; // 900 — final 30 s
 ///   1. GENTLE climb  `b → b·G`           over the first `GENTLE_TICKS`,
 ///   2. WARNING ramp  `b·G → b·G·W`       over the final `WARN_TICKS` (steeper),
 ///   3. DRAMATIC step `b·G·W → b·G·W·J`   instantaneously AT the 3-min boundary.
-/// So each interval multiplies difficulty by `G·W·J ≈ 1.2705`, and over 10
-/// intervals that compounds toward ≈ ×11 at the 30-min boss (the boss tick
-/// force-returns exactly ×11), preserving iter-2's boss endpoint and iter-3's
-/// per-3-min marks (×1.27/1.61/…). ITER-4: the SHAPE is retuned so the boundary
-/// JUMP is the dominant, dramatic event and the in-between climb is calm. `J` now
-/// carries +22% (was +9%), while `G` drops to +2.5% (was +10%) and `W` to +1.6%
-/// (was +6%). `W`'s small gain is still packed into 1/5 the ticks of `G`'s, so the
-/// warning slope stays ~3.3× the gentle slope — a perceptible telegraph — but the
-/// instant +22% cliff step now towers over the whole gentle+warning ramp.
-/// `G·W·J = 1.025·1.016·1.22` (Fixed product ≈ 1.27048, ≈ iter-3's 1.27092, so the
-/// per-mark multipliers are unchanged within rounding). Pure `(num,den)` Fixed
-/// ratios — no floats, feeds `state_checksum`.
+/// So each interval multiplies difficulty by `G·W·J ≈ 3.6446`, and over 10
+/// intervals that compounds toward ≈ ×413863 at the 30-min boss (the boss tick
+/// force-returns the matching endpoint). INTERIM DIFFICULTY RE-TUNE: the source-
+/// fidelity modifier catalog made the bundled defensive items ~2× stronger than
+/// the split versions this curve was tuned against, pushing the 80-seed sweep to
+/// ~94% wins. To bring the win rate back into a healthy ~50% band WITHOUT touching
+/// items/waves/boss, the ONLY lever moved here is the per-interval JUMP (`J`) — and
+/// the boss-phase clamp that rides with the new endpoint. The 3-min cadence and the
+/// gentle→warning→DRAMATIC shape are PRESERVED; only `J` is raised so the late game
+/// + boss actually threaten the stronger builds. `J` now carries +250% (was +22%),
+/// while `G` (+2.5%) and `W` (+1.6%) are UNCHANGED, so the cliff step still towers
+/// over the whole gentle+warning ramp and the warning slope stays ~3.3× the gentle
+/// slope. This is EXPLICITLY INTERIM — more item power lands in later milestones and
+/// the curve gets its final re-tune then. `G·W·J = 1.025·1.016·3.5` (Fixed product
+/// ≈ 3.6446). Pure `(num,den)` Fixed ratios — no floats, feeds `state_checksum`.
 const RAMP_GENTLE: (i64, i64) = (41, 40); //  G = +2.5% gentle climb (1.025)
 const RAMP_WARN: (i64, i64) = (127, 125); //  W = +1.6% over the short warning window (1.016)
-const RAMP_JUMP: (i64, i64) = (61, 50); //    J = +22% instantaneous cliff step (1.22) — the dominant event
+const RAMP_JUMP: (i64, i64) = (7, 2); //    J = +250% instantaneous cliff step (3.5) — the dominant event
 
 /// Enemy HP scaling at `tick`. The shape is a STEPPED "RAMP" on a strict 3-MINUTE
 /// cadence. Each 3-min interval is `gentle climb → warning → DRAMATIC step`:
@@ -1259,13 +1262,14 @@ const RAMP_JUMP: (i64, i64) = (61, 50); //    J = +22% instantaneous cliff step 
 ///     cliff, now the dominant difficulty event of every interval.
 /// Cliffs land at 3,6,…,30 min. The function is monotonic non-decreasing,
 /// CONTINUOUS within each interval (the only instantaneous jumps are the cliffs
-/// at the boundaries), and lands exactly ×11 at the 30-min boss (tick 54000),
-/// matching iter-2's boss endpoint. Integer/fixed-point only.
+/// at the boundaries), and lands at ≈ ×413863 at the 30-min boss (tick 54000) —
+/// the interim re-tuned endpoint. Integer/fixed-point only.
 pub fn enemy_hp_mult(tick: u32) -> Fixed {
-    // 30 min+: boss phase. Hold the peak ×11 tier — the boss AND its escort swarm
-    // (see `BOSS_ESCORT`) ride this multiplier, exactly as in iter-2.
+    // 30 min+: boss phase. Hold the peak ×413863 tier — the boss AND its escort
+    // swarm (see `BOSS_ESCORT`) ride this multiplier. The clamp moves with the
+    // re-tuned endpoint so the boss tier stays continuous with the k=9→k=10 cliff.
     if tick >= BOSS_SPAWN_TICK {
-        return Fixed::from_int(11);
+        return Fixed::from_int(413863);
     }
 
     let g = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_GENTLE.0, RAMP_GENTLE.1));

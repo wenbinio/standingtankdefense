@@ -159,28 +159,31 @@ mod tests {
         }
 
         // (2) Exact post-cliff multipliers at each 3-min boundary (×10000),
-        //     compounding ~×1.2705 per interval up to exactly ×11 at the boss.
-        //     ITER-4 retuned the WITHIN-interval shape (jump-dominant), so these
-        //     per-mark values are essentially unchanged from iter-3 (±a few /1e4).
+        //     compounding ~×3.6446 per interval up to ≈ ×413863 at the boss.
+        //     INTERIM DIFFICULTY RE-TUNE raised the per-interval JUMP (J: 1.22 →
+        //     3.5) so the late game + boss threaten the stronger source-fidelity
+        //     builds; the gentle/warning factors (G/W) and the 3-min cadence are
+        //     unchanged. These marks are the exact `Fixed` values of the steeper
+        //     curve, and the boss clamp rides the new endpoint.
         let post: [(u32, i64); 11] = [
             (0, 10000),
-            (5400, 12704),
-            (10800, 16140),
-            (16200, 20505),
-            (21600, 26051),
-            (27000, 33098),
-            (32400, 42050),
-            (37800, 53423),
-            (43200, 67872),
-            (48600, 86230),
-            (54000, 110000), // the 30-min boss tier — preserved at exactly ×11.
+            (5400, 36448),
+            (10800, 132848),
+            (16200, 484211),
+            (21600, 1764875),
+            (27000, 6432698),
+            (32400, 23446199),
+            (37800, 85457802),
+            (43200, 311480592),
+            (48600, 1135299031),
+            (54000, 4138630000), // the 30-min boss tier — the interim ×413863 endpoint.
         ];
         for (tick, mult10k) in post {
             assert_eq!(m(tick).scale_i64(10000), mult10k, "post-cliff mult at {tick}");
         }
-        // The boss phase HOLDS exactly ×11.
-        assert_eq!(m(content::BOSS_SPAWN_TICK), Fixed::from_int(11));
-        assert_eq!(m(content::BOSS_SPAWN_TICK + 5000), Fixed::from_int(11));
+        // The boss phase HOLDS the interim endpoint ×413863.
+        assert_eq!(m(content::BOSS_SPAWN_TICK), Fixed::from_int(413863));
+        assert_eq!(m(content::BOSS_SPAWN_TICK + 5000), Fixed::from_int(413863));
 
         // (3) Within an interval: a gentle region, then a STEEPER warning region.
         //     Verify on the k=1 interval [5400, 10800).
@@ -202,8 +205,8 @@ mod tests {
 
         // (4) The DRAMATIC step: the jump from the pre-cliff (warning peak) value
         //     to the next interval's post-cliff value is a real instantaneous step
-        //     (~+22% — ITER-4's dominant event), far larger than any single
-        //     warning-region tick step.
+        //     (~+250% — the interim re-tune's dominant event), far larger than any
+        //     single warning-region tick step.
         let pre_cliff = m(lo + interval - 1); // tick 10799, warning peak
         let post_cliff = m(lo + interval); //   tick 10800, post-cliff
         let step = post_cliff.scale_i64(1_000_000) - pre_cliff.scale_i64(1_000_000);
@@ -211,10 +214,10 @@ mod tests {
             step > warn_slope * 50,
             "boundary step must be a dramatic jump, not a ramp tick"
         );
-        // ~+22% (J): post ≈ pre × 1.22 (within rounding, ×1000).
+        // ~+250% (J): post ≈ pre × 3.5 (within rounding, ×1000).
         assert_eq!(
             post_cliff.scale_i64(1000),
-            pre_cliff.mul(Fixed::from_ratio(61, 50)).scale_i64(1000)
+            pre_cliff.mul(Fixed::from_ratio(7, 2)).scale_i64(1000)
         );
     }
 
@@ -229,9 +232,10 @@ mod tests {
         spawn(&mut s);
         let grunt_base = content::ENEMIES[0].base_hp;
         assert_eq!(s.enemies[0].def, 0, "first spawn this tick is the grunt (entry 0)");
-        // hp should be solidly scaled up (the curve is ~×3 here).
-        assert!(s.enemies[0].hp > grunt_base * 2, "late enemy HP must be scaled up");
-        assert!(s.enemies[0].hp <= grunt_base * 4);
+        // hp should be solidly scaled up (after the interim re-tune the curve is
+        // ~×184 here — k4 warning region, just before the 15-min cliff).
+        assert!(s.enemies[0].hp > grunt_base * 100, "late enemy HP must be scaled up");
+        assert!(s.enemies[0].hp <= grunt_base * 250);
     }
 
     #[test]
