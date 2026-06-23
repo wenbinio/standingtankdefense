@@ -2,3 +2,6 @@
 rust/target/
 # Godot editor cache / imports.
 .godot/
+
+# Local export output (binaries delivered out-of-band)
+build/
