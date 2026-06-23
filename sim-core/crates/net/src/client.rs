@@ -50,10 +50,31 @@ pub struct Client {
     /// Self-imposed purchase challenge, mirrored from the director so this
     /// client's shadow filters buys identically and stays in lockstep.
     challenge: sim::bot::Challenge,
+    /// Client-side estimate of the AUTHORITATIVE server tick (`docs/03 §3.7`).
+    /// Distinct from the local arena tick: a reconnecting client runs its arena
+    /// consistently behind the director, yet still needs an honest read of server
+    /// time for round/boss-timer UI and to notice if its local clock has drifted.
+    /// Free-runs (+1 per stepped tick) between beacons and re-anchors on each
+    /// `TimeBeacon`. `None` until the first beacon arrives (or the arena starts).
+    server_tick_est: Option<u32>,
+    /// Last measured drift `estimate - beacon` at the most recent `TimeBeacon`.
+    /// Positive ⇒ our estimate ran ahead of the server; negative ⇒ behind.
+    clock_drift: i32,
+    /// Set when a beacon revealed drift past `DRIFT_SNAP_THRESHOLD` and we hard-
+    /// snapped the estimate. A UI/resync layer can read+clear this to request an
+    /// authoritative `Snapshot`; it never touches arena/input/snapshot logic here.
+    clock_resync_flagged: bool,
 }
 
 /// Resend `Join` at most this often (in iterations) while awaiting state.
 const JOIN_RETRY_TICKS: u32 = 30;
+
+/// Drift magnitude (ticks) beyond which the server-time estimate is HARD-SNAPPED
+/// to the beacon (and `clock_resync_flagged` is set) instead of eased. Sized
+/// above normal jitter-induced wobble (a beacon's apparent age varies by the
+/// link's one-way delay spread) so ordinary jitter eases, but a genuine clock
+/// divergence snaps. Independent of sim determinism — pure UI/clock bookkeeping.
+const DRIFT_SNAP_THRESHOLD: i32 = 8;
 
 impl Client {
     /// An INITIAL client (joins at match start via the `MatchStart` broadcast).
@@ -81,6 +102,9 @@ impl Client {
             master_seed: None,
             last_join_iter: None,
             challenge: sim::bot::Challenge::None,
+            server_tick_est: None,
+            clock_drift: 0,
+            clock_resync_flagged: false,
         }
     }
 
@@ -146,7 +170,34 @@ impl Client {
                         }
                     }
                 }
-                Msg::TimeBeacon { .. } => {}
+                Msg::TimeBeacon { server_tick } => {
+                    // Re-anchor the server-time estimate. A beacon describes the
+                    // server tick AT SEND; by the time it arrives the server has
+                    // moved on by the one-way delay, so a healthy estimate runs a
+                    // little AHEAD of the beacon value — small positive drift is
+                    // normal and is eased, not snapped.
+                    match self.server_tick_est {
+                        None => {
+                            // First fix: adopt the beacon outright.
+                            self.server_tick_est = Some(server_tick);
+                            self.clock_drift = 0;
+                        }
+                        Some(est) => {
+                            let drift = est as i32 - server_tick as i32;
+                            self.clock_drift = drift;
+                            if drift.abs() > DRIFT_SNAP_THRESHOLD {
+                                // Genuine divergence: hard-snap and flag a resync.
+                                self.server_tick_est = Some(server_tick);
+                                self.clock_resync_flagged = true;
+                            } else if drift != 0 {
+                                // Ease one tick toward the beacon so the estimate
+                                // converges smoothly without a visible UI jump.
+                                let adj = if drift > 0 { -1 } else { 1 };
+                                self.server_tick_est = Some((est as i32 + adj) as u32);
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -160,6 +211,12 @@ impl Client {
                 let action = self.challenge.filter(self.schedule.take(pre), arena);
                 sim::step(arena, action);
                 stepped_tick = Some(pre);
+                // Free-run the server-time estimate one tick per stepped tick.
+                // It re-anchors on each TimeBeacon (above); between beacons it just
+                // advances at the same 30 Hz cadence the server does.
+                if let Some(est) = self.server_tick_est.as_mut() {
+                    *est += 1;
+                }
             }
         }
 
@@ -234,6 +291,28 @@ impl Client {
     /// Whether the local arena exists (MatchStart received or reconnect adopted).
     pub fn started(&self) -> bool {
         self.arena.is_some()
+    }
+
+    /// Client-side estimate of the authoritative SERVER tick — for round/boss
+    /// timer UI. `None` until the first `TimeBeacon` re-anchors it. This is NOT
+    /// the local arena tick (see [`Client::arena_tick`]); a reconnecting client
+    /// runs its arena behind the server yet still tracks true server time here.
+    pub fn server_tick(&self) -> Option<u32> {
+        self.server_tick_est
+    }
+
+    /// Drift `estimate - beacon` measured at the most recent `TimeBeacon`
+    /// (positive ⇒ estimate ahead of the server). 0 before any beacon.
+    pub fn clock_drift(&self) -> i32 {
+        self.clock_drift
+    }
+
+    /// Take (read+clear) the "clock resync needed" flag, set when a beacon showed
+    /// drift past the snap threshold and the estimate was hard-snapped. A UI/net
+    /// layer can poll this to request a fresh `Snapshot`; it does not affect the
+    /// deterministic arena/input/snapshot paths.
+    pub fn take_clock_resync(&mut self) -> bool {
+        std::mem::take(&mut self.clock_resync_flagged)
     }
 }
 
