@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bqbe878611cd4"
-path="res://.godot/imported/noperope_cobra.svg-3f9446d215645adb92f5e5414401ea9a.ctex"
+path="res://.godot/imported/noperope_cobra.svg-5d11a673e9dd659ac378feec69f17770.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://art/themes/gaslamp_bulwark/enemies/noperope_cobra.svg"
-dest_files=["res://.godot/imported/noperope_cobra.svg-3f9446d215645adb92f5e5414401ea9a.ctex"]
+dest_files=["res://.godot/imported/noperope_cobra.svg-5d11a673e9dd659ac378feec69f17770.ctex"]
 
 [params]
 

@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dsvvflar1u5wp"
-path="res://.godot/imported/noperope_cobra.svg-5549b3fee356332112e1beda2465b856.ctex"
+path="res://.godot/imported/noperope_cobra.svg-f7500fb8d31783cb75cd9df253440dfe.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://art/themes/grimdark/enemies/noperope_cobra.svg"
-dest_files=["res://.godot/imported/noperope_cobra.svg-5549b3fee356332112e1beda2465b856.ctex"]
+dest_files=["res://.godot/imported/noperope_cobra.svg-f7500fb8d31783cb75cd9df253440dfe.ctex"]
 
 [params]
 

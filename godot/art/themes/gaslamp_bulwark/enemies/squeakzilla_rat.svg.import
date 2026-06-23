@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ce80imowspk1q"
-path="res://.godot/imported/squeakzilla_rat.svg-fce78f69d9f59b57dcc66c57411c0f76.ctex"
+path="res://.godot/imported/squeakzilla_rat.svg-a089e7912cde5ab96109711ffbb658c9.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://art/themes/gaslamp_bulwark/enemies/squeakzilla_rat.svg"
-dest_files=["res://.godot/imported/squeakzilla_rat.svg-fce78f69d9f59b57dcc66c57411c0f76.ctex"]
+dest_files=["res://.godot/imported/squeakzilla_rat.svg-a089e7912cde5ab96109711ffbb658c9.ctex"]
 
 [params]
 

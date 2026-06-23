@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://biwflv8uyfmui"
-path="res://.godot/imported/bacon_warthog.svg-f609c65ed9bc72bb4b92b1e7d9b53623.ctex"
+path="res://.godot/imported/bacon_warthog.svg-1c9c38db219659cd13cace2ec83ccbd7.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://art/themes/gaslamp_bulwark/enemies/bacon_warthog.svg"
-dest_files=["res://.godot/imported/bacon_warthog.svg-f609c65ed9bc72bb4b92b1e7d9b53623.ctex"]
+dest_files=["res://.godot/imported/bacon_warthog.svg-1c9c38db219659cd13cace2ec83ccbd7.ctex"]
 
 [params]
 

@@ -1,78 +1,99 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
-  <!-- Standing Tank Defense - PLAYER TANK "Bulwark Cannon" (CHIBI) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- Chibi: big fat steel-blue body ~65% of canvas, ONE short stubby cannon UP, -->
-  <!-- one big aether eye, brass trim, tiny stubby feet. Centered, ~8% margin. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="ally_glow" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="4" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
+    <radialGradient id="vig3" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper3" cx="40%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
+    <radialGradient id="shell3" cx="42%" cy="34%" r="74%">
+      <stop offset="0%" stop-color="#d98f72"/>
+      <stop offset="100%" stop-color="#b5573f"/>
+    </radialGradient>
   </defs>
 
-  <!-- ground shadow: planted on the field -->
-  <ellipse cx="96" cy="160" rx="60" ry="22" fill="#0b0d14" opacity="0.45"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ======================= STUBBY FEET (peeking under big body) ======================= -->
-  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
-    <rect x="50" y="148" width="34" height="22" rx="9" fill="#3a4a63"/>
-    <rect x="108" y="148" width="34" height="22" rx="9" fill="#3a4a63"/>
+    <!-- ============ INK UNDERSHAPES (variable thick outline) ============ -->
+    <g fill="#241c14">
+      <!-- big shell dome -->
+      <path d="M160 56 C232 56 282 108 282 178 C282 232 240 268 160 268
+               C80 268 38 232 38 178 C38 108 88 56 160 56 Z"/>
+      <!-- battlement crown -->
+      <path d="M98 88 L98 52 L128 52 L128 68 L148 68 L148 50
+               L172 50 L172 68 L192 68 L192 52 L222 52 L222 88 Z"/>
+      <!-- left claw raised heroically -->
+      <path d="M78 188 C50 182 26 158 24 124 C22 96 44 84 58 100
+               C44 108 48 136 70 142 C50 142 46 168 78 172
+               C96 174 100 156 88 150 C108 154 110 184 78 188 Z"/>
+      <!-- right claw raised heroically -->
+      <path d="M242 188 C270 182 294 158 296 124 C298 96 276 84 262 100
+               C276 108 272 136 250 142 C270 142 274 168 242 172
+               C224 174 220 156 232 150 C212 154 210 184 242 188 Z"/>
+      <!-- little face mass under crown -->
+      <path d="M112 150 C112 120 140 104 160 104 C180 104 208 120 208 150
+               C208 178 188 196 160 196 C132 196 112 178 112 150 Z"/>
+    </g>
+
+    <!-- ============ SHELL DOME ============ -->
+    <path d="M160 64 C228 64 274 112 274 178 C274 228 234 260 160 260
+             C86 260 46 228 46 178 C46 112 92 64 160 64 Z" fill="url(#shell3)"/>
+    <!-- simple spiral swirl (lower-right of shell, clear of face) -->
+    <path d="M232 244 C198 256 168 240 168 212 C168 188 192 176 212 188
+             C228 198 226 218 210 222 C198 224 192 214 200 208" fill="none" stroke="#241c14"
+          stroke-width="6" opacity="0.8"/>
+    <!-- soft top highlight -->
+    <path d="M92 116 C112 92 146 80 176 86 C150 88 122 102 104 126 Z" fill="#e6a98c" opacity="0.55"/>
+
+    <!-- ============ BATTLEMENT CROWN ============ -->
+    <path d="M104 86 L104 58 L126 58 L126 72 L146 72 L146 56
+             L174 56 L174 72 L194 72 L194 58 L216 58 L216 86 Z"
+          fill="#c9b083"/>
+    <path d="M104 86 L216 86" stroke="#241c14" stroke-width="4"/>
+
+    <!-- ============ FACE ============ -->
+    <path d="M118 150 C118 124 142 110 160 110 C178 110 202 124 202 150
+             C202 174 184 190 160 190 C136 190 118 174 118 150 Z" fill="#e3c98f"/>
+
+    <!-- eye stalks -->
+    <path d="M138 118 L134 100" stroke="#241c14" stroke-width="6"/>
+    <path d="M182 118 L186 100" stroke="#241c14" stroke-width="6"/>
+    <!-- pie-cut eyes -->
+    <circle cx="134" cy="92" r="16" fill="#f4ecd6"/>
+    <circle cx="186" cy="92" r="16" fill="#f4ecd6"/>
+    <circle cx="134" cy="92" r="16" fill="none" stroke="#241c14" stroke-width="3.2"/>
+    <circle cx="186" cy="92" r="16" fill="none" stroke="#241c14" stroke-width="3.2"/>
+    <path d="M138 89 L138 104 A12 12 0 0 1 124 95 Z" fill="#241c14"/>
+    <path d="M182 89 L182 104 A12 12 0 0 0 196 95 Z" fill="#241c14"/>
+    <!-- noble downturned brows -->
+    <path d="M116 84 C124 78 138 78 148 84" fill="none" stroke="#241c14" stroke-width="4.4" stroke-linecap="round"/>
+    <path d="M172 84 C182 78 196 78 204 84" fill="none" stroke="#241c14" stroke-width="4.4" stroke-linecap="round"/>
+
+    <!-- grumpy-noble mouth -->
+    <path d="M138 170 C150 162 170 162 182 170" fill="none" stroke="#241c14" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- ============ GOLDEN CLAWS (raised) ============ -->
+    <path d="M80 184 C54 178 32 156 30 126 C28 102 46 92 58 104
+             C46 112 50 138 72 144 C52 144 50 166 80 168
+             C96 170 100 154 88 148 C106 152 108 180 80 184 Z" fill="#d8a838"/>
+    <path d="M240 184 C266 178 288 156 290 126 C292 102 274 92 262 104
+             C274 112 270 138 248 144 C268 144 270 166 240 168
+             C224 170 220 154 232 148 C214 152 212 180 240 184 Z" fill="#d8a838"/>
+    <!-- claw pincer gap lines -->
+    <path d="M68 144 C58 150 56 162 76 166" fill="none" stroke="#241c14" stroke-width="3" opacity="0.6"/>
+    <path d="M252 144 C262 150 264 162 244 166" fill="none" stroke="#241c14" stroke-width="3" opacity="0.6"/>
+    <!-- blunt pincer tip highlights -->
+    <circle cx="48" cy="118" r="4" fill="#f0d27a"/>
+    <circle cx="272" cy="118" r="4" fill="#f0d27a"/>
+
+    <!-- ============ tiny stubby legs ============ -->
+    <g fill="#c9a049" stroke="#241c14" stroke-width="3">
+      <path d="M124 258 C116 274 114 282 122 284 C130 282 132 270 134 258 Z"/>
+      <path d="M154 262 C152 280 154 288 162 286 C168 282 166 272 166 262 Z"/>
+      <path d="M186 258 C194 274 196 282 188 284 C180 282 178 270 176 258 Z"/>
+    </g>
   </g>
-  <!-- foot rim light -->
-  <rect x="54" y="151" width="26" height="5" rx="2.5" fill="#6f8db3" opacity="0.8"/>
-  <rect x="112" y="151" width="26" height="5" rx="2.5" fill="#6f8db3" opacity="0.8"/>
 
-  <!-- ======================= STUBBY CANNON (faces UP, short & fat) ======================= -->
-  <!-- barrel cast shadow toward away side -->
-  <rect x="84" y="22" width="30" height="56" rx="13" fill="#0b0d14" opacity="0.35"/>
-  <!-- short fat barrel body -->
-  <rect x="78" y="16" width="36" height="58" rx="16" fill="#3a4a63" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <!-- barrel rim light (camera-facing left edge) -->
-  <rect x="83" y="22" width="9" height="46" rx="4.5" fill="#6f8db3"/>
-  <!-- fat brass reinforcing band -->
-  <rect x="73" y="40" width="46" height="13" rx="6" fill="#caa24a" stroke="#101218" stroke-width="3.5"/>
-  <!-- chunky muzzle ring + aether bore glow -->
-  <rect x="70" y="10" width="52" height="18" rx="9" fill="#3a4a63" stroke="#101218" stroke-width="4.5"/>
-  <circle cx="96" cy="19" r="8" fill="#3fa9ff" filter="url(#ally_glow)"/>
-  <circle cx="96" cy="19" r="5" fill="#bcd6f2"/>
-
-  <!-- ======================= BIG FAT BODY (~65% of canvas) ======================= -->
-  <!-- main bulbous turret body -->
-  <path d="M96 56
-           C140 56 158 84 158 116
-           C158 148 132 162 96 162
-           C60 162 34 148 34 116
-           C34 84 52 56 96 56 Z"
-        fill="#6f8db3" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
-  <!-- inner shadow on the away (lower) half -->
-  <path d="M158 116 C158 148 132 162 96 162 C60 162 34 148 34 116
-           C34 132 64 142 96 142 C128 142 158 132 158 116 Z"
-        fill="#3a4a63" opacity="0.9"/>
-  <!-- top rim light (camera-facing forward edge) -->
-  <path d="M96 56 C140 56 158 84 158 116 C144 86 124 76 96 76
-           C68 76 48 86 34 116 C34 84 52 56 96 56 Z"
-        fill="#bcd6f2" opacity="0.7"/>
-
-  <!-- fat brass brow plate over the eye -->
-  <path d="M62 72 C76 62 116 62 130 72 L124 88 C110 80 82 80 68 88 Z"
-        fill="#caa24a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-  <path d="M62 72 C76 62 116 62 130 72 L127 78 C112 70 80 70 65 78 Z" fill="#bcd6f2" opacity="0.5"/>
-
-  <!-- ======================= BIG AETHER EYE ======================= -->
-  <circle cx="96" cy="112" r="26" fill="#3fa9ff" filter="url(#ally_glow)"/>
-  <circle cx="96" cy="112" r="23" fill="#101218" stroke="#caa24a" stroke-width="4.5"/>
-  <circle cx="96" cy="112" r="13" fill="#3fa9ff"/>
-  <circle cx="91" cy="106" r="5" fill="#bcd6f2"/>
-
-  <!-- side rivet pods (steampunk read) -->
-  <circle cx="48" cy="116" r="7" fill="#3a4a63" stroke="#101218" stroke-width="3.5"/>
-  <circle cx="144" cy="116" r="7" fill="#3a4a63" stroke="#101218" stroke-width="3.5"/>
-
-  <!-- rivets for steampunk read -->
-  <g fill="#bcd6f2" opacity="0.85">
-    <circle cx="72" cy="68" r="2.6"/>
-    <circle cx="120" cy="68" r="2.6"/>
-    <circle cx="54" cy="98" r="2.6"/>
-    <circle cx="138" cy="98" r="2.6"/>
-  </g>
 </svg>

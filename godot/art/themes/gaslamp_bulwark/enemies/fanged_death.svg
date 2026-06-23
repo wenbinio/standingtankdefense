@@ -1,94 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <!-- Standing Tank Defense - ENEMY "Fanged Death" (slow armored war-machine, 1200 HP) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- HEAVILY CHIBI TOY TANK: big fat rounded rusted rot-green hull (~65% canvas), ONE -->
-  <!-- oversized stubby front gun, big belching furnace w/ menace-orange glow, tiny stubby -->
-  <!-- treads under a bulbous body, bone/rivet accents. ~1.7 hulls tall. ENEMY: rot/bone/orange. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="t_menace" x="-70%" y="-70%" width="240%" height="240%">
-      <feGaussianBlur stdDeviation="2.6" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
+    <radialGradient id="vig" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="40%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
   </defs>
 
-  <!-- ground shadow: heavy footprint -->
-  <ellipse cx="48" cy="84" rx="33" ry="9" fill="#0b0d14" opacity="0.5"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ===================== TINY STUBBY TREADS/FEET (peeking under bulbous body) ===================== -->
-  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
-    <rect x="18" y="68" width="20" height="16" rx="7" fill="#1f3322"/>
-    <rect x="58" y="68" width="20" height="16" rx="7" fill="#1f3322"/>
+    <!-- ============ INK UNDERSHAPES (variable thick outline) ============ -->
+    <g fill="#241c14">
+      <!-- fat blubbery body blob, leaning forward (heavy toward viewer) -->
+      <path d="M160 300 C70 300 36 256 36 198 C36 150 60 116 100 100
+               C92 80 104 56 134 52 C160 49 178 62 184 82
+               C214 76 250 92 268 124 C286 156 288 196 280 226
+               C270 270 236 300 160 300 Z"/>
+      <!-- big jowly snout mass -->
+      <path d="M96 196 C78 196 66 216 66 240 C66 274 108 296 160 296
+               C212 296 254 274 254 240 C254 216 242 196 224 196
+               C200 182 120 182 96 196 Z"/>
+      <!-- left tiny flipper -->
+      <path d="M70 268 C46 282 32 304 42 312 C58 312 80 298 92 280 Z"/>
+      <!-- right tiny flipper -->
+      <path d="M250 268 C274 282 288 304 278 312 C262 312 240 298 228 280 Z"/>
+    </g>
+
+    <!-- ============ BODY (dusty teal-grey blubber) ============ -->
+    <path d="M160 292 C76 292 44 250 44 198 C44 152 67 121 104 106
+             C95 86 107 64 134 60 C158 57 174 70 179 89
+             C213 82 246 99 262 128 C278 158 280 195 272 224
+             C262 264 230 292 160 292 Z" fill="#7d9690"/>
+    <!-- belly highlight -->
+    <path d="M104 214 C104 256 138 280 168 280 C214 280 246 250 248 214
+             C234 252 150 258 104 214 Z" fill="#9cb1ab"/>
+
+    <!-- tiny flippers fill -->
+    <path d="M74 264 C52 278 40 296 49 304 C63 303 82 290 92 274 Z" fill="#7d9690"/>
+    <path d="M246 264 C268 278 280 296 271 304 C257 303 238 290 228 274 Z" fill="#7d9690"/>
+
+    <!-- ============ SNOUT (blubbery muzzle) ============ -->
+    <path d="M101 200 C84 200 73 218 73 240 C73 270 110 290 160 290
+             C210 290 247 270 247 240 C247 218 236 200 219 200
+             C197 188 123 188 101 200 Z" fill="#a99478"/>
+    <!-- nostrils -->
+    <ellipse cx="138" cy="222" rx="9" ry="12" fill="#241c14"/>
+    <ellipse cx="182" cy="222" rx="9" ry="12" fill="#241c14"/>
+    <ellipse cx="136" cy="218" rx="2.6" ry="4" fill="#c0a486"/>
+    <ellipse cx="180" cy="218" rx="2.6" ry="4" fill="#c0a486"/>
+
+    <!-- ============ BRISTLY WHISKERS ============ -->
+    <g stroke="#241c14" stroke-width="2.4" fill="none" opacity="0.85">
+      <path d="M108 244 C82 246 62 250 44 258"/>
+      <path d="M110 252 C86 258 66 266 50 278"/>
+      <path d="M210 244 C236 246 256 250 274 258"/>
+      <path d="M208 252 C232 258 252 266 268 278"/>
+    </g>
+    <!-- whisker dots -->
+    <g fill="#241c14" opacity="0.7">
+      <circle cx="118" cy="244" r="2"/><circle cx="120" cy="252" r="2"/>
+      <circle cx="124" cy="260" r="2"/>
+      <circle cx="200" cy="244" r="2"/><circle cx="198" cy="252" r="2"/>
+      <circle cx="194" cy="260" r="2"/>
+    </g>
+
+    <!-- ============ BIG BLUNT DOWNWARD TUSKS ============ -->
+    <path d="M126 256 C120 290 124 312 138 312 C150 312 150 290 144 258 Z"
+          fill="#f2ead4" stroke="#241c14" stroke-width="3.4"/>
+    <path d="M176 258 C170 290 170 312 182 312 C196 312 200 290 194 256 Z"
+          fill="#f2ead4" stroke="#241c14" stroke-width="3.4"/>
+
+    <!-- ============ SMALL GRUMPY EYES (pie-cut) ============ -->
+    <circle cx="130" cy="156" r="15" fill="#f4ecd6"/>
+    <circle cx="190" cy="156" r="15" fill="#f4ecd6"/>
+    <circle cx="130" cy="156" r="15" fill="none" stroke="#241c14" stroke-width="3.2"/>
+    <circle cx="190" cy="156" r="15" fill="none" stroke="#241c14" stroke-width="3.2"/>
+    <path d="M134 153 L134 168 A11 11 0 0 1 121 159 Z" fill="#241c14"/>
+    <path d="M186 153 L186 168 A11 11 0 0 0 199 159 Z" fill="#241c14"/>
+    <!-- heavy grumpy brows, low and slanted in -->
+    <path d="M110 142 C122 136 140 140 148 148" fill="none" stroke="#241c14" stroke-width="6.5" stroke-linecap="round"/>
+    <path d="M172 148 C180 140 198 136 210 142" fill="none" stroke="#241c14" stroke-width="6.5" stroke-linecap="round"/>
+
+    <!-- brow ridge wrinkle -->
+    <path d="M150 128 C156 122 164 122 170 128" fill="none" stroke="#241c14" stroke-width="3" opacity="0.6"/>
   </g>
-  <!-- tread cleats (rungs) -->
-  <g stroke="#101218" stroke-width="2.5" fill="#3a4a63">
-    <rect x="21" y="72" width="14" height="4" rx="1.5"/>
-    <rect x="21" y="78" width="14" height="4" rx="1.5"/>
-    <rect x="61" y="72" width="14" height="4" rx="1.5"/>
-    <rect x="61" y="78" width="14" height="4" rx="1.5"/>
-  </g>
-  <!-- tread rim light -->
-  <rect x="21" y="69" width="14" height="3" rx="1.5" fill="#5e8c3a" opacity="0.6"/>
-  <rect x="61" y="69" width="14" height="3" rx="1.5" fill="#5e8c3a" opacity="0.6"/>
 
-  <!-- ===================== ONE OVERSIZED STUBBY FRONT GUN (faces UP) ===================== -->
-  <rect x="38" y="16" width="20" height="20" rx="6" fill="#3a4a63" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <rect x="42" y="19" width="5" height="15" rx="2.5" fill="#6f8db3" opacity="0.7"/>
-  <!-- chunky bone muzzle band -->
-  <rect x="35" y="16" width="26" height="7" rx="3" fill="#d9d2b0" stroke="#101218" stroke-width="3.5"/>
-  <ellipse cx="48" cy="19" rx="6" ry="2.5" fill="#e8e3d2" opacity="0.5"/>
-
-  <!-- ===================== BIG FAT ROUNDED HULL (dominant bulbous mass) ===================== -->
-  <!-- hull base/shadow (fat bubble) -->
-  <path d="M48 26 C72 26 80 42 78 58 C76 72 64 76 48 76 C32 76 20 72 18 58 C16 42 24 26 48 26 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
-  <!-- hull plate fill -->
-  <path d="M48 28 C70 28 77 42 75 57 C73 70 62 73 48 73 C34 73 23 70 21 57 C19 42 26 28 48 28 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <!-- hull inner shadow (away/lower half) -->
-  <path d="M75 57 C73 70 62 73 48 73 C34 73 23 70 21 57 C30 64 39 66 48 66 C57 66 66 64 75 57 Z"
-        fill="#1f3322" opacity="0.85"/>
-  <!-- hull forward rim light (camera-facing top edge) -->
-  <path d="M48 28 C66 28 73 38 72 48 C63 38 56 35 48 35 C40 35 33 38 24 48 C23 38 30 28 48 28 Z"
-        fill="#a6d65e" opacity="0.55"/>
-
-  <!-- bone-edged armor brow over the front (asymmetric: left chipped) -->
-  <path d="M34 30 C42 28 54 28 62 30 C58 36 38 36 34 30 Z"
-        fill="#d9d2b0" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-  <path d="M34 30 C42 28 54 28 62 30 C56 32 40 32 34 30 Z" fill="#e8e3d2" opacity="0.5"/>
-  <!-- chip out of left front plate (battle damage) -->
-  <path d="M37 33 L41 28 L45 33 Z" fill="#1f3322" stroke="#101218" stroke-width="2"/>
-
-  <!-- ===================== BIG BELCHING FURNACE (center, menace-orange glow) ===================== -->
-  <!-- furnace housing (chunky rounded) -->
-  <path d="M34 48 L62 48 C64 48 65 50 64 52 L60 66 C59 68 57 68 55 68 L41 68 C39 68 37 68 36 66 L32 52 C31 50 32 48 34 48 Z"
-        fill="#3a4a63" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <path d="M64 52 L60 66 C59 68 57 68 55 68 L41 68 C39 68 37 68 36 66 L32 52 L48 56 Z" fill="#1f3322" opacity="0.7"/>
-  <!-- big furnace grate glow -->
-  <ellipse cx="48" cy="57" rx="14" ry="9" fill="#ff5a3c" filter="url(#t_menace)"/>
-  <ellipse cx="48" cy="57" rx="10.5" ry="6.5" fill="#ff5a3c" stroke="#101218" stroke-width="3"/>
-  <!-- grate bars -->
-  <g stroke="#101218" stroke-width="2.5">
-    <line x1="42" y1="52" x2="42" y2="62"/>
-    <line x1="48" y1="51" x2="48" y2="63"/>
-    <line x1="54" y1="52" x2="54" y2="62"/>
-  </g>
-  <ellipse cx="48" cy="54" rx="4.5" ry="2.5" fill="#caa24a" opacity="0.85"/>
-
-  <!-- ===================== TWO STUBBY EMBER SMOKESTACKS (asymmetric) ===================== -->
-  <g stroke="#101218" stroke-width="3.5" stroke-linejoin="round">
-    <rect x="24" y="42" width="9" height="11" rx="3" fill="#3a4a63"/>
-    <rect x="63" y="46" width="9" height="9" rx="3" fill="#3a4a63"/>
-  </g>
-  <circle cx="28.5" cy="43" r="3.5" fill="#ff5a3c" filter="url(#t_menace)"/>
-  <circle cx="28.5" cy="43" r="2" fill="#ff5a3c" stroke="#101218" stroke-width="1.3"/>
-  <circle cx="67.5" cy="47" r="3" fill="#ff5a3c" filter="url(#t_menace)"/>
-  <circle cx="67.5" cy="47" r="1.8" fill="#ff5a3c" stroke="#101218" stroke-width="1.3"/>
-
-  <!-- ===================== RIVETS + BONE DETAIL (few, chunky) ===================== -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="1.8">
-    <circle cx="27" cy="42" r="2.6"/>
-    <circle cx="69" cy="42" r="2.6"/>
-    <circle cx="29" cy="64" r="2.6"/>
-    <circle cx="67" cy="64" r="2.6"/>
-  </g>
 </svg>

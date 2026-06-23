@@ -1,119 +1,123 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
-  <!-- Standing Tank Defense - END BOSS "HIPPOCLYSM" (CHIBI MENACE) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- Chibi: one enormous fat round rot-green body, ONE huge angry hellfire eye, -->
-  <!-- fat cheeks, stubby blunt bone spikes, tiny feet. Biggest, cute-scary. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="hell_glow" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="7" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
-    <filter id="rot_glow" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="5" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
+    <radialGradient id="vig" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="38%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
+    <radialGradient id="mir" cx="42%" cy="38%" r="70%">
+      <stop offset="0%" stop-color="#eadfb8"/>
+      <stop offset="70%" stop-color="#c3b083"/>
+      <stop offset="100%" stop-color="#8f7c52"/>
+    </radialGradient>
   </defs>
 
-  <!-- massive ground shadow: screen-dominating footprint -->
-  <ellipse cx="160" cy="270" rx="132" ry="46" fill="#0b0d14" opacity="0.5"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- =================== TINY STUBBY FEET (peeking under big body) =================== -->
-  <g stroke="#101218" stroke-width="5" stroke-linejoin="round" fill="#1f3322">
-    <rect x="92" y="252" width="50" height="30" rx="13"/>
-    <rect x="178" y="252" width="50" height="30" rx="13"/>
-  </g>
-  <!-- bone claw nubs on feet -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="3.5" stroke-linejoin="round">
-    <circle cx="100" cy="280" r="6"/>
-    <circle cx="118" cy="282" r="6"/>
-    <circle cx="136" cy="280" r="6"/>
-    <circle cx="184" cy="280" r="6"/>
-    <circle cx="202" cy="282" r="6"/>
-    <circle cx="220" cy="280" r="6"/>
+    <!-- ============ INK UNDERSHAPES (variable thick outline) ============ -->
+    <g fill="#241c14">
+      <!-- left noodle arm (curving down then up holding bag) -->
+      <path d="M96 196 C58 206 30 196 24 166 C19 142 38 128 54 138
+               C46 158 60 176 96 174 Z"/>
+      <!-- right noodle arm raised high w/ syringe -->
+      <path d="M222 150 C250 122 268 96 286 70 C300 50 322 60 312 80
+               C300 104 276 132 240 158 Z"/>
+      <!-- body blob -->
+      <path d="M159 304 C92 304 58 262 58 212 C58 168 78 148 96 137
+               C82 118 86 92 108 82 C124 75 142 81 150 95
+               C156 90 166 90 172 95 C182 80 204 76 220 88
+               C242 102 240 128 226 140 C246 154 266 178 266 214
+               C266 266 228 304 159 304 Z"/>
+      <!-- snout ink -->
+      <path d="M101 192 C87 192 79 208 79 226 C79 252 110 270 160 270
+               C210 270 241 252 241 226 C241 208 233 192 219 192
+               C201 180 119 180 101 192 Z"/>
+    </g>
+
+    <!-- ============ left arm fill + glove ============ -->
+    <path d="M96 188 C62 197 36 188 31 163 C27 143 41 134 51 144
+             C46 162 64 170 96 167 Z" fill="#8fa19a"/>
+    <circle cx="36" cy="156" r="15" fill="#f4ecd6"/>
+    <circle cx="36" cy="156" r="15" fill="none" stroke="#241c14" stroke-width="2.6"/>
+    <path d="M28 156 a8 8 0 0 1 16 0 M36 148 v16" fill="none" stroke="#241c14" stroke-width="2"/>
+
+    <!-- ============ right arm fill ============ -->
+    <path d="M226 146 C252 120 268 96 284 73 C295 57 308 64 301 79
+             C290 102 268 128 234 154 Z" fill="#8fa19a"/>
+
+    <!-- ============ BODY ============ -->
+    <path d="M159 296 C98 296 66 258 66 212 C66 172 84 154 100 144
+             C87 124 91 100 111 91 C126 84 140 90 148 103
+             C155 98 165 98 171 103 C182 90 203 86 217 96
+             C236 109 234 131 222 143 C241 158 258 180 258 213
+             C258 260 222 296 159 296 Z" fill="#8fa19a"/>
+    <path d="M118 214 C118 252 145 278 174 278 C212 278 228 248 224 216
+             C212 252 150 256 118 214 Z" fill="#abbab2"/>
+
+    <!-- tiny ears -->
+    <path d="M116 92 C105 80 109 66 122 70 C133 74 132 90 124 98 Z" fill="#8fa19a" stroke="#241c14" stroke-width="3"/>
+    <path d="M204 96 C214 83 228 87 226 99 C224 110 211 112 203 104 Z" fill="#8fa19a" stroke="#241c14" stroke-width="3"/>
+
+    <!-- ============ SNOUT ============ -->
+    <path d="M111 194 C97 194 89 208 89 226 C89 248 116 264 160 264
+             C204 264 231 248 231 226 C231 208 223 194 209 194
+             C193 184 127 184 111 194 Z" fill="#c79a8e"/>
+    <ellipse cx="133" cy="222" rx="11" ry="14" fill="#241c14"/>
+    <ellipse cx="187" cy="222" rx="11" ry="14" fill="#241c14"/>
+    <ellipse cx="130" cy="217" rx="3.5" ry="5" fill="#dcbab0"/>
+    <ellipse cx="184" cy="217" rx="3.5" ry="5" fill="#dcbab0"/>
+
+    <!-- grin + blunt tusks -->
+    <path d="M106 250 C122 272 198 272 214 250 C198 264 122 264 106 250 Z" fill="#241c14"/>
+    <path d="M120 252 C118 266 127 271 133 263 C133 254 128 250 120 252 Z" fill="#f2ead4"/>
+    <path d="M200 252 C202 266 193 271 187 263 C187 254 192 250 200 252 Z" fill="#f2ead4"/>
+
+    <!-- ============ EYES (pie-cut) ============ -->
+    <circle cx="133" cy="171" r="19" fill="#f4ecd6"/>
+    <circle cx="187" cy="171" r="19" fill="#f4ecd6"/>
+    <circle cx="133" cy="171" r="19" fill="none" stroke="#241c14" stroke-width="3.4"/>
+    <circle cx="187" cy="171" r="19" fill="none" stroke="#241c14" stroke-width="3.4"/>
+    <path d="M138 167 L138 185 A14 14 0 0 1 122 174 Z" fill="#241c14"/>
+    <path d="M182 167 L182 185 A14 14 0 0 0 198 174 Z" fill="#241c14"/>
+    <path d="M112 153 C123 145 142 147 150 156" fill="none" stroke="#241c14" stroke-width="4.2" stroke-linecap="round"/>
+    <path d="M170 156 C178 147 197 145 208 153" fill="none" stroke="#241c14" stroke-width="4.2" stroke-linecap="round"/>
+
+    <!-- ============ DOCTOR HEAD MIRROR (off to side, on a band) ============ -->
+    <!-- head band across brow -->
+    <path d="M104 116 C130 104 190 104 216 116" fill="none" stroke="#241c14" stroke-width="6"/>
+    <path d="M104 116 C130 105 190 105 216 116" fill="none" stroke="#b5573f" stroke-width="3"/>
+    <!-- reflector boom + disc, up-left so it doesn't read as a third eye -->
+    <path d="M150 116 L132 92" stroke="#241c14" stroke-width="6"/>
+    <circle cx="124" cy="84" r="20" fill="#241c14"/>
+    <circle cx="124" cy="84" r="15" fill="url(#mir)"/>
+    <circle cx="124" cy="84" r="6" fill="#3a3026"/>
+    <path d="M118 78 a6 6 0 0 1 6 0" fill="none" stroke="#f4ecd6" stroke-width="3" stroke-linecap="round"/>
+    <path d="M112 72 L120 80" stroke="#f4ecd6" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- ============ OVERSIZED SYRINGE (right glove up high) ============ -->
+    <!-- white glove -->
+    <circle cx="276" cy="74" r="15" fill="#f4ecd6"/>
+    <circle cx="276" cy="74" r="15" fill="none" stroke="#241c14" stroke-width="2.6"/>
+    <g transform="rotate(48 276 74)">
+      <rect x="262" y="60" width="74" height="28" rx="6" fill="#241c14"/>
+      <rect x="266" y="64" width="58" height="20" rx="4" fill="#cdb4ad"/>
+      <rect x="268" y="66" width="36" height="16" rx="3" fill="#b3823b"/>
+      <rect x="259" y="54" width="8" height="40" rx="3" fill="#241c14"/>
+      <rect x="324" y="68" width="22" height="12" rx="3" fill="#241c14"/>
+      <circle cx="348" cy="74" r="8" fill="#c79a8e" stroke="#241c14" stroke-width="3"/>
+      <path d="M262 74 L236 74" stroke="#241c14" stroke-width="5"/>
+      <path d="M238 74 L222 74" stroke="#9a8a64" stroke-width="2.5"/>
+    </g>
+
+    <!-- toe nails -->
+    <g fill="#f2ead4" stroke="#241c14" stroke-width="2">
+      <ellipse cx="120" cy="290" rx="7" ry="6"/>
+      <ellipse cx="160" cy="294" rx="7" ry="6"/>
+      <ellipse cx="200" cy="290" rx="7" ry="6"/>
+    </g>
   </g>
 
-  <!-- =================== STUBBY BLUNT BONE SPIKES (accents around round form) =================== -->
-  <g stroke="#101218" stroke-width="5" stroke-linejoin="round" fill="#d9d2b0">
-    <!-- top crown nubs -->
-    <path d="M122 78 C118 56 142 50 146 72 C140 70 128 72 122 78 Z"/>
-    <path d="M150 66 C148 42 174 42 172 66 C166 60 156 60 150 66 Z"/>
-    <path d="M178 72 C184 50 206 60 198 80 C192 72 184 70 178 72 Z"/>
-    <!-- left shoulder nubs -->
-    <path d="M68 144 C44 142 44 168 68 166 C62 158 62 152 68 144 Z"/>
-    <path d="M58 190 C34 194 40 220 62 210 C56 204 54 196 58 190 Z"/>
-    <!-- right shoulder nubs -->
-    <path d="M252 144 C276 142 276 168 252 166 C258 158 258 152 252 144 Z"/>
-    <path d="M262 190 C286 194 280 220 258 210 C264 204 266 196 262 190 Z"/>
-  </g>
-  <!-- spike rim light -->
-  <g fill="#e8e3d2" opacity="0.4">
-    <circle cx="146" cy="58" r="4"/>
-    <circle cx="160" cy="54" r="4"/>
-    <circle cx="54" cy="156" r="4"/>
-    <circle cx="266" cy="156" r="4"/>
-  </g>
-
-  <!-- =================== HUGE FAT ROUND BODY (one bulbous mass) =================== -->
-  <!-- back hump shadow -->
-  <path d="M160 84
-           C246 84 276 150 276 200
-           C276 256 232 286 160 286
-           C88 286 44 256 44 200
-           C44 150 74 84 160 84 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="7" stroke-linejoin="round"/>
-  <!-- main flesh fill on top -->
-  <path d="M160 78
-           C242 78 270 144 270 196
-           C270 250 228 280 160 280
-           C92 280 50 250 50 196
-           C50 144 78 78 160 78 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="7" stroke-linejoin="round"/>
-  <!-- inner shadow on the away (lower) half -->
-  <path d="M270 196 C270 250 228 280 160 280 C92 280 50 250 50 196
-           C50 224 104 246 160 246 C216 246 270 224 270 196 Z"
-        fill="#1f3322" opacity="0.85"/>
-  <!-- forward rim light (camera-facing top edge) -->
-  <path d="M160 78 C242 78 270 144 270 196 C246 144 210 116 160 116
-           C110 116 74 144 50 196 C50 144 78 78 160 78 Z"
-        fill="#a6d65e" opacity="0.55"/>
-
-  <!-- fat cheeks (round bulges flanking the eye) -->
-  <g stroke="#101218" stroke-width="5" stroke-linejoin="round">
-    <ellipse cx="92" cy="206" rx="34" ry="28" fill="#5e8c3a"/>
-    <ellipse cx="228" cy="206" rx="34" ry="28" fill="#5e8c3a"/>
-  </g>
-  <ellipse cx="84" cy="198" rx="14" ry="9" fill="#a6d65e" opacity="0.45"/>
-  <ellipse cx="220" cy="198" rx="14" ry="9" fill="#a6d65e" opacity="0.45"/>
-
-  <!-- pulsing bile pustules (rot accent glow) -->
-  <g>
-    <circle cx="108" cy="138" r="11" fill="#a6d65e" filter="url(#rot_glow)"/>
-    <circle cx="108" cy="138" r="6" fill="#a6d65e" stroke="#101218" stroke-width="2.5"/>
-    <circle cx="214" cy="142" r="13" fill="#a6d65e" filter="url(#rot_glow)"/>
-    <circle cx="214" cy="142" r="7" fill="#a6d65e" stroke="#101218" stroke-width="2.5"/>
-  </g>
-
-  <!-- =================== HUGE ANGRY HELLFIRE EYE (one, dominant) =================== -->
-  <!-- angry bone brow ridge (asymmetric tilt = menace) -->
-  <path d="M104 150 C128 132 192 132 216 152 L208 170 C186 156 134 156 112 168 Z"
-        fill="#d9d2b0" stroke="#101218" stroke-width="6" stroke-linejoin="round"/>
-  <path d="M104 150 C128 132 192 132 216 152 L212 159 C188 144 132 144 110 160 Z"
-        fill="#e8e3d2" opacity="0.45"/>
-  <!-- the giant eye socket + hellfire -->
-  <circle cx="160" cy="196" r="56" fill="#ff5a3c" filter="url(#hell_glow)"/>
-  <circle cx="160" cy="196" r="50" fill="#101218" stroke="#ff5a3c" stroke-width="6"/>
-  <!-- angry slit / pissed-off lower lid -->
-  <path d="M110 200 C130 178 190 178 210 200 C190 214 130 214 110 200 Z"
-        fill="#ff5a3c"/>
-  <circle cx="160" cy="194" r="22" fill="#101218"/>
-  <circle cx="160" cy="194" r="14" fill="#ff5a3c"/>
-  <circle cx="153" cy="187" r="5" fill="#caa24a"/>
-  <circle cx="150" cy="184" r="2.4" fill="#d9d2b0"/>
-
-  <!-- stubby blunt fangs under the eye (forward/up) -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="4" stroke-linejoin="round">
-    <path d="M132 244 C130 262 146 264 148 246 C142 248 136 248 132 244 Z"/>
-    <path d="M160 248 C158 268 174 268 174 248 C170 252 164 252 160 248 Z"/>
-    <path d="M188 244 C190 262 174 264 172 246 C178 248 184 248 188 244 Z"/>
-  </g>
 </svg>

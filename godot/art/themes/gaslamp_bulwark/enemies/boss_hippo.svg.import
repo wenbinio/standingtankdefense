@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://byfphv23xvmxe"
-path="res://.godot/imported/boss_hippo.svg-51f35e7a21e4ac8ecd01507f186f3e09.ctex"
+path="res://.godot/imported/boss_hippo.svg-9753bc1886090a7171b228f960971d4d.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://art/themes/gaslamp_bulwark/enemies/boss_hippo.svg"
-dest_files=["res://.godot/imported/boss_hippo.svg-51f35e7a21e4ac8ecd01507f186f3e09.ctex"]
+dest_files=["res://.godot/imported/boss_hippo.svg-9753bc1886090a7171b228f960971d4d.ctex"]
 
 [params]
 

@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c7ljgs6dxm6l1"
-path="res://.godot/imported/bonk_golem.svg-5a82ad190e025b8da488c0ed96fc1da2.ctex"
+path="res://.godot/imported/bonk_golem.svg-3deac785525fe98e7bc1425f2ee9b793.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://art/themes/grimdark/enemies/bonk_golem.svg"
-dest_files=["res://.godot/imported/bonk_golem.svg-5a82ad190e025b8da488c0ed96fc1da2.ctex"]
+dest_files=["res://.godot/imported/bonk_golem.svg-3deac785525fe98e7bc1425f2ee9b793.ctex"]
 
 [params]
 

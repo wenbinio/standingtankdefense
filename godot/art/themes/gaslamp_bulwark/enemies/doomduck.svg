@@ -1,69 +1,80 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <!-- Standing Tank Defense - ENEMY "Doomduck" (scrawny weak chaff, smaller than grunt) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- HEAVILY CHIBI: small round rot-green head/body, big cute-angry eyes, ONE chipped tusk, -->
-  <!-- tiny crude stake held close, tiny stubby feet. Smaller/slighter than the grunt. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="pe_menace" x="-70%" y="-70%" width="240%" height="240%">
-      <feGaussianBlur stdDeviation="2" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
+    <radialGradient id="vig" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="40%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
   </defs>
 
-  <!-- ground shadow (small, scrawny) -->
-  <ellipse cx="48" cy="84" rx="22" ry="7" fill="#0b0d14" opacity="0.45"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ===================== TINY STUBBY FEET ===================== -->
-  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
-    <path d="M40 76 C37 84 39 88 44 87 C47 86 47 80 46 76 Z" fill="#1f3322"/>
-    <path d="M50 76 C53 84 51 88 46 87 C43 86 43 80 44 76 Z" fill="#1f3322"/>
+    <!-- ============ INK UNDERSHAPES ============ -->
+    <g fill="#241c14">
+      <!-- round fuzzy duckling body (small, lower-center) -->
+      <path d="M160 296 C108 296 78 264 78 224 C78 182 112 152 160 152
+               C208 152 242 182 242 224 C242 264 212 296 160 296 Z"/>
+      <!-- big round head fused on top -->
+      <path d="M160 196 C120 196 96 168 96 134 C96 96 124 66 160 66
+               C196 66 224 96 224 134 C224 168 200 196 160 196 Z"/>
+      <!-- tiny left wing -->
+      <path d="M92 214 C66 212 48 224 48 244 C48 262 66 266 82 256
+               C74 244 80 226 100 226 Z"/>
+      <!-- tiny right wing -->
+      <path d="M228 214 C254 212 272 224 272 244 C272 262 254 266 238 256
+               C246 244 240 226 220 226 Z"/>
+      <!-- big bill mass (lower, proper snout) -->
+      <path d="M114 156 C96 156 82 168 82 182 C82 198 102 208 138 208
+               C160 208 174 198 174 184 C174 166 142 156 114 156 Z"/>
+    </g>
+
+    <!-- ============ BODY (fuzzy mustard duckling) ============ -->
+    <path d="M160 288 C112 288 86 258 86 224 C86 186 116 160 160 160
+             C204 160 234 186 234 224 C234 258 208 288 160 288 Z" fill="#d6b84e"/>
+    <!-- belly highlight -->
+    <path d="M110 230 C112 262 138 280 162 280 C200 280 222 256 220 226
+             C208 258 144 264 110 230 Z" fill="#e6cf78"/>
+
+    <!-- tiny wings fill -->
+    <path d="M94 210 C70 208 54 220 54 240 C54 256 70 260 84 251
+             C76 240 82 222 100 222 Z" fill="#d6b84e"/>
+    <path d="M226 210 C250 208 266 220 266 240 C266 256 250 260 236 251
+             C244 240 238 222 220 222 Z" fill="#d6b84e"/>
+
+    <!-- ============ HEAD (fuzzy) ============ -->
+    <path d="M160 188 C124 188 102 162 102 132 C102 98 128 72 160 72
+             C192 72 218 98 218 132 C218 162 196 188 160 188 Z" fill="#dcc05a"/>
+    <!-- fuzzy tuft on head -->
+    <path d="M150 74 C146 58 152 46 160 50 C156 60 164 66 160 74 Z" fill="#dcc05a" stroke="#241c14" stroke-width="3"/>
+    <path d="M168 74 C172 60 166 48 174 52 C170 62 178 68 172 76 Z" fill="#dcc05a" stroke="#241c14" stroke-width="3"/>
+
+    <!-- ============ BIG ORANGE BILL (lower, snout) ============ -->
+    <path d="M120 162 C102 162 88 172 88 184 C88 200 106 210 140 210
+             C160 210 172 200 172 188 C172 170 142 162 120 162 Z" fill="#e08a32"/>
+    <path d="M92 186 C108 192 152 192 168 186" fill="none" stroke="#241c14" stroke-width="3" opacity="0.7"/>
+    <!-- bill nostril -->
+    <ellipse cx="112" cy="178" rx="3" ry="2.4" fill="#241c14" opacity="0.7"/>
+
+    <!-- ============ SINISTER EYES (pie-cut) ============ -->
+    <circle cx="138" cy="120" r="16" fill="#f4ecd6"/>
+    <circle cx="186" cy="120" r="16" fill="#f4ecd6"/>
+    <circle cx="138" cy="120" r="16" fill="none" stroke="#241c14" stroke-width="3.2"/>
+    <circle cx="186" cy="120" r="16" fill="none" stroke="#241c14" stroke-width="3.2"/>
+    <!-- pupils cut toward the nose (scheming) -->
+    <path d="M142 116 L142 132 A12 12 0 0 1 130 122 Z" fill="#241c14"/>
+    <path d="M182 116 L182 132 A12 12 0 0 0 194 122 Z" fill="#241c14"/>
+    <!-- ONE sinister HIGH-ARCHED raised eyebrow (right); low flat brow (left) -->
+    <path d="M120 106 C132 104 148 105 156 109" fill="none" stroke="#241c14" stroke-width="6" stroke-linecap="round"/>
+    <path d="M168 100 C176 82 198 80 208 92" fill="none" stroke="#241c14" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- ============ tiny feet ============ -->
+    <g fill="#e08a32" stroke="#241c14" stroke-width="2.6">
+      <path d="M138 286 C130 300 126 308 134 310 C142 308 144 298 146 286 Z"/>
+      <path d="M178 286 C186 300 190 308 182 310 C174 308 172 298 174 286 Z"/>
+    </g>
   </g>
 
-  <!-- ===================== CRUDE STAKE (tiny, held close, raised north) ===================== -->
-  <rect x="68" y="34" width="5" height="30" rx="2.5" fill="#3a2a16" stroke="#101218" stroke-width="3" stroke-linejoin="round" transform="rotate(8 70 49)"/>
-  <!-- lashed bone shard tip -->
-  <path d="M67 36 L70 24 L74 36 Z" fill="#d9d2b0" stroke="#101218" stroke-width="2.5" stroke-linejoin="round"/>
-  <!-- stubby arm to the stake -->
-  <path d="M60 54 C68 52 71 49 70 45 C64 47 59 50 57 54 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-
-  <!-- ===================== SMALL ROUND BODY (slighter mass, leaning forward) ===================== -->
-  <!-- body shadow base -->
-  <path d="M48 40 C68 40 73 56 70 68 C66 78 57 80 48 80 C39 80 30 78 26 68 C23 56 28 40 48 40 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <!-- main flesh fill -->
-  <path d="M48 42 C66 42 70 56 67 67 C63 75 56 77 48 77 C40 77 33 75 29 67 C26 56 30 42 48 42 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
-  <!-- inner shadow (lower half) -->
-  <path d="M67 67 C63 75 56 77 48 77 C40 77 33 75 29 67 C35 72 41 73 48 73 C55 73 61 72 67 67 Z"
-        fill="#1f3322" opacity="0.85"/>
-  <!-- forward rim light -->
-  <path d="M48 42 C63 42 68 52 66 60 C59 51 54 49 48 49 C42 49 37 51 30 60 C28 52 33 42 48 42 Z"
-        fill="#a6d65e" opacity="0.55"/>
-
-  <!-- exposed rib hint (malnourished, one chunky seam) -->
-  <path d="M40 70 C44 72 52 72 56 70" fill="none" stroke="#1f3322" stroke-width="2.5" opacity="0.7" stroke-linecap="round"/>
-
-  <!-- chunky stubby left fist -->
-  <path d="M29 60 C22 62 21 67 25 69 C31 67 34 64 35 61 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-
-  <!-- ===================== OVERSIZED FEATURES (weak read) ===================== -->
-  <!-- ONE chipped bone tusk (asymmetric, weak) -->
-  <path d="M41 65 L37 53 L47 63 Z" fill="#d9d2b0" stroke="#101218" stroke-width="2.8" stroke-linejoin="round"/>
-
-  <!-- big cute-but-dim menace eyes (smaller halo than grunt) -->
-  <g>
-    <circle cx="41" cy="58" r="6.5" fill="#ff5a3c" filter="url(#pe_menace)"/>
-    <circle cx="41" cy="58" r="5" fill="#ff5a3c" stroke="#101218" stroke-width="2.2"/>
-    <circle cx="39.5" cy="56.5" r="1.6" fill="#ffd0c2"/>
-    <circle cx="55" cy="59" r="6.5" fill="#ff5a3c" filter="url(#pe_menace)"/>
-    <circle cx="55" cy="59" r="5" fill="#ff5a3c" stroke="#101218" stroke-width="2.2"/>
-    <circle cx="53.5" cy="57.5" r="1.6" fill="#ffd0c2"/>
-  </g>
-  <!-- weak slanted brows (cute-tired) -->
-  <g stroke="#101218" stroke-width="3.5" stroke-linecap="round">
-    <line x1="35" y1="50" x2="46" y2="53"/>
-    <line x1="62" y1="51" x2="51" y2="54"/>
-  </g>
 </svg>

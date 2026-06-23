@@ -1,97 +1,116 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <!-- Standing Tank Defense - ENEMY "Spicy" (ranged fire beast) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- BREATHER SET (matched chibi form, 3 elements): squat fat round maw-beast, big gaping -->
-  <!-- front maw aimed north, 4 stubby splayed legs, slit eyes flanking the maw. -->
-  <!-- Element = FIRE: draconic horns, molten maw, menace-orange glow, smoke, flame curls. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="fb_glow" x="-90%" y="-90%" width="280%" height="280%">
-      <feGaussianBlur stdDeviation="2.6" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
-    <filter id="fb_smoke" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="3.2"/>
-    </filter>
+    <radialGradient id="vig" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="38%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
+    <radialGradient id="shell" cx="42%" cy="30%" r="76%">
+      <stop offset="0%" stop-color="#5a7f86"/>
+      <stop offset="100%" stop-color="#33565d"/>
+    </radialGradient>
+    <radialGradient id="ember" cx="50%" cy="55%" r="60%">
+      <stop offset="0%" stop-color="#e8a23a"/>
+      <stop offset="55%" stop-color="#c66a2e"/>
+      <stop offset="100%" stop-color="#8a3f22"/>
+    </radialGradient>
   </defs>
 
-  <!-- smoke plume rising off the maw (north) -->
-  <ellipse cx="48" cy="14" rx="13" ry="9" fill="#3a4a63" filter="url(#fb_smoke)" opacity="0.4"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ground shadow under the squat bulk -->
-  <ellipse cx="48" cy="84" rx="32" ry="8.5" fill="#0b0d14" opacity="0.48"/>
+    <!-- ============ INK UNDERSHAPES ============ -->
+    <g fill="#241c14">
+      <!-- glowing rear abdomen (lower, behind) -->
+      <path d="M160 300 C112 300 84 270 84 234 C84 198 112 174 160 174
+               C208 174 236 198 236 234 C236 270 208 300 160 300 Z"/>
+      <!-- big rounded carapace shell -->
+      <path d="M160 222 C84 222 44 178 44 130 C44 84 96 50 160 50
+               C224 50 276 84 276 130 C276 178 236 222 160 222 Z"/>
+      <!-- head bump up top -->
+      <path d="M160 76 C134 76 116 60 116 42 C116 24 136 12 160 12
+               C184 12 204 24 204 42 C204 60 186 76 160 76 Z"/>
+      <!-- segmented legs (3 each side) -->
+      <path d="M70 150 C40 150 18 158 8 176 M70 170 C38 174 16 188 8 208 M74 192 C46 200 28 218 22 240"
+            fill="none" stroke="#241c14" stroke-width="14"/>
+      <path d="M250 150 C280 150 302 158 312 176 M250 170 C282 174 304 188 312 208 M246 192 C274 200 292 218 298 240"
+            fill="none" stroke="#241c14" stroke-width="14"/>
+      <!-- antennae -->
+      <path d="M138 28 C118 8 96 2 78 8 M182 28 C202 8 224 2 242 8"
+            fill="none" stroke="#241c14" stroke-width="9"/>
+    </g>
 
-  <!-- ===================== STUBBY CLAWED LEGS (4, flank corners) ===================== -->
-  <g fill="#1f3322" stroke="#101218" stroke-width="4" stroke-linejoin="round">
-    <ellipse cx="22" cy="48" rx="9" ry="6.5" transform="rotate(-30 22 48)"/>
-    <ellipse cx="74" cy="48" rx="9" ry="6.5" transform="rotate(30 74 48)"/>
-    <ellipse cx="22" cy="74" rx="9" ry="6.5" transform="rotate(30 22 74)"/>
-    <ellipse cx="74" cy="74" rx="9" ry="6.5" transform="rotate(-30 74 74)"/>
+    <!-- ============ segmented legs fill ============ -->
+    <g fill="none" stroke="#3a4f54" stroke-width="8" stroke-linecap="round">
+      <path d="M70 150 C42 150 22 158 12 175"/>
+      <path d="M70 170 C40 174 20 188 12 207"/>
+      <path d="M74 192 C48 200 31 217 25 238"/>
+      <path d="M250 150 C278 150 298 158 308 175"/>
+      <path d="M250 170 C280 174 300 188 308 207"/>
+      <path d="M246 192 C272 200 289 217 295 238"/>
+    </g>
+    <!-- leg joint knuckles -->
+    <g fill="#33565d" stroke="#241c14" stroke-width="2.4">
+      <circle cx="40" cy="153" r="5"/><circle cx="38" cy="176" r="5"/><circle cx="46" cy="200" r="5"/>
+      <circle cx="280" cy="153" r="5"/><circle cx="282" cy="176" r="5"/><circle cx="274" cy="200" r="5"/>
+    </g>
+
+    <!-- ============ GLOWING REAR ABDOMEN ============ -->
+    <path d="M160 292 C116 292 90 264 90 232 C90 200 116 180 160 180
+             C204 180 230 200 230 232 C230 264 204 292 160 292 Z" fill="url(#ember)"/>
+    <!-- hot core glow -->
+    <ellipse cx="160" cy="244" rx="40" ry="30" fill="#f2c454" opacity="0.55"/>
+    <!-- abdomen segment lines -->
+    <g fill="none" stroke="#7a3a20" stroke-width="3.2" opacity="0.7">
+      <path d="M104 224 C128 236 192 236 216 224"/>
+      <path d="M100 250 C126 266 194 266 220 250"/>
+    </g>
+    <!-- subtle heat shimmer wisps off the rear -->
+    <g fill="none" stroke="#d98f4a" stroke-width="3" stroke-linecap="round" opacity="0.55">
+      <path d="M134 288 C130 300 138 308 132 318"/>
+      <path d="M160 292 C156 304 164 312 158 322"/>
+      <path d="M186 288 C190 300 182 308 188 318"/>
+    </g>
+
+    <!-- ============ ROUNDED CARAPACE SHELL ============ -->
+    <path d="M160 214 C88 214 52 174 52 130 C52 88 100 58 160 58
+             C220 58 268 88 268 130 C268 174 232 214 160 214 Z" fill="url(#shell)"/>
+    <!-- center elytra seam -->
+    <path d="M160 62 L160 210" stroke="#1f3338" stroke-width="5"/>
+    <!-- glossy top highlight -->
+    <path d="M96 96 C120 76 160 70 196 78 C160 80 122 92 100 116 Z" fill="#7d9ea4" opacity="0.6"/>
+    <!-- shell spot dapples -->
+    <g fill="#1f3338" opacity="0.6">
+      <ellipse cx="110" cy="120" rx="10" ry="13"/>
+      <ellipse cx="210" cy="120" rx="10" ry="13"/>
+      <ellipse cx="120" cy="166" rx="8" ry="10"/>
+      <ellipse cx="200" cy="166" rx="8" ry="10"/>
+    </g>
+
+    <!-- ============ HEAD ============ -->
+    <path d="M160 70 C136 70 122 56 122 40 C122 24 138 16 160 16
+             C182 16 198 24 198 40 C198 56 184 70 160 70 Z" fill="#3a4f54"/>
+
+    <!-- antennae fill + ember tips -->
+    <path d="M140 30 C120 12 100 6 82 12" fill="none" stroke="#3a4f54" stroke-width="5"/>
+    <path d="M180 30 C200 12 220 6 238 12" fill="none" stroke="#3a4f54" stroke-width="5"/>
+    <circle cx="80" cy="12" r="7" fill="#e8a23a" stroke="#241c14" stroke-width="2.4"/>
+    <circle cx="240" cy="12" r="7" fill="#e8a23a" stroke="#241c14" stroke-width="2.4"/>
+
+    <!-- ============ beady eyes ============ -->
+    <circle cx="144" cy="40" r="11" fill="#f4ecd6"/>
+    <circle cx="176" cy="40" r="11" fill="#f4ecd6"/>
+    <circle cx="144" cy="40" r="11" fill="none" stroke="#241c14" stroke-width="2.8"/>
+    <circle cx="176" cy="40" r="11" fill="none" stroke="#241c14" stroke-width="2.8"/>
+    <circle cx="147" cy="42" r="4.4" fill="#241c14"/>
+    <circle cx="173" cy="42" r="4.4" fill="#241c14"/>
+    <!-- angry brows -->
+    <path d="M132 30 C140 25 152 26 158 32" fill="none" stroke="#241c14" stroke-width="4.4" stroke-linecap="round"/>
+    <path d="M162 32 C168 26 180 25 188 30" fill="none" stroke="#241c14" stroke-width="4.4" stroke-linecap="round"/>
+    <!-- tiny mandibles / frown -->
+    <path d="M150 56 C156 60 164 60 170 56" fill="none" stroke="#241c14" stroke-width="3.4" stroke-linecap="round"/>
   </g>
 
-  <!-- ===================== FAT ROUND SCALED BODY (dominant mass) ===================== -->
-  <!-- body shadow base -->
-  <path d="M48 34 C72 34 80 52 78 66 C74 80 60 82 48 82 C36 82 22 80 18 66 C16 52 24 34 48 34 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
-  <!-- flesh fill -->
-  <path d="M48 36 C70 36 77 52 75 65 C71 77 59 79 48 79 C37 79 25 77 21 65 C19 52 26 36 48 36 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <!-- inner shadow (lower half) -->
-  <path d="M75 65 C71 77 59 79 48 79 C37 79 25 77 21 65 C29 72 38 74 48 74 C58 74 67 72 75 65 Z"
-        fill="#1f3322" opacity="0.85"/>
-  <!-- forward rim light -->
-  <path d="M48 36 C66 36 73 48 71 57 C63 47 56 44 48 44 C40 44 33 47 25 57 C23 48 30 36 48 36 Z"
-        fill="#a6d65e" opacity="0.55"/>
-
-  <!-- ===================== ELEMENT: MOLTEN SCALE CRACKS (menace, on back) ===================== -->
-  <g stroke="#ff5a3c" stroke-linecap="round" opacity="0.6">
-    <path d="M34 54 C33 62 36 70 34 78" stroke-width="2.6"/>
-    <path d="M48 58 L48 78" stroke-width="2.4"/>
-    <path d="M62 54 C63 62 60 70 62 78" stroke-width="2.4"/>
-  </g>
-  <circle cx="40" cy="66" r="5" fill="#ff5a3c" filter="url(#fb_glow)"/>
-  <circle cx="40" cy="66" r="2.8" fill="#ff5a3c" stroke="#101218" stroke-width="2"/>
-  <circle cx="58" cy="64" r="5" fill="#ff5a3c" filter="url(#fb_glow)"/>
-  <circle cx="58" cy="64" r="2.8" fill="#ff5a3c" stroke="#101218" stroke-width="2"/>
-  <!-- raised dorsal scale-spikes -->
-  <g fill="#5e8c3a" stroke="#101218" stroke-width="2.5" stroke-linejoin="round">
-    <path d="M41 50 L38 40 L47 49 Z"/>
-    <path d="M55 50 L58 40 L49 49 Z"/>
-  </g>
-
-  <!-- ===================== BIG GAPING MOLTEN MAW (front, aimed north) ===================== -->
-  <!-- swept-back bone horns -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="2.5" stroke-linejoin="round">
-    <path d="M33 40 L24 30 L38 42 Z"/>
-    <path d="M63 40 L72 30 L58 42 Z"/>
-  </g>
-  <circle cx="48" cy="34" r="15" fill="#ff5a3c" filter="url(#fb_glow)" opacity="0.9"/>
-  <!-- maw cavity -->
-  <path d="M34 36 C38 20 58 20 62 36 C58 48 38 48 34 36 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-  <!-- glowing molten throat -->
-  <path d="M39 35 C43 25 53 25 57 35 C53 43 43 43 39 35 Z" fill="#ff5a3c"/>
-  <ellipse cx="48" cy="33" rx="4" ry="5" fill="#5a1206" opacity="0.7"/>
-  <!-- chunky bone fang ring -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="2" stroke-linejoin="round">
-    <path d="M41 28 L43 21 L47 28 Z"/>
-    <path d="M49 28 L53 21 L55 28 Z"/>
-    <path d="M40 40 L43 47 L46 40 Z"/>
-    <path d="M50 40 L53 47 L56 40 Z"/>
-  </g>
-
-  <!-- licking flame curls escaping the maw (north) -->
-  <g fill="none" stroke="#ff5a3c" stroke-linecap="round" opacity="0.85">
-    <path d="M43 22 C41 16 45 12 43 8" stroke-width="2.6"/>
-    <path d="M53 22 C55 16 51 12 53 8" stroke-width="2.4"/>
-  </g>
-  <circle cx="43" cy="8" r="2.2" fill="#ff5a3c" filter="url(#fb_glow)"/>
-  <circle cx="53" cy="8" r="2" fill="#ff5a3c" filter="url(#fb_glow)"/>
-
-  <!-- molten slit eyes flanking the maw -->
-  <g>
-    <circle cx="30" cy="44" r="4.5" fill="#ff5a3c" filter="url(#fb_glow)"/>
-    <path d="M27 42 L33 44 L27 46 Z" fill="#5a1206" stroke="#101218" stroke-width="1.4" stroke-linejoin="round"/>
-    <circle cx="66" cy="44" r="4.5" fill="#ff5a3c" filter="url(#fb_glow)"/>
-    <path d="M69 42 L63 44 L69 46 Z" fill="#5a1206" stroke="#101218" stroke-width="1.4" stroke-linejoin="round"/>
-  </g>
 </svg>

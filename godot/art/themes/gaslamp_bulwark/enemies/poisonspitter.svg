@@ -1,86 +1,117 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <!-- Standing Tank Defense - ENEMY "Croak" (ranged venom toad-beast) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- BREATHER SET (matched chibi form, 3 elements): squat fat round maw-beast, big gaping -->
-  <!-- front maw aimed north, 4 stubby splayed legs, beady eyes flanking the maw. -->
-  <!-- Element = POISON: sick-bile green glow, pustules, dripping venom. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="ps_glow" x="-90%" y="-90%" width="280%" height="280%">
-      <feGaussianBlur stdDeviation="2.4" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
+    <radialGradient id="vig" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="38%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
+    <radialGradient id="frog" cx="46%" cy="34%" r="74%">
+      <stop offset="0%" stop-color="#3f9bb0"/>
+      <stop offset="100%" stop-color="#2c7184"/>
+    </radialGradient>
   </defs>
 
-  <!-- ground shadow under the squat bulk -->
-  <ellipse cx="48" cy="84" rx="32" ry="8.5" fill="#0b0d14" opacity="0.48"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ===================== STUBBY SPLAYED LEGS (4, flank corners) ===================== -->
-  <g fill="#1f3322" stroke="#101218" stroke-width="4" stroke-linejoin="round">
-    <ellipse cx="22" cy="48" rx="9" ry="6.5" transform="rotate(-30 22 48)"/>
-    <ellipse cx="74" cy="48" rx="9" ry="6.5" transform="rotate(30 74 48)"/>
-    <ellipse cx="22" cy="74" rx="9" ry="6.5" transform="rotate(30 22 74)"/>
-    <ellipse cx="74" cy="74" rx="9" ry="6.5" transform="rotate(-30 74 74)"/>
+    <!-- ============ INK UNDERSHAPES ============ -->
+    <g fill="#241c14">
+      <!-- squat wide body -->
+      <path d="M160 296 C72 296 32 252 32 204 C32 156 72 120 160 120
+               C248 120 288 156 288 204 C288 252 248 296 160 296 Z"/>
+      <!-- two big bulging eye domes on top -->
+      <path d="M96 132 C60 132 38 104 38 78 C38 50 62 32 92 32
+               C124 32 144 56 144 84 C144 112 124 132 96 132 Z"/>
+      <path d="M224 132 C260 132 282 104 282 78 C282 50 258 32 228 32
+               C196 32 176 56 176 84 C176 112 196 132 224 132 Z"/>
+      <!-- splayed front feet -->
+      <path d="M70 286 C44 300 22 300 18 286 C40 282 56 274 70 270 Z"/>
+      <path d="M250 286 C276 300 298 300 302 286 C280 282 264 274 250 270 Z"/>
+    </g>
+
+    <!-- ============ splayed sticky feet ============ -->
+    <g fill="#2c7184" stroke="#241c14" stroke-width="3">
+      <g transform="translate(58 282)">
+        <circle cx="-14" cy="4" r="9"/><circle cx="0" cy="9" r="9"/><circle cx="14" cy="6" r="9"/>
+      </g>
+      <g transform="translate(262 282)">
+        <circle cx="14" cy="4" r="9"/><circle cx="0" cy="9" r="9"/><circle cx="-14" cy="6" r="9"/>
+      </g>
+    </g>
+
+    <!-- ============ BODY ============ -->
+    <path d="M160 288 C80 288 40 248 40 204 C40 160 80 128 160 128
+             C240 128 280 160 280 204 C280 248 240 288 160 288 Z" fill="url(#frog)"/>
+    <!-- belly highlight -->
+    <path d="M92 222 C92 260 126 280 160 280 C220 280 244 250 240 218
+             C224 256 124 264 92 222 Z" fill="#5fb4c6"/>
+    <!-- warning SPOTS (poison-dart) -->
+    <g fill="#241c14">
+      <circle cx="108" cy="186" r="13"/>
+      <circle cx="208" cy="180" r="11"/>
+      <circle cx="150" cy="234" r="14"/>
+      <circle cx="226" cy="226" r="10"/>
+      <circle cx="74" cy="222" r="9"/>
+    </g>
+    <g fill="#e8b53a">
+      <circle cx="108" cy="186" r="6"/>
+      <circle cx="208" cy="180" r="5"/>
+      <circle cx="150" cy="234" r="6.5"/>
+      <circle cx="226" cy="226" r="4.5"/>
+      <circle cx="74" cy="222" r="4"/>
+    </g>
+
+    <!-- ============ puffed THROAT SAC (below the mouth) ============ -->
+    <path d="M120 238 C120 264 138 280 160 280 C182 280 200 264 200 238
+             C200 224 182 216 160 216 C138 216 120 224 120 238 Z" fill="#6fc0d0"/>
+    <path d="M130 240 C130 262 144 274 160 274 C176 274 190 262 190 240" fill="none" stroke="#2c7184" stroke-width="3" opacity="0.7"/>
+
+    <!-- ============ BULGING EYE DOMES ============ -->
+    <path d="M96 126 C64 126 44 100 44 76 C44 52 66 38 92 38
+             C122 38 138 60 138 86 C138 110 120 126 96 126 Z" fill="#3f9bb0"/>
+    <path d="M224 126 C256 126 276 100 276 76 C276 52 254 38 228 38
+             C198 38 182 60 182 86 C182 110 200 126 224 126 Z" fill="#3f9bb0"/>
+    <!-- eyeball whites -->
+    <circle cx="90" cy="74" r="26" fill="#e8c23a"/>
+    <circle cx="230" cy="74" r="26" fill="#e8c23a"/>
+    <circle cx="90" cy="74" r="26" fill="none" stroke="#241c14" stroke-width="3.2"/>
+    <circle cx="230" cy="74" r="26" fill="none" stroke="#241c14" stroke-width="3.2"/>
+    <!-- big pupils -->
+    <circle cx="96" cy="80" r="12" fill="#241c14"/>
+    <circle cx="224" cy="80" r="12" fill="#241c14"/>
+    <circle cx="92" cy="74" r="4" fill="#fff" opacity="0.85"/>
+    <circle cx="220" cy="74" r="4" fill="#fff" opacity="0.85"/>
+    <!-- angry brow ridges -->
+    <path d="M64 54 C76 46 100 46 114 56" fill="none" stroke="#241c14" stroke-width="5" stroke-linecap="round"/>
+    <path d="M206 56 C220 46 244 46 256 54" fill="none" stroke="#241c14" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- ============ HUGE OPEN MOUTH mid-spit ============ -->
+    <path d="M74 158 C104 150 216 150 246 158 C246 196 206 222 160 222
+             C114 222 74 196 74 158 Z" fill="#241c14"/>
+    <!-- inner mouth cavity -->
+    <path d="M88 164 C112 160 208 160 232 164 C228 192 196 210 160 210
+             C124 210 92 192 88 164 Z" fill="#9c3a4a"/>
+    <!-- lower lip / tongue -->
+    <path d="M104 196 C124 208 196 208 216 196 C196 204 124 204 104 196 Z" fill="#c85a68"/>
+    <!-- upper teeth row -->
+    <g fill="#f2ead4" stroke="#241c14" stroke-width="1.6">
+      <path d="M96 160 l8 0 l-2 10 l-6 -4 Z"/>
+      <path d="M124 159 l9 0 l-3 12 l-6 -5 Z"/>
+      <path d="M188 159 l9 0 l3 12 l-6 -5 Z"/>
+      <path d="M216 160 l8 0 l2 10 l-6 -4 Z"/>
+    </g>
+    <!-- POISON SPIT arc launching straight up-out of the mouth into open paper -->
+    <g fill="#cfe23a" stroke="#241c14" stroke-width="2.6">
+      <ellipse cx="160" cy="148" rx="15" ry="11"/>
+      <circle cx="159" cy="120" r="8"/>
+      <circle cx="161" cy="96" r="6.5"/>
+      <circle cx="159" cy="76" r="5"/>
+      <circle cx="161" cy="58" r="3.6"/>
+    </g>
+    <!-- drip trail accent -->
+    <path d="M160 144 C158 128 161 108 160 88" fill="none" stroke="#9bb02a" stroke-width="2.4" opacity="0.7"/>
   </g>
 
-  <!-- ===================== FAT ROUND BLOATED BODY (dominant mass) ===================== -->
-  <!-- body shadow base -->
-  <path d="M48 34 C72 34 80 52 78 66 C74 80 60 82 48 82 C36 82 22 80 18 66 C16 52 24 34 48 34 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
-  <!-- flesh fill -->
-  <path d="M48 36 C70 36 77 52 75 65 C71 77 59 79 48 79 C37 79 25 77 21 65 C19 52 26 36 48 36 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <!-- inner shadow (lower half) -->
-  <path d="M75 65 C71 77 59 79 48 79 C37 79 25 77 21 65 C29 72 38 74 48 74 C58 74 67 72 75 65 Z"
-        fill="#1f3322" opacity="0.85"/>
-  <!-- forward rim light -->
-  <path d="M48 36 C66 36 73 48 71 57 C63 47 56 44 48 44 C40 44 33 47 25 57 C23 48 30 36 48 36 Z"
-        fill="#a6d65e" opacity="0.55"/>
-
-  <!-- ===================== ELEMENT: VENOM PUSTULES (sick-bile, on back) ===================== -->
-  <g>
-    <circle cx="34" cy="64" r="6" fill="#a6d65e" filter="url(#ps_glow)"/>
-    <circle cx="34" cy="64" r="3.4" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
-    <circle cx="62" cy="62" r="6" fill="#a6d65e" filter="url(#ps_glow)"/>
-    <circle cx="62" cy="62" r="3.4" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
-    <circle cx="48" cy="71" r="5" fill="#a6d65e" filter="url(#ps_glow)"/>
-    <circle cx="48" cy="71" r="2.8" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
-  </g>
-  <!-- dark warty bumps -->
-  <g fill="#1f3322" opacity="0.7">
-    <circle cx="40" cy="56" r="2.4"/><circle cx="57" cy="69" r="2.4"/><circle cx="29" cy="61" r="2"/>
-  </g>
-
-  <!-- ===================== BIG GAPING VENOM MAW (front, aimed north) ===================== -->
-  <circle cx="48" cy="34" r="15" fill="#a6d65e" filter="url(#ps_glow)" opacity="0.9"/>
-  <!-- maw cavity -->
-  <path d="M34 36 C38 20 58 20 62 36 C58 48 38 48 34 36 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-  <!-- glowing venom throat -->
-  <path d="M39 35 C43 25 53 25 57 35 C53 43 43 43 39 35 Z" fill="#a6d65e"/>
-  <ellipse cx="48" cy="33" rx="4" ry="5" fill="#1f3322" opacity="0.6"/>
-  <!-- chunky bone fang ring -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="2" stroke-linejoin="round">
-    <path d="M41 28 L43 21 L47 28 Z"/>
-    <path d="M49 28 L53 21 L55 28 Z"/>
-    <path d="M40 40 L43 47 L46 40 Z"/>
-    <path d="M50 40 L53 47 L56 40 Z"/>
-  </g>
-
-  <!-- dripping venom strings (down off the maw) -->
-  <g fill="none" stroke="#a6d65e" stroke-linecap="round" opacity="0.85">
-    <path d="M38 44 C37 50 39 54 38 58" stroke-width="2.4"/>
-    <path d="M58 44 C59 50 57 55 58 59" stroke-width="2.2"/>
-  </g>
-  <circle cx="38" cy="59" r="2.2" fill="#a6d65e" filter="url(#ps_glow)"/>
-  <circle cx="58" cy="60" r="2" fill="#a6d65e" filter="url(#ps_glow)"/>
-
-  <!-- beady venom eyes flanking the maw -->
-  <g>
-    <circle cx="30" cy="44" r="4.5" fill="#a6d65e" filter="url(#ps_glow)"/>
-    <circle cx="30" cy="44" r="2.8" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
-    <circle cx="29" cy="43" r="0.9" fill="#e8e3d2"/>
-    <circle cx="66" cy="44" r="4.5" fill="#a6d65e" filter="url(#ps_glow)"/>
-    <circle cx="66" cy="44" r="2.8" fill="#a6d65e" stroke="#101218" stroke-width="2"/>
-    <circle cx="65" cy="43" r="0.9" fill="#e8e3d2"/>
-  </g>
 </svg>

@@ -1,78 +1,112 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <!-- Standing Tank Defense - ENEMY "Squeakzilla" (basic weak mob, 200 HP) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- HEAVILY CHIBI: big round rot-green head/body (~65% canvas), oversized cute-angry -->
-  <!-- eyes, stubby bone tusks, tiny crude axe held close, tiny stubby feet. ~1.7 heads tall. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="g_menace" x="-70%" y="-70%" width="240%" height="240%">
-      <feGaussianBlur stdDeviation="2.2" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
+    <radialGradient id="vig2" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper2" cx="40%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
   </defs>
 
-  <!-- ground shadow under pivot -->
-  <ellipse cx="48" cy="84" rx="28" ry="9" fill="#0b0d14" opacity="0.45"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ===================== TINY STUBBY FEET (peeking under big body) ===================== -->
-  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
-    <path d="M37 76 C34 84 36 88 41 87 C45 86 45 80 44 76 Z" fill="#1f3322"/>
-    <path d="M52 76 C55 84 53 88 48 87 C44 86 44 80 45 76 Z" fill="#1f3322"/>
+    <!-- ============ INK UNDERSHAPES ============ -->
+    <g fill="#241c14">
+      <!-- long curling rope tail -->
+      <path d="M222 270 C272 268 300 240 298 206 C296 178 270 168 256 184
+               C272 188 280 206 264 224 C246 244 210 248 198 244
+               C200 256 210 268 222 270 Z"/>
+      <!-- body blob (small scrappy, hunched) -->
+      <path d="M150 296 C96 296 64 262 64 222 C64 188 84 168 110 162
+               C100 146 104 124 124 116 C140 110 156 116 162 130
+               C176 116 200 116 212 132 C226 152 222 174 206 184
+               C232 196 244 214 244 240 C244 274 210 296 150 296 Z"/>
+      <!-- snout cone pointing left-down -->
+      <path d="M118 180 C92 184 70 198 64 214 C60 226 70 236 86 236
+               C112 236 138 220 144 200 C146 188 132 178 118 180 Z"/>
+      <!-- left noodle arm scheming (rubbing) -->
+      <path d="M118 232 C92 244 78 240 74 222 C71 208 84 200 94 208
+               C90 220 102 224 120 218 Z"/>
+      <!-- right noodle arm -->
+      <path d="M198 220 C224 230 244 226 248 208 C251 194 238 188 228 196
+               C232 208 220 214 200 208 Z"/>
+    </g>
+
+    <!-- ============ rope tail fill ============ -->
+    <path d="M222 264 C268 262 294 238 292 207 C290 182 270 175 258 188
+             C272 194 277 209 261 226 C242 246 206 250 196 240"
+          fill="none" stroke="#c79a8e" stroke-width="13" stroke-linecap="round"/>
+
+    <!-- ============ BODY (dusty mustard-grey rat) ============ -->
+    <path d="M150 288 C100 288 72 257 72 222 C72 190 90 173 114 167
+             C103 150 108 130 126 123 C141 117 154 123 160 137
+             C175 122 198 123 208 138 C221 156 217 175 201 184
+             C226 197 236 215 236 240 C236 270 204 288 150 288 Z" fill="#9b8e6a"/>
+    <!-- belly highlight -->
+    <path d="M108 226 C108 258 134 274 158 274 C194 274 210 250 206 224
+             C196 256 138 262 108 226 Z" fill="#bcae84"/>
+
+    <!-- ============ round ears ============ -->
+    <circle cx="124" cy="124" r="26" fill="#9b8e6a" stroke="#241c14" stroke-width="4"/>
+    <circle cx="124" cy="124" r="14" fill="#c79a8e"/>
+    <circle cx="200" cy="130" r="24" fill="#9b8e6a" stroke="#241c14" stroke-width="4"/>
+    <circle cx="200" cy="130" r="13" fill="#c79a8e"/>
+
+    <!-- ============ noodle arms fill + gloves ============ -->
+    <path d="M120 226 C96 238 80 234 77 218 C74 206 85 201 93 208
+             C90 219 104 222 122 214 Z" fill="#9b8e6a"/>
+    <path d="M198 214 C222 225 242 221 245 205 C248 193 237 188 229 195
+             C232 206 220 211 200 204 Z" fill="#9b8e6a"/>
+    <!-- scheming steepled gloved hands front-center -->
+    <g transform="translate(150 252)">
+      <ellipse cx="-13" cy="0" rx="13" ry="11" fill="#f4ecd6" stroke="#241c14" stroke-width="2.6"/>
+      <ellipse cx="13" cy="0" rx="13" ry="11" fill="#f4ecd6" stroke="#241c14" stroke-width="2.6"/>
+      <path d="M-20 -2 a6 6 0 0 1 12 0 M-14 -8 v12" fill="none" stroke="#241c14" stroke-width="1.8"/>
+      <path d="M8 -2 a6 6 0 0 1 12 0 M14 -8 v12" fill="none" stroke="#241c14" stroke-width="1.8"/>
+    </g>
+    <circle cx="244" cy="208" r="12" fill="#f4ecd6" stroke="#241c14" stroke-width="2.4"/>
+    <path d="M237 208 a7 7 0 0 1 14 0" fill="none" stroke="#241c14" stroke-width="1.8"/>
+
+    <!-- ============ POINTY SNOUT ============ -->
+    <path d="M120 184 C96 188 76 200 71 214 C67 224 76 232 90 232
+             C114 232 137 218 142 200 C144 189 132 182 120 184 Z" fill="#b3a37a"/>
+    <!-- nose tip -->
+    <ellipse cx="74" cy="216" rx="11" ry="9" fill="#241c14"/>
+    <ellipse cx="70" cy="213" rx="3" ry="2.5" fill="#c79a8e"/>
+
+    <!-- ============ WHISKERS ============ -->
+    <g stroke="#241c14" stroke-width="2" fill="none" opacity="0.8">
+      <path d="M80 220 C56 224 40 230 26 240"/>
+      <path d="M82 226 C58 234 44 242 32 254"/>
+      <path d="M84 212 C60 210 44 208 28 206"/>
+    </g>
+
+    <!-- ============ BIG BUCK INCISORS ============ -->
+    <path d="M82 230 C79 254 84 268 95 268 C103 268 105 256 102 232 Z" fill="#f2ead4" stroke="#241c14" stroke-width="2.6"/>
+    <path d="M104 230 C104 256 110 268 121 268 C129 268 128 254 122 232 Z" fill="#f2ead4" stroke="#241c14" stroke-width="2.6"/>
+    <path d="M103 240 L103 264" stroke="#241c14" stroke-width="1.8"/>
+
+    <!-- ============ BEADY ANGRY EYES ============ -->
+    <circle cx="138" cy="168" r="16" fill="#f4ecd6"/>
+    <circle cx="184" cy="166" r="16" fill="#f4ecd6"/>
+    <circle cx="138" cy="168" r="16" fill="none" stroke="#241c14" stroke-width="3"/>
+    <circle cx="184" cy="166" r="16" fill="none" stroke="#241c14" stroke-width="3"/>
+    <circle cx="141" cy="170" r="6" fill="#241c14"/>
+    <circle cx="181" cy="168" r="6" fill="#241c14"/>
+    <circle cx="139" cy="168" r="2" fill="#f4ecd6"/>
+    <circle cx="179" cy="166" r="2" fill="#f4ecd6"/>
+    <!-- angry scheming brows (heavy, low, slanted in toward nose) -->
+    <path d="M122 156 C134 153 150 158 156 165" fill="none" stroke="#241c14" stroke-width="6" stroke-linecap="round"/>
+    <path d="M167 164 C174 157 190 152 200 155" fill="none" stroke="#241c14" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- toe nails -->
+    <g fill="#f2ead4" stroke="#241c14" stroke-width="2">
+      <ellipse cx="118" cy="284" rx="6" ry="5"/>
+      <ellipse cx="152" cy="287" rx="6" ry="5"/>
+      <ellipse cx="186" cy="284" rx="6" ry="5"/>
+    </g>
   </g>
 
-  <!-- ===================== CRUDE AXE (tiny, held close in stubby arm) ===================== -->
-  <!-- short stubby haft -->
-  <rect x="70" y="44" width="6" height="22" rx="3" fill="#1f3322" stroke="#101218" stroke-width="3.5" stroke-linejoin="round" transform="rotate(16 73 55)"/>
-  <!-- blunt little axe head -->
-  <path d="M64 40 L80 35 L83 50 L72 50 L78 56 L64 54 Z"
-        fill="#6f8db3" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-  <path d="M64 54 L78 56 L72 50 L67 49 Z" fill="#3a4a63" opacity="0.85"/>
-  <path d="M64 40 L80 35 L81 40 L65 45 Z" fill="#bcd6f2" opacity="0.7"/>
-
-  <!-- stubby little arm reaching to axe -->
-  <path d="M62 56 C70 54 74 52 73 48 C66 49 60 52 58 56 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
-
-  <!-- ===================== BIG ROUND PUDGY BODY (dominant mass, leaning forward) ===================== -->
-  <!-- body base/shadow (big bubble) -->
-  <path d="M48 34 C72 34 78 54 74 68 C70 80 58 82 48 82 C38 82 26 80 22 68 C18 54 24 34 48 34 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
-  <!-- main flesh fill -->
-  <path d="M48 36 C70 36 75 54 71 67 C67 77 57 79 48 79 C39 79 29 77 25 67 C21 54 26 36 48 36 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <!-- inner shadow on away (lower) half -->
-  <path d="M71 67 C67 77 57 79 48 79 C39 79 29 77 25 67 C32 73 40 75 48 75 C56 75 64 73 71 67 Z"
-        fill="#1f3322" opacity="0.85"/>
-  <!-- forward rim light (camera-facing top edge) -->
-  <path d="M48 36 C66 36 72 48 70 58 C62 47 56 44 48 44 C40 44 34 47 26 58 C24 48 30 36 48 36 Z"
-        fill="#a6d65e" opacity="0.55"/>
-
-  <!-- chunky stubby left arm/fist (held close) -->
-  <path d="M26 58 C18 60 16 66 21 69 C28 67 32 63 33 59 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
-
-  <!-- big rounded bone shoulder lump (asymmetric, left) -->
-  <path d="M27 48 C18 46 15 53 20 58 C27 56 31 54 33 52 Z"
-        fill="#d9d2b0" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-
-  <!-- ===================== OVERSIZED FEATURES on the big front face ===================== -->
-  <!-- stubby bone tusks jutting up (chunky, blunt, asymmetric) -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="3" stroke-linejoin="round">
-    <path d="M38 62 L34 48 L45 60 Z"/>
-    <path d="M58 62 L63 46 L52 60 Z"/>
-  </g>
-
-  <!-- HUGE cute-angry menace-orange eyes (dominant feature) -->
-  <g>
-    <circle cx="40" cy="55" r="8.5" fill="#ff5a3c" filter="url(#g_menace)"/>
-    <circle cx="40" cy="55" r="6.5" fill="#ff5a3c" stroke="#101218" stroke-width="2.5"/>
-    <circle cx="38" cy="53" r="2" fill="#ffd0c2"/>
-    <circle cx="57" cy="56" r="8.5" fill="#ff5a3c" filter="url(#g_menace)"/>
-    <circle cx="57" cy="56" r="6.5" fill="#ff5a3c" stroke="#101218" stroke-width="2.5"/>
-    <circle cx="55" cy="54" r="2" fill="#ffd0c2"/>
-  </g>
-  <!-- angry brows (chunky, slanted inward = cute-angry) -->
-  <g stroke="#101218" stroke-width="4" stroke-linecap="round">
-    <line x1="32" y1="46" x2="45" y2="50"/>
-    <line x1="65" y1="47" x2="52" y2="51"/>
-  </g>
 </svg>

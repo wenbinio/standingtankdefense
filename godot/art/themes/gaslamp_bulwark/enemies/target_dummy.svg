@@ -1,76 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <!-- Standing Tank Defense - ENEMY "Dodo" (inert harmless practice dummy) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- HEAVILY CHIBI & comic: fat round straw-stuffed sackcloth body on a wooden post, crossbar -->
-  <!-- arms, painted target rings, derpy stitched X-eyes. NO glow / NO menace (harmless). -->
-  <!-- Flat two-tone: bone/parchment sack, brass/wood post, brimstone-red target rings. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+  <defs>
+    <radialGradient id="vig" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="40%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
+    <radialGradient id="dodo" cx="42%" cy="32%" r="76%">
+      <stop offset="0%" stop-color="#a9a193"/>
+      <stop offset="100%" stop-color="#867d6c"/>
+    </radialGradient>
+  </defs>
 
-  <!-- ground shadow under the post base -->
-  <ellipse cx="48" cy="85" rx="24" ry="7.5" fill="#0b0d14" opacity="0.45"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ===================== WOODEN POST + SPLAYED FEET (south, behind body) ===================== -->
-  <g stroke="#101218" stroke-width="3.5" stroke-linecap="round">
-    <path d="M48 78 L36 90"/>
-    <path d="M48 78 L60 90"/>
+    <!-- ============ INK UNDERSHAPES ============ -->
+    <g fill="#241c14">
+      <!-- plump round body blob -->
+      <path d="M160 306 C92 306 52 258 52 200 C52 144 96 110 160 110
+               C224 110 268 144 268 200 C268 258 228 306 160 306 Z"/>
+      <!-- round head sitting on top, slight neck pinch -->
+      <path d="M126 130 C92 130 70 104 70 76 C70 46 96 24 132 24
+               C168 24 192 46 192 76 C192 104 170 130 136 130 Z"/>
+      <!-- big hooked beak off front of face, curving down -->
+      <path d="M178 70 C222 60 266 74 274 104 C278 122 270 140 252 156
+               C238 168 222 158 224 142 C236 138 240 124 230 112
+               C214 100 184 102 176 96 Z"/>
+      <!-- tiny useless wing -->
+      <path d="M52 198 C24 198 8 216 12 236 C16 252 34 254 44 242
+               C38 232 44 218 60 216 Z"/>
+    </g>
+
+    <!-- ============ BODY ============ -->
+    <path d="M160 298 C98 298 60 254 60 200 C60 150 100 118 160 118
+             C220 118 260 150 260 200 C260 254 222 298 160 298 Z" fill="url(#dodo)"/>
+    <!-- pale belly -->
+    <path d="M160 292 C112 292 84 258 84 214 C84 194 114 190 160 190
+             C206 190 230 196 230 218 C230 260 204 292 160 292 Z" fill="#d8d2c2"/>
+
+    <!-- ============ HEAD ============ -->
+    <path d="M126 124 C94 124 78 100 78 76 C78 48 102 30 132 30
+             C162 30 184 48 184 76 C184 100 162 124 130 124 Z" fill="#a9a193"/>
+
+    <!-- ============ BEAK ============ -->
+    <path d="M180 76 C220 66 260 80 267 106 C271 122 263 138 247 152
+             C235 162 222 154 224 140 C236 136 240 122 229 110
+             C214 98 188 100 178 96 Z" fill="#c9a049"/>
+    <!-- mouth seam along beak -->
+    <path d="M182 108 C206 114 230 116 252 110" fill="none" stroke="#241c14" stroke-width="3.5" opacity="0.7"/>
+    <!-- darker hooked tip -->
+    <path d="M243 140 C252 146 252 156 240 154 C232 152 232 144 234 138 Z" fill="#a87f33"/>
+    <!-- nostril -->
+    <circle cx="206" cy="92" r="3" fill="#241c14"/>
+
+    <!-- ============ CROSS-EYED DOPEY EYES (big, close together, pupils crossed in) ============ -->
+    <circle cx="120" cy="70" r="21" fill="#f4ecd6"/>
+    <circle cx="166" cy="70" r="21" fill="#f4ecd6"/>
+    <circle cx="120" cy="70" r="21" fill="none" stroke="#241c14" stroke-width="3.4"/>
+    <circle cx="166" cy="70" r="21" fill="none" stroke="#241c14" stroke-width="3.4"/>
+    <!-- pupils both pulled to inner edges = cross-eyed -->
+    <circle cx="136" cy="74" r="8" fill="#241c14"/>
+    <circle cx="150" cy="74" r="8" fill="#241c14"/>
+    <circle cx="133" cy="71" r="2.6" fill="#f4ecd6"/>
+    <circle cx="147" cy="71" r="2.6" fill="#f4ecd6"/>
+    <!-- silly high arched dopey brows (raised, surprised/harmless) -->
+    <path d="M102 42 C112 32 130 32 140 40" fill="none" stroke="#241c14" stroke-width="3.6" stroke-linecap="round"/>
+    <path d="M148 40 C158 32 176 32 186 42" fill="none" stroke="#241c14" stroke-width="3.6" stroke-linecap="round"/>
+
+    <!-- ============ silly head tuft feathers ============ -->
+    <g fill="none" stroke="#241c14" stroke-width="4" stroke-linecap="round">
+      <path d="M130 30 C128 14 138 8 142 16"/>
+      <path d="M114 34 C108 20 114 12 122 18"/>
+      <path d="M146 34 C152 20 164 14 162 24"/>
+    </g>
+
+    <!-- ============ TINY USELESS WING ============ -->
+    <path d="M60 202 C36 202 22 218 26 234 C30 248 46 248 54 238
+             C48 230 52 218 64 216 Z" fill="#988f7e"/>
+    <path d="M38 212 L38 236 M48 210 L48 236" stroke="#241c14" stroke-width="2.5" opacity="0.6"/>
+
+    <!-- ============ stubby legs + big goofy feet ============ -->
+    <g fill="#c9a049" stroke="#241c14" stroke-width="3.4">
+      <path d="M132 296 L132 308 M112 308 L152 308 M118 308 L116 300 M146 308 L148 300" fill="none" stroke-width="5"/>
+      <path d="M188 296 L188 308 M168 308 L208 308 M174 308 L172 300 M202 308 L204 300" fill="none" stroke-width="5"/>
+    </g>
   </g>
-  <rect x="43" y="56" width="10" height="28" rx="3" fill="#caa24a" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
-  <rect x="44" y="58" width="3.5" height="24" rx="1.5" fill="#e8c878" opacity="0.6"/>
 
-  <!-- ===================== CROSSBAR ARMS (both flanks) ===================== -->
-  <rect x="14" y="44" width="68" height="10" rx="5" fill="#caa24a" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
-  <rect x="16" y="46" width="64" height="3" rx="1.5" fill="#e8c878" opacity="0.6"/>
-  <!-- straw tufts bursting from the cuffs -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="2.4" stroke-linejoin="round">
-    <path d="M14 49 L5 42 L12 51 L4 54 Z"/>
-    <path d="M82 49 L91 42 L84 51 L92 54 Z"/>
-  </g>
-
-  <!-- ===================== FAT ROUND STUFFED SACKCLOTH BODY (centered) ===================== -->
-  <!-- body shadow base -->
-  <path d="M48 32 C68 32 75 48 73 62 C69 76 58 78 48 78 C38 78 27 76 23 62 C21 48 28 32 48 32 Z"
-        fill="#8a7a52" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <!-- sackcloth fill -->
-  <path d="M48 34 C66 34 72 48 70 61 C66 73 57 75 48 75 C39 75 30 73 26 61 C24 48 30 34 48 34 Z"
-        fill="#d9d2b0" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
-  <!-- inner shadow (lower half) -->
-  <path d="M70 61 C66 73 57 75 48 75 C39 75 30 73 26 61 C33 68 41 70 48 70 C55 70 63 68 70 61 Z"
-        fill="#8a7a52" opacity="0.7"/>
-  <!-- rim light -->
-  <path d="M48 34 C64 34 70 45 68 54 C61 45 55 42 48 42 C41 42 35 45 28 54 C26 45 32 34 48 34 Z"
-        fill="#e8e3d2" opacity="0.6"/>
-
-  <!-- burlap stitch seam + cinch -->
-  <path d="M48 36 L48 74" stroke="#8a7a52" stroke-width="2" opacity="0.7" stroke-dasharray="3 3"/>
-  <path d="M30 64 C40 68 56 68 66 64" fill="none" stroke="#8a7a52" stroke-width="3" opacity="0.6" stroke-linecap="round"/>
-  <!-- straw poking from a torn seam -->
-  <g fill="#caa24a" stroke="#101218" stroke-width="2" stroke-linejoin="round">
-    <path d="M58 68 L67 72 L60 74 L66 78 Z"/>
-  </g>
-
-  <!-- ===================== PAINTED TARGET RINGS (on body front) ===================== -->
-  <circle cx="48" cy="52" r="16" fill="none" stroke="#ff5a3c" stroke-width="3.5" opacity="0.85"/>
-  <circle cx="48" cy="52" r="10.5" fill="none" stroke="#caa24a" stroke-width="3" opacity="0.8"/>
-  <circle cx="48" cy="52" r="5.5" fill="none" stroke="#ff5a3c" stroke-width="3" opacity="0.85"/>
-  <circle cx="48" cy="52" r="2.5" fill="#ff5a3c" opacity="0.9"/>
-  <!-- arrows already stuck in it (comic, harmless) -->
-  <g stroke="#101218" stroke-width="2.4" stroke-linecap="round">
-    <path d="M63 41 L52 49"/>
-    <path d="M35 65 L44 56"/>
-  </g>
-  <path d="M63 41 L68 37 M63 41 L68 43 M63 41 L66 38" stroke="#caa24a" stroke-width="2"/>
-  <path d="M35 65 L30 69 M35 65 L30 63 M35 65 L32 67" stroke="#caa24a" stroke-width="2"/>
-
-  <!-- ===================== DERPY STITCHED FACE (upper body) — harmless ===================== -->
-  <g stroke="#101218" stroke-width="2.6" stroke-linecap="round">
-    <path d="M38 40 L43 45 M43 40 L38 45"/>
-    <path d="M53 40 L58 45 M58 40 L53 45"/>
-  </g>
-  <path d="M41 47 C45 51 51 51 55 47" fill="none" stroke="#101218" stroke-width="2.4" stroke-linecap="round"/>
-
-  <!-- straw tuft sprouting from the top of the head -->
-  <g fill="#caa24a" stroke="#101218" stroke-width="2.2" stroke-linejoin="round">
-    <path d="M43 34 L41 23 L46 33 Z"/>
-    <path d="M48 33 L48 21 L51 33 Z"/>
-    <path d="M53 34 L57 24 L55 34 Z"/>
-  </g>
 </svg>

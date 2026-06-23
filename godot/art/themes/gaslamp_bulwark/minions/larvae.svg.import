@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dymu1vjfgryqb"
-path="res://.godot/imported/larvae.svg-09ec9e924911cfa6be311ea33b9e1831.ctex"
+path="res://.godot/imported/larvae.svg-6fa9545bb29a1ae3ab696155f8f893bc.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://art/themes/gaslamp_bulwark/minions/larvae.svg"
-dest_files=["res://.godot/imported/larvae.svg-09ec9e924911cfa6be311ea33b9e1831.ctex"]
+dest_files=["res://.godot/imported/larvae.svg-6fa9545bb29a1ae3ab696155f8f893bc.ctex"]
 
 [params]
 

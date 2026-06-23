@@ -1,110 +1,108 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
-  <!-- Standing Tank Defense - ENEMY "Bonk" (huge armored stone giant, fortified/slow) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- Biggest non-boss: scaled to 140 (vs 96 swarm) but smaller than the boss (320). -->
-  <!-- HEAVILY CHIBI: one enormous fat round granite body, hulking stubby boulder fists, blunt -->
-  <!-- mossy stone head sunk between pauldrons, ONE big cute-angry menace pair, tiny feet. -->
-  <!-- Steel-grey stone armor + rot-green moss joints (ties to orcs) + menace magma seams. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="mg_menace" x="-70%" y="-70%" width="240%" height="240%">
-      <feGaussianBlur stdDeviation="3" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
+    <radialGradient id="vig" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="38%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
   </defs>
 
-  <!-- heavy ground shadow under the immense bulk -->
-  <ellipse cx="70" cy="122" rx="52" ry="13" fill="#0b0d14" opacity="0.5"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ===================== TINY STUBBY FEET (peeking under huge body) ===================== -->
-  <g stroke="#101218" stroke-width="5" stroke-linejoin="round" fill="#1f3322">
-    <rect x="48" y="106" width="22" height="16" rx="7"/>
-    <rect x="70" y="106" width="22" height="16" rx="7"/>
+    <!-- ============ INK UNDERSHAPES (variable thick outline) ============ -->
+    <g fill="#241c14">
+      <!-- huge armored body bulk -->
+      <path d="M150 300 C70 300 36 256 36 200 C36 150 60 116 104 104
+               C100 80 120 60 152 60 C170 60 184 68 190 80
+               C236 86 286 120 286 184 C286 256 240 300 150 300 Z"/>
+      <!-- big blunt head/snout block forward-low -->
+      <path d="M40 230 C18 230 6 204 16 176 C24 152 50 128 92 124
+               C132 124 152 152 152 188 C152 224 122 250 82 250
+               C58 250 44 244 40 230 Z"/>
+      <!-- stompy legs -->
+      <path d="M86 280 L86 312 L128 312 L128 280 Z"/>
+      <path d="M186 280 L186 312 L228 312 L228 280 Z"/>
+    </g>
+
+    <!-- ============ STOMPY LEGS fill ============ -->
+    <g fill="#7d8c8a">
+      <path d="M92 276 L92 306 L122 306 L122 276 Z"/>
+      <path d="M192 276 L192 306 L222 306 L222 276 Z"/>
+    </g>
+    <g fill="#f2ead4" stroke="#241c14" stroke-width="2.4">
+      <path d="M90 300 h12 v8 h-12 Z"/><path d="M108 300 h12 v8 h-12 Z"/>
+      <path d="M190 300 h12 v8 h-12 Z"/><path d="M208 300 h12 v8 h-12 Z"/>
+    </g>
+
+    <!-- ============ ARMORED BODY ============ -->
+    <path d="M150 292 C76 292 44 252 44 200 C44 152 67 122 108 111
+             C104 86 123 68 152 68 C168 68 181 76 187 88
+             C231 94 278 126 278 184 C278 252 236 292 150 292 Z" fill="#8a9794"/>
+    <!-- belly / plate highlight -->
+    <path d="M96 224 C96 262 132 280 168 280 C224 280 250 250 246 214
+             C232 254 140 264 96 224 Z" fill="#a6b3af"/>
+    <!-- armor plate seams -->
+    <g fill="none" stroke="#5f6c69" stroke-width="4" opacity="0.7">
+      <path d="M150 78 C150 110 152 150 154 188"/>
+      <path d="M196 96 C214 130 222 168 220 206"/>
+      <path d="M110 120 C100 150 98 186 104 220"/>
+    </g>
+    <!-- shoulder rivets -->
+    <g fill="#5f6c69">
+      <circle cx="206" cy="120" r="4"/><circle cx="230" cy="150" r="4"/>
+      <circle cx="240" cy="190" r="4"/><circle cx="226" cy="228" r="4"/>
+    </g>
+
+    <!-- ============ HEAD / SNOUT block ============ -->
+    <path d="M46 228 C26 228 16 204 26 178 C34 156 58 136 92 132
+             C130 132 146 156 146 188 C146 218 118 242 82 242
+             C60 242 49 240 46 228 Z" fill="#9aa7a4"/>
+    <!-- snout side highlight -->
+    <path d="M60 210 C74 196 94 190 112 194 C92 198 74 208 66 222 Z" fill="#b3bfbb" opacity="0.55"/>
+
+    <!-- tiny ears -->
+    <path d="M128 116 C120 98 130 86 142 92 C150 96 148 114 138 122 Z" fill="#8a9794" stroke="#241c14" stroke-width="3"/>
+    <path d="M160 110 C168 94 182 96 182 108 C182 118 170 124 162 118 Z" fill="#8a9794" stroke="#241c14" stroke-width="3"/>
+
+    <!-- ============ small second horn nub ============ -->
+    <path d="M84 138 C78 118 84 102 98 102 C110 102 114 120 108 138 C100 148 90 148 84 138 Z" fill="#241c14"/>
+    <path d="M90 136 C85 120 90 110 99 110 C108 110 110 122 105 136 C99 144 95 144 90 136 Z" fill="#c9b88c"/>
+
+    <!-- ============ HUGE BLUNT NOSE-HORN (rises off the snout tip, angled up-forward) ============ -->
+    <g>
+      <path d="M28 206 C8 176 14 116 44 96 C70 78 96 96 92 130
+               C88 160 64 186 50 206 C44 214 33 214 28 206 Z" fill="#241c14"/>
+      <path d="M36 202 C20 176 26 124 48 108 C70 92 84 110 80 138
+               C76 162 56 184 46 202 C41 210 39 210 36 202 Z" fill="#c9b88c"/>
+      <!-- thin highlight streak only -->
+      <path d="M48 192 C40 168 44 134 58 122 C66 116 71 124 68 138 C63 162 56 182 50 196 C48 198 47 196 48 192 Z" fill="#e2d3a4" opacity="0.8"/>
+      <!-- horn texture rings -->
+      <path d="M40 178 C50 176 64 174 72 168" fill="none" stroke="#9a8a64" stroke-width="2.4" opacity="0.6"/>
+      <path d="M40 158 C50 156 62 152 70 146" fill="none" stroke="#9a8a64" stroke-width="2.4" opacity="0.6"/>
+    </g>
+    <!-- nostrils at snout tip -->
+    <ellipse cx="52" cy="222" rx="8" ry="6" fill="#241c14"/>
+    <ellipse cx="78" cy="226" rx="8" ry="6" fill="#241c14"/>
+
+    <!-- ============ small angry eyes ============ -->
+    <circle cx="118" cy="166" r="12" fill="#f4ecd6"/>
+    <circle cx="118" cy="166" r="12" fill="none" stroke="#241c14" stroke-width="3"/>
+    <circle cx="121" cy="169" r="5" fill="#241c14"/>
+    <circle cx="119" cy="167" r="1.6" fill="#f4ecd6"/>
+    <!-- single visible far eye -->
+    <circle cx="158" cy="158" r="10" fill="#f4ecd6"/>
+    <circle cx="158" cy="158" r="10" fill="none" stroke="#241c14" stroke-width="2.8"/>
+    <circle cx="161" cy="161" r="4.2" fill="#241c14"/>
+    <!-- heavy angry brows -->
+    <path d="M102 154 C112 148 126 150 134 158" fill="none" stroke="#241c14" stroke-width="6" stroke-linecap="round"/>
+    <path d="M148 148 C156 143 168 144 174 151" fill="none" stroke="#241c14" stroke-width="5.5" stroke-linecap="round"/>
+
+    <!-- tough grimace mouth + jutting tooth -->
+    <path d="M58 238 C78 230 106 230 124 240" fill="none" stroke="#241c14" stroke-width="4.4" stroke-linecap="round"/>
+    <path d="M98 240 C97 250 103 252 106 246 C106 240 102 238 98 240 Z" fill="#f2ead4" stroke="#241c14" stroke-width="2"/>
   </g>
 
-  <!-- ===================== HULKING STUBBY BOULDER FISTS (to either flank, north reach) ===================== -->
-  <!-- left arm slab -->
-  <path d="M24 60 C16 64 14 84 22 96 C30 104 40 102 42 92 L40 66 C38 58 30 56 24 60 Z"
-        fill="#3a4a63" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
-  <!-- right arm slab -->
-  <path d="M116 60 C124 64 126 84 118 96 C110 104 100 102 98 92 L100 66 C102 58 110 56 116 60 Z"
-        fill="#3a4a63" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
-  <!-- boulder fists -->
-  <circle cx="28" cy="56" r="16" fill="#6f8db3" stroke="#101218" stroke-width="5"/>
-  <circle cx="112" cy="56" r="16" fill="#6f8db3" stroke="#101218" stroke-width="5"/>
-  <!-- fist rim light + knuckle magma cracks -->
-  <path d="M18 50 C22 42 30 42 38 46" fill="none" stroke="#bcd6f2" stroke-width="4" opacity="0.55" stroke-linecap="round"/>
-  <path d="M102 50 C106 42 114 42 122 46" fill="none" stroke="#bcd6f2" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
-  <g stroke="#ff5a3c" stroke-width="2.5" opacity="0.7" stroke-linecap="round">
-    <path d="M20 60 L34 60"/><path d="M106 60 L120 60"/>
-  </g>
-
-  <!-- ===================== HUGE FAT ROUND GRANITE BODY (dominant mass) ===================== -->
-  <!-- body shadow base -->
-  <path d="M70 40 C108 40 120 64 118 88 C116 110 96 116 70 116 C44 116 24 110 22 88 C20 64 32 40 70 40 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="6" stroke-linejoin="round"/>
-  <!-- stone plate fill -->
-  <path d="M70 43 C106 43 117 64 115 87 C113 107 95 113 70 113 C45 113 27 107 25 87 C23 64 34 43 70 43 Z"
-        fill="#6f8db3" stroke="#101218" stroke-width="5.5" stroke-linejoin="round"/>
-  <!-- body inner shadow (lower half) -->
-  <path d="M115 87 C113 107 95 113 70 113 C45 113 27 107 25 87 C36 99 52 104 70 104 C88 104 104 99 115 87 Z"
-        fill="#3a4a63" opacity="0.85"/>
-  <!-- forward rim light -->
-  <path d="M70 43 C100 43 112 60 110 75 C96 60 84 54 70 54 C56 54 44 60 30 75 C28 60 40 43 70 43 Z"
-        fill="#bcd6f2" opacity="0.5"/>
-
-  <!-- overlapping granite armor plate seam -->
-  <path d="M40 68 C52 62 62 60 70 60 C78 60 88 62 100 68 C88 74 52 74 40 68 Z"
-        fill="#3a4a63" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
-  <!-- moss grime in the plate seam (rot tie) -->
-  <path d="M40 68 C52 73 88 73 100 68" fill="none" stroke="#5e8c3a" stroke-width="3.5" opacity="0.7" stroke-linecap="round"/>
-  <!-- magma cracks bleeding through -->
-  <g stroke="#ff5a3c" stroke-width="2.5" opacity="0.5" stroke-linecap="round">
-    <path d="M52 62 C50 76 54 90 52 104"/>
-    <path d="M88 64 C90 78 86 92 88 106"/>
-  </g>
-
-  <!-- hulking stone shoulder pauldrons -->
-  <g stroke="#101218" stroke-width="5.5" stroke-linejoin="round">
-    <circle cx="42" cy="66" r="22" fill="#6f8db3"/>
-    <circle cx="98" cy="66" r="22" fill="#6f8db3"/>
-  </g>
-  <!-- craggy spike outcrops on pauldrons -->
-  <g fill="#6f8db3" stroke="#101218" stroke-width="4" stroke-linejoin="round">
-    <path d="M32 48 L26 28 L48 46 Z"/>
-    <path d="M108 48 L114 28 L92 46 Z"/>
-  </g>
-  <!-- pauldron rim light -->
-  <ellipse cx="34" cy="56" rx="8" ry="5" fill="#bcd6f2" opacity="0.45"/>
-  <ellipse cx="106" cy="56" rx="8" ry="5" fill="#bcd6f2" opacity="0.45"/>
-
-  <!-- ===================== BLUNT MOSSY STONE HEAD (sunk between shoulders) ===================== -->
-  <path d="M70 56 C86 56 92 70 92 82 C92 94 82 100 70 100 C58 100 48 94 48 82 C48 70 54 56 70 56 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
-  <!-- head inner shadow -->
-  <path d="M92 82 C92 94 82 100 70 100 C58 100 48 94 48 82 C55 89 62 92 70 92 C78 92 85 89 92 82 Z"
-        fill="#1f3322" opacity="0.8"/>
-  <!-- heavy stone brow slab -->
-  <path d="M52 74 C60 62 80 62 88 74 C80 68 60 68 52 74 Z"
-        fill="#3a4a63" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-
-  <!-- HUGE cute-angry menace eyes (dominant feature) -->
-  <g>
-    <circle cx="60" cy="82" r="9" fill="#ff5a3c" filter="url(#mg_menace)"/>
-    <circle cx="60" cy="82" r="6.5" fill="#ff5a3c" stroke="#101218" stroke-width="2.6"/>
-    <circle cx="58" cy="80" r="2" fill="#ffd0c2"/>
-    <circle cx="80" cy="82" r="9" fill="#ff5a3c" filter="url(#mg_menace)"/>
-    <circle cx="80" cy="82" r="6.5" fill="#ff5a3c" stroke="#101218" stroke-width="2.6"/>
-    <circle cx="78" cy="80" r="2" fill="#ffd0c2"/>
-  </g>
-  <!-- angry slanted brows -->
-  <g stroke="#101218" stroke-width="5" stroke-linecap="round">
-    <line x1="50" y1="71" x2="66" y2="76"/>
-    <line x1="90" y1="71" x2="74" y2="76"/>
-  </g>
-
-  <!-- craggy broken stone teeth (lower head) -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="2.6" stroke-linejoin="round">
-    <path d="M60 90 L62 100 L68 90 Z"/>
-    <path d="M72 90 L74 100 L80 90 Z"/>
-  </g>
 </svg>

@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://gagstfnvjvo6"
-path="res://.godot/imported/doomduck.svg-4dd2cfd19259e9434bb3031c894dd402.ctex"
+path="res://.godot/imported/doomduck.svg-d201119468e749ca737d275ba186c081.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://art/themes/grimdark/enemies/doomduck.svg"
-dest_files=["res://.godot/imported/doomduck.svg-4dd2cfd19259e9434bb3031c894dd402.ctex"]
+dest_files=["res://.godot/imported/doomduck.svg-d201119468e749ca737d275ba186c081.ctex"]
 
 [params]
 

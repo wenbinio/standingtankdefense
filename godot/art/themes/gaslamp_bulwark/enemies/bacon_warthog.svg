@@ -1,83 +1,89 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <!-- Standing Tank Defense - ENEMY "Bacon" (fast lean twin-blade skirmisher) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- HEAVILY CHIBI but leaner/lower than grunt: round rot-green body lunging forward, -->
-  <!-- TWIN stubby steel blades thrust north, speed-smear behind, crossed straps, big keen eyes. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="ra_menace" x="-70%" y="-70%" width="240%" height="240%">
-      <feGaussianBlur stdDeviation="2" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
-    <filter id="ra_motion" x="-40%" y="-40%" width="180%" height="200%">
-      <feGaussianBlur stdDeviation="3"/>
-    </filter>
+    <radialGradient id="vig" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="40%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
   </defs>
 
-  <!-- speed-smear behind (south), reads "quick" -->
-  <path d="M30 92 C34 78 38 70 48 64 C58 70 62 78 66 92 Z"
-        fill="#5e8c3a" filter="url(#ra_motion)" opacity="0.4"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ground shadow (lean) -->
-  <ellipse cx="48" cy="84" rx="24" ry="7" fill="#0b0d14" opacity="0.45"/>
+    <!-- ============ INK UNDERSHAPES (variable thick outline) ============ -->
+    <g fill="#241c14">
+      <!-- bulky boar body, hunched, charging-left lean (head low-left, rump high-right) -->
+      <path d="M58 252 C40 224 44 186 70 162 C50 150 48 122 70 108
+               C92 94 118 102 126 122 C150 110 196 108 234 124
+               C282 144 296 188 286 226 C276 262 244 286 196 290
+               C140 295 86 290 58 252 Z"/>
+      <!-- big snout muzzle thrust forward-left -->
+      <path d="M60 200 C36 196 18 176 22 154 C26 134 46 126 66 132
+               C92 140 110 158 108 180 C106 198 84 204 60 200 Z"/>
+      <!-- front leg -->
+      <path d="M96 286 C90 304 92 314 104 314 C114 312 116 300 114 284 Z"/>
+      <!-- back leg -->
+      <path d="M214 286 C208 304 210 314 222 314 C232 312 234 300 232 284 Z"/>
+    </g>
 
-  <!-- ===================== TINY STUBBY FEET (low crouch) ===================== -->
-  <g stroke="#101218" stroke-width="4" stroke-linejoin="round">
-    <path d="M39 76 C36 84 38 88 43 87 C46 86 46 80 45 76 Z" fill="#1f3322"/>
-    <path d="M51 76 C54 84 52 88 47 87 C44 86 44 80 45 76 Z" fill="#1f3322"/>
+    <!-- ============ BODY (dusty rose-brown boar) ============ -->
+    <path d="M64 248 C48 222 52 188 75 166 C56 154 55 128 74 115
+             C94 102 116 110 123 129 C148 117 194 116 230 131
+             C275 150 287 190 278 225 C268 258 238 280 195 284
+             C142 289 90 284 64 248 Z" fill="#a86f63"/>
+    <!-- bristly back / belly shading -->
+    <path d="M110 200 C120 240 160 262 196 260 C244 257 268 230 270 200
+             C252 240 150 252 110 200 Z" fill="#bb8579"/>
+
+    <!-- bristly MOHAWK along the back -->
+    <g fill="#241c14">
+      <path d="M150 118 L142 86 L160 110 Z"/>
+      <path d="M172 116 L168 80 L184 110 Z"/>
+      <path d="M196 118 L196 80 L210 112 Z"/>
+      <path d="M220 124 L226 90 L234 120 Z"/>
+    </g>
+
+    <!-- legs fill -->
+    <path d="M99 282 C94 300 96 308 105 308 C112 306 114 296 112 282 Z" fill="#a86f63"/>
+    <path d="M217 282 C212 300 214 308 223 308 C230 306 232 296 230 282 Z" fill="#a86f63"/>
+    <!-- tiny hooves -->
+    <path d="M96 304 L114 304 L112 314 L98 314 Z" fill="#241c14"/>
+    <path d="M214 304 L232 304 L230 314 L216 314 Z" fill="#241c14"/>
+
+    <!-- little ear -->
+    <path d="M120 110 C108 96 110 80 124 84 C136 88 136 106 126 116 Z" fill="#a86f63" stroke="#241c14" stroke-width="3.5"/>
+
+    <!-- ============ SNOUT MUZZLE ============ -->
+    <path d="M62 196 C40 192 24 174 28 154 C32 136 50 130 68 136
+             C92 143 108 160 106 180 C104 196 84 200 62 196 Z" fill="#c79a8e"/>
+    <!-- flat snout disc with two nostrils, at the tip -->
+    <ellipse cx="44" cy="166" rx="20" ry="24" fill="#b3837a" stroke="#241c14" stroke-width="3.4"/>
+    <ellipse cx="40" cy="158" rx="4.5" ry="7" fill="#241c14"/>
+    <ellipse cx="40" cy="176" rx="4.5" ry="7" fill="#241c14"/>
+
+    <!-- ============ UPWARD TUSKS ============ -->
+    <path d="M64 184 C52 184 44 168 50 152 C56 162 66 168 72 176 Z"
+          fill="#f2ead4" stroke="#241c14" stroke-width="3.2"/>
+    <path d="M88 188 C78 188 70 172 76 156 C82 166 90 174 96 182 Z"
+          fill="#f2ead4" stroke="#241c14" stroke-width="3.2"/>
+
+    <!-- ============ ANGRY EYES (pie-cut, beady) ============ -->
+    <circle cx="108" cy="138" r="14" fill="#f4ecd6"/>
+    <circle cx="148" cy="134" r="14" fill="#f4ecd6"/>
+    <circle cx="108" cy="138" r="14" fill="none" stroke="#241c14" stroke-width="3"/>
+    <circle cx="148" cy="134" r="14" fill="none" stroke="#241c14" stroke-width="3"/>
+    <!-- pupils cut toward snout (down-left) -->
+    <path d="M104 142 L96 132 A10 10 0 0 0 110 146 Z" fill="#241c14"/>
+    <path d="M144 138 L136 128 A10 10 0 0 0 150 142 Z" fill="#241c14"/>
+    <!-- heavy angry brows slanting hard inward-down -->
+    <path d="M90 120 C100 122 114 130 120 138" fill="none" stroke="#241c14" stroke-width="6.5" stroke-linecap="round"/>
+    <path d="M134 118 C144 122 156 130 162 138" fill="none" stroke="#241c14" stroke-width="6.5" stroke-linecap="round"/>
+
+    <!-- curly tail at rump -->
+    <path d="M286 210 C302 206 308 220 298 228 C290 234 282 228 288 220"
+          fill="none" stroke="#241c14" stroke-width="5" stroke-linecap="round"/>
   </g>
 
-  <!-- ===================== TWIN STUBBY BLADES (both fists, thrust north) ===================== -->
-  <!-- left blade -->
-  <path d="M24 22 L31 20 L40 50 L33 53 Z" fill="#6f8db3" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-  <path d="M26 24 L36 49" fill="none" stroke="#bcd6f2" stroke-width="2" opacity="0.7" stroke-linecap="round"/>
-  <!-- right blade -->
-  <path d="M72 22 L65 20 L56 50 L63 53 Z" fill="#6f8db3" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-  <path d="M70 24 L60 49" fill="none" stroke="#bcd6f2" stroke-width="2" opacity="0.7" stroke-linecap="round"/>
-  <!-- chunky stubby arms to grips -->
-  <path d="M34 56 C28 53 27 49 31 47 C37 50 39 53 39 57 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-  <path d="M62 56 C68 53 69 49 65 47 C59 50 57 53 57 57 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-
-  <!-- ===================== LEAN ROUND BODY (lunging forward) ===================== -->
-  <!-- body shadow base -->
-  <path d="M48 38 C68 38 73 54 70 67 C66 78 57 80 48 80 C39 80 30 78 26 67 C23 54 28 38 48 38 Z"
-        fill="#1f3322" stroke="#101218" stroke-width="4.5" stroke-linejoin="round"/>
-  <!-- main flesh fill -->
-  <path d="M48 40 C66 40 71 54 68 66 C64 75 56 77 48 77 C40 77 32 75 28 66 C25 54 30 40 48 40 Z"
-        fill="#5e8c3a" stroke="#101218" stroke-width="4" stroke-linejoin="round"/>
-  <!-- inner shadow -->
-  <path d="M68 66 C64 75 56 77 48 77 C40 77 32 75 28 66 C34 71 41 73 48 73 C55 73 62 71 68 66 Z"
-        fill="#1f3322" opacity="0.85"/>
-  <!-- forward rim light -->
-  <path d="M48 40 C64 40 69 50 67 59 C60 49 54 47 48 47 C42 47 36 49 29 59 C27 50 32 40 48 40 Z"
-        fill="#a6d65e" opacity="0.55"/>
-
-  <!-- crossed leather straps over chest -->
-  <g stroke="#3a2a16" stroke-width="3.5" stroke-linecap="round" opacity="0.9">
-    <path d="M38 50 L58 72"/>
-    <path d="M58 50 L38 72"/>
-  </g>
-
-  <!-- ===================== OVERSIZED FEATURES (keen, fast) ===================== -->
-  <!-- twin stubby tusks (sharp) -->
-  <g fill="#d9d2b0" stroke="#101218" stroke-width="2.8" stroke-linejoin="round">
-    <path d="M40 64 L36 52 L46 62 Z"/>
-    <path d="M56 64 L60 52 L50 62 Z"/>
-  </g>
-
-  <!-- big narrowed keen menace eyes -->
-  <g>
-    <circle cx="41" cy="57" r="7" fill="#ff5a3c" filter="url(#ra_menace)"/>
-    <path d="M35 56 L46 54 L46 60 L35 59 Z" fill="#ff5a3c" stroke="#101218" stroke-width="2.2" stroke-linejoin="round"/>
-    <circle cx="40" cy="56.5" r="1.5" fill="#ffd0c2"/>
-    <circle cx="55" cy="58" r="7" fill="#ff5a3c" filter="url(#ra_menace)"/>
-    <path d="M61 57 L50 55 L50 61 L61 60 Z" fill="#ff5a3c" stroke="#101218" stroke-width="2.2" stroke-linejoin="round"/>
-    <circle cx="56" cy="57.5" r="1.5" fill="#ffd0c2"/>
-  </g>
-  <!-- sharp slanted angry brows -->
-  <g stroke="#101218" stroke-width="3.5" stroke-linecap="round">
-    <line x1="33" y1="48" x2="46" y2="53"/>
-    <line x1="63" y1="49" x2="50" y2="54"/>
-  </g>
 </svg>

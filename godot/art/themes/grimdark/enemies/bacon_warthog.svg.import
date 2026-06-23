@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bo13n8sbr105g"
-path="res://.godot/imported/bacon_warthog.svg-1a41d8c0d9e4663a71f02b21e16c0b77.ctex"
+path="res://.godot/imported/bacon_warthog.svg-d7327f08970f6fdc42b8d6b7640ad934.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://art/themes/grimdark/enemies/bacon_warthog.svg"
-dest_files=["res://.godot/imported/bacon_warthog.svg-1a41d8c0d9e4663a71f02b21e16c0b77.ctex"]
+dest_files=["res://.godot/imported/bacon_warthog.svg-d7327f08970f6fdc42b8d6b7640ad934.ctex"]
 
 [params]
 

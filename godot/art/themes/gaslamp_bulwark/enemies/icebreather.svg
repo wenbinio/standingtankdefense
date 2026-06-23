@@ -1,96 +1,95 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <!-- Standing Tank Defense - ENEMY "Popsicle" (ranged frost beast, bulkier/tankier) -->
-  <!-- Gaslamp Bulwark style. High 3/4 top-down. Default facing UP (north). -->
-  <!-- BREATHER SET (matched chibi form, 3 elements): squat fat round maw-beast, big gaping -->
-  <!-- front maw aimed north, 4 stubby splayed legs (thicker), eyes flanking the maw. -->
-  <!-- Element = ICE: pale frosted hide, glassy icicle spines, cold cyan frost glow; bulkier. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
   <defs>
-    <filter id="ib_glow" x="-90%" y="-90%" width="280%" height="280%">
-      <feGaussianBlur stdDeviation="2.6" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge>
-    </filter>
+    <radialGradient id="vig" cx="50%" cy="46%" r="62%">
+      <stop offset="58%" stop-color="#efe2c0" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#6b5a36" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="40%" cy="30%" r="82%">
+      <stop offset="0%" stop-color="#f3e8c8"/>
+      <stop offset="100%" stop-color="#e4d4ad"/>
+    </radialGradient>
+    <radialGradient id="frog" cx="42%" cy="34%" r="74%">
+      <stop offset="0%" stop-color="#9cc1bd"/>
+      <stop offset="100%" stop-color="#6f9a96"/>
+    </radialGradient>
   </defs>
 
-  <!-- cold frost-mist drifting off the maw (north) -->
-  <ellipse cx="48" cy="14" rx="13" ry="9" fill="#6fe0ff" filter="url(#ib_glow)" opacity="0.3"/>
+<g stroke-linejoin="round" stroke-linecap="round">
 
-  <!-- ground shadow under the heavy bulk (bigger footprint, tanky) -->
-  <ellipse cx="48" cy="85" rx="35" ry="9" fill="#0b0d14" opacity="0.48"/>
+    <!-- ============ INK UNDERSHAPES ============ -->
+    <g fill="#241c14">
+      <!-- body blob (wide squat frog) -->
+      <path d="M160 300 C82 300 38 256 38 196 C38 142 84 112 160 112
+               C236 112 282 142 282 196 C282 256 238 300 160 300 Z"/>
+      <!-- left back foot -->
+      <path d="M64 282 C36 290 18 282 16 264 C14 250 28 244 40 252
+               C36 262 48 270 70 266 Z"/>
+      <!-- right back foot -->
+      <path d="M256 282 C284 290 302 282 304 264 C306 250 292 244 280 252
+               C284 262 272 270 250 266 Z"/>
+      <!-- eye dome left -->
+      <path d="M92 116 C66 116 50 96 50 74 C50 50 70 34 96 34
+               C122 34 142 50 142 74 C142 96 118 116 92 116 Z"/>
+      <!-- eye dome right -->
+      <path d="M228 116 C202 116 182 96 182 74 C182 50 202 34 228 34
+               C254 34 270 50 270 74 C270 96 254 116 228 116 Z"/>
+    </g>
 
-  <!-- ===================== HEAVY STUBBY LEGS (4, flank corners — thicker) ===================== -->
-  <g fill="#33505e" stroke="#101218" stroke-width="4.2" stroke-linejoin="round">
-    <ellipse cx="20" cy="48" rx="11" ry="7.5" transform="rotate(-30 20 48)"/>
-    <ellipse cx="76" cy="48" rx="11" ry="7.5" transform="rotate(30 76 48)"/>
-    <ellipse cx="20" cy="75" rx="11" ry="7.5" transform="rotate(30 20 75)"/>
-    <ellipse cx="76" cy="75" rx="11" ry="7.5" transform="rotate(-30 76 75)"/>
+    <!-- ============ BODY ============ -->
+    <path d="M160 292 C88 292 46 252 46 196 C46 146 90 120 160 120
+             C230 120 274 146 274 196 C274 252 232 292 160 292 Z" fill="url(#frog)"/>
+    <!-- pale frosty belly -->
+    <path d="M160 286 C112 286 84 256 84 220 C84 200 110 196 160 196
+             C210 196 236 200 236 220 C236 256 208 286 160 286 Z" fill="#cfe0dc"/>
+
+    <!-- ============ BACK FEET ============ -->
+    <path d="M66 276 C40 284 22 277 21 261 C20 249 32 244 42 251
+             C38 260 50 266 70 262 Z" fill="#7fa6a1"/>
+    <path d="M254 276 C280 284 298 277 299 261 C300 249 288 244 278 251
+             C282 260 270 266 250 262 Z" fill="#7fa6a1"/>
+
+    <!-- ============ EYE DOMES (big bulging) ============ -->
+    <path d="M92 110 C68 110 56 92 56 72 C56 50 74 40 96 40
+             C118 40 136 50 136 72 C136 92 116 110 92 110 Z" fill="#9cc1bd"/>
+    <path d="M228 110 C204 110 188 92 188 72 C188 50 204 40 224 40
+             C246 40 264 50 264 72 C264 92 252 110 228 110 Z" fill="#9cc1bd"/>
+    <!-- pie-cut eyes -->
+    <circle cx="96" cy="70" r="22" fill="#f4ecd6"/>
+    <circle cx="224" cy="70" r="22" fill="#f4ecd6"/>
+    <circle cx="96" cy="70" r="22" fill="none" stroke="#241c14" stroke-width="3.6"/>
+    <circle cx="224" cy="70" r="22" fill="none" stroke="#241c14" stroke-width="3.6"/>
+    <path d="M101 65 L101 86 A16 16 0 0 1 84 73 Z" fill="#241c14"/>
+    <path d="M219 65 L219 86 A16 16 0 0 0 236 73 Z" fill="#241c14"/>
+    <!-- menacing low brows slanting inward -->
+    <path d="M74 52 C84 44 104 46 116 56" fill="none" stroke="#241c14" stroke-width="5" stroke-linecap="round"/>
+    <path d="M204 56 C216 46 236 44 246 52" fill="none" stroke="#241c14" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- ============ WIDE GRIN MOUTH ============ -->
+    <path d="M70 176 C100 224 220 224 250 176 C232 212 88 212 70 176 Z" fill="#241c14"/>
+    <path d="M84 186 C110 206 210 206 236 186 C212 198 108 198 84 186 Z" fill="#3a5754"/>
+    <!-- nostrils -->
+    <circle cx="146" cy="158" r="4" fill="#241c14"/>
+    <circle cx="174" cy="158" r="4" fill="#241c14"/>
+
+    <!-- ============ FROST RIM (chilly accents) ============ -->
+    <g fill="#eaf3f1" opacity="0.9">
+      <path d="M50 150 L42 138 L56 142 L58 126 L66 140 L80 134 L72 148 Z"/>
+      <path d="M270 150 L278 138 L264 142 L262 126 L254 140 L240 134 L248 148 Z"/>
+      <path d="M160 122 L154 108 L160 114 L166 108 Z"/>
+    </g>
+    <!-- frost sparkle dots -->
+    <g fill="#f4ecd6">
+      <circle cx="110" cy="138" r="2.5"/><circle cx="210" cy="138" r="2.5"/>
+      <circle cx="160" cy="246" r="2.5"/><circle cx="120" cy="232" r="2"/>
+      <circle cx="200" cy="232" r="2"/>
+    </g>
+
+    <!-- ============ tiny front toes ============ -->
+    <g fill="#7fa6a1" stroke="#241c14" stroke-width="3">
+      <path d="M118 288 C110 302 110 308 118 308 C124 306 124 296 124 286 Z"/>
+      <path d="M152 290 C150 306 152 310 160 308 C164 304 162 296 162 288 Z"/>
+      <path d="M200 288 C208 302 208 308 200 308 C194 306 194 296 194 286 Z"/>
+    </g>
   </g>
 
-  <!-- ===================== FAT ROUND BULKY FROSTED BODY (dominant, biggest of the set) ===================== -->
-  <!-- body shadow base -->
-  <path d="M48 32 C74 32 83 50 81 66 C77 81 62 84 48 84 C34 84 19 81 15 66 C13 50 22 32 48 32 Z"
-        fill="#1d2b35" stroke="#101218" stroke-width="5.5" stroke-linejoin="round"/>
-  <!-- frosted hide fill -->
-  <path d="M48 34 C72 34 80 50 78 65 C74 78 61 81 48 81 C35 81 22 78 18 65 C16 50 24 34 48 34 Z"
-        fill="#4e6e84" stroke="#101218" stroke-width="5" stroke-linejoin="round"/>
-  <!-- inner shadow (lower half) -->
-  <path d="M78 65 C74 78 61 81 48 81 C35 81 22 78 18 65 C26 72 37 75 48 75 C59 75 70 72 78 65 Z"
-        fill="#1d2b35" opacity="0.85"/>
-  <!-- frost-rim light -->
-  <path d="M48 34 C67 34 75 47 73 57 C64 46 56 43 48 43 C40 43 32 46 23 57 C21 47 29 34 48 34 Z"
-        fill="#bcd6f2" opacity="0.55"/>
-
-  <!-- ===================== ELEMENT: ICICLE SPINE RIDGE + cryo seams (on back) ===================== -->
-  <g fill="#bcd6f2" stroke="#101218" stroke-width="2.4" stroke-linejoin="round">
-    <path d="M30 60 L26 46 L37 58 Z"/>
-    <path d="M44 62 L42 44 L51 62 Z"/>
-    <path d="M62 60 L66 46 L55 58 Z"/>
-    <path d="M48 74 L46 62 L54 74 Z"/>
-  </g>
-  <g stroke="#6fe0ff" stroke-linecap="round" opacity="0.6">
-    <path d="M34 60 C33 68 35 74 34 80" stroke-width="2.2"/>
-    <path d="M62 60 C63 68 61 74 62 80" stroke-width="2"/>
-  </g>
-  <circle cx="38" cy="68" r="5" fill="#6fe0ff" filter="url(#ib_glow)"/>
-  <circle cx="38" cy="68" r="2.8" fill="#6fe0ff" stroke="#101218" stroke-width="2"/>
-  <circle cx="58" cy="66" r="5" fill="#6fe0ff" filter="url(#ib_glow)"/>
-  <circle cx="58" cy="66" r="2.8" fill="#6fe0ff" stroke="#101218" stroke-width="2"/>
-
-  <!-- ===================== BIG GAPING FROSTED MAW (front, aimed north) ===================== -->
-  <!-- swept ice-horns -->
-  <g fill="#bcd6f2" stroke="#101218" stroke-width="2.5" stroke-linejoin="round">
-    <path d="M32 38 L22 28 L37 41 Z"/>
-    <path d="M64 38 L74 28 L59 41 Z"/>
-  </g>
-  <circle cx="48" cy="33" r="15" fill="#6fe0ff" filter="url(#ib_glow)" opacity="0.85"/>
-  <!-- maw cavity -->
-  <path d="M34 35 C38 19 58 19 62 35 C58 47 38 47 34 35 Z"
-        fill="#0a2638" stroke="#101218" stroke-width="3.5" stroke-linejoin="round"/>
-  <!-- glowing cryo throat -->
-  <path d="M39 34 C43 24 53 24 57 34 C53 42 43 42 39 34 Z" fill="#6fe0ff"/>
-  <ellipse cx="48" cy="32" rx="4" ry="5" fill="#0a2638" opacity="0.7"/>
-  <!-- glassy icicle fang ring -->
-  <g fill="#bcd6f2" stroke="#101218" stroke-width="2" stroke-linejoin="round">
-    <path d="M41 27 L43 20 L47 27 Z"/>
-    <path d="M49 27 L53 20 L55 27 Z"/>
-    <path d="M40 39 L43 46 L46 39 Z"/>
-    <path d="M50 39 L53 46 L56 39 Z"/>
-  </g>
-
-  <!-- frost vapor curls escaping the maw (north) -->
-  <g fill="none" stroke="#6fe0ff" stroke-linecap="round" opacity="0.8">
-    <path d="M43 21 C41 15 45 11 43 7" stroke-width="2.4"/>
-    <path d="M53 21 C55 15 51 11 53 7" stroke-width="2.2"/>
-  </g>
-  <circle cx="43" cy="7" r="2.2" fill="#6fe0ff" filter="url(#ib_glow)"/>
-  <circle cx="53" cy="7" r="2" fill="#6fe0ff" filter="url(#ib_glow)"/>
-
-  <!-- pale cryo eyes flanking the maw -->
-  <g>
-    <circle cx="28" cy="44" r="4.5" fill="#6fe0ff" filter="url(#ib_glow)"/>
-    <circle cx="28" cy="44" r="2.8" fill="#6fe0ff" stroke="#101218" stroke-width="2"/>
-    <circle cx="27" cy="43" r="0.9" fill="#eafbff"/>
-    <circle cx="68" cy="44" r="4.5" fill="#6fe0ff" filter="url(#ib_glow)"/>
-    <circle cx="68" cy="44" r="2.8" fill="#6fe0ff" stroke="#101218" stroke-width="2"/>
-    <circle cx="67" cy="43" r="0.9" fill="#eafbff"/>
-  </g>
 </svg>
