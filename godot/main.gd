@@ -18,6 +18,16 @@ var _poofs := []              # [{wpos:Vector2, ttl:int, life:int}]
 var _muzzle := 0
 var _prev_proj := 0
 
+# --- audio trackers (render-only; read sim deltas, never write the sim) ------
+# Mirror of the small set of sim values the audio hooks diff each tick to decide
+# which placeholder SFX to fire. Exactly the same one-way pattern as the juice
+# trackers above: we sample sim state, compare to last tick, and play a sound.
+var _au_prev_tank_hp := -1     # tank hp last tick (drop -> tank_hit)
+var _au_prev_round := -1       # round last tick (change -> round_start)
+var _au_prev_boss := false     # was a boss on screen last tick (rise -> boss_spawn)
+var _au_was_dead := false      # death edge -> tank_destroyed + defeat
+var _au_prev_gold := -1        # gold last tick (confirms a buy/reroll actually spent)
+
 # UI fonts (loaded in _ready). _font is the body/HUD face; _font_head a heavier
 # weight for headers. Falls back to ThemeDB if the theme resource is missing.
 var _ui_theme: Theme = null
@@ -54,6 +64,14 @@ func _ready() -> void:
 	fx = Fx.new()
 	_load_textures()
 	_setup_environment()
+	# AUDIO (render-only): start the looping ambient bed. Seed the audio trackers
+	# from the fresh sim so the first tick doesn't false-trigger round_start etc.
+	Audio.set_music("ambient_bed.wav")
+	_au_prev_round = sim.round()
+	_au_prev_tank_hp = sim.tank()[2]
+	_au_prev_gold = sim.economy()[0]
+	_au_prev_boss = false
+	_au_was_dead = false
 
 # Build the render-only lighting + post-processing rig in code (Main.tscn is a
 # bare Node2D). All cosmetic; nothing here touches the sim.
@@ -196,6 +214,14 @@ func _load_textures() -> void:
 func _unhandled_key_input(e: InputEvent) -> void:
 	if not (e is InputEventKey) or not e.pressed or e.echo:
 		return
+	# [N] mute is a global UX toggle (render-only) — handled before the dead-guard
+	# so it works on the results panel too. Plays a confirm blip when unmuting.
+	if e.keycode == KEY_N:
+		var muted := Audio.toggle_mute()
+		if not muted:
+			Audio.play(&"ui_move")
+		queue_redraw()
+		return
 	# While dead, the only live controls are Redeploy (Enter/Space) and Menu
 	# (Esc); swallow the shop/number/reroll keys so a fresh run isn't dirtied.
 	if sim != null and sim.is_dead():
@@ -254,6 +280,12 @@ func _redeploy() -> void:
 	_recorded = false
 	pending_code = 0
 	pending_slot = 0
+	# AUDIO trackers re-seeded from the fresh sim (no cross-run false triggers).
+	_au_prev_round = sim.round()
+	_au_prev_tank_hp = sim.tank()[2]
+	_au_prev_gold = sim.economy()[0]
+	_au_prev_boss = false
+	_au_was_dead = false
 	fx = Fx.new()
 	redeploy_rect = Rect2()
 	queue_redraw()
@@ -262,6 +294,11 @@ func _physics_process(_delta: float) -> void:
 	if sim == null:
 		return
 	t += 1
+	# Capture the input intent + pre-step gold so the audio hook can tell a
+	# successful buy (gold actually dropped) from a no-op click. Read-only.
+	var au_intent := pending_code
+	var au_eco_before: PackedInt64Array = sim.economy()
+	var au_gold_before: int = au_eco_before[0] if au_eco_before.size() > 0 else 0
 	if not sim.is_dead():
 		sim.step(pending_code, pending_slot)
 		if pending_code == 3:
@@ -281,6 +318,7 @@ func _physics_process(_delta: float) -> void:
 		}):
 			print("Achievement unlocked: ", Profile.ach_def(id).get("name", id))
 	_update_juice()
+	_update_audio(au_intent, au_gold_before)
 	if clear_fx > 0:
 		clear_fx -= 1
 	pending_code = 0
@@ -366,6 +404,8 @@ func _update_juice() -> void:
 		cur[id] = {"pos": wp, "hp": h}
 		if _prev.has(id) and h < _prev[id]["hp"]:
 			_flash[id] = 6
+			# AUDIO (render-only): an hp drop on a still-living enemy = an impact.
+			Audio.play(&"hit")
 			# impact spark pop + damage number at the hit location
 			var sp := _to_screen(wp.x, wp.y)
 			fx.burst_sparks(sp, Color(2.2, 1.3, 0.6), 6, 200.0, 0.26)
@@ -377,6 +417,9 @@ func _update_juice() -> void:
 		if not cur.has(id):
 			var wp2: Vector2 = _prev[id]["pos"]
 			_poofs.append({"wpos": wp2, "ttl": 12, "life": 12})
+			# AUDIO (render-only): an id that was here last tick and is gone now
+			# = a death (the same signal that drives the death poof).
+			Audio.play(&"enemy_death")
 			# kill burst + shake + a "death" combat pop
 			var sp2 := _to_screen(wp2.x, wp2.y)
 			fx.kill_burst(sp2, Color(2.4, 1.6, 0.7))
@@ -391,6 +434,9 @@ func _update_juice() -> void:
 	var pc: int = ppos.size()
 	if pc > _prev_proj:
 		_muzzle = 5
+		# AUDIO (render-only): more projectiles on screen than last tick = a shot
+		# was fired (the same delta that triggers the muzzle flash).
+		Audio.play(&"fire")
 		fx.add_shake(0.025)   # tiny recoil kick on fire
 	_prev_proj = pc
 	for id in _flash.keys():
@@ -405,9 +451,65 @@ func _update_juice() -> void:
 
 	# Clear (Space) is a big event: shockwave already drawn; add shake + flash.
 	if clear_fx == 18:
+		# AUDIO (render-only): clear_fx was just armed by the Clear input this tick.
+		Audio.play(&"clear")
 		fx.add_shake(0.35)
 		fx.add_flash(Color(0.7, 0.85, 1.0, 0.35), 0.22)
 		fx.add_hitstop(0.05)
+
+# AUDIO (render-only): the "slow" / state-change sound hooks, diffed once per
+# sim tick. STRICTLY ONE-WAY — every line here only READS sim state (tank(),
+# round(), enemies_boss(), is_dead(), economy()) or the captured input intent,
+# then plays a placeholder SFX. Nothing in here calls sim.step() or otherwise
+# writes the sim; audio cannot influence determinism. Mirrors how _draw reads
+# the same snapshot to render.
+#   `intent`     = this tick's pending_code (1 buy · 2 reroll · 3 clear · else none)
+#   `gold_before`= gold sampled BEFORE the step, to confirm a buy actually spent.
+func _update_audio(intent: int, gold_before: int) -> void:
+	# --- death edge: tank_destroyed + defeat (single-arena has no victory) ----
+	var dead: bool = sim.is_dead()
+	if dead and not _au_was_dead:
+		Audio.play(&"tank_destroyed")
+		Audio.play(&"defeat")
+	_au_was_dead = dead
+	if dead:
+		return   # frozen run: no further gameplay SFX while on the results panel
+
+	# --- tank hit: current hp below last tick's (and not the death frame) -----
+	var ta: PackedInt64Array = sim.tank()
+	var hp: int = ta[2] if ta.size() > 2 else 0
+	if _au_prev_tank_hp >= 0 and hp < _au_prev_tank_hp and hp > 0:
+		Audio.play(&"tank_hit")
+	_au_prev_tank_hp = hp
+
+	# --- round change -> round_start fanfare ---------------------------------
+	var rnd: int = sim.round()
+	if _au_prev_round >= 0 and rnd != _au_prev_round:
+		Audio.play(&"round_start")
+	_au_prev_round = rnd
+
+	# --- boss appears: a boss flag present now that wasn't last tick ----------
+	var boss_flags: PackedByteArray = sim.enemies_boss()
+	var boss_now := false
+	for b in boss_flags:
+		if b != 0:
+			boss_now = true
+			break
+	if boss_now and not _au_prev_boss:
+		Audio.play(&"boss_spawn")
+	_au_prev_boss = boss_now
+
+	# --- economy actions: buy (gold actually dropped) / reroll ---------------
+	var eco: PackedInt64Array = sim.economy()
+	var gold: int = eco[0] if eco.size() > 0 else 0
+	if intent == 1 and gold < gold_before:
+		# A buy that spent gold this tick (a click on an unaffordable card spends
+		# nothing, so it stays silent).
+		Audio.play(&"buy")
+	elif intent == 2 and _au_prev_gold >= 0:
+		# Reroll: refreshes the shop whether free or paid, so always voice it.
+		Audio.play(&"reroll")
+	_au_prev_gold = gold
 
 func _scale() -> float:
 	var c: Vector2 = get_viewport_rect().size * 0.5
@@ -691,8 +793,10 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 	var shop_hdr := tr("SHOP")
 	draw_string(head, Vector2(16, y0 + 20), shop_hdr, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("header"))
 	var sw := head.get_string_size(shop_hdr, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+	# Help line + the [N] mute state indicator (render-only UX reflection).
+	var audio_hint := tr("[N] sound: off") if Audio.is_muted() else tr("[N] sound: on")
 	draw_string(font, Vector2(16 + sw + 10, y0 + 20),
-		tr("click a card or press [1-8] to buy  ·  refreshes every round (30s)  ·  buy as many as you can afford"),
+		tr("click a card or press [1-8] to buy  ·  refreshes every round (30s)  ·  buy as many as you can afford") + "  ·  " + audio_hint,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
 
 	var n := names.size()

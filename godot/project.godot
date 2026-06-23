@@ -7,6 +7,11 @@ config_version=5
 ArtTheme="*res://theme.gd"
 Profile="*res://profile.gd"
 Session="*res://session.gd"
+Audio="*res://audio.gd"
+
+[audio]
+
+buses/default_bus_layout="res://audio/default_bus_layout.tres"
 
 [application]
 

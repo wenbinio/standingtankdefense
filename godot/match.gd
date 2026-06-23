@@ -46,6 +46,7 @@ func _ready() -> void:
 	_assign_cosmetics()
 	_cache_theme_textures()
 	_setup_environment()
+	Audio.set_music("ambient_bed.wav")   # render-only ambient bed
 
 # --- Per-player cosmetic assignment (engine-only, never feeds the sim) --------
 # Player 0 is YOU (your live theme + selected skin). Players 1..N-1 simulate
@@ -163,6 +164,9 @@ func _physics_process(_delta: float) -> void:
 		}
 		for id in Profile.record_match(rec):
 			_toast.append(Profile.ach_def(id).get("name", id))
+		# AUDIO (render-only): voice the outcome for "you" once, reading the
+		# authoritative placement. Strictly one-way — no sim write.
+		Audio.play(&"victory" if rec["won"] else &"defeat")
 	queue_redraw()
 
 func _blit(tx: Texture2D, center: Vector2, size: float, mod := Color.WHITE) -> void:
