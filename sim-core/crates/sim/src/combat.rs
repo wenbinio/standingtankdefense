@@ -497,9 +497,26 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
         let contact = dmg_mult.scale_i64(edef.contact_damage);
         let moved = e.pos.step_toward(tank_pos, speed);
         if moved == tank_pos {
-            // Contact: deal contact damage through the defensive layer, remove
-            // the enemy (no bounty for self-destruct).
-            crate::defense::hit_tank(s, contact);
+            if edef.boss {
+                // BOSS — PERSISTENT ATTRITION FIGHT (not a one-shot self-destruct).
+                // The boss does NOT despawn on contact: it plants at the tank and
+                // grinds it with a CADENCED contact hit (every `BOSS_CONTACT_CADENCE`
+                // ticks) until the player kills it with `Clear` (the only thing that
+                // hurts it) or the tank dies. This is what makes the 30-min climax a
+                // real multi-Clear RACE — survival is no longer a single dodge coin
+                // flip on one burst; the player must out-Clear the boss's sustained
+                // DPS while the escort piles on. Determinism: the cadence is a pure
+                // function of `s.tick` (no wall-clock, no new RNG); dodge/armor/shield
+                // are still honored per hit inside `hit_tank`.
+                e.pos = moved; // pin at the tank
+                if s.tick % content::BOSS_CONTACT_CADENCE == 0 {
+                    crate::defense::hit_tank(s, contact);
+                }
+                survivors.push(e);
+            } else {
+                // Normal enemy: self-destruct on contact (no bounty), one hit, gone.
+                crate::defense::hit_tank(s, contact);
+            }
         } else {
             e.pos = moved;
             survivors.push(e);
@@ -989,6 +1006,42 @@ mod tests {
         // Moved 8 units toward origin (move_speed 8) along -x.
         assert_eq!(s.enemies[0].pos.x, Fixed::from_int(92));
         assert_eq!(s.tank.hp, hp0, "no contact yet");
+    }
+
+    #[test]
+    fn boss_persists_on_contact_and_grinds_on_cadence() {
+        // The boss does NOT self-destruct: on reaching the tank it stays planted
+        // and lands a contact hit only on its cadence ticks. A non-cadence tick
+        // pins it with NO damage; a cadence tick deals one (scaled) contact hit.
+        // Use the boss-phase tick so the ×11 multiplier (and a real cadence) apply.
+        let cadence = content::BOSS_CONTACT_CADENCE;
+        let boss_def = content::SAMWISE;
+        let raw = content::ENEMIES[boss_def as usize].contact_damage;
+
+        // Off-cadence tick: boss arrives, plants, deals nothing.
+        let mut off = blank_state();
+        off.weapons.clear();
+        off.tick = content::BOSS_SPAWN_TICK + 1; // not a multiple of cadence (16)
+        assert_ne!(off.tick % cadence, 0);
+        let hp_off = off.tank.hp;
+        mk_enemy(&mut off, boss_def, 33_000_000, Vec2::new(Fixed::from_int(2), Fixed::ZERO));
+        move_enemies(&mut off);
+        assert_eq!(off.enemies.len(), 1, "boss persists on contact (no self-destruct)");
+        assert_eq!(off.enemies[0].pos, Vec2::ZERO, "boss planted on the tank");
+        assert_eq!(off.tank.hp, hp_off, "no damage on an off-cadence tick");
+
+        // On-cadence tick: boss is still planted but now lands one scaled hit.
+        let mut on = blank_state();
+        on.weapons.clear();
+        on.tick = content::BOSS_SPAWN_TICK; // a multiple of cadence
+        assert_eq!(on.tick % cadence, 0);
+        let expected = content::enemy_hp_mult(on.tick).scale_i64(raw);
+        let hp_on = on.tank.hp;
+        mk_enemy(&mut on, boss_def, 33_000_000, Vec2::new(Fixed::from_int(2), Fixed::ZERO));
+        move_enemies(&mut on);
+        assert_eq!(on.enemies.len(), 1, "boss still present after a contact hit");
+        assert_eq!(on.tank.hp, hp_on - expected, "cadence tick deals one scaled boss hit");
+        assert!(on.pending_kills.is_empty(), "boss contact grants no bounty");
     }
 
     // ---- determinism --------------------------------------------------------

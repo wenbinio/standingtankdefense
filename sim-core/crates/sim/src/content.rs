@@ -158,7 +158,7 @@ pub enum Archetype {
     /// Approaches to a standoff range then attacks the tank at range
     /// (the breather / spitter family).
     Ranged,
-    /// The end boss (Samwise) — immune to weapon fire.
+    /// The end boss (Hungry Hungry Happypotamus) — immune to weapon fire.
     Boss,
     /// Inert practice dummy (Target Dummy) — never moves, no contact.
     Inert,
@@ -196,7 +196,8 @@ pub struct EnemyDef {
     pub archetype: Archetype,
     /// Special ability (enemy-side); `EnemyAbility::None` for plain melee.
     pub ability: EnemyAbility,
-    /// A boss (e.g. Samwise) — immune to weapon fire; only `Clear` damages it.
+    /// A boss (e.g. Hungry Hungry Happypotamus) — immune to weapon fire; only
+    /// `Clear` damages it.
     pub boss: bool,
 }
 
@@ -909,12 +910,22 @@ pub static ENEMIES: &[EnemyDef] = &[
         ability: EnemyAbility::None,
         boss: false,
     },
-    // 2 — Samwise: fixed huge HP, immune to weapon fire; only `Clear` hurts it.
+    // 2 — Hungry Hungry Happypotamus: the 30-min END-GAME boss. Fixed huge HP,
+    // immune to weapon fire; only `Clear` hurts it (CLEAR_DAMAGE = 3M/use ⇒ ~11
+    // Clears to kill its 33M HP). It does NOT self-destruct: when it reaches the
+    // tank it PLANTS and grinds with a CADENCED contact hit (every
+    // `BOSS_CONTACT_CADENCE` ticks, ×11 tier ⇒ ~0.33M/hit, dodge/armor/shield
+    // honored) — see `combat::move_enemies`. That makes the climax a sustained
+    // multi-Clear RACE: the player must out-Clear the boss's DPS (while the dense
+    // escort piles on) before being ground down, instead of the old single
+    // dodge-coin-flip on one 1.1M burst. After 30 min of player scaling this is the
+    // real climax wall MOST runs end at, not a pushover. (Const id stays SAMWISE;
+    // sprite key unchanged.)
     EnemyDef {
-        name: "Samwise",
-        base_hp: 10_000_000,
+        name: "Hungry Hungry Happypotamus",
+        base_hp: 33_000_000,
         move_speed: 3,
-        contact_damage: 100_000,
+        contact_damage: 45_000,
         bounty: 0,
         armor_class: ARMOR_LIGHT,
         archetype: Archetype::Boss,
@@ -1035,30 +1046,99 @@ pub static ENEMIES: &[EnemyDef] = &[
 /// Index of the boss enemy def.
 pub const SAMWISE: u16 = 2;
 
-// Match timeline (ticks @ 30 Hz). Enemy scaling steps at 10 and 15 minutes; the
-// boss spawns at 15 minutes (`docs/02 §2.3`, adapted from the source map).
-pub const SCALE_STEP_1_TICK: u32 = 10 * 60 * 30; // 18000 — 10 min
-pub const SCALE_STEP_2_TICK: u32 = 15 * 60 * 30; // 27000 — 15 min
-/// Samwise spawns here; normal waves stop.
-pub const BOSS_SPAWN_TICK: u32 = SCALE_STEP_2_TICK;
+// Match timeline (ticks @ 30 Hz). The curve is a STAIRCASE: a gentle early ramp,
+// then discrete "difficulty cliffs" at 15 / 20 / 25 minutes, then the end-game
+// boss at 30 minutes. Each cliff is GENEROUS — telegraphed by a short ramp INTO
+// the step (a few-second HP ease-in, not an instant full-HP→dead spike), so a
+// prepared player can brace rather than being deleted. (`docs/02 §2.3`.)
+pub const SCALE_STEP_1_TICK: u32 = 10 * 60 * 30; // 18000 — 10 min (first soft ramp)
+pub const SCALE_STEP_2_TICK: u32 = 15 * 60 * 30; // 27000 — 15 min (cliff #1; the OLD boss moment, now a mid-cliff)
+pub const CLIFF_20_TICK: u32 = 20 * 60 * 30; // 36000 — 20 min (cliff #2)
+pub const CLIFF_25_TICK: u32 = 25 * 60 * 30; // 45000 — 25 min (cliff #3)
+/// The end-game boss ("Hungry Hungry Happypotamus") spawns here; normal waves
+/// stop. Moved from 15 min to 30 min — it is the climax most runs end at.
+pub const BOSS_SPAWN_TICK: u32 = 30 * 60 * 30; // 54000 — 30 min
 
-/// Enemy HP scaling at `tick`: identity until 10 min, then ramps to ×2 by 15
-/// min, then steeper "to bring the game to a swift end". Deterministic.
+/// While the boss is planted on the tank it lands a contact hit every this many
+/// ticks (a PERSISTENT attrition attack, not a one-shot self-destruct). 20 ticks
+/// @30 Hz ⇒ 1.5 hits/s; with the ×11 boss-phase multiplier each hit is ~0.33M
+/// (dodge/armor/shield apply). Tuned so the boss is a multi-Clear RACE the player
+/// must win, deadly to an unprepared snowball but survivable by a strong build.
+/// Pure function of `s.tick` — deterministic, no new RNG/state. (`combat::move_enemies`.)
+pub const BOSS_CONTACT_CADENCE: u32 = 16;
+
+/// Ticks of telegraphed ramp leading INTO each post-15 cliff: over this window
+/// (ending AT the cliff tick) HP eases STEEPLY from the gentle inter-cliff climb
+/// up to the next tier, rather than jumping in one tick. This is the "generous"
+/// mechanism — enemies visibly harden over the few seconds before the step lands,
+/// giving the player a beat to Clear / brace instead of an instant deletion.
+const CLIFF_RAMP: u32 = 8 * 30; // 8 s
+
+/// Enemy HP scaling at `tick`. The shape is a GENEROUS STAIRCASE:
+///   • 0–10 min: ×1 (unscaled — the golden-checksum window).
+///   • 10–15 min: smooth ×1 → ×2 ramp (this long ramp IS the telegraph for the
+///     15-min cliff).
+///   • 15→20, 20→25, 25→30: each segment is a GENTLE inter-cliff climb (keeps a
+///     snowballing player pressured), then a STEEP telegraphed ramp over the last
+///     `CLIFF_RAMP` ticks that lands the next tier exactly at the cliff.
+/// Tier peaks: ×2 @15, ×4 @20, ×7 @25, ×11 @30. The function is piecewise-linear
+/// and CONTINUOUS at every boundary (the telegraph picks up from the climb's value
+/// at telegraph-start, so there is no downward jump). Integer/fixed-point only.
 pub fn enemy_hp_mult(tick: u32) -> Fixed {
-    let span = (SCALE_STEP_2_TICK - SCALE_STEP_1_TICK) as i64; // 5 min window
+    // Linear interpolation `from → to` (Fixed) over `[lo, hi)`.
+    let lerp_f = |lo: u32, hi: u32, from: Fixed, to: Fixed| -> Fixed {
+        let span = (hi - lo) as i64;
+        from + (to - from).mul(Fixed::from_ratio((tick - lo) as i64, span))
+    };
+    let lerp = |lo: u32, hi: u32, from: i64, to: i64| -> Fixed {
+        lerp_f(lo, hi, Fixed::from_int(from), Fixed::from_int(to))
+    };
+    // One staircase segment `[lo, hi)` from tier `from` to tier `to`: a gentle
+    // climb across most of the segment (to `mid`), then a STEEP telegraphed ramp
+    // `mid → to` over the final `CLIFF_RAMP` ticks. `mid = from + (to-from)/3`,
+    // so ~1/3 of the tier gain is the slow climb and ~2/3 is the telegraphed cliff.
+    let segment = |lo: u32, hi: u32, from: i64, to: i64| -> Fixed {
+        let ramp_start = hi - CLIFF_RAMP;
+        let mid = Fixed::from_int(from) + Fixed::from_ratio(to - from, 3);
+        if tick < ramp_start {
+            lerp_f(lo, ramp_start, Fixed::from_int(from), mid) // gentle climb
+        } else {
+            lerp_f(ramp_start, hi, mid, Fixed::from_int(to)) // telegraphed cliff
+        }
+    };
+
     if tick < SCALE_STEP_1_TICK {
         Fixed::ONE
     } else if tick < SCALE_STEP_2_TICK {
-        // +100% linearly across minutes 10–15.
-        Fixed::ONE + Fixed::from_ratio((tick - SCALE_STEP_1_TICK) as i64, span)
+        // 10–15 min: smooth ×1 → ×2 (the long telegraph into cliff #1).
+        lerp(SCALE_STEP_1_TICK, SCALE_STEP_2_TICK, 1, 2)
+    } else if tick < CLIFF_20_TICK {
+        segment(SCALE_STEP_2_TICK, CLIFF_20_TICK, 2, 4) // ×2 → ×4, cliff #2 @20
+    } else if tick < CLIFF_25_TICK {
+        segment(CLIFF_20_TICK, CLIFF_25_TICK, 4, 7) // ×4 → ×7, cliff #3 @25
+    } else if tick < BOSS_SPAWN_TICK {
+        segment(CLIFF_25_TICK, BOSS_SPAWN_TICK, 7, 11) // ×7 → ×11, into the 30-min boss
     } else {
-        // ×2 at 15 min, then +100% per additional 5 minutes.
-        Fixed::from_int(2) + Fixed::from_ratio((tick - SCALE_STEP_2_TICK) as i64, span)
+        // 30 min+: boss phase. Hold the peak ×11 tier — the boss AND its escort
+        // swarm (see `BOSS_ESCORT`) ride this multiplier.
+        Fixed::from_int(11)
     }
 }
 
 /// Ticks per in-game minute at 30 Hz (gate-time helper for the schedule).
 const MIN: u32 = 60 * 30;
+
+/// Boss-phase ESCORT swarm (30 min+): spawned alongside Hungry Hungry
+/// Happypotamus by `waves::spawn` at the peak ×11 HP tier. A relentless grunt/raider/
+/// bruiser flood whose job is contact-damage VOLUME and keeping the player's Clear
+/// cycling (every Clear also chips the Clear-only boss). Tuned so the boss phase is
+/// the wall MOST runs end at — survivable only by a genuinely prepared snowball.
+pub static BOSS_ESCORT: &[WaveSpawn] = &[
+    WaveSpawn { enemy: 0, cadence_ticks: 4, start_tick: BOSS_SPAWN_TICK },  // Fel Orc Grunt — dense floor (was 5)
+    WaveSpawn { enemy: 4, cadence_ticks: 12, start_tick: BOSS_SPAWN_TICK }, // Fel Orc Raider — fast pressure (was 18)
+    WaveSpawn { enemy: 5, cadence_ticks: 15, start_tick: BOSS_SPAWN_TICK }, // Bandit Rider — very fast (was 22)
+    WaveSpawn { enemy: 1, cadence_ticks: 45, start_tick: BOSS_SPAWN_TICK }, // Steam Tank — periodic bruiser (was 60)
+];
 
 /// Match wave schedule: an ESCALATING mix. Early ticks are the original Grunt +
 /// Steam-Tank baseline (entries 0/1, ungated); progressively richer/deadlier
@@ -1067,22 +1147,46 @@ const MIN: u32 = 60 * 30;
 /// stops all of this (handled in `waves::spawn`). HP scales via `enemy_hp_mult`.
 pub static WAVE_M0: &[WaveSpawn] = &[
     // --- baseline (from the start) ---
-    WaveSpawn { enemy: 0, cadence_ticks: 15, start_tick: 0 }, // Fel Orc Grunt — swarm floor
+    // EARLY-SWARM PUNISH (first 5 min) — ITER-2: the opening is now BRUTAL FOR
+    // EVERYONE, not just pure-eco. The grunt floor is dense, and a fast-rusher
+    // stream (Raider) now gates in at ~30s, so even a normally-armed opening (the
+    // bot's 3-weapon floor) has to fight to keep contact damage off the tank — a
+    // non-trivial share of seeds die in the first ~5 min if play is loose. The
+    // lever is still VOLUME + RUSH CADENCE (no one-shot spike), so it stays
+    // brutal-but-survivable for the armed and ~certain death for the unarmed
+    // (lone-Bow pure-eco can never out-DPS this stream).
+    WaveSpawn { enemy: 0, cadence_ticks: 6, start_tick: 0 }, // Fel Orc Grunt — swarm floor (was 10; much denser)
     WaveSpawn { enemy: 1, cadence_ticks: 120, start_tick: 0 }, // Steam Tank — periodic bruiser
-    // --- early escalation (≈30s+): cheap peons + a target dummy for practice ---
-    WaveSpawn { enemy: 3, cadence_ticks: 40, start_tick: MIN / 2 }, // Fel Orc Peon
+    // --- early escalation (≈12s+): cheap peons stream in early & fast ---
+    WaveSpawn { enemy: 3, cadence_ticks: 18, start_tick: MIN / 5 }, // Fel Orc Peon (was 24 @20s; now 18 @12s)
     WaveSpawn { enemy: 11, cadence_ticks: 600, start_tick: MIN / 2 }, // Target Dummy (rare, inert)
-    // --- ≈1.5 min: fast melee rushers ---
-    WaveSpawn { enemy: 4, cadence_ticks: 90, start_tick: 3 * MIN / 2 }, // Fel Orc Raider (fast)
+    // --- ≈25s: fast melee rushers arrive EARLY — the core of the brutal opening.
+    //     Raiders are fast (speed 16) and hit hard (700 contact), so they reach the
+    //     tank quickly and punish a tank that hasn't established board control. ---
+    WaveSpawn { enemy: 4, cadence_ticks: 55, start_tick: 5 * MIN / 12 }, // Fel Orc Raider (fast, EARLY ≈25s — was 90 @90s)
+    // --- ≈1 min: a second peon trickle thickens the early wall ---
+    WaveSpawn { enemy: 3, cadence_ticks: 28, start_tick: MIN }, // Fel Orc Peon (second stream from 1 min)
+    // --- ≈1.5 min: even faster bandit rushers pile onto the early rush ---
+    WaveSpawn { enemy: 5, cadence_ticks: 100, start_tick: 3 * MIN / 2 }, // Bandit Rider (very fast, EARLY — was 150s)
     // --- ≈2.5 min: ranged spitters start pelting from standoff ---
     WaveSpawn { enemy: 8, cadence_ticks: 150, start_tick: 5 * MIN / 2 }, // Poisonspitter (ranged)
-    WaveSpawn { enemy: 5, cadence_ticks: 120, start_tick: 5 * MIN / 2 }, // Bandit Rider (very fast)
     // --- ≈4 min: casters + heavier ranged breath ---
     WaveSpawn { enemy: 7, cadence_ticks: 180, start_tick: 4 * MIN }, // Fel Orc Warlock (caster)
     WaveSpawn { enemy: 9, cadence_ticks: 200, start_tick: 4 * MIN }, // Firebreather (ranged)
     // --- ≈6 min: fortified giants + slow ice breath, the late-game wall ---
     WaveSpawn { enemy: 6, cadence_ticks: 300, start_tick: 6 * MIN }, // Mountain Giant (Fortified)
     WaveSpawn { enemy: 10, cadence_ticks: 240, start_tick: 6 * MIN }, // Icebreather (ranged)
+    // --- POST-15 CLIFF SURGES: discrete roster jumps coinciding with the HP cliffs
+    //     so each step is felt as MORE enemies AND tougher enemies, not just an HP
+    //     bump. Telegraphed by the HP ramp in `enemy_hp_mult` landing at the same
+    //     tick. These keep a snowballing player pressured between/at the cliffs.
+    // Cliff #2 @20 min: a heavy fortified surge + extra fast rushers.
+    WaveSpawn { enemy: 6, cadence_ticks: 150, start_tick: CLIFF_20_TICK }, // Mountain Giant (surge, was 300)
+    WaveSpawn { enemy: 5, cadence_ticks: 60, start_tick: CLIFF_20_TICK },  // Bandit Rider (fast surge)
+    // Cliff #3 @25 min: relentless breathers + a grunt flood into the boss.
+    WaveSpawn { enemy: 9, cadence_ticks: 90, start_tick: CLIFF_25_TICK },  // Firebreather (surge)
+    WaveSpawn { enemy: 10, cadence_ticks: 100, start_tick: CLIFF_25_TICK }, // Icebreather (surge)
+    WaveSpawn { enemy: 0, cadence_ticks: 8, start_tick: CLIFF_25_TICK },   // Fel Orc Grunt (pre-boss flood)
 ];
 
 /// Enemies spawn on this ring (radius ~1500) and march toward the tank.

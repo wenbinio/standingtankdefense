@@ -8,17 +8,37 @@ use crate::state::*;
 /// `s.alloc_entity_id()`; push to `s.enemies` (keep id order). Set hp from
 /// `EnemyDef::base_hp`.
 pub(crate) fn spawn(s: &mut ArenaState) {
-    // Boss phase: spawn Samwise exactly once at the boss tick; afterwards normal
-    // waves stop (the shop "flees"). Samwise uses its fixed HP (no scaling) and
-    // is immune to weapon fire — only `Clear` damages it (handled in combat).
+    // Boss phase (30 min+): spawn Hungry Hungry Happypotamus exactly once at
+    // the boss tick. The boss uses its fixed HP (no scaling) and is immune to
+    // weapon fire — only `Clear` damages it (handled in combat). UNLIKE the old
+    // design, normal waves do NOT fully stop: a relentless ESCORT swarm keeps
+    // pouring in alongside the boss. The escort serves the climax three ways —
+    //   1) contact-damage VOLUME that pressures even a heavily-defended tank,
+    //   2) it forces the player to keep Clearing, and every Clear also chips the
+    //      boss, so the boss is a real MULTI-CLEAR FIGHT rather than a stalemate,
+    //   3) it makes the boss the wall most runs end at instead of a victory lap.
     if s.tick == content::BOSS_SPAWN_TICK {
         let edef = &content::ENEMIES[content::SAMWISE as usize];
         let id = s.alloc_entity_id();
         s.enemies
             .push(Enemy::new(id, content::SAMWISE, edef.base_hp, content::SPAWN_RING[0]));
-        return;
+        // fall through: the escort swarm below also spawns on this tick.
     }
     if s.tick >= content::BOSS_SPAWN_TICK {
+        // Boss escort: a dense grunt/raider flood at the peak HP tier. Cadences
+        // are tight so the board stays full (keeps the player's Clear cycling onto
+        // the boss). Deterministic ring picks via `rng_spawn`, same as normal waves.
+        let hp_mult = content::enemy_hp_mult(s.tick);
+        for ws in content::BOSS_ESCORT {
+            if ws.cadence_ticks != 0 && s.tick % ws.cadence_ticks == 0 {
+                let ring_idx = s.rng_spawn.below(content::SPAWN_RING.len() as u32) as usize;
+                let pos = content::SPAWN_RING[ring_idx];
+                let edef = &content::ENEMIES[ws.enemy as usize];
+                let hp = hp_mult.scale_i64(edef.base_hp);
+                let id = s.alloc_entity_id();
+                s.enemies.push(Enemy::new(id, ws.enemy, hp, pos));
+            }
+        }
         return;
     }
 
@@ -59,9 +79,11 @@ mod tests {
 
     #[test]
     fn spawns_on_cadence_for_first_wave_entry() {
-        // WAVE_M0[0]: enemy 0, cadence 15.  WAVE_M0[1]: enemy 1, cadence 120.
+        // WAVE_M0[0]: enemy 0 (Fel Orc Grunt), cadence 6.  WAVE_M0[1]: enemy 1
+        // (Steam Tank), cadence 120. Tick 6 fires only the grunt entry (all gated
+        // entries — peon/raider/etc — start well after tick 6).
         let mut s = blank_state();
-        s.tick = 15; // 15 % 15 == 0, 15 % 120 != 0
+        s.tick = 6; // 6 % 6 == 0, 6 % 120 != 0
         let before = s.enemies.len();
         spawn(&mut s);
         assert_eq!(s.enemies.len(), before + 1, "exactly one enemy (entry 0)");
@@ -73,7 +95,7 @@ mod tests {
     #[test]
     fn no_spawn_off_cadence() {
         let mut s = blank_state();
-        s.tick = 7; // 7 % 15 != 0 and 7 % 120 != 0
+        s.tick = 7; // 7 % 6 != 0, 7 % 120 != 0, and below all gated entries
         spawn(&mut s);
         assert!(s.enemies.is_empty(), "nothing spawns off-cadence");
     }
@@ -93,7 +115,7 @@ mod tests {
     #[test]
     fn spawns_at_ring_position() {
         let mut s = blank_state();
-        s.tick = 15;
+        s.tick = 6; // grunt cadence (6) fires
         spawn(&mut s);
         let pos = s.enemies[0].pos;
         // The spawn must be exactly one of the precomputed ring positions.
@@ -132,39 +154,52 @@ mod tests {
 
     #[test]
     fn late_game_enemies_spawn_with_scaled_hp() {
+        // Use a grunt-cadence (6) tick just before the 15-min cliff, where the
+        // 10→15 ramp has nearly reached ×2 (and is still ≤ ×2). Grunt is wave
+        // entry 0 (catalog order), so it is `enemies[0]` among this tick's spawns.
         let mut s = blank_state();
-        s.tick = content::SCALE_STEP_2_TICK; // 15 min, but this is the boss tick…
-        // …so use a tick just before the boss where scaling is ~2×.
-        s.tick = content::SCALE_STEP_2_TICK - 15; // a grunt-cadence tick before boss
-        // ensure it is a grunt cadence tick (cadence 15)
-        assert_eq!(s.tick % 15, 0);
+        s.tick = content::SCALE_STEP_2_TICK - 6; // 26994, a grunt-cadence tick
+        assert_eq!(s.tick % 6, 0);
         spawn(&mut s);
         let grunt_base = content::ENEMIES[0].base_hp;
-        // hp should be roughly 2× base (just under, since ~tick before 15 min).
+        assert_eq!(s.enemies[0].def, 0, "first spawn this tick is the grunt (entry 0)");
+        // hp should be just under 2× base (a tick before the 15-min ×2 tier).
         assert!(s.enemies[0].hp > grunt_base, "late enemy HP must be scaled up");
         assert!(s.enemies[0].hp <= grunt_base * 2);
     }
 
     #[test]
-    fn boss_spawns_once_at_boss_tick_then_no_normal_waves() {
+    fn boss_spawns_once_at_boss_tick_with_escort_then_only_escort() {
+        // At the boss tick the boss spawns exactly once; the BOSS_ESCORT swarm may
+        // also spawn this tick (all escort cadences divide the boss tick). Assert
+        // exactly ONE boss is present and that the boss is among the spawns.
         let mut s = blank_state();
         s.tick = content::BOSS_SPAWN_TICK;
         spawn(&mut s);
-        assert_eq!(s.enemies.len(), 1, "exactly Samwise spawns at the boss tick");
-        assert_eq!(s.enemies[0].def, content::SAMWISE);
-        assert!(content::ENEMIES[s.enemies[0].def as usize].boss);
+        let bosses = s
+            .enemies
+            .iter()
+            .filter(|e| content::ENEMIES[e.def as usize].boss)
+            .count();
+        assert_eq!(bosses, 1, "exactly one boss spawns at the boss tick");
+        assert!(s.enemies.iter().any(|e| e.def == content::SAMWISE));
 
-        // After the boss tick, normal waves no longer spawn.
+        // The boss spawns ONLY once: at a later boss-phase tick no second boss
+        // appears, but the escort swarm keeps coming (the climax is a real fight).
         s.enemies.clear();
-        s.tick = content::BOSS_SPAWN_TICK + 15; // a former grunt-cadence tick
+        s.tick = content::BOSS_SPAWN_TICK + 4; // an escort grunt-cadence tick (4)
         spawn(&mut s);
-        assert!(s.enemies.is_empty(), "no normal waves during the boss phase");
+        assert!(
+            s.enemies.iter().all(|e| !content::ENEMIES[e.def as usize].boss),
+            "the boss spawns once, not again during the boss phase"
+        );
+        assert!(!s.enemies.is_empty(), "the escort swarm keeps spawning in the boss phase");
     }
 
     #[test]
     fn every_roster_enemy_spawns_over_the_match() {
         // Walk the whole pre-boss timeline; collect every enemy def that spawns.
-        // Every catalog enemy except the boss (Samwise, which arrives via the
+        // Every catalog enemy except the boss (the Happypotamus, which arrives via the
         // dedicated boss tick) must appear via the escalating WAVE_M0 schedule.
         let mut s = blank_state();
         let mut seen = std::collections::BTreeSet::new();

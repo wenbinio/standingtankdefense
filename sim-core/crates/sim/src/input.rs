@@ -4,8 +4,8 @@ use crate::shop;
 use crate::state::*;
 
 /// Damage dealt to every enemy by a `Clear`. Large but FINITE: it wipes normal
-/// enemies instantly, but the boss (Samwise, ~10M HP) takes several Clears —
-/// and `Clear` is the ONLY thing that can hurt the boss.
+/// enemies instantly, but the boss (Hungry Hungry Happypotamus, ~33M HP) takes
+/// ~11 Clears — and `Clear` is the ONLY thing that can hurt the boss.
 const CLEAR_DAMAGE: i64 = 3_000_000;
 /// Cooldown (in ticks) imposed after a `Clear`.
 const CLEAR_COOLDOWN_TICKS: u32 = 300;

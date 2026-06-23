@@ -45,16 +45,24 @@ pub enum Challenge {
     NoEconomy,
     /// Prefer collecting a weapon of every attack-class.
     JackOfAll,
+    /// MEASUREMENT ONLY (not a shipped achievement): a PURE-ECONOMY player — buys
+    /// ONLY economy/gold offers, NEVER weapons or any other modifier. Used to
+    /// verify the early-game punish (an unarmed tank relying solely on the starting
+    /// Bow + Clear should usually die inside the first 5 min). Exposed via an
+    /// explicit code (`9`) so the DEFAULT bot never adopts it.
+    EcoOnly,
 }
 
 impl Challenge {
     /// Map the GDScript-facing integer code to a challenge. 1..=6 → Purist of
-    /// attack-class 0..5, 7 → NoEconomy, 8 → JackOfAll, anything else → None.
+    /// attack-class 0..5, 7 → NoEconomy, 8 → JackOfAll, 9 → EcoOnly (measurement),
+    /// anything else → None.
     pub fn from_code(code: i64) -> Challenge {
         match code {
             1..=6 => Challenge::Purist((code - 1) as u8),
             7 => Challenge::NoEconomy,
             8 => Challenge::JackOfAll,
+            9 => Challenge::EcoOnly,
             _ => Challenge::None,
         }
     }
@@ -67,6 +75,12 @@ impl Challenge {
             }
             (Challenge::NoEconomy, OfferKind::Modifier) => {
                 !content::MODIFIERS[off.def as usize].effect.is_economy()
+            }
+            // Pure-economy: forbid ALL weapons and every non-economy modifier; the
+            // only permitted purchase is an economy/gold modifier.
+            (Challenge::EcoOnly, OfferKind::Weapon) => false,
+            (Challenge::EcoOnly, OfferKind::Modifier) => {
+                content::MODIFIERS[off.def as usize].effect.is_economy()
             }
             _ => true,
         }

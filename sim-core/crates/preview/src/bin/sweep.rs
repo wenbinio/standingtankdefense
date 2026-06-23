@@ -15,7 +15,7 @@
 //!   sweep                 # seeds 0..80, cap = 20 min
 //!   sweep --seeds 80 --cap 36000 --rows   # explicit knobs; --rows prints each seed
 
-use sim::bot::Bot;
+use sim::bot::{Bot, Challenge};
 use sim::{step, ArenaState, TICK_HZ};
 
 /// Survival cap: 20 minutes @ 30 Hz. Past the 15-min boss and the second scale
@@ -30,11 +30,14 @@ struct Run {
     won: bool,
 }
 
-fn run_seed(seed: u64, cap: u32) -> Run {
+fn run_seed(seed: u64, cap: u32, challenge: Challenge) -> Run {
     let mut s = ArenaState::new(seed, 0);
-    let mut bot = Bot::default();
+    let mut bot = Bot::with_challenge(challenge);
     while s.tick < cap && !s.dead {
-        let action = bot.decide(&s);
+        // Apply the challenge's authoritative buy-filter too, so a slot purchase
+        // can never violate the playstyle even if the shop shifted — keeps the
+        // measured run a faithful pure-eco / constrained run.
+        let action = challenge.filter(bot.decide(&s), &s);
         step(&mut s, action);
     }
     Run {
@@ -49,21 +52,33 @@ fn main() {
     let mut seeds = DEFAULT_SEEDS;
     let mut cap = DEFAULT_CAP_TICKS;
     let mut rows = false;
+    let mut challenge = Challenge::None;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
             "--seeds" => seeds = it.next().and_then(|v| v.parse().ok()).unwrap_or(seeds),
             "--cap" => cap = it.next().and_then(|v| v.parse().ok()).unwrap_or(cap),
             "--rows" => rows = true,
+            // Drive the bot under a self-imposed playstyle (challenge code, see
+            // `Challenge::from_code`): 9 = pure-economy (weapons forbidden). The
+            // default is the greedy survivor (code 0/None).
+            "--challenge" => {
+                challenge = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .map(Challenge::from_code)
+                    .unwrap_or(challenge)
+            }
+            "--eco" => challenge = Challenge::EcoOnly, // shorthand for --challenge 9
             "-h" | "--help" => {
-                println!("sweep [--seeds N] [--cap TICKS] [--rows]");
+                println!("sweep [--seeds N] [--cap TICKS] [--rows] [--challenge CODE | --eco]");
                 return;
             }
             _ => {}
         }
     }
 
-    let runs: Vec<Run> = (0..seeds).map(|seed| run_seed(seed, cap)).collect();
+    let runs: Vec<Run> = (0..seeds).map(|seed| run_seed(seed, cap, challenge)).collect();
 
     if rows {
         println!("seed  death_tick  survived  result");

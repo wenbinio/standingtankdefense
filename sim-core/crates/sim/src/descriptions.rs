@@ -120,7 +120,7 @@ const MODIFIER_TEXT: [(&str, &str); 84] = [
     ("The Relief that never came included field-surgeons; the Wardens improvised this drip in their absence.", "+50 HP regen per tick."),  // 15
     ("A Warden's last trick when the line is held and the Relief is a rumor: be where the blow is not.", "+10% chance to dodge a hit."),  // 16
     ("The longer the war drags on, the heavier the Foundry's old governor leans into the firing chain.", "+2% damage now, +1% every round."),  // 17
-    ("The Conclave warned that borrowed chaos compounds with every round it sits unrepaid, and Samwise is still on the horizon.", "+20% chaos now, +5% every round."),  // 18
+    ("The Conclave warned that borrowed chaos compounds with every round it sits unrepaid, and Hungry Hungry Happypotamus is still on the horizon.", "+20% chaos now, +5% every round."),  // 18
     ("The quartermaster's ledger breeds on itself; each round the Greycoats turn in more, and the line grows fatter.", "+10 income now, +5 every round."),  // 19
     ("Scar over scar, the way a Warden's plating thickens every round the Relief fails to arrive.", "+10 armor now, +5 every round."),  // 20
     ("Warden marksmanship doctrine, the kind drilled into gunners told to make every single shot count.", "+25% to single-target weapons."),  // 21
@@ -182,7 +182,7 @@ const MODIFIER_TEXT: [(&str, &str); 84] = [
     ("A respectable clip of mending, more than the Relief ever delivered to this line.", "+40 HP regen per tick."),  // 77
     ("An obscene coat of Hexwright life-work, more borrowed skin than any Warden was meant to wear.", "+10000 mana shield, fast regen."),  // 78
     ("A Greycoat's bad habits, learned at Ashmark: one swing in ten finds only air.", "+10% chance to dodge a hit."),  // 79
-    ("The Greycoat ledger compounds as the siege drags on, the dead worth more every round Samwise nears.", "+100% kill gold, +15% more each round."),  // 80
+    ("The Greycoat ledger compounds as the siege drags on, the dead worth more every round Hungry Hungry Happypotamus nears.", "+100% kill gold, +15% more each round."),  // 80
     ("Warden salvage welded round Warden salvage, the wall thickening every round the line holds.", "+2500 max HP, +500 more each round."),  // 81
     ("A thin Hexwright coat of borrowed math, enough to spend before your own skin.", "+1000 mana shield, slow regen."),  // 82
     ("The Wardens' last surgeon works faster the longer the war grinds, mending quickening as the siege wears on.", "+120 HP/tick regen, +30 more each round."),  // 83

@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0xb36b2d2745e6e0cf, // re-baselined: + Summon minion entity (skeletons / infernals)
+        0x63d277040e6497b3, // re-baselined (iter-2): brutal early opening (denser grunt floor + early raider/bandit rush) shifts the 2000-tick window
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

@@ -119,8 +119,19 @@ impl Modifiers {
             }
             ModEffect::HpRegen(r) => tank.hp_regen_per_tick += r,
             ModEffect::Dodge(n) => {
-                // Additive, capped just below 100% so a hit can always land.
-                tank.dodge_num = (tank.dodge_num + n).min(tank.dodge_den.saturating_sub(1));
+                // Additive, but HARD-CAPPED at 70% of `dodge_den` (integer math:
+                // `dodge_den * 7 / 10`). This is a deliberate nerf: at the old
+                // 99% ceiling dodge was an invincibility button — once a build hit
+                // it, NO enemy lever (HP / contact / volume / boss) could pressure
+                // it and ~88% of runs coasted to the 60-min cap purely on dodge.
+                // Capping the effective avoid-rate at 70% leaves dodge strong but
+                // mortal: ~30% of hits still land, so the HP staircase and the boss
+                // can finally threaten a snowball, and mitigation (armor / shield /
+                // regen / spikes) becomes a real competing axis instead of a
+                // strictly-worse alternative. Integer/Fixed only — feeds the
+                // checksum, so no floats.
+                let cap = tank.dodge_den.saturating_mul(7) / 10;
+                tank.dodge_num = (tank.dodge_num + n).min(cap);
             }
             ModEffect::DamageScopePct(sid, n, d) => {
                 self.add_by_scope[sid as usize % content::NUM_SCOPES] += Fixed::from_ratio(n, d)

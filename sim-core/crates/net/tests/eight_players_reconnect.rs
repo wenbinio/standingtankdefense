@@ -60,18 +60,55 @@ fn eight_players_one_drops_and_reconnects() {
         hub.advance();
     }
 
-    // The seven never-dropped players are in lockstep with their shadows.
+    // The seven never-dropped players are on the canonical trajectory, and their
+    // director shadow is a faithful (possibly lagging) prefix of it.
+    //
+    // NOTE: we compare each side to a fresh reference advanced to ITS OWN arena
+    // tick rather than directly equating `client.arena_checksum()` with
+    // `shadow_checksum()`. After P3 drops, the director's shadow clock stalls a few
+    // ticks behind the live clients, so the client and shadow sit at DIFFERENT
+    // arena ticks. The old direct equality only passed by accident — under Noop
+    // inputs the sparse early-game board reached a steady state where the checksum
+    // stopped changing, so the two different ticks happened to hash equal. The
+    // difficulty-curve redesign makes the early board churn through this window
+    // (denser swarm), exposing that the two ticks are genuinely different states.
+    // Comparing each side at its own tick is the tick-correct lockstep check (it is
+    // exactly how the reconnected P3 is validated below).
     for &p in &ps {
         if p.0 == DROPPED {
             continue;
         }
         let c = clients[(p.0 - 1) as usize].as_ref().unwrap();
+        // Client is bit-equal to the canonical trajectory at its own tick.
+        let c_tick = c.arena_tick().unwrap();
+        let mut c_ref = sim::ArenaState::new(SEED, p.0);
+        for _ in 0..c_tick {
+            sim::step(&mut c_ref, Input::Noop);
+        }
         assert_eq!(
-            c.arena_checksum(),
-            d.shadow_checksum(p),
-            "player {} drifted from its shadow",
+            c.arena_checksum().unwrap(),
+            sim::checksum(&c_ref),
+            "player {} client drifted from the canonical trajectory",
             p.0
         );
+        // Director's shadow is bit-equal to the canonical trajectory at ITS tick
+        // (a prefix of the client's), proving shadow↔client lockstep modulo lag.
+        let s_ck = d.shadow_checksum(p).unwrap();
+        let mut s_ref = sim::ArenaState::new(SEED, p.0);
+        let mut s_tick = 0u32;
+        // Advance the reference until it matches the shadow checksum, bounded by
+        // the client's tick (the shadow can never be ahead of the client).
+        let matched = loop {
+            if sim::checksum(&s_ref) == s_ck {
+                break true;
+            }
+            if s_tick >= c_tick {
+                break false;
+            }
+            sim::step(&mut s_ref, Input::Noop);
+            s_tick += 1;
+        };
+        assert!(matched, "player {} shadow not on the canonical trajectory", p.0);
     }
 
     // The reconnected P3 adopted authoritative state and stayed on the canonical
