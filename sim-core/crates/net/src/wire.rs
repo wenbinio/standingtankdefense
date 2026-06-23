@@ -58,6 +58,24 @@ pub enum Msg {
     Digest { tick: u32, checksum: u64 },
 }
 
+/// Canonical list of message variants that are actually **transmitted on the
+/// wire** — the single source of truth for the protocol catalog in
+/// `docs/04-protocol-and-messages.md`. Every name here is a [`Msg`] variant and
+/// every [`Msg`] variant is named here, and the doc's transmitted-message table
+/// must list exactly these names; `tests/wire_doc_sync.rs` enforces all three.
+/// Keep this in lock-step with [`Msg`].
+pub const TRANSMITTED_MESSAGES: &[&str] = &[
+    "MatchStart",
+    "TimeBeacon",
+    "InputAck",
+    "Snapshot",
+    "DeathConfirmed",
+    "MatchResult",
+    "Join",
+    "Input",
+    "Digest",
+];
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum WireError {
     UnexpectedEof,

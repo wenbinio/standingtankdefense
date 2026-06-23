@@ -46,130 +46,183 @@ ROUND and SHOP overlap in practice (the shop opens each round while combat conti
 
 ## 4.4 Message catalog
 
+> **Authoritative source of truth.** The list of messages that actually go on
+> the wire is the `net::wire::Msg` enum and its companion
+> `net::wire::TRANSMITTED_MESSAGES` constant (`sim-core/crates/net/src/wire.rs`).
+> The table in §4.4.0 below must enumerate **exactly** those variants; the test
+> `sim-core/crates/net/tests/wire_doc_sync.rs` fails the build if the enum, the
+> const, and this catalog drift apart. The JSON payloads shown in later
+> subsections are *illustrative readability sketches* — the implemented codec is
+> compact little-endian binary with the fields listed per variant; not every
+> sketched field exists yet (see "Implemented fields" notes).
+
+### 4.4.0 Transmitted messages (the wire `Msg` set)
+
+These nine variants are the complete set of messages encoded onto the wire by
+the M2+ codec. **If it isn't in this table, it isn't sent.** Lobby/ready
+lifecycle and seed-derived events (rounds/shop/boss) are deliberately *absent* —
+see §4.4.7.
+
+| Message | Dir | Channel | Implemented fields | Purpose |
+| --- | --- | --- | --- | --- |
+| **`MatchStart`** | S→C | CONTROL | `start_tick:u32`, `master_seed:u64` | Begin the match; client builds `ArenaState::new(master_seed, player_id)` at `start_tick`. |
+| **`TimeBeacon`** | S→C | TELEMETRY | `server_tick:u32` | Authoritative clock beacon for drift correction. |
+| **`InputAck`** | S→C | CONTROL | `seq:u32`, `apply_tick:u32` | Ack an input and pin its authoritative apply tick. |
+| **`Snapshot`** | S→C | BULK | `tick:u32`, `bytes:Vec<u8>` | Authoritative serialized arena state (correction / reconnect). |
+| **`DeathConfirmed`** | S→C | CONTROL | `player:u32`, `died_tick:u32`, `place:u32` | A player was eliminated; `place` is their final placement. |
+| **`MatchResult`** | S→C | CONTROL | `places:Vec<(u32,u32)>` | Final standings as `(player, place)` pairs. |
+| **`Join`** | C→S | CONTROL | `content_hash:u64` | Join handshake; `content_hash` gates version/content match. |
+| **`Input`** | C→S | CONTROL | `seq:u32`, `action:InputCode` | A player action; the director assigns its `apply_tick`. |
+| **`Digest`** | C→S | TELEMETRY | `tick:u32`, `checksum:u64` | Liveness + drift digest for the client's current tick. |
+
+The `Input.action` payload is the `InputCode` tagged union — the only actions on
+the wire today are: `Noop`, `BuyOffer(slot:u8)`, `Reroll`, `Clear`. (The richer
+action menu sketched in §4.4.3 — `UseItem`, `BlackMarketPick`, `SetGameSpeed` —
+is **not yet on the wire**; it is planned, not implemented.)
+
 ### 4.4.1 Lifecycle (CONTROL)
 
-**`JoinRequest`** (C→S)
+**`Join`** (C→S) — the implemented handshake. On the wire it carries a single
+`content_hash:u64`:
 ```json
-{ "type":"JoinRequest", "match_id":"...", "client_version":"1.0.0",
-  "content_hash":"sha256:...", "display_name":"..." }
+{ "type":"Join", "content_hash":"u64" }
 ```
-`content_hash` gates version/content mismatch up front — the #1 desync cause in WC3 was version drift; here it's a hard pre-match check.
+`content_hash` gates version/content mismatch up front — the #1 desync cause in
+WC3 was version drift; here it's a hard pre-match check. (The richer
+`JoinRequest` sketch with `match_id` / `client_version` / `display_name` is a
+future expansion; those identities are carried by the Steam lobby layer today —
+see §4.4.7.)
 
-**`JoinAccept`** (S→C)
+**`MatchStart`** (S→C, broadcast) — implemented as `{ start_tick:u32, master_seed:u64 }`:
 ```json
-{ "type":"JoinAccept", "player_id":3, "slot_count":8,
-  "tick_rate":30, "server_tick":0, "content_manifest_ref":"BULK:manifest@1" }
+{ "type":"MatchStart", "start_tick":150, "master_seed":"u64" }
 ```
+The director sends the `start_tick` and the `master_seed` from which every
+client deterministically builds its arena. (A future hardening replaces the raw
+seed with a **commit** revealed per round so no client can precompute the whole
+match's RNG; the current codec ships the seed directly. Lobby/ready/host
+selection — formerly sketched here as `JoinAccept` / `LobbyState` / `Ready` — is
+handled off-wire by the in-process `Lobby` state machine; see §4.4.7.)
 
-**`LobbyState`** (S→C, on change) — slots, names, ready flags, host id.
+### 4.4.2 Clock (TELEMETRY)
 
-**`Ready`** (C→S) `{ "ready":true }`.
-
-**`MatchStart`** (S→C, broadcast)
+**`TimeBeacon`** (S→C, unreliable) — implemented as `{ server_tick:u32 }`:
 ```json
-{ "type":"MatchStart", "start_tick":150, "master_seed_commit":"sha256:..." }
-```
-The server broadcasts a **commit** (hash) of the master seed at countdown and reveals derived seeds per round — so no client can precompute the whole match's RNG, but the commit proves the server didn't change it later.
-
-### 4.4.2 Clock & rounds (TELEMETRY for beacon, CONTROL for round)
-
-**`TimeBeacon`** (S→C, 2–4 Hz, unreliable)
-```json
-{ "type":"TimeBeacon", "server_tick":5400, "server_unix_ns":169... }
+{ "type":"TimeBeacon", "server_tick":5400 }
 ```
 
-**`RoundStart`** (S→C, CONTROL)
-```json
-{ "type":"RoundStart", "round":12, "start_tick":21600,
-  "wave_table_id":"wave_12",
-  "spawn_seed":"a3f1...",            // this player's spawn stream seed for round 12
-  "scaling_step":"post_10min" }
-```
-Per-player `spawn_seed` (same wave table, individual jitter). Scaling steps (`base`/`post_10min`/`post_15min`) are carried so the sim applies the right multipliers deterministically.
-
-**`BossSpawn`** (S→C, CONTROL) `{ "round":31, "spawn_tick":..., "boss_id":"samwise" }`.
+Rounds, shop offers, and the boss are **not clock messages and are not
+transmitted** — they are derived deterministically from the master seed + tick.
+See §4.4.7.
 
 ### 4.4.3 Player inputs (CONTROL, reliable-ordered)
 
-A single envelope covers every player action; `action` is a tagged union. Inputs affect only the sender's arena.
+A single envelope covers every player action; `action` is the `InputCode` tagged
+union. Inputs affect only the sender's arena.
 
-**`Input`** (C→S)
+**`Input`** (C→S) — implemented as `{ seq:u32, action:InputCode }`:
 ```json
-{ "type":"Input", "player_id":3, "seq":87, "client_tick":21750,
-  "action": { "kind":"BuyOffer", "offer_slot":2 } }
+{ "type":"Input", "seq":87, "action": { "kind":"BuyOffer", "slot":2 } }
 ```
-`action.kind` ∈:
-- `BuyOffer { offer_slot }` — purchase the weapon/upgrade in a shop slot.
-- `Reroll {}` — refresh offers (consumes a reroll / charges gold).
-- `UseItem { item_id }` — Magic Treasure / Multiplication Gems / Black Market pick.
-- `BlackMarketPick { weapon_id }` — choose the specific weapon (stateful offer).
-- `Clear {}` — fire the manual `Clear` ability (the one real-time combat input; also the boss-damage action).
-- `SetGameSpeed { speed }` — host (slot 0) only; server validates and re-broadcasts.
+`action` (`InputCode`) — **implemented** kinds:
+- `Noop` — no-op / heartbeat input slot.
+- `BuyOffer(slot:u8)` — purchase the weapon/upgrade in a shop slot.
+- `Reroll` — refresh offers (consumes a reroll / charges gold).
+- `Clear` — fire the manual `Clear` ability (the one real-time combat input; also the boss-damage action).
 
-**`InputAck`** (S→C)
+Planned, **not yet on the wire**: `UseItem { item_id }` (Magic Treasure /
+Multiplication Gems / Black Market pick), `BlackMarketPick { weapon_id }`,
+`SetGameSpeed { speed }` (host-only, server-validated).
+
+**`InputAck`** (S→C) — implemented as `{ seq:u32, apply_tick:u32 }`:
 ```json
-{ "type":"InputAck", "seq":87, "apply_tick":21752, "result":"ok",
-  "gold_after":1450, "rerolls_after":3 }
+{ "type":"InputAck", "seq":87, "apply_tick":21752 }
 ```
-The server stamps the **authoritative `apply_tick`** (so client and shadow apply the input at the same tick) and returns authoritative economy fields. `result` ∈ `ok | rejected(reason)`; rejection reasons: `insufficient_gold`, `offer_not_available`, `no_rerolls`, `on_cooldown`, `illegal`.
+The server stamps the **authoritative `apply_tick`** so client and shadow apply
+the input at the same tick. (Planned extension: an authoritative
+`result`/`gold_after`/`rerolls_after` economy echo for optimistic-UI rollback,
+per §4.6 — not yet carried on the wire.)
 
-**`ShopOffer`** (S→C, CONTROL) — the server-gated offer set for the current shop (so clients can't precompute):
+### 4.4.4 Liveness & digests (TELEMETRY, unreliable)
+
+**`Digest`** (C→S) — heartbeat + drift check, implemented as `{ tick:u32, checksum:u64 }`:
 ```json
-{ "type":"ShopOffer", "round":12, "shop_seq":4,
-  "offers":[ {"slot":0,"id":"wpn_frost_bow","rarity":"uncommon","cost":1500},
-             {"slot":1,"id":"upg_chaos_dmg_10","rarity":"common","cost":500} ],
-  "reroll_cost":300 }
+{ "type":"Digest", "tick":21900, "checksum":"u64" }
 ```
+`checksum` is the arena's `state_checksum` (`docs/05 §5.6`); the server compares
+it to its shadow-sim (§4.6).
 
-### 4.4.4 Liveness, digests, leaderboard (TELEMETRY, unreliable)
-
-**`Digest`** (C→S, 2–5 Hz) — heartbeat + drift check
+**`LeaderboardDelta`** — **planned / not yet on the wire.** Standings are
+currently reconstructed by the director from `DeathConfirmed` / `MatchResult`;
+a periodic changed-standings telemetry message is a future addition:
 ```json
-{ "type":"Digest", "player_id":3, "tick":21900,
-  "hp":18500, "max_hp":24000, "gold":1450, "kills":2104,
-  "wave":12, "state_checksum":"7f3a9c01" }
-```
-`state_checksum` is a rolling hash of the arena's authoritative-relevant state; the server compares it to its shadow-sim (§4.6).
-
-**`LeaderboardDelta`** (S→C, 1–2 Hz) — changed standings only
-```json
+// PLANNED — not transmitted
 { "type":"LeaderboardDelta", "tick":21900,
-  "entries":[ {"player_id":5,"alive":false,"place":8,"died_tick":21010,"wave":9},
-              {"player_id":3,"alive":true,"survival_ticks":21900,"kills":2104} ] }
+  "entries":[ {"player_id":5,"alive":false,"place":8,"died_tick":21010,"wave":9} ] }
 ```
 
 ### 4.4.5 Death, placement, resolution (CONTROL, reliable)
 
-**`DeathReport`** (C→S) — client reports its own death `{ "tick":22050, "cause":"overrun" }`. Advisory; the server confirms against its shadow.
+There is no client-sent `DeathReport` on the wire — death is **server-confirmed
+only**. The director detects elimination against its shadow sim and broadcasts
+`DeathConfirmed`; the formerly-sketched advisory `DeathReport` (C→S) is *not
+transmitted* (the client never reports its own death authoritatively).
 
-**`DeathConfirmed`** (S→C, broadcast)
+**`DeathConfirmed`** (S→C, broadcast) — implemented as `{ player:u32, died_tick:u32, place:u32 }`:
 ```json
-{ "type":"DeathConfirmed", "player_id":3, "died_tick":22050, "place":4,
-  "alive_remaining":3 }
+{ "type":"DeathConfirmed", "player":3, "died_tick":22050, "place":4 }
 ```
+(Planned field: `alive_remaining` for client HUD; not yet carried.)
 
-**`MatchResult`** (S→C, broadcast)
+**`MatchResult`** (S→C, broadcast) — implemented as `{ places:Vec<(u32,u32)> }`:
 ```json
-{ "type":"MatchResult",
-  "placements":[ {"player_id":7,"place":1,"last_stand":true,"killed_boss":true},
-                 {"player_id":3,"place":4} ],
-  "win_cutoff_place":4 }     // places ≤ cutoff are wins (top half)
+{ "type":"MatchResult", "places":[ [7,1], [3,4] ] }   // (player, place) pairs
 ```
+(Planned fields: `last_stand` / `killed_boss` flags and `win_cutoff_place`; not
+yet carried — placement order in `places` is the authoritative result today.)
 
 ### 4.4.6 Snapshots & reconnect (BULK, reliable)
 
-**`SnapshotRequest`** (C→S) `{ "reason":"reconnect" | "desync" }`.
-
-**`Snapshot`** (S→C) — authoritative full state of **one** arena at a tick, plus the data to continue deterministically:
+**`Snapshot`** (S→C) — authoritative full state of **one** arena at a tick,
+implemented as `{ tick:u32, bytes:Vec<u8> }` where `bytes` is the serialized
+authoritative arena (carrying its rng cursors so the client can continue
+deterministically):
 ```json
-{ "type":"Snapshot", "player_id":3, "tick":22000,
-  "arena_state": { /* serialized authoritative arena */ },
-  "rng_cursors": { "spawn":..., "targeting":..., "shop":..., "proc":..., "reroll":... },
-  "input_log_from": 88 }   // client replays inputs ≥88 to reach 'now'
+{ "type":"Snapshot", "tick":22000, "bytes":"<serialized arena incl. rng cursors>" }
 ```
-On reconnect the client loads `arena_state`, restores `rng_cursors`, then replays any inputs from `input_log_from` to catch up to the live tick (§3.7).
+On reconnect/correction the client loads `bytes`, then replays any inputs after
+the snapshot tick to catch up to the live tick (`docs/03 §3.7`).
+
+**`SnapshotRequest`** (C→S) — **planned / not yet on the wire.** Today the
+director *pushes* a `Snapshot` when it detects a checksum mismatch (§4.6) or on
+reconnect; a client-initiated `{ "reason":"reconnect" | "desync" }` pull is a
+future addition.
+
+### 4.4.7 Not transmitted (derived from seed+tick, or handled off-wire)
+
+The architecture in `docs/03` ships **inputs + seeds, not entities**, and shards
+each player into an independent deterministic sim. Because of that, several
+"messages" named in earlier drafts of this spec are intentionally **never sent**
+— transmitting them would be redundant (the receiver can compute them) or would
+leak authority the director must keep:
+
+| Concept | Status | Why |
+| --- | --- | --- |
+| **`RoundStart`** | **DERIVED from seed+tick — not transmitted** | Round boundaries, wave tables, per-player spawn seeds, and scaling steps are a pure function of `master_seed` + `tick`. Every client computes them identically; sending them would be redundant and a desync surface. |
+| **`ShopOffer`** | **DERIVED from seed+tick — not transmitted** | The shop offer set and reroll cost are produced by the seeded shop RNG stream at the current tick; client and shadow generate the same offers from the same seed. |
+| **`BossSpawn`** | **DERIVED from seed+tick — not transmitted** | The boss spawn tick is fixed by the deterministic schedule (the ~15:00 transition); no event is needed. |
+| **`JoinAccept` / `LobbyState` / `Ready`** | **Off-wire — handled by the in-process `Lobby`** | Pre-match slots, names, ready flags, host id, and ruleset/`content_hash` live in `net::lobby::Lobby` (`sim-core/crates/net/src/lobby.rs`, `docs/07 §7.3`), fed by the Steam matchmaking adapter. They are not `Msg` variants; only the resulting `MatchStart` crosses the wire. |
+| **`LeaderboardDelta`** | **Planned — not yet on the wire** | Standings are derived from `DeathConfirmed`/`MatchResult` today; a periodic delta telemetry message is a future addition (§4.4.4). |
+| **`SnapshotRequest`** | **Planned — not yet on the wire** | The director currently pushes corrective `Snapshot`s; a client-initiated request is a future addition (§4.4.6). |
 
 ## 4.5 Sequence diagrams
+
+> These diagrams show the **conceptual end-to-end flow**, including steps that
+> are *not* wire `Msg`s: lobby/`Ready`/`JoinAccept` exchanges run through the
+> off-wire `Lobby` layer (§4.4.7), and `RoundStart` / `ShopOffer` /
+> `LeaderboardDelta` are shown where the corresponding *derived* (seed+tick) or
+> *planned* event occurs, not as transmitted packets. Only the messages in the
+> §4.4.0 table actually cross the wire.
 
 ### Match start & a round
 ```
@@ -214,9 +267,9 @@ Client(P3) [dropped, rejoining]       Match Director
 
 ## 4.6 Validation & error handling
 
-- **Input validation** at ordering time (gold, offer availability, reroll count, cooldown) → `InputAck.result=rejected(reason)`; client rolls back its optimistic UI to the authoritative `gold_after`/`rerolls_after`.
-- **Checksum mismatch** → server pushes a `Snapshot`; bumps suspicion. Thresholded suspicion → kick with `Disconnect{reason}`.
-- **Version/content mismatch** → rejected at `JoinRequest` (`content_hash`), eliminating WC3's #1 desync cause before the match starts.
+- **Input validation** at ordering time (gold, offer availability, reroll count, cooldown). The implemented `InputAck` carries only `(seq, apply_tick)`; a rejected input is simply *not applied* and the client reconciles against the authoritative `Snapshot`/digest. (The planned `result`/`gold_after`/`rerolls_after` echo, for tighter optimistic-UI rollback, is a future `InputAck` extension — §4.4.3.)
+- **Checksum mismatch** → server pushes a `Snapshot`; bumps suspicion. Thresholded suspicion → kick (disconnect handled by the transport/lobby layer).
+- **Version/content mismatch** → rejected at `Join` (`content_hash`), eliminating WC3's #1 desync cause before the match starts.
 - **Lost TELEMETRY** is fine (newest-wins); lost CONTROL is retransmitted by the reliability layer; lost BULK blocks only the requesting client's correction, not the match.
 - **Idempotency**: inputs are keyed by `(player_id, seq)`; duplicates are acked but applied once.
 
