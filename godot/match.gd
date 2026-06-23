@@ -172,26 +172,30 @@ func _draw() -> void:
 	if m == null:
 		return
 	var vp: Vector2 = get_viewport_rect().size
-	var font := ThemeDB.fallback_font
+	var font := ArtTheme.ui_font(false)   # Barlow + Noto SC fallback (renders CJK)
 	var n: int = m.player_count()
 
 	# header
-	var status := "MATCH OVER" if m.match_over() else "LIVE"
+	var status := tr("MATCH OVER") if m.match_over() else tr("LIVE")
 	draw_string(font, Vector2(16, 26),
-		"MULTI-ARENA NET VIEW  —  %d sharded sims · 1 authoritative director · server tick %d · alive %d/%d  [%s]"
+		tr("MULTI-ARENA NET VIEW  —  %d sharded sims · 1 authoritative director · server tick %d · alive %d/%d  [%s]")
 		% [n, m.server_tick(), m.alive_count(), n, status],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.82, 0.88, 0.96))
-	var you := "YOU: %s  ·  [S] skins" % Profile.skin_def(Profile.selected).name
+	var you := tr("YOU: %s  ·  [S] skins") % tr(Profile.skin_def(Profile.selected).name)
 	if Profile.active_challenge_code != 0:
 		for c in Profile.CHALLENGES:
 			if c.code == Profile.active_challenge_code:
-				you = "CHALLENGE: %s  ·  %s" % [c.name, you]
+				you = tr("CHALLENGE: %s  ·  %s") % [tr(c.name), you]
 				break
 	draw_string(font, Vector2(vp.x - mini(int(vp.x) - 20, 16 + you.length() * 7), 26),
 		you, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.72, 0.66, 0.5))
 	if not _toast.is_empty():
+		# Each toast entry is an achievement name (in the translation table).
+		var toast_names: Array = []
+		for t in _toast:
+			toast_names.append(tr(t))
 		draw_string(font, Vector2(16, vp.y - 16),
-			"ACHIEVEMENT UNLOCKED:  " + ", ".join(_toast),
+			tr("ACHIEVEMENT UNLOCKED:  %s") % ", ".join(toast_names),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1.0, 0.82, 0.4))
 
 	# Featured layout: player 0 (YOU) gets a large panel on the left taking ~60%
@@ -328,14 +332,14 @@ func _draw_cell(font, i: int, r: Rect2, is_big: bool = false) -> void:
 
 	# net legibility: who picked what. Skin name line in theme text; your own cell
 	# keeps the accent and the ★ YOU mark so the grid reads like a lobby of choices.
-	var skin_name: String = Profile.skin_def(pc["skin"]).name
+	var skin_name: String = tr(Profile.skin_def(pc["skin"]).name)
 	var name_sz := int(13 * us)
-	var who := ("P%d · %s" % [i + 1, skin_name]) + ("  ★ YOU" if is_you else "")
+	var who := ("P%d · %s" % [i + 1, skin_name]) + ("  " + tr("★ YOU") if is_you else "")
 	draw_string(font, Vector2(r.position.x + 10, r.position.y + r.size.y - 12), who,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, name_sz, c_accent if is_you else c_text)
 	# theme pill, bottom-right — the pill itself reads as THAT theme's color: fill
 	# from accent (dimmed), border + text from the theme's header/accent.
-	var tag := _theme_tag(theme_idx)
+	var tag := tr(_theme_tag(theme_idx))
 	var pill_fs := int(11 * us)
 	var tag_w: float = font.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, pill_fs).x + 14.0
 	var pill_h := 18.0 * us
@@ -358,7 +362,7 @@ func _draw_cell(font, i: int, r: Rect2, is_big: bool = false) -> void:
 	if dead:
 		draw_rect(r, Color(0, 0, 0, 0.5))
 		var place: int = m.placement(i)
-		var txt := "OUT" if place == 0 else "#%d" % place
+		var txt := tr("OUT") if place == 0 else "#%d" % place
 		var dead_fs := int(26 * us)
 		var dw: float = font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, dead_fs).x
 		draw_string(font, center - Vector2(dw * 0.5, dead_fs * 0.25), txt,

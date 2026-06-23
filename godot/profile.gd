@@ -73,6 +73,7 @@ var earned := {}                 # ach_id -> true
 var selected := "ol_reliable"
 var active_challenge_code := 0   # transient: applied to player 0 on next deploy
 var last_unlocks: Array = []     # ach ids granted by the most recent record_match()
+var _locale := "en"              # persisted UI language ("en" / "zh_CN")
 
 func _ready() -> void:
 	_load()
@@ -99,6 +100,15 @@ func skin_for_ach(ach_id: String) -> Dictionary:
 		if s.unlock == ach_id:
 			return s
 	return SKINS[0]
+
+# --- UI language (cosmetic, render-layer only) -------------------------------
+# Persisted UI locale. Never feeds the sim; the sim core stays English-only.
+func locale() -> String:
+	return _locale
+
+func set_locale_pref(loc: String) -> void:
+	_locale = loc
+	_save()
 
 func is_unlocked(skin_id: String) -> bool:
 	var u: String = skin_def(skin_id).unlock
@@ -160,6 +170,7 @@ func _load() -> void:
 	if cf.load(SAVE_PATH) != OK:
 		return
 	selected = cf.get_value("profile", "selected", "ol_reliable")
+	_locale = cf.get_value("profile", "locale", "en")
 	for id in cf.get_value("profile", "earned", []):
 		earned[id] = true
 	if not is_unlocked(selected):   # a skin that lost its unlock falls back
@@ -168,5 +179,6 @@ func _load() -> void:
 func _save() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("profile", "selected", selected)
+	cf.set_value("profile", "locale", _locale)
 	cf.set_value("profile", "earned", earned.keys())
 	cf.save(SAVE_PATH)

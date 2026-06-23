@@ -14,6 +14,10 @@ config/name="Standing Tank Defense (preview)"
 run/main_scene="res://SkinSelect.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 
+[internationalization]
+
+locale/translations=PackedStringArray("res://locale/game_translations.en.translation","res://locale/game_translations.zh_CN.translation")
+
 [physics]
 
 ; The sim runs at a fixed 30 Hz — drive one sim tick per physics frame.

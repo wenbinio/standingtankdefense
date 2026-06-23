@@ -50,7 +50,7 @@ const PEER_NAMES := [
 ]
 
 func _ready() -> void:
-	font = ThemeDB.fallback_font
+	font = ArtTheme.ui_font(false)   # Barlow + Noto SC fallback (renders CJK)
 	randomize()
 	# Open a lobby with us as host (peer 0): seated + ready, phase Filling.
 	lobby = StLobby.host()
@@ -172,9 +172,9 @@ func _attempt_start() -> void:
 	if lobby.phase() != 1:
 		# Not in Ready phase: tell the host why (mirror try_start's reasons).
 		if lobby.member_count() < 2:
-			_flash("Need at least 1 other player to start.")
+			_flash(tr("Need at least 1 other player to start."))
 		else:
-			_flash("Not everyone is ready yet. [R] readies all.")
+			_flash(tr("Not everyone is ready yet. [R] readies all."))
 		return
 	var code: int = lobby.try_start(randi())
 	if code == 0:
@@ -186,13 +186,13 @@ func _attempt_start() -> void:
 		Session.lobby_players = maxi(lobby.plan_player_count() - 1, 1)
 		get_tree().change_scene_to_file("res://Match.tscn")
 	elif code == -1:
-		_flash("Start rejected: not all players ready.")
+		_flash(tr("Start rejected: not all players ready."))
 	elif code == -2:
-		_flash("Start rejected: not enough players.")
+		_flash(tr("Start rejected: not enough players."))
 	elif code == -3:
-		_flash("Start rejected: match already started.")
+		_flash(tr("Start rejected: match already started."))
 	else:
-		_flash("Start rejected (code %d)." % code)
+		_flash(tr("Start rejected (code %d).") % code)
 
 func _flash(msg: String) -> void:
 	_start_msg = msg
@@ -241,7 +241,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.035, 0.04, 0.055))
 
 	if lobby == null:
-		draw_string(font, Vector2(36, 60), "Lobby unavailable (StLobby not loaded).",
+		draw_string(font, Vector2(36, 60), tr("Lobby unavailable (StLobby not loaded)."),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(0.85, 0.45, 0.4))
 		return
 
@@ -256,11 +256,11 @@ func _draw() -> void:
 		if lobby.member_ready(i):
 			ready_n += 1
 	var phase: int = lobby.phase()
-	var phase_txt: String = ["FILLING", "READY", "STARTED"][phase] if phase >= 0 and phase < 3 else "?"
-	draw_string(font, Vector2(36, 48), "MULTIPLAYER LOBBY",
+	var phase_txt: String = [tr("FILLING"), tr("READY"), tr("STARTED")][phase] if phase >= 0 and phase < 3 else "?"
+	draw_string(font, Vector2(36, 48), tr("MULTIPLAYER LOBBY"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(0.9, 0.93, 0.98))
 	draw_string(font, Vector2(420, 48),
-		"host peer %d  ·  %d / %d seated  ·  %d / %d ready  ·  phase %s"
+		tr("host peer %d  ·  %d / %d seated  ·  %d / %d ready  ·  phase %s")
 		% [lobby.host_peer(), n, MAX_PEERS, ready_n, n, phase_txt],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, my_dim)
 
@@ -315,26 +315,27 @@ func _draw_member_card(i: int, r: Rect2) -> void:
 		draw_texture_rect(tex, Rect2(tp, Vector2(ts, ts)), false,
 			Color(1.15, 1.18, 1.3) if is_ready else Color(0.7, 0.7, 0.76))
 
-	# Name line (YOUR name in gold; peers in their theme text).
-	var nm: String = cos["name"]
+	# Name line (YOUR name in gold; peers in their theme text). Peer 0 is "YOU"
+	# (translatable); simulated-peer flavor handles stay as-is.
+	var nm: String = tr(cos["name"])
 	draw_string(font, r.position + Vector2(10, r.size.y - 64), nm,
 		HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20, 18, gold if is_you else c_text)
 
-	# Peer + role line.
+	# Peer + role line. "P%d" is scaffolding; the HOST tag is translatable.
 	var role := "P%d" % (peer + 1)
 	if is_host:
-		role += "  ·  HOST"
+		role += "  ·  " + tr("HOST")
 	draw_string(font, r.position + Vector2(10, r.size.y - 44), role,
 		HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20, 13, c_dim)
 
 	# READY check/✗ — green check when ready, dim ✗ when not.
-	var rmark := "✓ READY" if is_ready else "✗ not ready"
+	var rmark := tr("✓ READY") if is_ready else tr("✗ not ready")
 	var rcol := Color(0.42, 0.85, 0.55) if is_ready else Color(0.78, 0.45, 0.42)
 	draw_string(font, r.position + Vector2(10, r.size.y - 22), rmark,
 		HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20, 14, rcol)
 
 	# THEME pill, top-right — fill from accent (dimmed), border + text from header.
-	var tag := _theme_tag(theme_idx)
+	var tag := tr(_theme_tag(theme_idx))
 	var pill_fs := 11
 	var tag_w: float = font.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, pill_fs).x + 14.0
 	var pill := Rect2(r.position.x + r.size.x - tag_w - 8.0, r.position.y + 8.0, tag_w, 18.0)
@@ -345,7 +346,7 @@ func _draw_member_card(i: int, r: Rect2) -> void:
 
 	# "YOU" badge, top-left, in gold.
 	if is_you:
-		draw_string(font, r.position + Vector2(10, 22), "★ YOU",
+		draw_string(font, r.position + Vector2(10, 22), tr("★ YOU"),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, gold)
 
 	# Card border — YOUR card gets a thicker gold double-frame; peers get their
@@ -367,23 +368,24 @@ func _draw_footer(vp: Vector2, phase: int, n: int, ready_n: int,
 	var btn_text := Color(0.6, 0.95, 0.66) if can_start else Color(0.5, 0.5, 0.56)
 	draw_rect(btn, btn_fill)
 	draw_rect(btn, my_accent if can_start else Color(0.3, 0.3, 0.34), false, 2.0)
-	var label := "▶ START MATCH  [Enter]" if can_start else "START  (all must ready)"
+	var label := tr("▶ START MATCH  [Enter]") if can_start else tr("START  (all must ready)")
 	draw_string(font, Vector2(btn.position.x + 14, btn.position.y + 29), label,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, btn_text)
 
-	# Your-ready toggle state, beside the button.
+	# Your-ready toggle state, beside the button. "[Space] toggle" is a control
+	# hint suffix; the ready state itself is in the translation table.
 	var youready := _my_ready()
 	draw_string(font, Vector2(316, fy + 29),
-		("YOU: ✓ ready" if youready else "YOU: ✗ not ready") + "   [Space] toggle",
+		(tr("YOU: ✓ ready") if youready else tr("YOU: ✗ not ready")) + "   [Space] toggle",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 		Color(0.42, 0.85, 0.55) if youready else my_text)
 
-	# Flash message (rejection reason / hint).
+	# Flash message (rejection reason / hint) — already tr()'d at its source.
 	if _start_msg != "":
 		draw_string(font, Vector2(36, fy - 10), _start_msg,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.95, 0.7, 0.4))
 
 	# Control hint line.
 	draw_string(font, Vector2(36, vp.y - 22),
-		"[Space] your ready   [A] add player   [X] remove player   [R] ready all   [Enter] start   [T] theme   [Esc] back",
+		tr("[Space] your ready   [A] add player   [X] remove player   [R] ready all   [Enter] start   [T] theme   [Esc] back"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, my_dim)

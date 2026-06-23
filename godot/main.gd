@@ -148,13 +148,14 @@ func _radial_light_tex(size: int) -> Texture2D:
 # fallback). Kept in its own helper so it doesn't entangle with _load_textures().
 func _load_fonts() -> void:
 	_ui_theme = load("res://art/ui_theme.tres") as Theme
-	if _ui_theme:
-		_font = _ui_theme.default_font
+	# Body + header faces, each with a Noto Sans SC fallback chained in so the
+	# custom-drawn HUD/shop renders CJK glyphs under zh-CN. Centralized on the
+	# ArtTheme autoload (ui_font) so every draw site shares one CJK-capable face.
+	_font = ArtTheme.ui_font(false)
 	if _font == null:
 		_font = ThemeDB.fallback_font
 	# Heavier weight for headers; fall back to the body face if it won't load.
-	var head_path := "res://art/fonts/BarlowSemiCondensed-SemiBold.ttf"
-	_font_head = (load(head_path) as Font) if ResourceLoader.exists(head_path) else _font
+	_font_head = ArtTheme.ui_font(true)
 	if _font_head == null:
 		_font_head = _font
 
@@ -516,8 +517,8 @@ func _draw_hud(font: Font, vp: Vector2) -> void:
 	draw_string(head, Vector2(60, 81), "%d" % eco[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 19, ArtTheme.ui("coin"))
 	var gold_w := head.get_string_size("%d" % eco[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 19).x
 	draw_string(font, Vector2(60 + gold_w + 8, 81), "+%d/t" % eco[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("accent_dim"))
-	draw_string(head, Vector2(212, 45), "ROUND %d" % sim.round(), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ArtTheme.ui("header"))
-	draw_string(font, Vector2(212, 81), "tick %d" % sim.tick(), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
+	draw_string(head, Vector2(212, 45), tr("ROUND %d") % sim.round(), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ArtTheme.ui("header"))
+	draw_string(font, Vector2(212, 81), tr("tick %d") % sim.tick(), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
 	_draw_arsenal(font, head, vp)
 	# While dead the bottom shop bar is frozen/irrelevant — replace it with the
 	# results panel so the destroyed-run summary owns the screen.
@@ -555,10 +556,10 @@ func _draw_results(font: Font, head: Font, vp: Vector2) -> void:
 
 	var cx := vp.x * 0.5
 	# Title.
-	var title := "TANK DESTROYED"
+	var title := tr("TANK DESTROYED")
 	var tw := head.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34).x
 	draw_string(head, Vector2(cx - tw * 0.5, py + 48), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, ArtTheme.ui("danger") * 1.4)
-	var sub := "Run summary"
+	var sub := tr("Run summary")
 	var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 	draw_string(font, Vector2(cx - sw * 0.5, py + 72), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("text_dim"))
 
@@ -567,32 +568,33 @@ func _draw_results(font: Font, head: Font, vp: Vector2) -> void:
 	var rx := px + pw - 36.0
 	var ry := py + 110.0
 	var rstep := 30.0
-	_draw_stat_row(font, head, lx, rx, ry, "Round reached", "%d" % rnd, ArtTheme.ui("header"))
+	_draw_stat_row(font, head, lx, rx, ry, tr("Round reached"), "%d" % rnd, ArtTheme.ui("header"))
 	ry += rstep
-	_draw_stat_row(font, head, lx, rx, ry, "Damage dealt", "%d" % dmg, ArtTheme.ui("accent"))
+	_draw_stat_row(font, head, lx, rx, ry, tr("Damage dealt"), "%d" % dmg, ArtTheme.ui("accent"))
 	ry += rstep
-	_draw_stat_row(font, head, lx, rx, ry, "Gold earned", "%d" % gold, ArtTheme.ui("coin"))
+	_draw_stat_row(font, head, lx, rx, ry, tr("Gold earned"), "%d" % gold, ArtTheme.ui("coin"))
 	ry += rstep
-	_draw_stat_row(font, head, lx, rx, ry, "Weapons bought", "%d" % bought, ArtTheme.ui("text"))
+	_draw_stat_row(font, head, lx, rx, ry, tr("Weapons bought"), "%d" % bought, ArtTheme.ui("text"))
 	ry += rstep + 4.0
 
-	# Owned arsenal, condensed onto one wrapped line.
-	draw_string(head, Vector2(lx, ry), "ARSENAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("header"))
+	# Owned arsenal, condensed onto one wrapped line. `owned` entries are
+	# Rust-sourced "Name xN" lines; translate each name (preserving the xN tail).
+	draw_string(head, Vector2(lx, ry), tr("ARSENAL"), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("header"))
 	ry += 20.0
-	var ars := "  ·  ".join(owned) if owned.size() > 0 else "— nothing acquired —"
+	var ars := "  ·  ".join(_tr_arsenal(owned)) if owned.size() > 0 else tr("— nothing acquired —")
 	draw_string(font, Vector2(lx, ry), ars, HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 13, ArtTheme.ui("text"))
 	ry += 30.0
 
 	# Achievements unlocked this run.
-	draw_string(head, Vector2(lx, ry), "ACHIEVEMENTS UNLOCKED", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("accent"))
+	draw_string(head, Vector2(lx, ry), tr("ACHIEVEMENTS UNLOCKED"), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("accent"))
 	ry += 20.0
 	if unlock_n == 0:
-		draw_string(font, Vector2(lx, ry), "— none this run —", HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 13, ArtTheme.ui("text_dim"))
+		draw_string(font, Vector2(lx, ry), tr("— none this run —"), HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 13, ArtTheme.ui("text_dim"))
 		ry += 22.0
 	else:
 		for id in Profile.last_unlocks:
 			var nm: String = Profile.ach_def(id).get("name", id)
-			draw_string(font, Vector2(lx, ry), "★ " + nm, HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 14, ArtTheme.ui("accent"))
+			draw_string(font, Vector2(lx, ry), "★ " + tr(nm), HORIZONTAL_ALIGNMENT_LEFT, pw - 72.0, 14, ArtTheme.ui("accent"))
 			ry += 22.0
 
 	# Redeploy button + Esc prompt.
@@ -607,10 +609,10 @@ func _draw_results(font: Font, head: Font, vp: Vector2) -> void:
 	var btn_border := ArtTheme.ui("accent")
 	btn_border.a = 0.7
 	draw_rect(redeploy_rect, btn_border, false, 1.5)
-	var blabel := "REDEPLOY"
+	var blabel := tr("REDEPLOY")
 	var blw := head.get_string_size(blabel, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
 	draw_string(head, redeploy_rect.position + Vector2(btn_w * 0.5 - blw * 0.5, 27), blabel, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, ArtTheme.ui("accent").lightened(0.3))
-	var prompt := "[Enter] Redeploy   ·   [Esc] Menu"
+	var prompt := tr("[Enter] Redeploy   ·   [Esc] Menu")
 	var pwid := font.get_string_size(prompt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 	draw_string(font, Vector2(cx - pwid * 0.5, py + ph - 12.0), prompt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("text_dim"))
 
@@ -619,6 +621,18 @@ func _draw_stat_row(font: Font, head: Font, lx: float, rx: float, y: float, labe
 	draw_string(font, Vector2(lx, y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ArtTheme.ui("text_dim"))
 	var vw := head.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
 	draw_string(head, Vector2(rx - vw, y + 1), value, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, vcol)
+
+# Translate each "Name xN" arsenal line: tr() the name, keep the " xN" tail
+# (scaffolding). Used by the results-panel arsenal summary.
+func _tr_arsenal(lines: PackedStringArray) -> PackedStringArray:
+	var out: PackedStringArray = []
+	for line in lines:
+		var sp := line.rfind(" x")
+		if sp > 0:
+			out.append(tr(line.substr(0, sp)) + line.substr(sp))
+		else:
+			out.append(tr(line))
+	return out
 
 # C3 — Arsenal panel: a framed list (top-right) of owned weapons/mods with a
 # header and right-aligned counts pulled from `sim.arsenal_lines()` ("Name xN").
@@ -633,23 +647,24 @@ func _draw_arsenal(font: Font, head: Font, vp: Vector2) -> void:
 	draw_rect(Rect2(Vector2(px, py), Vector2(pw, ph)), ArtTheme.ui("panel_bg"))
 	draw_rect(Rect2(Vector2(px, py), Vector2(pw, ph)), ArtTheme.ui("panel_border"), false, 1.0)
 	draw_rect(Rect2(Vector2(px, py), Vector2(pw, head_h)), ArtTheme.ui("panel_border").darkened(0.4))
-	draw_string(head, Vector2(px + 10, py + 18), "ARSENAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("header"))
+	draw_string(head, Vector2(px + 10, py + 18), tr("ARSENAL"), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("header"))
 	var ct := "%d" % lines.size()
 	var ctw := font.get_string_size(ct, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 	draw_string(font, Vector2(px + pw - ctw - 10, py + 18), ct, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("text_dim"))
 	var ay := py + head_h + 8.0
 	if lines.is_empty():
-		draw_string(font, Vector2(px + 10, ay + 12), "— nothing yet —", HORIZONTAL_ALIGNMENT_LEFT, pw - 20, 13, ArtTheme.ui("text_dim"))
+		draw_string(font, Vector2(px + 10, ay + 12), tr("— nothing yet —"), HORIZONTAL_ALIGNMENT_LEFT, pw - 20, 13, ArtTheme.ui("text_dim"))
 		return
 	for line in lines:
 		# Split "Name xN" so the count can be right-aligned for legibility.
+		# `nm` is a Rust-sourced weapon/mod name — translate it; "xN" is scaffolding.
 		var nm := line
 		var cnt := ""
 		var sp := line.rfind(" x")
 		if sp > 0:
 			nm = line.substr(0, sp)
 			cnt = line.substr(sp + 1)   # "xN"
-		draw_string(font, Vector2(px + 10, ay + 13), nm, HORIZONTAL_ALIGNMENT_LEFT, pw - 56, 14, ArtTheme.ui("text"))
+		draw_string(font, Vector2(px + 10, ay + 13), tr(nm), HORIZONTAL_ALIGNMENT_LEFT, pw - 56, 14, ArtTheme.ui("text"))
 		if cnt != "":
 			var cw := font.get_string_size(cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 			draw_string(font, Vector2(px + pw - cw - 10, ay + 13), cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("accent_dim"))
@@ -673,10 +688,11 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 	var y0 := vp.y - bar_h
 	draw_rect(Rect2(Vector2(0, y0), Vector2(vp.x, bar_h)), ArtTheme.ui("panel_bg"))
 	draw_rect(Rect2(Vector2(0, y0), Vector2(vp.x, 2)), ArtTheme.ui("panel_border"))
-	draw_string(head, Vector2(16, y0 + 20), "SHOP", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("header"))
-	var sw := head.get_string_size("SHOP", HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+	var shop_hdr := tr("SHOP")
+	draw_string(head, Vector2(16, y0 + 20), shop_hdr, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("header"))
+	var sw := head.get_string_size(shop_hdr, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 	draw_string(font, Vector2(16 + sw + 10, y0 + 20),
-		"click a card or press [1-8] to buy  ·  refreshes every round (30s)  ·  buy as many as you can afford",
+		tr("click a card or press [1-8] to buy  ·  refreshes every round (30s)  ·  buy as many as you can afford"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
 
 	var n := names.size()
@@ -725,24 +741,27 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 		_blit(frame_tex[clampi(rarity, 0, 3)], icx, 46, fg)
 		_blit(tex["weapon"] if is_weapon else tex["mod"], icx, 30, fg)
 		draw_string(head, r.position + Vector2(6, 16), "%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
-		draw_string(head, r.position + Vector2(6, ch - 38), _fit(font, names[i], 13, cw - 12), HORIZONTAL_ALIGNMENT_LEFT, cw - 10, 13, fg)
+		# Rust-sourced name/tip: translate at the draw boundary (category logic
+		# above still keys off the English text).
+		draw_string(head, r.position + Vector2(6, ch - 38), _fit(font, tr(names[i]), 13, cw - 12), HORIZONTAL_ALIGNMENT_LEFT, cw - 10, 13, fg)
 		# C2 self-describing effect line (the mechanical tip), truncated to fit.
 		var eff_col := ArtTheme.ui("text_dim") if affordable else ArtTheme.ui("text_dim").darkened(0.3)
-		draw_string(font, r.position + Vector2(6, ch - 22), _fit(font, tip, 11, cw - 12), HORIZONTAL_ALIGNMENT_LEFT, cw - 10, 11, eff_col)
+		draw_string(font, r.position + Vector2(6, ch - 22), _fit(font, tr(tip), 11, cw - 12), HORIZONTAL_ALIGNMENT_LEFT, cw - 10, 11, eff_col)
 		# cost (left) + rarity word (right), measured for clean right-alignment.
 		draw_string(head, r.position + Vector2(6, ch - 5), "%dg" % cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("coin") if affordable else ArtTheme.ui("accent_dim"))
-		draw_string(font, r.position + Vector2(cw - 8 - font.get_string_size(cat[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x, ch - 6), cat[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, (cat[1] as Color).lightened(0.1) if affordable else ArtTheme.ui("text_dim").darkened(0.2))
+		var cat_lbl := tr(cat[0])
+		draw_string(font, r.position + Vector2(cw - 8 - font.get_string_size(cat_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x, ch - 6), cat_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, (cat[1] as Color).lightened(0.1) if affordable else ArtTheme.ui("text_dim").darkened(0.2))
 		if i == 0:
-			draw_string(head, Vector2(x, top - 6), "WEAPONS", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ArtTheme.ui("header"))
+			draw_string(head, Vector2(x, top - 6), tr("WEAPONS"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ArtTheme.ui("header"))
 		elif i == split:
-			draw_string(head, Vector2(x, top - 6), "ECONOMY · PASSIVES · SPIKES", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ArtTheme.ui("accent"))
+			draw_string(head, Vector2(x, top - 6), tr("ECONOMY · PASSIVES · SPIKES"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ArtTheme.ui("accent"))
 		x += cw + gap
 
 	var bx := vp.x - btn_w - 8.0
 	reroll_rect = Rect2(bx, top, btn_w, ch * 0.5 - 4.0)
 	clear_rect = Rect2(bx, top + ch * 0.5 + 4.0, btn_w, ch * 0.5 - 4.0)
 	var rr_ok := free_rr > 0 or gold >= rr_cost
-	var rr_label := "REROLL  free x%d" % free_rr if free_rr > 0 else "REROLL  %dg" % rr_cost
+	var rr_label := tr("REROLL  free x%d") % free_rr if free_rr > 0 else tr("REROLL  %dg") % rr_cost
 	var rr_on := ArtTheme.ui("header").darkened(0.7)
 	var rr_bg := _btn_bg(rr_on, ArtTheme.ui("panel_border").darkened(0.45), rr_ok, reroll_rect.has_point(mpos), pending_code == 2)
 	draw_rect(reroll_rect, rr_bg)
@@ -759,7 +778,7 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 		var cl_outline := ArtTheme.ui("danger")
 		cl_outline.a = 0.5
 		draw_rect(clear_rect, cl_outline, false, 1.0)
-	draw_string(head, clear_rect.position + Vector2(12, clear_rect.size.y * 0.5 + 5), "[Space] CLEAR",
+	draw_string(head, clear_rect.position + Vector2(12, clear_rect.size.y * 0.5 + 5), tr("[Space] CLEAR"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("danger"))
 
 	# Hover tooltip: flavor + mechanical tip for the card under the cursor.
@@ -813,9 +832,10 @@ func _draw_tooltip(font: Font, vp: Vector2, card: Rect2, nm: String, flavor: Str
 	var y := card.position.y - h - 12.0
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), ArtTheme.ui("panel_bg"))
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), ArtTheme.ui("panel_border"), false, 2.0)
-	draw_string(head, Vector2(x + 14, y + 26), nm, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 17, ArtTheme.ui("accent"))
-	draw_multiline_string(font, Vector2(x + 14, y + 48), flavor, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, 2, ArtTheme.ui("text"))
-	draw_string(font, Vector2(x + 14, y + h - 12), tip, HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, ArtTheme.ui("text_dim"))
+	# Rust-sourced name / flavor / tip — translate at the draw boundary.
+	draw_string(head, Vector2(x + 14, y + 26), tr(nm), HORIZONTAL_ALIGNMENT_LEFT, w - 28, 17, ArtTheme.ui("accent"))
+	draw_multiline_string(font, Vector2(x + 14, y + 48), tr(flavor), HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, 2, ArtTheme.ui("text"))
+	draw_string(font, Vector2(x + 14, y + h - 12), tr(tip), HORIZONTAL_ALIGNMENT_LEFT, w - 28, 13, ArtTheme.ui("text_dim"))
 
 func _rarity_color(r: int) -> Color:
 	match r:

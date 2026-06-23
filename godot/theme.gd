@@ -52,6 +52,47 @@ const THEME_UI := {
 	},
 }
 
+# --- UI fonts with CJK fallback ----------------------------------------------
+# The HUD/menus are custom-drawn with draw_string() using Barlow (Latin-only).
+# To render Simplified-Chinese (and any non-Latin) glyphs, every UI Font needs a
+# Noto Sans SC fallback chained in. Centralized + cached here so all draw sites
+# (main.gd, match.gd, lobby.gd, challenge_select.gd, skin_select.gd) share one
+# CJK-capable font instance per weight.
+const _BARLOW_BOLD := "res://art/fonts/BarlowSemiCondensed-SemiBold.ttf"
+const _BARLOW_BODY := "res://art/fonts/BarlowSemiCondensed-Medium.ttf"
+const _NOTO_SC := "res://fonts/NotoSansSC.ttf"
+
+var _noto: FontFile = null
+var _ui_font_cache := {}  # bold:bool -> FontFile (Barlow + Noto fallback)
+
+# The shared CJK fallback face, loaded once.
+func _cjk() -> FontFile:
+	if _noto == null and ResourceLoader.exists(_NOTO_SC):
+		_noto = load(_NOTO_SC) as FontFile
+	return _noto
+
+# A UI font (bold=header weight, else body) that renders Latin via Barlow and
+# falls back to Noto Sans SC for CJK glyphs. Cached per weight.
+func ui_font(bold: bool) -> Font:
+	if _ui_font_cache.has(bold):
+		return _ui_font_cache[bold]
+	var path := _BARLOW_BOLD if bold else _BARLOW_BODY
+	var f: FontFile = (load(path) as FontFile) if ResourceLoader.exists(path) else null
+	if f == null:
+		# No Barlow on disk: use Noto alone if present, else engine fallback.
+		var only_cjk := _cjk()
+		var fb: Font = only_cjk if only_cjk else ThemeDB.fallback_font
+		_ui_font_cache[bold] = fb
+		return fb
+	# load() returns a shared cached resource; duplicate so setting fallbacks
+	# here doesn't mutate the same instance referenced by ui_theme.tres et al.
+	f = f.duplicate() as FontFile
+	var noto := _cjk()
+	if noto:
+		f.fallbacks = [noto]
+	_ui_font_cache[bold] = f
+	return f
+
 func base() -> String:
 	return "res://art/themes/%s/" % themes[active]
 
