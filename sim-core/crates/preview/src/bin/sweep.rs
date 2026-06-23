@@ -15,7 +15,7 @@
 //!   sweep                 # seeds 0..80, cap = 20 min
 //!   sweep --seeds 80 --cap 36000 --rows   # explicit knobs; --rows prints each seed
 
-use sim::bot::{Bot, Challenge};
+use sim::bot::{Archetype, Bot, Challenge};
 use sim::{step, ArenaState, TICK_HZ};
 
 /// Survival cap: 20 minutes @ 30 Hz. Past the 15-min boss and the second scale
@@ -28,6 +28,10 @@ struct Run {
     death_tick: u32,
     survived_secs: u32,
     won: bool,
+    archetype: Archetype,
+    weapons: usize,
+    max_hp: i64,
+    armor: i64,
 }
 
 fn run_seed(seed: u64, cap: u32, challenge: Challenge) -> Run {
@@ -45,6 +49,11 @@ fn run_seed(seed: u64, cap: u32, challenge: Challenge) -> Run {
         death_tick: s.tick,
         survived_secs: s.tick / TICK_HZ,
         won: !s.dead, // reached the cap alive
+        // The default bot's per-match archetype is a pure function of the seed.
+        archetype: Archetype::for_seed(seed),
+        weapons: s.weapons.len(),
+        max_hp: s.tank.max_hp,
+        armor: s.tank.armor,
     }
 }
 
@@ -81,13 +90,15 @@ fn main() {
     let runs: Vec<Run> = (0..seeds).map(|seed| run_seed(seed, cap, challenge)).collect();
 
     if rows {
-        println!("seed  death_tick  survived  result");
+        println!("seed  death_tick  survived  weapons  archetype     result");
         for r in &runs {
             println!(
-                "{:>4}  {:>10}  {:>5}s  {}",
+                "{:>4}  {:>10}  {:>5}s  {:>7}  {:<12}  {}",
                 r.seed,
                 r.death_tick,
                 r.survived_secs,
+                r.weapons,
+                arch_name(r.archetype),
                 if r.won { "WON (cap)" } else { "DEAD" }
             );
         }
@@ -154,5 +165,46 @@ fn main() {
     match min_death_tick {
         Some(t) => println!("min death: tick {} = {:.2}s", t, t as f64 / TICK_HZ as f64),
         None => println!("min death: none (no deaths)"),
+    }
+
+    // ---- build-diversity breakdown (archetype distribution + per-archetype outcome) ----
+    println!("\nbuild diversity (default bot archetype, seeded per match):");
+    for arch in [
+        Archetype::GlassCannon,
+        Archetype::Tanky,
+        Archetype::EcoPivot,
+        Archetype::Balanced,
+    ] {
+        let group: Vec<&Run> = runs.iter().filter(|r| r.archetype == arch).collect();
+        let cnt = group.len();
+        if cnt == 0 {
+            println!("  {:<12}: 0 seeds", arch_name(arch));
+            continue;
+        }
+        let aw = group.iter().filter(|r| r.won).count();
+        let mean_wpn = group.iter().map(|r| r.weapons as f64).sum::<f64>() / cnt as f64;
+        let mean_hp = group.iter().map(|r| r.max_hp as f64).sum::<f64>() / cnt as f64;
+        let mean_armor = group.iter().map(|r| r.armor as f64).sum::<f64>() / cnt as f64;
+        let mean_surv = group.iter().map(|r| r.survived_secs as f64).sum::<f64>() / cnt as f64;
+        println!(
+            "  {:<12}: {:>2} seeds  wins {:>2} ({:>4.0}%)  mean wpn {:>4.1}  mean maxHP {:>8.0}  mean armor {:>5.0}  mean survival {:>5.0}s",
+            arch_name(arch),
+            cnt,
+            aw,
+            100.0 * aw as f64 / cnt as f64,
+            mean_wpn,
+            mean_hp,
+            mean_armor,
+            mean_surv
+        );
+    }
+}
+
+fn arch_name(a: Archetype) -> &'static str {
+    match a {
+        Archetype::GlassCannon => "glass-cannon",
+        Archetype::Tanky => "tanky",
+        Archetype::EcoPivot => "eco-pivot",
+        Archetype::Balanced => "balanced",
     }
 }

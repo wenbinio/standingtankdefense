@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x7f221f1dd37b0233, // re-baselined (EXPANSION batch E2): four NEW source upgrades appended to the modifier catalog (Energy Pulse, Poison Armor, Bloody Spikes, Blight Aura) with their four exotic mechanics (shield-break stun / spikes-poison / stacking-spikes / damage-poison aura). The M0 bot buys from the catalog, so appending entries shifts its shop draw and the trace; the new checksum-feeding tank fields (incl. the per-tick aura_tick / spikes_stacks counters) also enter the trace. No EXISTING entry's effects changed, and the RAMP/boss/wave curve is untouched. (Previous baseline 0x935c95ffa9386f92 was the E1 dynamic-damage pass.) SNAPSHOT_VERSION 18→19 for the new checksum-feeding fields
+        0x436067271f1956d8, // re-baselined (BALANCE PASS): the enemy HP/contact CURVE (`enemy_hp_mult`) was reshaped — the interim ×413863 hack replaced by a smooth integer-parametrized ramp to a ≈ ×5.56 boss endpoint (`RAMP_JUMP` 3.5→1.14) — and the early wave cadences + the staggered SPAWN_RING radii changed. All of these feed enemy HP/contact, which changes the scripted M0 trace's tank HP / kills / economy → the checksum. The Fixed arithmetic is now SATURATING (a deterministic, platform-stable clamp) but that is bit-identical for every in-range value, so it does NOT contribute to this drift. No item/weapon EFFECT changed; the M0 scenario inputs are unchanged. (Previous baseline 0x7f221f1dd37b0233 was the E2 expansion.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

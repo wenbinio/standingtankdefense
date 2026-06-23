@@ -1335,9 +1335,11 @@ pub const SAMWISE: u16 = 2;
 
 // Match timeline (ticks @ 30 Hz). The HP/damage curve (`enemy_hp_mult`) is a
 // STEPPED "RAMP" on a strict 3-MINUTE cadence: every interval is gentle climb →
-// warning → DRAMATIC step, with cliffs at 3,6,…,30 min (see `RAMP_INTERVAL`).
-// These named tick constants pin the ROSTER schedule below (the wave/surge
-// gates) and a couple of tests; the HP curve itself no longer keys off them.
+// warning → step, with steps at 3,6,…,30 min (see `RAMP_INTERVAL`). BALANCE PASS:
+// the step is now a modest +14% (the old ×413863 cliff hack is gone); the curve
+// escalates smoothly to a ≈ ×5.56 boss endpoint. These named tick constants pin the
+// ROSTER schedule below (the wave/surge gates) and a couple of tests; the HP curve
+// itself no longer keys off them.
 pub const SCALE_STEP_1_TICK: u32 = 10 * 60 * 30; // 18000 — 10 min (roster reference)
 pub const SCALE_STEP_2_TICK: u32 = 15 * 60 * 30; // 27000 — 15 min (roster reference)
 pub const CLIFF_20_TICK: u32 = 20 * 60 * 30; // 36000 — 20 min (roster surge gate)
@@ -1370,53 +1372,54 @@ pub const WARN_TICKS: u32 = RAMP_INTERVAL - GENTLE_TICKS; // 900 — final 30 s
 /// interval that starts (post-cliff) at value `b` runs:
 ///   1. GENTLE climb  `b → b·G`           over the first `GENTLE_TICKS`,
 ///   2. WARNING ramp  `b·G → b·G·W`       over the final `WARN_TICKS` (steeper),
-///   3. DRAMATIC step `b·G·W → b·G·W·J`   instantaneously AT the 3-min boundary.
-/// So each interval multiplies difficulty by `G·W·J ≈ 3.6446`, and over 10
-/// intervals that compounds toward ≈ ×413863 at the 30-min boss (the boss tick
-/// force-returns the matching endpoint). INTERIM DIFFICULTY RE-TUNE: the source-
-/// fidelity modifier catalog made the bundled defensive items ~2× stronger than
-/// the split versions this curve was tuned against, pushing the 80-seed sweep to
-/// ~94% wins. To bring the win rate back into a healthy ~50% band WITHOUT touching
-/// items/waves/boss, the ONLY lever moved here is the per-interval JUMP (`J`) — and
-/// the boss-phase clamp that rides with the new endpoint. The 3-min cadence and the
-/// gentle→warning→DRAMATIC shape are PRESERVED; only `J` is raised so the late game
-/// + boss actually threaten the stronger builds. `J` now carries +250% (was +22%),
-/// while `G` (+2.5%) and `W` (+1.6%) are UNCHANGED, so the cliff step still towers
-/// over the whole gentle+warning ramp and the warning slope stays ~3.3× the gentle
-/// slope. This is EXPLICITLY INTERIM — more item power lands in later milestones and
-/// the curve gets its final re-tune then. `G·W·J = 1.025·1.016·3.5` (Fixed product
-/// ≈ 3.6446). Pure `(num,den)` Fixed ratios — no floats, feeds `state_checksum`.
+///   3. STEP UP       `b·G·W → b·G·W·J`   instantaneously AT the 3-min boundary.
+/// So each interval multiplies difficulty by `G·W·J`, and over 10 intervals that
+/// compounds to the boss endpoint `base(10)` (the boss tick rides the same value).
+///
+/// BALANCE PASS (`docs/06`): this REPLACES the interim ×413863 late-game hack. The
+/// old hack set `J = 3.5` (+250%), compounding to an absurd ≈ ×413863 at the boss —
+/// a meaningless number that piled ALL difficulty into one boss wall. The principled
+/// curve keeps the same gentle→warning→step SHAPE and the strict 3-min cadence, but
+/// the per-interval factors are tuned so the WHOLE 30-min run escalates smoothly to a
+/// SANE endpoint:
+///   • `G = +2.5%` gentle climb, `W = +1.6%` warning ramp (UNCHANGED), and
+///   • `J = +14%` step (was +250%) — the cliff is now a felt-but-modest step, not a
+///     cliff-edge, so the curve rises ≈ ×1 → ×5.56 across the match (factor ≈ 1.1872
+///     per interval; `base(10) ≈ 5.56`).
+/// `J` is the OVERALL-SCALE / win-rate dial: with the diversified, finite bot
+/// (`bot.rs`) this lands the 80-seed sweep at ~19% wins (target 20%, band 17–23%).
+/// Both enemy HP *and* contact damage scale on this curve, so the late game is
+/// genuinely harder (denser, tankier, deadlier) without any one-number absurdity.
+/// `G·W·J = 1.025·1.016·1.14` (Fixed product ≈ 1.1872). Pure `(num,den)` Fixed
+/// ratios — no floats, integer-parametrized, feeds `state_checksum`.
 const RAMP_GENTLE: (i64, i64) = (41, 40); //  G = +2.5% gentle climb (1.025)
 const RAMP_WARN: (i64, i64) = (127, 125); //  W = +1.6% over the short warning window (1.016)
-const RAMP_JUMP: (i64, i64) = (7, 2); //    J = +250% instantaneous cliff step (3.5) — the dominant event
+const RAMP_JUMP: (i64, i64) = (57, 50); //    J = +14% per-interval step (1.14) — the overall-scale dial
 
-/// Enemy HP scaling at `tick`. The shape is a STEPPED "RAMP" on a strict 3-MINUTE
-/// cadence. Each 3-min interval is `gentle climb → warning → DRAMATIC step`:
+/// Enemy HP scaling at `tick` (also scales contact/ranged damage — see
+/// `combat::move_enemies` / `enemy_ranged_attacks`). The shape is a STEPPED "RAMP"
+/// on a strict 3-MINUTE cadence. Each 3-min interval is `gentle climb → warning →
+/// step`:
 ///   • a CALM smooth rise for the first ~2.5 min (`RAMP_GENTLE`, +2.5% total),
 ///   • a perceptibly steeper sub-ramp over the final ~30 s (`RAMP_WARN`, +1.6%) —
-///     the telegraph that a big jump is coming (slope ~3.3× the gentle region),
-///   • an instantaneous +22% step up AT the 3-min boundary (`RAMP_JUMP`) — the
-///     cliff, now the dominant difficulty event of every interval.
-/// Cliffs land at 3,6,…,30 min. The function is monotonic non-decreasing,
-/// CONTINUOUS within each interval (the only instantaneous jumps are the cliffs
-/// at the boundaries), and lands at ≈ ×413863 at the 30-min boss (tick 54000) —
-/// the interim re-tuned endpoint. Integer/fixed-point only.
+///     the telegraph that a step is coming,
+///   • an instantaneous +14% step up AT the 3-min boundary (`RAMP_JUMP`).
+/// Steps land at 3,6,…,30 min. The function is monotonic non-decreasing, CONTINUOUS
+/// within each interval (the only instantaneous jumps are the steps at the
+/// boundaries), and lands at ≈ ×5.56 at the 30-min boss (tick 54000) — the BALANCE-
+/// PASS endpoint (`base(10)`), which replaces the old interim ×413863 hack. A smooth,
+/// sane escalation over the whole match; `RAMP_JUMP` is the overall-scale / win-rate
+/// dial. Integer/fixed-point only.
 pub fn enemy_hp_mult(tick: u32) -> Fixed {
-    // 30 min+: boss phase. Hold the peak ×413863 tier — the boss AND its escort
-    // swarm (see `BOSS_ESCORT`) ride this multiplier. The clamp moves with the
-    // re-tuned endpoint so the boss tier stays continuous with the k=9→k=10 cliff.
-    if tick >= BOSS_SPAWN_TICK {
-        return Fixed::from_int(413863);
-    }
-
     let g = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_GENTLE.0, RAMP_GENTLE.1));
     let w = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_WARN.0, RAMP_WARN.1));
     let j = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_JUMP.0, RAMP_JUMP.1));
 
     // `base(k)` = the post-cliff value at the start of interval `k`, built by
     // compounding the per-interval factor `k` times from ×1. Deterministic and
-    // cheap (k ≤ 9). The k=10 boundary (the boss tick) is handled above as
-    // exactly ×11, so the curve approaches ×11 across interval 9 and lands on it.
+    // cheap (k ≤ 10). The boss endpoint is `base(10)` (the k=10 boundary), so the
+    // boss-phase clamp is DERIVED from the same compounding — no magic constant to
+    // drift when `RAMP_JUMP` is re-tuned.
     let base = |k: u32| -> Fixed {
         let mut b = Fixed::ONE;
         for _ in 0..k {
@@ -1424,6 +1427,13 @@ pub fn enemy_hp_mult(tick: u32) -> Fixed {
         }
         b
     };
+
+    // 30 min+: boss phase. Hold the peak endpoint tier (`base(10)`) — the boss AND
+    // its escort swarm (see `BOSS_ESCORT`) ride this multiplier. Continuous with the
+    // k=9→k=10 cliff because it IS that cliff's post value.
+    if tick >= BOSS_SPAWN_TICK {
+        return base(10);
+    }
 
     // Linear interpolation `from → to` (Fixed) over `[lo, hi)`.
     let lerp_f = |lo: u32, hi: u32, from: Fixed, to: Fixed| -> Fixed {
@@ -1471,31 +1481,50 @@ pub static BOSS_ESCORT: &[WaveSpawn] = &[
 /// roster entries gate in over the match via `start_tick`. Entries are processed
 /// in catalog order every tick (stable `rng_spawn` draw sequence). The boss tick
 /// stops all of this (handled in `waves::spawn`). HP scales via `enemy_hp_mult`.
+/// EARLY-THROUGHPUT cadences (the eco-rush lever). The opening waves are tuned so
+/// that an UNARMED tank (no weapons) leaks enough contact damage past its free
+/// Clear to die by tick ≤3600 (the eco-rush punish, target 1) — while a MODEST
+/// opener (a weapon or two + some HP/armor) thins the board fast enough to reach a
+/// stable state and survive past 3600. The separation lever is OFFENSE: the spawn
+/// rate sits just above what a weaponless tank can survive on Clear alone, but well
+/// within what even a small arsenal can hold. These are the PRIMARY early-game knob;
+/// raising any cadence (slower spawns) gentles the opening, lowering it makes it
+/// deadlier. Integer ticks — deterministic, no floats. (Balance pass: see `docs/06`.)
+pub const EARLY_GRUNT_CADENCE: u32 = 18; // Fel Orc Grunt swarm floor (was 6)
+pub const EARLY_PEON_CADENCE: u32 = 45; // Fel Orc Peon trickle (was 18)
+pub const EARLY_RAIDER_CADENCE: u32 = 95; // Fel Orc Raider rush (was 55)
+pub const EARLY_BANDIT_CADENCE: u32 = 130; // Bandit Rider rush (was 100)
+
 pub static WAVE_M0: &[WaveSpawn] = &[
     // --- baseline (from the start) ---
-    // EARLY-SWARM PUNISH (first 5 min) — ITER-2: the opening is now BRUTAL FOR
-    // EVERYONE, not just pure-eco. The grunt floor is dense, and a fast-rusher
-    // stream (Raider) now gates in at ~30s, so even a normally-armed opening (the
-    // bot's 3-weapon floor) has to fight to keep contact damage off the tank — a
-    // non-trivial share of seeds die in the first ~5 min if play is loose. The
-    // lever is still VOLUME + RUSH CADENCE (no one-shot spike), so it stays
-    // brutal-but-survivable for the armed and ~certain death for the unarmed
-    // (lone-Bow pure-eco can never out-DPS this stream).
-    WaveSpawn { enemy: 0, cadence_ticks: 6, start_tick: 0 }, // Fel Orc Grunt — swarm floor (was 10; much denser)
-    WaveSpawn { enemy: 1, cadence_ticks: 120, start_tick: 0 }, // Steam Tank — periodic bruiser
-    // --- early escalation (≈12s+): cheap peons stream in early & fast ---
-    WaveSpawn { enemy: 3, cadence_ticks: 18, start_tick: MIN / 5 }, // Fel Orc Peon (was 24 @20s; now 18 @12s)
+    // EARLY GRACE WITH AN ECO-RUSH PUNISH — BALANCE PASS. The opening is gentle
+    // enough that a MODEST opener (1–2 weapons + some HP/armor) establishes board
+    // control and survives past tick 3600, but a NAKED tank (no weapons/defense)
+    // cannot out-Clear the steady leak and dies by ≤3600. The lever is VOLUME +
+    // RUSH CADENCE (no one-shot spike): a weaponless tank's only tool is the free
+    // 10 s Clear, and the fast-rusher streams (Raider/Bandit) arrive inside that
+    // cooldown, so leak accumulates. Cadences come from the `EARLY_*_CADENCE`
+    // constants above (the primary early-game knob).
+    WaveSpawn { enemy: 0, cadence_ticks: EARLY_GRUNT_CADENCE, start_tick: 0 }, // Fel Orc Grunt — swarm floor
+    WaveSpawn { enemy: 1, cadence_ticks: 95, start_tick: 0 }, // Steam Tank — periodic bruiser (slow, 1500 contact)
+    // --- early escalation (≈12s+): cheap peons stream in early ---
+    WaveSpawn { enemy: 3, cadence_ticks: EARLY_PEON_CADENCE, start_tick: MIN / 5 }, // Fel Orc Peon
     WaveSpawn { enemy: 11, cadence_ticks: 600, start_tick: MIN / 2 }, // Target Dummy (rare, inert)
-    // --- ≈25s: fast melee rushers arrive EARLY — the core of the brutal opening.
-    //     Raiders are fast (speed 16) and hit hard (700 contact), so they reach the
-    //     tank quickly and punish a tank that hasn't established board control. ---
-    WaveSpawn { enemy: 4, cadence_ticks: 55, start_tick: 5 * MIN / 12 }, // Fel Orc Raider (fast, EARLY ≈25s — was 90 @90s)
-    // --- ≈1 min: a second peon trickle thickens the early wall ---
-    WaveSpawn { enemy: 3, cadence_ticks: 28, start_tick: MIN }, // Fel Orc Peon (second stream from 1 min)
-    // --- ≈1.5 min: even faster bandit rushers pile onto the early rush ---
-    WaveSpawn { enemy: 5, cadence_ticks: 100, start_tick: 3 * MIN / 2 }, // Bandit Rider (very fast, EARLY — was 150s)
-    // --- ≈2.5 min: ranged spitters start pelting from standoff ---
-    WaveSpawn { enemy: 8, cadence_ticks: 150, start_tick: 5 * MIN / 2 }, // Poisonspitter (ranged)
+    // --- ≈25s: fast melee rushers — the core of the eco-rush punish. Raiders are
+    //     fast (speed 16) and hit hard (700 contact), so they reach the tank inside
+    //     the Clear cooldown and a weaponless tank can't keep them off. ---
+    WaveSpawn { enemy: 4, cadence_ticks: EARLY_RAIDER_CADENCE, start_tick: 5 * MIN / 12 }, // Fel Orc Raider
+    // --- ≈1 min: a second peon trickle thickens the wall ---
+    WaveSpawn { enemy: 3, cadence_ticks: 70, start_tick: MIN }, // Fel Orc Peon (second stream from 1 min)
+    // --- ≈45 s: even faster bandit rushers pile on (pulled early — fastest enemy,
+    //     arrives inside the Clear cooldown, so it's the main eco-rush punisher) ---
+    WaveSpawn { enemy: 5, cadence_ticks: EARLY_BANDIT_CADENCE, start_tick: 3 * MIN / 4 }, // Bandit Rider (very fast)
+    // --- ≈90 s: ranged spitters start pelting from STANDOFF. Pulled early on the
+    //     balance pass: standoff DPS (it pelts without reaching the tank, and a
+    //     weaponless tank can't kill it between Clears) is what closes the eco-rush
+    //     stalemate — it breaks the "Clear keeps the board empty forever" loophole
+    //     so a naked tank reliably dies by ≤3600, while a real build just shoots it. ---
+    WaveSpawn { enemy: 8, cadence_ticks: 120, start_tick: 3 * MIN / 2 }, // Poisonspitter (ranged, early standoff)
     // --- ≈4 min: casters + heavier ranged breath ---
     WaveSpawn { enemy: 7, cadence_ticks: 180, start_tick: 4 * MIN }, // Fel Orc Warlock (caster)
     WaveSpawn { enemy: 9, cadence_ticks: 200, start_tick: 4 * MIN }, // Firebreather (ranged)
@@ -1515,17 +1544,25 @@ pub static WAVE_M0: &[WaveSpawn] = &[
     WaveSpawn { enemy: 0, cadence_ticks: 8, start_tick: CLIFF_25_TICK },   // Fel Orc Grunt (pre-boss flood)
 ];
 
-/// Enemies spawn on this ring (radius ~1500) and march toward the tank.
+/// Enemies spawn on this ring and march toward the tank. The eight angular
+/// directions are unchanged, but the BALANCE PASS STAGGERS THE RADII (≈1200 /
+/// 1500 / 1800 around the ring) so arrivals DESYNCHRONIZE: a near spawn lands
+/// sooner than a far one on the same tick. This breaks the old "all spawns at
+/// r≈1500 arrive together, so one Clear catches the whole synchronized wave"
+/// loophole that let a weaponless Clear-spammer phase-lock the board to zero
+/// contact on some seeds — now a steady trickle always has an enemy in-flight
+/// when Clear is on cooldown, so an unarmed tank reliably leaks and dies (the
+/// eco-rush punish). A real build just shoots them, so it is unaffected.
 /// Precomputed (no trig) so spawn positions are deterministic.
 pub static SPAWN_RING: &[Vec2] = &[
-    v(1500, 0),
-    v(1061, 1061),
-    v(0, 1500),
-    v(-1061, 1061),
-    v(-1500, 0),
-    v(-1061, -1061),
-    v(0, -1500),
-    v(1061, -1061),
+    v(1200, 0),       // near (arrives soonest)
+    v(1273, 1273),    // far  (≈1800 diag)
+    v(0, 1500),       // mid
+    v(-849, 849),     // near (≈1200 diag)
+    v(1800, 0),       // far
+    v(-1061, -1061),  // mid (≈1500 diag)
+    v(0, -1200),      // near
+    v(1273, -1273),   // far (≈1800 diag)
 ];
 
 const fn v(x: i64, y: i64) -> Vec2 {

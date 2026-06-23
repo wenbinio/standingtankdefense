@@ -47,16 +47,25 @@ impl Fixed {
     }
     #[inline]
     pub fn mul(self, o: Fixed) -> Fixed {
-        Fixed(((self.0 as i128 * o.0 as i128) >> Self::FRAC_BITS) as i64)
+        // SATURATING at the i64 boundary. The i128 product never overflows; only the
+        // final narrowing can. Clamping (vs wrapping/panicking) keeps the result
+        // monotonic and DETERMINISTIC — a pure function of the integer inputs, no
+        // floats, identical on every platform. This only ever engages on extreme
+        // builds whose multiplier already exceeds the representable range (e.g. a bot
+        // stacking hundreds of multiplicative damage mods); for all in-range values
+        // it is bit-identical to the plain narrowing, so no normal run / checksum
+        // changes — it just turns an out-of-range panic into a saturated ceiling.
+        Fixed(sat_i128_to_i64((self.0 as i128 * o.0 as i128) >> Self::FRAC_BITS))
     }
     #[inline]
     pub fn div(self, o: Fixed) -> Fixed {
-        Fixed((((self.0 as i128) << Self::FRAC_BITS) / o.0 as i128) as i64)
+        Fixed(sat_i128_to_i64(((self.0 as i128) << Self::FRAC_BITS) / o.0 as i128))
     }
     /// Multiply an `i64` magnitude (e.g. damage) by this multiplier, flooring.
+    /// Saturating at the i64 boundary (see [`Fixed::mul`]).
     #[inline]
     pub fn scale_i64(self, v: i64) -> i64 {
-        ((v as i128 * self.0 as i128) >> Self::FRAC_BITS) as i64
+        sat_i128_to_i64((v as i128 * self.0 as i128) >> Self::FRAC_BITS)
     }
     /// Deterministic integer square root of a non-negative Fixed.
     /// Returns floor(sqrt(self)) as a Fixed. Panics on negative input.
@@ -70,37 +79,57 @@ impl Fixed {
     }
 }
 
+// All Fixed arithmetic SATURATES at the i64 boundary instead of wrapping/panicking.
+// This is a pure-integer, platform-stable, deterministic clamp: for every in-range
+// value it is bit-identical to plain arithmetic (so no normal run or checksum is
+// affected), and it only engages on extreme builds whose accumulated value already
+// exceeds the representable range — turning a would-be overflow panic into a stable
+// saturated ceiling. (Needed because the bot can legitimately stack many additive /
+// multiplicative damage modifiers; the sim must not crash on such builds.)
 impl core::ops::Add for Fixed {
     type Output = Fixed;
     #[inline]
     fn add(self, o: Fixed) -> Fixed {
-        Fixed(self.0 + o.0)
+        Fixed(self.0.saturating_add(o.0))
     }
 }
 impl core::ops::Sub for Fixed {
     type Output = Fixed;
     #[inline]
     fn sub(self, o: Fixed) -> Fixed {
-        Fixed(self.0 - o.0)
+        Fixed(self.0.saturating_sub(o.0))
     }
 }
 impl core::ops::Neg for Fixed {
     type Output = Fixed;
     #[inline]
     fn neg(self) -> Fixed {
-        Fixed(-self.0)
+        Fixed(self.0.saturating_neg())
     }
 }
 impl core::ops::AddAssign for Fixed {
     #[inline]
     fn add_assign(&mut self, o: Fixed) {
-        self.0 += o.0;
+        self.0 = self.0.saturating_add(o.0);
     }
 }
 impl core::ops::SubAssign for Fixed {
     #[inline]
     fn sub_assign(&mut self, o: Fixed) {
-        self.0 -= o.0;
+        self.0 = self.0.saturating_sub(o.0);
+    }
+}
+
+/// Clamp an i128 to the i64 range (saturating narrowing) — the shared helper for
+/// all Fixed multiply/divide/scale paths.
+#[inline]
+fn sat_i128_to_i64(v: i128) -> i64 {
+    if v > i64::MAX as i128 {
+        i64::MAX
+    } else if v < i64::MIN as i128 {
+        i64::MIN
+    } else {
+        v as i64
     }
 }
 

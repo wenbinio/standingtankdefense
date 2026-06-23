@@ -79,11 +79,12 @@ mod tests {
 
     #[test]
     fn spawns_on_cadence_for_first_wave_entry() {
-        // WAVE_M0[0]: enemy 0 (Fel Orc Grunt), cadence 6.  WAVE_M0[1]: enemy 1
-        // (Steam Tank), cadence 120. Tick 6 fires only the grunt entry (all gated
-        // entries — peon/raider/etc — start well after tick 6).
+        // WAVE_M0[0]: Fel Orc Grunt at `EARLY_GRUNT_CADENCE` (18); WAVE_M0[1]: Steam
+        // Tank at 95. The grunt cadence fires only the grunt entry (all gated entries
+        // — peon/raider/etc — start well after, and 18 % 95 != 0).
+        let g = content::EARLY_GRUNT_CADENCE;
         let mut s = blank_state();
-        s.tick = 6; // 6 % 6 == 0, 6 % 120 != 0
+        s.tick = g; // g % g == 0, g % 95 != 0
         let before = s.enemies.len();
         spawn(&mut s);
         assert_eq!(s.enemies.len(), before + 1, "exactly one enemy (entry 0)");
@@ -95,7 +96,7 @@ mod tests {
     #[test]
     fn no_spawn_off_cadence() {
         let mut s = blank_state();
-        s.tick = 7; // 7 % 6 != 0, 7 % 120 != 0, and below all gated entries
+        s.tick = 7; // 7 % 18 != 0, 7 % 95 != 0, and below all gated entries
         spawn(&mut s);
         assert!(s.enemies.is_empty(), "nothing spawns off-cadence");
     }
@@ -115,7 +116,7 @@ mod tests {
     #[test]
     fn spawns_at_ring_position() {
         let mut s = blank_state();
-        s.tick = 6; // grunt cadence (6) fires
+        s.tick = content::EARLY_GRUNT_CADENCE; // grunt cadence fires
         spawn(&mut s);
         let pos = s.enemies[0].pos;
         // The spawn must be exactly one of the precomputed ring positions.
@@ -138,9 +139,10 @@ mod tests {
 
     #[test]
     fn hp_curve_is_a_3min_stepped_ramp() {
-        // The iter-3 curve is a STEPPED "RAMP" on a strict 3-min cadence: every
-        // 5400-tick interval is `gentle climb → warning → DRAMATIC step`, with
-        // cliffs at k*5400 for k=1..=10. This test pins that shape numerically.
+        // BALANCE PASS: the curve is a STEPPED "RAMP" on a strict 3-min cadence —
+        // every 5400-tick interval is `gentle climb → warning → step`, with steps at
+        // k*5400 for k=1..=10. The old ×413863 hack is gone; the curve now escalates
+        // SMOOTHLY to a sane ≈ ×5.56 boss endpoint. This test pins the new shape.
         use determinism::Fixed;
         let m = content::enemy_hp_mult;
         let interval = content::RAMP_INTERVAL; // 5400
@@ -158,32 +160,30 @@ mod tests {
             t += 30; // sample once per second — fast and dense enough
         }
 
-        // (2) Exact post-cliff multipliers at each 3-min boundary (×10000),
-        //     compounding ~×3.6446 per interval up to ≈ ×413863 at the boss.
-        //     INTERIM DIFFICULTY RE-TUNE raised the per-interval JUMP (J: 1.22 →
-        //     3.5) so the late game + boss threaten the stronger source-fidelity
-        //     builds; the gentle/warning factors (G/W) and the 3-min cadence are
-        //     unchanged. These marks are the exact `Fixed` values of the steeper
-        //     curve, and the boss clamp rides the new endpoint.
+        // (2) Exact post-step multipliers at each 3-min boundary (×10000),
+        //     compounding ×1.1872 per interval up to ≈ ×5.56 at the boss. These are
+        //     the exact `Fixed` values of the balance-pass curve (`G·W·J` with
+        //     J = 1.14); the boss clamp returns `base(10)`.
         let post: [(u32, i64); 11] = [
             (0, 10000),
-            (5400, 36448),
-            (10800, 132848),
-            (16200, 484211),
-            (21600, 1764875),
-            (27000, 6432698),
-            (32400, 23446199),
-            (37800, 85457802),
-            (43200, 311480592),
-            (48600, 1135299031),
-            (54000, 4138630000), // the 30-min boss tier — the interim ×413863 endpoint.
+            (5400, 11871),
+            (10800, 14093),
+            (16200, 16731),
+            (21600, 19862),
+            (27000, 23580),
+            (32400, 27993),
+            (37800, 33232),
+            (43200, 39452),
+            (48600, 46837),
+            (54000, 55604), // the 30-min boss tier — the ≈ ×5.56 endpoint.
         ];
         for (tick, mult10k) in post {
-            assert_eq!(m(tick).scale_i64(10000), mult10k, "post-cliff mult at {tick}");
+            assert_eq!(m(tick).scale_i64(10000), mult10k, "post-step mult at {tick}");
         }
-        // The boss phase HOLDS the interim endpoint ×413863.
-        assert_eq!(m(content::BOSS_SPAWN_TICK), Fixed::from_int(413863));
-        assert_eq!(m(content::BOSS_SPAWN_TICK + 5000), Fixed::from_int(413863));
+        // The boss phase HOLDS the endpoint `base(10)` (≈ ×5.56).
+        let boss = m(content::BOSS_SPAWN_TICK);
+        assert_eq!(boss.scale_i64(10000), 55604);
+        assert_eq!(m(content::BOSS_SPAWN_TICK + 5000), boss, "boss phase holds the endpoint");
 
         // (3) Within an interval: a gentle region, then a STEEPER warning region.
         //     Verify on the k=1 interval [5400, 10800).
@@ -203,21 +203,18 @@ mod tests {
             "warning slope ({warn_slope}) must be perceptibly steeper than gentle ({gentle_slope})"
         );
 
-        // (4) The DRAMATIC step: the jump from the pre-cliff (warning peak) value
-        //     to the next interval's post-cliff value is a real instantaneous step
-        //     (~+250% — the interim re-tune's dominant event), far larger than any
-        //     single warning-region tick step.
-        let pre_cliff = m(lo + interval - 1); // tick 10799, warning peak
-        let post_cliff = m(lo + interval); //   tick 10800, post-cliff
-        let step = post_cliff.scale_i64(1_000_000) - pre_cliff.scale_i64(1_000_000);
-        assert!(
-            step > warn_slope * 50,
-            "boundary step must be a dramatic jump, not a ramp tick"
-        );
-        // ~+250% (J): post ≈ pre × 3.5 (within rounding, ×1000).
+        // (4) The boundary STEP: the jump from the pre-step (warning peak) value to
+        //     the next interval's post-step value is a real instantaneous +14% step,
+        //     larger than any single warning-region tick step (a felt-but-modest
+        //     cliff, no longer the dramatic ×3.5 wall of the old hack).
+        let pre_step = m(lo + interval - 1); // tick 10799, warning peak
+        let post_step = m(lo + interval); //   tick 10800, post-step
+        let step = post_step.scale_i64(1_000_000) - pre_step.scale_i64(1_000_000);
+        assert!(step > warn_slope * 50, "boundary step must dwarf a single warning tick");
+        // +14% (J): post ≈ pre × 1.14 (within rounding, ×1000).
         assert_eq!(
-            post_cliff.scale_i64(1000),
-            pre_cliff.mul(Fixed::from_ratio(7, 2)).scale_i64(1000)
+            post_step.scale_i64(1000),
+            pre_step.mul(Fixed::from_ratio(57, 50)).scale_i64(1000)
         );
     }
 
@@ -227,15 +224,16 @@ mod tests {
         // boundary), where the multiplier is well above ×1. Grunt is wave entry 0
         // (catalog order), so it is `enemies[0]` among this tick's spawns.
         let mut s = blank_state();
-        s.tick = content::SCALE_STEP_2_TICK - 6; // 26994, a grunt-cadence tick
-        assert_eq!(s.tick % 6, 0);
+        // A grunt-cadence (`EARLY_GRUNT_CADENCE`) tick just before the 15-min step.
+        s.tick = content::SCALE_STEP_2_TICK - content::EARLY_GRUNT_CADENCE; // 26982
+        assert_eq!(s.tick % content::EARLY_GRUNT_CADENCE, 0);
         spawn(&mut s);
         let grunt_base = content::ENEMIES[0].base_hp;
         assert_eq!(s.enemies[0].def, 0, "first spawn this tick is the grunt (entry 0)");
-        // hp should be solidly scaled up (after the interim re-tune the curve is
-        // ~×184 here — k4 warning region, just before the 15-min cliff).
-        assert!(s.enemies[0].hp > grunt_base * 100, "late enemy HP must be scaled up");
-        assert!(s.enemies[0].hp <= grunt_base * 250);
+        // hp should be scaled up (BALANCE PASS: the curve is ~×2.06 here — k4 warning
+        // region, just before the 15-min step — a smooth escalation, not the old hack).
+        assert!(s.enemies[0].hp > grunt_base * 2, "late enemy HP must be scaled up");
+        assert!(s.enemies[0].hp <= grunt_base * 3);
     }
 
     #[test]

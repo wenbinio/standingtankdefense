@@ -618,8 +618,12 @@ impl ArenaState {
         if amount == 0 {
             return;
         }
-        self.economy.gold += amount;
-        self.total_gold_earned += amount;
+        // SATURATING: an extreme snowball (Bloodmoney + bounty procs on a huge board)
+        // can push lifetime gold past i64. Clamping is deterministic (pure integer,
+        // platform-stable) and only ever engages on out-of-range totals, so no normal
+        // run / checksum changes — it turns a would-be overflow panic into a ceiling.
+        self.economy.gold = self.economy.gold.saturating_add(amount);
+        self.total_gold_earned = self.total_gold_earned.saturating_add(amount);
     }
 
     /// Record `amount` of damage dealt by a PLAYER source: accumulates the
@@ -630,7 +634,9 @@ impl ArenaState {
         if amount <= 0 {
             return;
         }
-        self.total_damage_dealt += amount;
+        // SATURATING scoreboard accumulation (see `award_gold`): a saturated single-
+        // hit damage value can otherwise overflow the lifetime total.
+        self.total_damage_dealt = self.total_damage_dealt.saturating_add(amount);
         if self.economy.gold_per_damage > Fixed::ZERO {
             self.award_gold(self.economy.gold_per_damage.scale_i64(amount));
         }
