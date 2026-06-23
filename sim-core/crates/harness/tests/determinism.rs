@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x65b84178d492fa54, // re-baselined (iter-4): jump-dominant retune of the 3-min RAMP — gentle climb is now +2.5% (was +10%), so the 2000-tick window's early HP scaling differs; per-3-min marks and the ×11 boss endpoint are unchanged
+        0xcab3bbf00f8b3da1, // re-baselined (content-fidelity pass): the modifier catalog was rebuilt (restored source names, re-bundled split multi-effect upgrades, merged "Golden Vitality" into "Entangled Gold Mine", added MaxHpPct/HpRegenPct/ManaRegenPct riders). The M0 bot buys from the catalog, so the trace shifts; the RAMP/boss curve is unchanged
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

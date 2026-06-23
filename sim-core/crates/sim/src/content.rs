@@ -301,6 +301,19 @@ pub enum ModEffect {
     /// +% of each income award also added to the Mana-Shield pool `(num, den)`,
     /// capped at its max (mirrors `IncomeRegenPct` for the shield).
     IncomeShieldPct(i64, i64),
+    /// +% of CURRENT Max HP added to Max HP (and current HP), `(num, den)`. The
+    /// percentage is taken of `tank.max_hp` at the moment it applies, so in a
+    /// bundle it compounds on whatever flat Max-HP effect ran before it (the
+    /// source's "+25% Max HP" rider on Imbued Masonry). Integer/Fixed only.
+    MaxHpPct(i64, i64),
+    /// +% of CURRENT HP-regen/tick added to HP-regen/tick, `(num, den)` (the
+    /// source's "+25% HP Regen" rider on Renew). Compounds on the flat regen that
+    /// ran before it in the same bundle.
+    HpRegenPct(i64, i64),
+    /// +% of CURRENT Mana-Shield regen/tick added to it, `(num, den)` (the
+    /// source's "+25% Mana Regeneration" rider on Recharge). Compounds on the flat
+    /// shield-regen that ran before it in the same bundle.
+    ManaRegenPct(i64, i64),
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
@@ -370,6 +383,9 @@ impl ModEffect {
             ModEffect::TradeRegenForGold(r, g) => (32, r, g, 0),
             ModEffect::GoldPerDamagePct(n, d) => (33, n, d, 0),
             ModEffect::IncomeShieldPct(n, d) => (34, n, d, 0),
+            ModEffect::MaxHpPct(n, d) => (35, n, d, 0),
+            ModEffect::HpRegenPct(n, d) => (36, n, d, 0),
+            ModEffect::ManaRegenPct(n, d) => (37, n, d, 0),
         }
     }
 
@@ -431,6 +447,9 @@ impl ModEffect {
             32 => ModEffect::TradeRegenForGold(a, b),
             33 => ModEffect::GoldPerDamagePct(a, b),
             34 => ModEffect::IncomeShieldPct(a, b),
+            35 => ModEffect::MaxHpPct(a, b),
+            36 => ModEffect::HpRegenPct(a, b),
+            37 => ModEffect::ManaRegenPct(a, b),
             _ => return None,
         })
     }
@@ -472,143 +491,260 @@ impl ModifierDef {
     }
 }
 
-/// M4 modifier catalog — a representative slice across every scope (additive
-/// global/by-type, multiplicative, attack-speed, economy, defensive). Numbers
-/// adapted from the extracted upgrades (`docs/appendix-A-map-extraction.md`).
+/// M4 modifier catalog. CONTENT-FIDELITY pass: entries that map to a source
+/// upgrade (`research/tower-survivors-map/raw/war3map.wts`) carry the REAL WC3
+/// upgrade name, and bundled multi-effect source upgrades are re-bundled into one
+/// `ModifierDef { effects: &[…] }` (effects apply in slice order). Some source
+/// secondaries need combat/defense mechanics not yet built — those keep the NAME
+/// + the modelable PRIMARY effect, with a `// TODO(M1c/M2/M3)` note for the
+/// exotic part. A handful of entries have no clean source mapping and are kept as
+/// representative slices (flagged "representative"). Numbers track the source
+/// effect text; existing cost/rarity preserved.
 pub static MODIFIERS: &[ModifierDef] = &[
+    // representative: "+10% to ALL damage" has no single source upgrade (closest
+    // is Improved Attacks "+5% all types"); kept as a generic global-damage item.
     ModifierDef { name: "+10% Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageGlobalPct(1, 10)], ramp: None },
-    ModifierDef { name: "+10% Piercing Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 1, 10)], ramp: None },
-    ModifierDef { name: "+10% Siege Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 1, 10)], ramp: None },
-    ModifierDef { name: "+10% Magic Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_MAGIC, 1, 10)], ramp: None },
-    // HIGH-CEILING multiplier: a true force-multiplier on an already-spiky build.
+    ModifierDef { name: "Improved Piercing Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 1, 10)], ramp: None },
+    ModifierDef { name: "Improved Siege Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 1, 10)], ramp: None },
+    ModifierDef { name: "Improved Magic Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_MAGIC, 1, 10)], ramp: None },
+    // representative Epic multiplier (no source upgrade is a flat ×-damage item):
+    // a true force-multiplier on an already-spiky build.
     ModifierDef { name: "+25% Damage (Epic)", rarity: 3, cost: 5000, effects: &[ModEffect::DamageMulPct(2, 5)], ramp: None },
-    ModifierDef { name: "+10% Attack Speed", rarity: 0, cost: 500, effects: &[ModEffect::AttackSpeedPct(1, 10)], ramp: None },
-    ModifierDef { name: "+50% Kill Bounty", rarity: 1, cost: 1500, effects: &[ModEffect::BountyPct(1, 2)], ramp: None },
-    ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(20)], ramp: None },
-    // Economy depth (`docs/06` #5/source): income multiplier, income→HP-regen,
-    // and a gambling bounty proc. `income_mult` is its own lever — `bounty_mult`
-    // still never touches passive income (source rule).
+    ModifierDef { name: "Rapidfire", rarity: 0, cost: 500, effects: &[ModEffect::AttackSpeedPct(1, 10)], ramp: None },
+    ModifierDef { name: "Bounty Hunter", rarity: 1, cost: 1500, effects: &[ModEffect::BountyPct(1, 2)], ramp: None },
+    // Entangled Gold Mine (A0H0): "+20 Gold Income | +25% of Gold Income as instant
+    // HP Regen". RE-BUNDLED — the live catalog had split this into "+20 Gold Income"
+    // + a standalone "Golden Vitality (... as HP Regen)"; that standalone is DELETED
+    // and folded back here (source ratio 25%, was 40% on the spun-off item).
+    ModifierDef { name: "Entangled Gold Mine", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(20), ModEffect::IncomeRegenPct(25, 100)], ramp: None },
     // ECONOMY SNOWBALL (high-ceiling/high-risk): income multipliers are the engine
-    // of the snowball-or-die path. Cheap, but they buy gold not survival, so a
-    // player who front-loads these is fragile until the compounding kicks in.
+    // of the snowball-or-die path. Cheap, but they buy gold not survival.
+    // representative income-multiplier items (Gold Mine below is the true source
+    // "+10 Income +10% Income"; these pure ×income items are kept as a slice).
     ModifierDef { name: "+10% Gold Income", rarity: 1, cost: 1000, effects: &[ModEffect::IncomePct(20, 100)], ramp: None },
     ModifierDef { name: "+25% Gold Income", rarity: 2, cost: 2000, effects: &[ModEffect::IncomePct(50, 100)], ramp: None },
-    ModifierDef { name: "Golden Vitality (25% of Income as HP Regen)", rarity: 2, cost: 3000, effects: &[ModEffect::IncomeRegenPct(40, 100)], ramp: None },
-    ModifierDef { name: "Lucky Strikes (5% chance: +200% Bounty)", rarity: 2, cost: 3000, effects: &[ModEffect::BountyProc(8, 400)], ramp: None },
-    ModifierDef { name: "+2000 Max HP", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(2000)], ramp: None },
+    // Transmute (A0AE): "+100% Kill Bounty | +200% Bounty Gold with 5% activation
+    // chance". RE-BUNDLED — the live catalog modeled ONLY the proc ("Lucky Strikes");
+    // now both the flat bounty and the gambling proc ride one named upgrade.
+    ModifierDef { name: "Transmute", rarity: 2, cost: 3000, effects: &[ModEffect::BountyPct(100, 100), ModEffect::BountyProc(5, 200)], ramp: None },
+    // Imbued Masonry (A04J): "+2000 Max HP | +25% Max HP". RE-BUNDLED via the new
+    // MaxHpPct rider (the +25% is taken of max_hp AFTER the +2000 flat applies).
+    ModifierDef { name: "Imbued Masonry", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(2000), ModEffect::MaxHpPct(25, 100)], ramp: None },
     ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(10)], ramp: None },
-    ModifierDef { name: "+2000 Mana Shield", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(2000, 10)], ramp: None },
+    // Moonwell (A0FA): "+2000 Mana Shield | +10 Mana Shield every second" — the
+    // per-second shield regen is modeled as the ManaShield regen-per-tick field.
+    ModifierDef { name: "Moonwell", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(2000, 10)], ramp: None },
+    // representative flat-regen item (the true source +50-regen upgrades all bundle
+    // a secondary; this plain +50 is kept as a slice).
     ModifierDef { name: "+50 HP Regen", rarity: 0, cost: 500, effects: &[ModEffect::HpRegen(50)], ramp: None },
-    ModifierDef { name: "+10% Dodge", rarity: 1, cost: 1500, effects: &[ModEffect::Dodge(10)], ramp: None },
+    ModifierDef { name: "Evasion", rarity: 1, cost: 1500, effects: &[ModEffect::Dodge(10)], ramp: None },
     // Time-scaling growth modifiers (`docs/06`): a base effect now + a smaller
     // effect re-applied every round, so they compound over a match.
-    // TIME-SCALING (high-ceiling/slow): weak now, monstrous late — they reward
-    // surviving long enough for the compounding to dominate (boom if you live).
-    ModifierDef { name: "Building Power (+2% Damage, +1%/round)", rarity: 2, cost: 3000,
+    // Power Generator (A099): "+2% Damage | +1% Damage every 30 seconds".
+    ModifierDef { name: "Power Generator", rarity: 2, cost: 3000,
         effects: &[ModEffect::DamageGlobalPct(2, 100)],
         ramp: Some(RampSpec { effect: ModEffect::DamageGlobalPct(1, 100), interval_ticks: RAMP_PER_ROUND }) },
-    ModifierDef { name: "Escalating Chaos (+20% Chaos, +3%/round)", rarity: 2, cost: 3000,
+    // Scroll of Chaos (A0IB): "+20% Chaos | +3% Chaos every 30 seconds".
+    ModifierDef { name: "Scroll of Chaos", rarity: 2, cost: 3000,
         effects: &[ModEffect::DamageTypePct(DMG_CHAOS, 20, 100)],
-        ramp: Some(RampSpec { effect: ModEffect::DamageTypePct(DMG_CHAOS, 5, 100), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec { effect: ModEffect::DamageTypePct(DMG_CHAOS, 3, 100), interval_ticks: RAMP_PER_ROUND }) },
+    // representative compounding-income ramp (no exact source; Gold Mine/Magic
+    // Treasure are the named income items). Kept as a slice.
     ModifierDef { name: "Compounding Greed (+10 Income, +5/round)", rarity: 1, cost: 1500,
         effects: &[ModEffect::IncomeFlat(10)],
         ramp: Some(RampSpec { effect: ModEffect::IncomeFlat(5), interval_ticks: RAMP_PER_ROUND }) },
-    ModifierDef { name: "Hardening (+10 Armor, +5/round)", rarity: 1, cost: 1500,
+    // Blessed Armor (A096): "+10 Armor | +15 Bonus Armor every 30 seconds | -1 when
+    // damaged". The flat-now + per-round growth is modeled; the small -1-on-damage
+    // decay is dropped (a minor exotic, not worth a mechanic). Ramp kept at the
+    // live +5/round (the source's +15/round would be a balance retune — flagged).
+    ModifierDef { name: "Blessed Armor", rarity: 1, cost: 1500,
         effects: &[ModEffect::Armor(10)],
         ramp: Some(RampSpec { effect: ModEffect::Armor(5), interval_ticks: RAMP_PER_ROUND }) },
     // Per-scope damage (`docs/06`): +% for weapons matching an attack class /
     // range bucket / rarity (scope ids from attack_scope_id/range_scope_id/rarity_scope_id).
-    ModifierDef { name: "+25% Single-Target Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(0, 25, 100)], ramp: None },
+    // Focusfire (A07I): "+25% Damage for Single Target Weapons".
+    ModifierDef { name: "Focusfire", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(0, 25, 100)], ramp: None },
+    // representative per-attack-class items (the source has no clean +Splash/
+    // +Barrage/+Area/+Bounce upgrade — it bundles "Bounce and Barrage" together);
+    // kept as a slice exposing each attack scope.
     ModifierDef { name: "+25% Splash Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(1, 25, 100)], ramp: None },
     ModifierDef { name: "+25% Barrage Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(2, 25, 100)], ramp: None },
     ModifierDef { name: "+25% Area Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(3, 25, 100)], ramp: None },
-    ModifierDef { name: "+25% Wave Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(4, 25, 100)], ramp: None },
+    // Wavefire (A0JO): "+25% Damage for Wave Weapons".
+    ModifierDef { name: "Wavefire", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(4, 25, 100)], ramp: None },
     ModifierDef { name: "+25% Bounce Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(5, 25, 100)], ramp: None },
-    ModifierDef { name: "+25% Short-Range Damage (300/600)", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(6, 25, 100)], ramp: None },
-    ModifierDef { name: "+25% Long-Range Damage (900/1200)", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(7, 25, 100)], ramp: None },
-    ModifierDef { name: "+100% Common Weapon Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(8, 100, 100)], ramp: None },
+    // Command Aura (A078): "+25% Damage for 300 and 600 Attack Range Weapons".
+    ModifierDef { name: "Command Aura", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(6, 25, 100)], ramp: None },
+    // Trueshot Aura (A04T): "+25% Damage for 900 and 1200 Attack Range Weapons".
+    ModifierDef { name: "Trueshot Aura", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(7, 25, 100)], ramp: None },
+    // Engineering Upgrade (A09F): "+100% Damage for 500 Gold (Common) Weapons".
+    ModifierDef { name: "Engineering Upgrade", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(8, 100, 100)], ramp: None },
     // Status-conditional & flavor damage (`docs/06` #4): bonus damage vs enemies
     // in a status, and scalers on the statuses the tank applies.
-    ModifierDef { name: "+20% Damage to Stunned", rarity: 1, cost: 1500, effects: &[ModEffect::DamageVsStunnedPct(20, 100)], ramp: None },
-    ModifierDef { name: "+25% Damage to Poisoned", rarity: 1, cost: 1500, effects: &[ModEffect::DamageVsPoisonedPct(25, 100)], ramp: None },
-    ModifierDef { name: "+10% Poison Damage", rarity: 0, cost: 500, effects: &[ModEffect::PoisonDamagePct(10, 100)], ramp: None },
-    ModifierDef { name: "+50% Stun Duration", rarity: 1, cost: 1500, effects: &[ModEffect::StunDurationPct(50, 100)], ramp: None },
+    // Bash (A032): "+20% Damage to Stunned enemies".
+    ModifierDef { name: "Bash", rarity: 1, cost: 1500, effects: &[ModEffect::DamageVsStunnedPct(20, 100)], ramp: None },
+    // Corrosive Poison (A04R): "+25% Damage to Poisoned enemies".
+    ModifierDef { name: "Corrosive Poison", rarity: 1, cost: 1500, effects: &[ModEffect::DamageVsPoisonedPct(25, 100)], ramp: None },
+    // Potent Poison (A034): "+10% Poison damage".
+    ModifierDef { name: "Potent Poison", rarity: 0, cost: 500, effects: &[ModEffect::PoisonDamagePct(10, 100)], ramp: None },
+    // Dazing Stuns (A0CH): "+50% Stun Duration".
+    ModifierDef { name: "Dazing Stuns", rarity: 1, cost: 1500, effects: &[ModEffect::StunDurationPct(50, 100)], ramp: None },
     // Spikes (`docs/06`): retaliation damage to nearby enemies when the tank is hit.
-    ModifierDef { name: "+80 Spikes Damage", rarity: 0, cost: 500, effects: &[ModEffect::SpikesFlat(80)], ramp: None },
+    // Dreadlord Fang (A03A): "+80 Spikes Damage | +8 Heal when damaged". Primary
+    // (flat spikes) modeled; the heal-on-damaged-taken rider is exotic.
+    // TODO(M2): exotic secondary "+8 Heal when damaged" — needs damage-taken retaliation/heal trigger.
+    ModifierDef { name: "Dreadlord Fang", rarity: 0, cost: 500, effects: &[ModEffect::SpikesFlat(80)], ramp: None },
+    // representative big-flat-spikes item (source has +160/+400 flats, not +300);
+    // kept as a slice.
     ModifierDef { name: "+300 Spikes Damage", rarity: 1, cost: 1500, effects: &[ModEffect::SpikesFlat(300)], ramp: None },
+    // representative pure-%-spikes item (source always bundles flat+%); kept as a slice.
     ModifierDef { name: "+50% Spikes Damage", rarity: 1, cost: 1500, effects: &[ModEffect::SpikesPct(50, 100)], ramp: None },
-    ModifierDef { name: "Bloody Spikes (+80, +10/round)", rarity: 2, cost: 3000,
+    // Growing Spikes (A0DU): "+80 Spikes Damage | +10 Spikes Damage every 30 seconds".
+    ModifierDef { name: "Growing Spikes", rarity: 2, cost: 3000,
         effects: &[ModEffect::SpikesFlat(80)],
         ramp: Some(RampSpec { effect: ModEffect::SpikesFlat(10), interval_ticks: RAMP_PER_ROUND }) },
-    // Vulnerability Pulse (`docs/06`): +5% damage taken / second to enemies in 1200 range.
-    ModifierDef { name: "Vulnerability Pulse", rarity: 2, cost: 3000,
+    // Vulnerability Totem (A0EN): "Vulnerability Pulse: +5% damage taken to all
+    // enemies within 1200 range every second, stacking."
+    ModifierDef { name: "Vulnerability Totem", rarity: 2, cost: 3000,
         effects: &[ModEffect::GrantVulnPulse(5, 1200, 30)], ramp: None },
     // On-event triggers (`docs/06`): heal the tank on enemy-kill / on-poison-tick.
-    ModifierDef { name: "+15 Heal on Kill", rarity: 1, cost: 1500, effects: &[ModEffect::HealOnKill(15)], ramp: None },
+    // Mask of Death (A07S): "+1000 Max HP | +15 Heal when an enemy dies". RE-BUNDLED
+    // — the live "+15 Heal on Kill" gains its Max-HP half from the source upgrade.
+    ModifierDef { name: "Mask of Death", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(1000), ModEffect::HealOnKill(15)], ramp: None },
+    // representative larger heal-on-kill item (no source for a bare +60-on-kill).
     ModifierDef { name: "+60 Heal on Kill", rarity: 2, cost: 3000, effects: &[ModEffect::HealOnKill(60)], ramp: None },
-    ModifierDef { name: "Vampiric Spores (+5 HP/poison tick)", rarity: 2, cost: 3000, effects: &[ModEffect::HealOnPoison(5)], ramp: None },
+    // Reanimating Poison (A0FL): "+5 instant HP Regen when an enemy takes Poison
+    // damage from a Weapon | +1 ... from an Upgrade". Primary (weapon-poison heal)
+    // modeled; the upgrade-poison half collapses into the same per-tick heal.
+    ModifierDef { name: "Reanimating Poison", rarity: 2, cost: 3000, effects: &[ModEffect::HealOnPoison(5)], ramp: None },
     // Meta / shop items (`docs/06` #5): they bend the purchase flow, not the
     // tank's stats. Resolved deterministically in `input::apply` (a one-shot
     // `PendingPerk`), and flagged `is_meta` so they never trigger or duplicate
     // each other.
-    ModifierDef { name: "Magic Coin (+3 copies of next Common)", rarity: 1, cost: 1500, effects: &[ModEffect::GrantDuplicator(0, 3)], ramp: None },
-    ModifierDef { name: "Duplicator (+1 copy of next Rare)", rarity: 2, cost: 3000, effects: &[ModEffect::GrantDuplicator(2, 1)], ramp: None },
-    ModifierDef { name: "Black Market (next Uncommon is free)", rarity: 1, cost: 1500, effects: &[ModEffect::GrantVoucher(1)], ramp: None },
-    ModifierDef { name: "Magic Treasure (+250 Gold, +5 income/round)", rarity: 1, cost: 1000,
+    // Multiplication Gems (A0BC): "+3 extra copies of the next 500 Gold (Common)
+    // Upgrade" (the live name "Magic Coin" was wrong — Magic Coin is "+5 Gold
+    // Income"; the common-duplicator is Multiplication Gems).
+    ModifierDef { name: "Multiplication Gems", rarity: 1, cost: 1500, effects: &[ModEffect::GrantDuplicator(0, 3)], ramp: None },
+    // Duplicator (A0EH): "+1 extra copy of the next Rare Weapon or Spikes Upgrade".
+    ModifierDef { name: "Duplicator", rarity: 2, cost: 3000, effects: &[ModEffect::GrantDuplicator(2, 1)], ramp: None },
+    // Black Market (A0GR): "Buy 1 Uncommon Weapon or Spikes Upgrade of your choosing".
+    ModifierDef { name: "Black Market", rarity: 1, cost: 1500, effects: &[ModEffect::GrantVoucher(1)], ramp: None },
+    // Magic Treasure (A0FP): "+250 Gold | Gold value increases by 2 per second" —
+    // the growing-value is modeled as a per-round income ramp.
+    ModifierDef { name: "Magic Treasure", rarity: 1, cost: 1000,
         effects: &[ModEffect::GrantGold(250)],
         ramp: Some(RampSpec { effect: ModEffect::IncomeFlat(5), interval_ticks: RAMP_PER_ROUND }) },
     // Self-scaling / healing / revive (`docs/06` #6): bespoke survival & growth.
-    ModifierDef { name: "Ankh of Reincarnation (revive, +2000 Max HP)", rarity: 3, cost: 5000, effects: &[ModEffect::GrantRevive(2000)], ramp: None },
-    ModifierDef { name: "+25% Healing", rarity: 1, cost: 1500, effects: &[ModEffect::HealingPct(25, 100)], ramp: None },
-    ModifierDef { name: "Regeneration (1.5% Missing HP/sec)", rarity: 2, cost: 3000, effects: &[ModEffect::MissingHpHealPct(15, 1000)], ramp: None },
-    ModifierDef { name: "+1% Piercing Damage per Bow", rarity: 2, cost: 3000, effects: &[ModEffect::DamagePerWeapon(0, DMG_PIERCING as i64, 1)], ramp: None },
-    ModifierDef { name: "+1% Siege Damage per Mortar", rarity: 2, cost: 3000, effects: &[ModEffect::DamagePerWeapon(1, DMG_SIEGE as i64, 1)], ramp: None },
+    // Ankh of Reconstruction (A01T): "Upon fatal damage, fully repair the tower,
+    // using up the Ankh but gaining +2000 Max HP."
+    ModifierDef { name: "Ankh of Reconstruction", rarity: 3, cost: 5000, effects: &[ModEffect::GrantRevive(2000)], ramp: None },
+    // Healing Hand (A0BI): "+25% Healing".
+    ModifierDef { name: "Healing Hand", rarity: 1, cost: 1500, effects: &[ModEffect::HealingPct(25, 100)], ramp: None },
+    // Living Wood (A09C): "+2000 Max HP | +1.5% Missing HP Heal every second".
+    // RE-BUNDLED — the live "Regeneration" modeled only the missing-HP heal; the
+    // Max-HP half now rides the named upgrade.
+    ModifierDef { name: "Living Wood", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(2000), ModEffect::MissingHpHealPct(15, 1000)], ramp: None },
+    // Enchanted Moon Arrow (A0CZ): "+100% Piercing Damage | +1% Piercing per Bow".
+    // RE-BUNDLED — the live item modeled only the per-Bow self-scaling; the flat
+    // +100% Piercing half now rides the named upgrade.
+    ModifierDef { name: "Enchanted Moon Arrow", rarity: 2, cost: 3000, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 100, 100), ModEffect::DamagePerWeapon(0, DMG_PIERCING as i64, 1)], ramp: None },
+    // Refined Explosives (A0D3): "+100% Siege Damage | +1% Siege per Boulder".
+    // RE-BUNDLED (flat +100% Siege + per-Boulder self-scaling). NOTE: the source
+    // keys "per Boulder"; here it keys per Mortar Launcher (weapon def 1) as the
+    // live catalog did — the Boulder weapon lives in the GEN block at a non-stable
+    // index, so the stable index 1 (Mortar) is used. Flagged as a judgement call.
+    ModifierDef { name: "Refined Explosives", rarity: 2, cost: 3000, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 100, 100), ModEffect::DamagePerWeapon(1, DMG_SIEGE as i64, 1)], ramp: None },
     // Stacking damage generator (`docs/06` #5): the Death Engine weapon's Chaos
     // damage scales +10% per Death Engine owned (self-referential count).
+    // representative self-referential generator (the source's "Death Generator"
+    // weapon does +10% per copy; this models that as a +Chaos-per-Death-Engine
+    // modifier keyed to the stable Death Engine weapon index — kept, ramp test
+    // depends on it).
     ModifierDef { name: "Overclocked Death Engine (+10% Chaos per Death Engine)", rarity: 2, cost: 3000, effects: &[ModEffect::DamagePerWeapon(DEATH_ENGINE as i64, DMG_CHAOS as i64, 10)], ramp: None },
     // Damage ↔ economy trades & damage-scaled bounty (`docs/06` #5): pay survival
-    // stats for gold, and convert dealt damage into gold ("Bloodmoney"), and
-    // income into a survival buffer.
-    ModifierDef { name: "Blood Pact (-1000 Max HP, +2000 Gold)", rarity: 1, cost: 0, effects: &[ModEffect::TradeMaxHpForGold(1000, 2000)], ramp: None },
-    ModifierDef { name: "Last Rites (-100 HP Regen, +5000 Gold)", rarity: 2, cost: 0, effects: &[ModEffect::TradeRegenForGold(100, 5000)], ramp: None },
-    // DAMAGE→GOLD (high-ceiling combo): turns a glass-cannon's throughput into a
-    // gold geyser — pairs with high-dps epics to snowball, useless without dps.
+    // stats for gold, and convert dealt damage into gold, and income into a buffer.
+    // Philosopher's Stone (A01S): "-1000 Max HP | +2000 Gold".
+    ModifierDef { name: "Philosopher's Stone", rarity: 1, cost: 0, effects: &[ModEffect::TradeMaxHpForGold(1000, 2000)], ramp: None },
+    // Cursed Treasure (A04P): "-100 HP Regen | +5000 Gold".
+    ModifierDef { name: "Cursed Treasure", rarity: 2, cost: 0, effects: &[ModEffect::TradeRegenForGold(100, 5000)], ramp: None },
+    // representative damage→gold items (the source's "Bloodmoney" gold-per-damage
+    // mechanic, no single named upgrade); kept as a slice.
     ModifierDef { name: "Bloodmoney (+1 Gold per 100 Damage)", rarity: 1, cost: 1500, effects: &[ModEffect::GoldPerDamagePct(1, 60)], ramp: None },
     ModifierDef { name: "Bloodmoney II (+1 Gold per 20 Damage)", rarity: 2, cost: 3000, effects: &[ModEffect::GoldPerDamagePct(1, 12)], ramp: None },
+    // representative income→shield item (mirrors income→HP for the shield); no
+    // single source name. Kept as a slice.
     ModifierDef { name: "Wartithe (25% of Income as Mana Shield)", rarity: 2, cost: 3000, effects: &[ModEffect::IncomeShieldPct(25, 100)], ramp: None },
-    // GEN-MODIFIERS-BEGIN (generated by research/tower-survivors-map/gen_catalog.py)
+    // GEN-MODIFIERS-BEGIN (originally generated by research/tower-survivors-map/
+    // gen_catalog.py; names restored / re-bundled in the content-fidelity pass).
+    // representative ramping epic shield (no exact source; closest named shields
+    // are Recharge / Energy Shield below). Kept as a slice.
     ModifierDef { name: "Aegis Protocol (+2500 Shield, +400/round)", rarity: 3, cost: 5000,
         effects: &[ModEffect::ManaShield(2500, 20)],
         ramp: Some(RampSpec { effect: ModEffect::ManaShield(400, 4), interval_ticks: RAMP_PER_ROUND }) },
-    ModifierDef { name: "+500 Max HP", rarity: 0, cost: 500, effects: &[ModEffect::MaxHp(500)], ramp: None },
-    ModifierDef { name: "+10% Piercing Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 10, 100)], ramp: None },
-    ModifierDef { name: "+10% Normal Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_NORMAL, 10, 100)], ramp: None },
-    ModifierDef { name: "+10% Siege Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 10, 100)], ramp: None },
-    ModifierDef { name: "+10% Chaos Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_CHAOS, 10, 100)], ramp: None },
+    // Improved Masonry (A001): "+500 Max HP".
+    ModifierDef { name: "Improved Masonry", rarity: 0, cost: 500, effects: &[ModEffect::MaxHp(500)], ramp: None },
+    ModifierDef { name: "Improved Piercing Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 10, 100)], ramp: None },
+    ModifierDef { name: "Improved Normal Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_NORMAL, 10, 100)], ramp: None },
+    ModifierDef { name: "Improved Siege Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 10, 100)], ramp: None },
+    ModifierDef { name: "Improved Chaos Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_CHAOS, 10, 100)], ramp: None },
+    // representative +1000-Max-HP item (the source bundles +1000 with a secondary
+    // on Mask of Death / Magic Seeds); kept as a plain slice.
     ModifierDef { name: "+1000 Max HP", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(1000)], ramp: None },
+    // representative +10-armor item (every source +10-armor upgrade bundles a
+    // secondary — Blessed/Spiky/Frost/Poison Armor); kept as a plain slice.
     ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(10)], ramp: None },
+    // representative +2000-Max-HP item (Imbued Masonry above is the bundled source).
     ModifierDef { name: "+2000 Max HP", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(2000)], ramp: None },
+    // representative +50%-bounty item (Bounty Hunter above is the named source).
     ModifierDef { name: "+50% Kill Bounty", rarity: 2, cost: 3000, effects: &[ModEffect::BountyPct(50, 100)], ramp: None },
-    ModifierDef { name: "+2000 Mana Shield", rarity: 2, cost: 3000, effects: &[ModEffect::ManaShield(2000, 10)], ramp: None },
+    // Recharge (A0EX): "+4000 Mana Shield | +25% Mana Regeneration". RE-BUNDLED via
+    // the new ManaRegenPct rider (+25% of the shield's per-tick regen, applied after
+    // the flat pool). NOTE: kept this entry's existing pool (2000) per rule 5 rather
+    // than the source's 4000 — flagged as a judgement call.
+    ModifierDef { name: "Recharge", rarity: 2, cost: 3000, effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ManaRegenPct(25, 100)], ramp: None },
+    // representative +20-income item (Entangled Gold Mine above is the bundled source).
     ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(20)], ramp: None },
-    ModifierDef { name: "+5 Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(5)], ramp: None },
+    // Tower Armor (A02G): "+5 Armor".
+    ModifierDef { name: "Tower Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(5)], ramp: None },
+    // representative +attack-speed item (Rapidfire above is the named source).
     ModifierDef { name: "+10% Attack Speed", rarity: 0, cost: 500, effects: &[ModEffect::AttackSpeedPct(10, 100)], ramp: None },
-    ModifierDef { name: "+80 HP Regen", rarity: 1, cost: 1500, effects: &[ModEffect::HpRegen(80)], ramp: None },
-    ModifierDef { name: "+20 HP Regen", rarity: 0, cost: 500, effects: &[ModEffect::HpRegen(20)], ramp: None },
-    ModifierDef { name: "+5 Gold Income", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(5)], ramp: None },
-    ModifierDef { name: "+10 Gold Income", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(10)], ramp: None },
+    // Renew (A066): "+80 HP Regen | +25% HP Regen". RE-BUNDLED via the new HpRegenPct
+    // rider (+25% of the per-tick regen, applied after the flat +80).
+    ModifierDef { name: "Renew", rarity: 1, cost: 1500, effects: &[ModEffect::HpRegen(80), ModEffect::HpRegenPct(25, 100)], ramp: None },
+    // Repair Crew (A00G): "+20 HP Regen".
+    ModifierDef { name: "Repair Crew", rarity: 0, cost: 500, effects: &[ModEffect::HpRegen(20)], ramp: None },
+    // Magic Coin (A01L): "+5 Gold Income".
+    ModifierDef { name: "Magic Coin", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(5)], ramp: None },
+    // Gold Mine (A02J): "+10 Gold Income | +10% Gold Income". RE-BUNDLED — the live
+    // "+10 Gold Income" gains its +10% income-multiplier half from the source.
+    ModifierDef { name: "Gold Mine", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(10), ModEffect::IncomePct(10, 100)], ramp: None },
+    // representative +100%-bounty item (Transmute above is the bundled named source).
     ModifierDef { name: "+100% Kill Bounty", rarity: 2, cost: 3000, effects: &[ModEffect::BountyPct(100, 100)], ramp: None },
-    ModifierDef { name: "+10% Magic Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_MAGIC, 10, 100)], ramp: None },
+    ModifierDef { name: "Improved Magic Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_MAGIC, 10, 100)], ramp: None },
+    // representative +40-regen item (Wisp/Rejuvenating Petal bundle a secondary);
+    // kept as a plain slice.
     ModifierDef { name: "+40 HP Regen", rarity: 0, cost: 500, effects: &[ModEffect::HpRegen(40)], ramp: None },
-    ModifierDef { name: "+10000 Mana Shield", rarity: 3, cost: 5000, effects: &[ModEffect::ManaShield(10000, 50)], ramp: None },
-    ModifierDef { name: "+10% Dodge", rarity: 0, cost: 500, effects: &[ModEffect::Dodge(10)], ramp: None },
+    // Energy Shield (A0FD): "+10000 Mana Shield | +30% Damage Reduction while Mana
+    // Shield is active". Primary (the huge shield pool) modeled; the conditional DR
+    // is exotic.
+    // TODO(M2): exotic secondary "+30% Damage Reduction while Mana Shield active" — needs shield-active conditional damage-reduction.
+    ModifierDef { name: "Energy Shield", rarity: 3, cost: 5000, effects: &[ModEffect::ManaShield(10000, 50)], ramp: None },
+    // Evasion (A0CL): "+10% Dodge".
+    ModifierDef { name: "Evasion", rarity: 0, cost: 500, effects: &[ModEffect::Dodge(10)], ramp: None },
+    // representative ramping-bounty item (Golden Ring's "+1% Damage per 50% Bounty"
+    // secondary is exotic; this models a plain bounty ramp). Kept as a slice.
     ModifierDef { name: "Escalating Plunder (+100% Bounty, +15%/round)", rarity: 2, cost: 3000,
         effects: &[ModEffect::BountyPct(100, 100)],
         ramp: Some(RampSpec { effect: ModEffect::BountyPct(15, 100), interval_ticks: RAMP_PER_ROUND }) },
+    // representative ramping-Max-HP item (Magic Seeds "+1000 +5/sec" is the closest
+    // source; this is a bigger epic slice). Kept.
     ModifierDef { name: "Living Fortress (+2500 Max HP, +500/round)", rarity: 3, cost: 5000,
         effects: &[ModEffect::MaxHp(2500)],
         ramp: Some(RampSpec { effect: ModEffect::MaxHp(500), interval_ticks: RAMP_PER_ROUND }) },
-    ModifierDef { name: "+1000 Mana Shield", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(1000, 5)], ramp: None },
+    // Mana Shield (A0EQ): "+1000 Mana Shield".
+    ModifierDef { name: "Mana Shield", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(1000, 5)], ramp: None },
+    // representative ramping-regen item (no exact source; closest named regen items
+    // are Renew / Repair Crew). Kept as a slice.
     ModifierDef { name: "Mending Engine (+120 Regen, +30/round)", rarity: 1, cost: 1500,
         effects: &[ModEffect::HpRegen(120)],
         ramp: Some(RampSpec { effect: ModEffect::HpRegen(30), interval_ticks: RAMP_PER_ROUND }) },

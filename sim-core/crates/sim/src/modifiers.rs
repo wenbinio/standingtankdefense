@@ -12,6 +12,15 @@ use crate::content::{self, ModEffect, ModifierDef, WeaponDef};
 use crate::state::{ArenaState, Economy, Modifiers, Tank};
 use determinism::Fixed;
 
+/// Overflow guard for the compounding percentage riders (`MaxHpPct` / `HpRegenPct`
+/// / `ManaRegenPct`). Each such rider multiplies its stat by ~1.25 per purchase,
+/// so a pathological repeat-buy stack would otherwise run a stat to i64 overflow
+/// and poison every downstream `hp + x`. 1e12 sits orders of magnitude above any
+/// reachable real build (max HP tops out in the low millions even on a full
+/// snowball) yet leaves ~7 orders of headroom under i64::MAX for downstream adds,
+/// so the clamp is bit-stable across platforms and never trips in normal play.
+const STAT_CEIL: i64 = 1_000_000_000_000;
+
 /// Phase: apply each active time-scaling ramp whose interval has elapsed
 /// (`docs/06`). Deterministic — fixed ticks, fixed order (ramps are append-only,
 /// never reordered).
@@ -167,6 +176,30 @@ impl Modifiers {
             }
             ModEffect::GoldPerDamagePct(n, d) => economy.gold_per_damage += Fixed::from_ratio(n, d),
             ModEffect::IncomeShieldPct(n, d) => economy.income_shield_pct += Fixed::from_ratio(n, d),
+            // Percentage riders evaluated against the CURRENT stat at apply-time
+            // (so in a bundle they compound on the flat effect listed before them).
+            // Integer/Fixed only — these feed the checksum. The compounding is
+            // CLAMPED to `STAT_CEIL`: repeatedly buying a `[flat, pct]` bundle
+            // multiplies the stat by ~1.25 each time, which would otherwise overflow
+            // i64 (and poison every downstream `hp + x`) in a pathological purchase
+            // stack. `STAT_CEIL` (1e12) sits far above any reachable real build yet
+            // leaves ample headroom for downstream adds, so the clamp is bit-stable
+            // across platforms and never trips in normal play. Same spirit as the
+            // Dodge hard-cap. The inc itself is also derived from the clamped stat,
+            // so it stays bounded.
+            ModEffect::MaxHpPct(n, d) => {
+                let inc = Fixed::from_ratio(n, d).scale_i64(tank.max_hp);
+                tank.max_hp = (tank.max_hp + inc).min(STAT_CEIL);
+                tank.hp += inc;
+            }
+            ModEffect::HpRegenPct(n, d) => {
+                let inc = Fixed::from_ratio(n, d).scale_i64(tank.hp_regen_per_tick);
+                tank.hp_regen_per_tick = (tank.hp_regen_per_tick + inc).clamp(-STAT_CEIL, STAT_CEIL);
+            }
+            ModEffect::ManaRegenPct(n, d) => {
+                let inc = Fixed::from_ratio(n, d).scale_i64(tank.mana_regen_per_tick);
+                tank.mana_regen_per_tick = (tank.mana_regen_per_tick + inc).clamp(-STAT_CEIL, STAT_CEIL);
+            }
             // Registered as per-arena trigger / purchase-flow state in
             // `buy_modifier`; they have no aggregate contribution here. The
             // HP/regen→gold trades need the full ArenaState (gold scoreboard) and

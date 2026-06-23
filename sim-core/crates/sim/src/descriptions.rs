@@ -101,91 +101,90 @@ const WEAPON_TEXT: [(&str, &str); 86] = [
     ("The last rite the Pale Wardens kept for what's coming: it pins a thing where it stands and waits beside it.", "Fast epic normal single-target. Roots the target in place."),  // 85
 ];
 
-const MODIFIER_TEXT: [(&str, &str); 84] = [
+const MODIFIER_TEXT: [(&str, &str); 83] = [
     ("Foundry stamps this kit \"general issue,\" the catch-all crate the Wardens hand out when nothing specialized survived the haul from Ashmark.", "+10% to all weapon damage."),  // 0
-    ("Hexwrights ground these heads to a finer point than the Foundry would risk, and the Wardens never asked how.", "+10% piercing damage."),  // 1
-    ("Recovered from the Ashmark siege-works, calibrated for walls that fell the night the line broke.", "+10% siege damage."),  // 2
-    ("The Conclave bottles a little more of what it borrows, and signs none of it.", "+10% magic damage."),  // 3
+    ("Hexwrights ground these heads to a finer point than the Foundry would risk, and the Wardens never asked how.", "Improved Piercing Attacks: +10% piercing damage."),  // 1
+    ("Recovered from the Ashmark siege-works, calibrated for walls that fell the night the line broke.", "Improved Siege Attacks: +10% siege damage."),  // 2
+    ("The Conclave bottles a little more of what it borrows, and signs none of it.", "Improved Magic Attacks: +10% magic damage."),  // 3
     ("Foundry overrun stamped EPIC and locked in the deep vault; the Wardens were told it would never leave Ashmark.", "+25% damage, multiplicative on top."),  // 4
-    ("A Hexwright governor wired into the firing chain, shaving the pause the Foundry built in for safety.", "+10% attack speed. Shorter cooldowns."),  // 5
-    ("The quartermaster's ledger pays a premium per body, settled out of whatever the Greycoats strip off the field.", "+50% gold per kill."),  // 6
-    ("A standing line in the quartermaster's ledger, drawn each round against the fallen the Greycoats process.", "+20 gold income per round."),  // 7
+    ("A Hexwright governor wired into the firing chain, shaving the pause the Foundry built in for safety.", "Rapidfire: +10% attack speed."),  // 5
+    ("The quartermaster's ledger pays a premium per body, settled out of whatever the Greycoats strip off the field.", "Bounty Hunter: +50% gold per kill."),  // 6
+    ("A Hexwright-tapped seam that pays the gunner in coin and in mending both, the ledger and the surgeon settled from one vein.", "Entangled Gold Mine: +20 income, 25% of it healed."),  // 7
     ("The quartermaster skims a margin off every coin the Greycoats turn in, and the ledger never forgets.", "+10% to passive income."),  // 8
     ("A heavier cut, written into the ledger by a quartermaster who stopped pretending the conscripts would be paid.", "+25% to passive income."),  // 9
-    ("Greycoat field-medics were paid in salvage, so the ledger learned to mend what the Relief never sent.", "Heals 25% of income each tick."),  // 10
-    ("The quartermaster keeps a crooked ledger; now and then a body settles for far more than its line was worth.", "5% of kills pay triple bounty."),  // 11
-    ("Plating scavenged off the Ashmark redoubts, bolted on by Wardens who knew the Relief was not coming.", "+2000 max HP."),  // 12
-    ("Foundry hull-shave, rolled too thin in the rush but thick enough to turn what the Relief left you to face.", "+10 flat armor. Shaves every hit."),  // 13
-    ("A Hexwright's borrowed skin of math, holding where the Wardens' own armor and the Relief both gave out.", "+2000 mana shield, slow regen."),  // 14
-    ("The Relief that never came included field-surgeons; the Wardens improvised this drip in their absence.", "+50 HP regen per tick."),  // 15
-    ("A Warden's last trick when the line is held and the Relief is a rumor: be where the blow is not.", "+10% chance to dodge a hit."),  // 16
-    ("The longer the war drags on, the heavier the Foundry's old governor leans into the firing chain.", "+2% damage now, +1% every round."),  // 17
-    ("The Conclave warned that borrowed chaos compounds with every round it sits unrepaid, and Hungry Hungry Happypotamus is still on the horizon.", "+20% chaos now, +5% every round."),  // 18
-    ("The quartermaster's ledger breeds on itself; each round the Greycoats turn in more, and the line grows fatter.", "+10 income now, +5 every round."),  // 19
-    ("Scar over scar, the way a Warden's plating thickens every round the Relief fails to arrive.", "+10 armor now, +5 every round."),  // 20
-    ("Warden marksmanship doctrine, the kind drilled into gunners told to make every single shot count.", "+25% to single-target weapons."),  // 21
-    ("Foundry overpressure tuning meant for the crater-makers, ground for walls and the crowds behind them.", "+25% to splash weapons."),  // 22
-    ("Greycoat volley discipline, salvaged off a unit that fired in ranks until the ranks ran out.", "+25% to barrage weapons."),  // 23
-    ("A Hexwright field-binding that thickens whatever the tank pulses out into the ring of dirt around it.", "+25% to area-pulse weapons."),  // 24
-    ("Calibration recovered from the Ashmark breakwalls, meant to shove a whole front rank into the next world.", "+25% to wave weapons."),  // 25
-    ("Foundry ricochet-work, each hop tuned to land angrier than the last off scrap nobody else would salvage.", "+25% to bounce weapons."),  // 26
-    ("Warden close-line doctrine, where the work is done at knife-reach and the gunner smells what he kills.", "+25% to short-range weapons (<=600)."),  // 27
-    ("A long-glass sighting kit off an Ashmark sniper-nest, for killing them before they have a face.", "+25% to long-range weapons (>=900)."),  // 28
-    ("The Foundry's cheapest overruns, the junk the Greycoats are handed first, made to earn twice its serial.", "Doubles common-rarity weapon damage."),  // 29
-    ("Warden execution drill: a thing on the ground and stunned is a thing the line stops counting.", "+20% damage to stunned enemies."),  // 30
-    ("Finish what the field-rations and the rot already started in them.", "+25% damage to poisoned enemies."),  // 31
-    ("Greycoat sickness spread through Ashmark in the bad winters; the Conclave learned to concentrate it.", "+10% applied poison damage."),  // 32
-    ("A Hexwright lock that holds the stunned a breath longer, long enough for the Wardens to work.", "+50% stun duration."),  // 33
-    ("Field-improvised cruelty: Ashmark scrap-iron driven point-out into the tank's hull.", "+80 retaliation damage when hit."),  // 34
-    ("A denser hide of welded scrap, the kind a Warden bolts on when reaching the tank should cost a limb.", "+300 retaliation damage when hit."),  // 35
-    ("The same improvised barbs, ground keener by a gunner with nothing left to do but sharpen the punishment.", "+50% to all spikes damage."),  // 36
-    ("Every round the war drags on, the Wardens hammer fresh scrap into the hull and the welcome gets crueler.", "+80 spikes now, +10 every round."),  // 37
-    ("A Hexwright marking-rite that opens the flesh of everything near; the marked do not heal what is opened.", "Nearby enemies take +5% damage/sec."),  // 38
-    ("The Relief never came, so the Wardens learned to take their mending off the dying instead.", "+15 HP each time an enemy dies."),  // 39
-    ("A deeper draught of the same grim arithmetic, each corpse on the line paying back the Relief's debt.", "+60 HP each time an enemy dies."),  // 40
-    ("Conclave rot-spores feed two mouths at once, the dying enemy's and the gunner the Relief abandoned.", "+5 HP every poison tick you deal."),  // 41
-    ("Three flips of a Greycoat token, and the quartermaster's ledger pays out in triplicate before anyone checks the column twice.", "Next common bought yields 3 free copies."),  // 42
-    ("The Conclave keeps a second of everything worth having, off the ledger and out of the quartermaster's count.", "Next rare bought yields 1 free copy."),  // 43
-    ("A name in the right margin of the ledger, and the Greycoats look the other way once.", "Next uncommon purchase is free."),  // 44
-    ("Coin the Greycoats buried at Ashmark before the line broke, dug up and still drawing interest.", "+250 gold now, +5 income every round."),  // 45
-    ("The Wardens buried this rite with their last chaplain; it answers once, and resents being asked.", "Revive once on lethal hit, +2000 max HP."),  // 46
-    ("What field-dressing the Wardens have left, doled out by a surgeon who stopped counting the dead at Ashmark.", "+25% to all healing received."),  // 47
-    ("Scar tissue layered over scar tissue; the closer to the dirt, the harder the body argues.", "Heals 1.5% of missing HP each second."),  // 48
-    ("Every Warden bow racked beside this one lends its draw to the next; the post hoards what it cannot replace.", "+1% piercing per Bow owned."),  // 49
-    ("Ranged together, Foundry mortars find the old Ashmark firing tables faster, each barrel correcting the last.", "+1% siege per Mortar Launcher owned."),  // 50
-    ("Feed the Foundry's worst machine more of its own kind and the chaos in it deepens with the count.", "+10% chaos per Death Engine owned."),  // 51
-    ("The Greycoats will buy the meat off a living Warden, and the ledger never asks why the line went thin.", "-1000 max HP, +2000 gold. No going back."),  // 52
-    ("Stop the surgeon's work, sell the bandages, and pay the quartermaster in the healing you'll never get.", "-100 HP regen, +5000 gold."),  // 53
-    ("The Greycoats price the dead by the wound; every hundred you open is a coin in the ledger.", "+1 gold per 100 damage dealt."),  // 54
-    ("A richer contract from the same bloody ledger, paying out every twenty points of ruin you deal.", "+1 gold per 20 damage dealt."),  // 55
-    ("The Hexwrights tithe a quarter of your takings into borrowed math, keeping the skin paid up.", "Income tops up your mana shield, 25%."),  // 56
-    ("Conclave shieldwork that studies the siege as it stands, thickening a little more each round it endures.", "+2500 shield, +400 more each round."),  // 57
-    ("A patched plate off an Ashmark casualty, just enough give before the seam parts.", "+500 max HP."),  // 58
-    ("A spare Warden quiver, the heads honed on the same stone the last gunner used.", "+10% piercing damage."),  // 59
-    ("Plain Foundry shot, no markings, no cleverness, stamped out by the crate.", "+10% normal damage."),  // 60
-    ("A Foundry overrun of siege charges, serialed for a wall at Ashmark that no longer stands.", "+10% siege damage."),  // 61
-    ("Conclave ordnance the Hexwrights signed for but never logged, full of something that resents the barrel.", "+10% chaos damage."),  // 62
-    ("Hull plating cut from a dead Ashmark engine, bolted over the old wounds.", "+1000 max HP."),  // 63
-    ("A Foundry armor ration, thin but stamped and accounted for in the ledger.", "+10 flat armor."),  // 64
-    ("Heavy Warden plate pulled off a tank that held this line three reliefs ago.", "+2000 max HP."),  // 65
-    ("The Greycoats run the corpse-tally generous when the bodies pile this high.", "+50% gold per kill."),  // 66
-    ("A Hexwright shield-charm, borrowed life to throw away before your own.", "+2000 mana shield, slow regen."),  // 67
-    ("A standing line in the quartermaster's ledger, paid out of Ashmark salvage each round.", "+20 gold income per round."),  // 68
-    ("A scrap of Foundry plate, half a ration, glancing off what it can.", "+5 flat armor."),  // 69
-    ("A Foundry gear-kit that shaves the pause between firings, cut from a faster machine.", "+10% attack speed."),  // 70
-    ("The Wardens' field-surgeon at full pace, stitching faster than the line falls apart.", "+80 HP regen per tick."),  // 71
-    ("A slow, stubborn mending, all the relief the Wardens could spare this post.", "+20 HP regen per tick."),  // 72
-    ("A thin trickle on the Greycoat ledger, the kind command forgets to honor.", "+5 gold income per round."),  // 73
-    ("A modest entry in the quartermaster's books, paid round on round from the dead.", "+10 gold income per round."),  // 74
-    ("The Greycoats pay twice over for the same fallen, the ledger long past honesty.", "+100% gold per kill."),  // 75
-    ("Conclave shot the Hexwrights leaned on too hard, biting back through the barrel each time.", "+10% magic damage."),  // 76
-    ("A respectable clip of mending, more than the Relief ever delivered to this line.", "+40 HP regen per tick."),  // 77
-    ("An obscene coat of Hexwright life-work, more borrowed skin than any Warden was meant to wear.", "+10000 mana shield, fast regen."),  // 78
-    ("A Greycoat's bad habits, learned at Ashmark: one swing in ten finds only air.", "+10% chance to dodge a hit."),  // 79
-    ("The Greycoat ledger compounds as the siege drags on, the dead worth more every round Hungry Hungry Happypotamus nears.", "+100% kill gold, +15% more each round."),  // 80
-    ("Warden salvage welded round Warden salvage, the wall thickening every round the line holds.", "+2500 max HP, +500 more each round."),  // 81
-    ("A thin Hexwright coat of borrowed math, enough to spend before your own skin.", "+1000 mana shield, slow regen."),  // 82
-    ("The Wardens' last surgeon works faster the longer the war grinds, mending quickening as the siege wears on.", "+120 HP/tick regen, +30 more each round."),  // 83
+    ("The quartermaster keeps a crooked ledger; now and then a body settles for far more than its line was worth, and pays the premium too.", "Transmute: +100% bounty; 5% of kills pay triple."),  // 10
+    ("Warden masons doubled the wall on the wall they already had, the way a siege teaches you to never stop pouring stone.", "Imbued Masonry: +2000 max HP, then +25%."),  // 11
+    ("Foundry hull-shave, rolled too thin in the rush but thick enough to turn what the Relief left you to face.", "+10 flat armor. Shaves every hit."),  // 12
+    ("A Hexwright spring fed into the hull, the borrowed skin topping itself off the way a well does.", "Moonwell: +2000 mana shield, regenerating."),  // 13
+    ("The Relief that never came included field-surgeons; the Wardens improvised this drip in their absence.", "+50 HP regen per tick."),  // 14
+    ("A Warden's last trick when the line is held and the Relief is a rumor: be where the blow is not.", "Evasion: +10% chance to dodge a hit."),  // 15
+    ("The longer the war drags on, the heavier the Foundry's old governor leans into the firing chain.", "Power Generator: +2% damage now, +1% every round."),  // 16
+    ("The Conclave warned that borrowed chaos compounds with every round it sits unrepaid, and Hungry Hungry Happypotamus is still on the horizon.", "Scroll of Chaos: +20% chaos now, +3% every round."),  // 17
+    ("The quartermaster's ledger breeds on itself; each round the Greycoats turn in more, and the line grows fatter.", "+10 income now, +5 every round."),  // 18
+    ("Scar over scar, the way a Warden's plating thickens every round the Relief fails to arrive.", "Blessed Armor: +10 armor now, +5 every round."),  // 19
+    ("Warden marksmanship doctrine, the kind drilled into gunners told to make every single shot count.", "Focusfire: +25% to single-target weapons."),  // 20
+    ("Foundry overpressure tuning meant for the crater-makers, ground for walls and the crowds behind them.", "+25% to splash weapons."),  // 21
+    ("Greycoat volley discipline, salvaged off a unit that fired in ranks until the ranks ran out.", "+25% to barrage weapons."),  // 22
+    ("A Hexwright field-binding that thickens whatever the tank pulses out into the ring of dirt around it.", "+25% to area-pulse weapons."),  // 23
+    ("Calibration recovered from the Ashmark breakwalls, meant to shove a whole front rank into the next world.", "Wavefire: +25% to wave weapons."),  // 24
+    ("Foundry ricochet-work, each hop tuned to land angrier than the last off scrap nobody else would salvage.", "+25% to bounce weapons."),  // 25
+    ("Warden close-line doctrine, where the work is done at knife-reach and the gunner smells what he kills.", "Command Aura: +25% to short-range (<=600)."),  // 26
+    ("A long-glass sighting kit off an Ashmark sniper-nest, for killing them before they have a face.", "Trueshot Aura: +25% to long-range (>=900)."),  // 27
+    ("The Foundry's cheapest overruns, the junk the Greycoats are handed first, made to earn twice its serial.", "Engineering Upgrade: doubles common-weapon damage."),  // 28
+    ("Warden execution drill: a thing on the ground and stunned is a thing the line stops counting.", "Bash: +20% damage to stunned enemies."),  // 29
+    ("Finish what the field-rations and the rot already started in them.", "Corrosive Poison: +25% damage to poisoned."),  // 30
+    ("Greycoat sickness spread through Ashmark in the bad winters; the Conclave learned to concentrate it.", "Potent Poison: +10% applied poison damage."),  // 31
+    ("A Hexwright lock that holds the stunned a breath longer, long enough for the Wardens to work.", "Dazing Stuns: +50% stun duration."),  // 32
+    ("Field-improvised cruelty: Ashmark scrap-iron driven point-out into the tank's hull, set so the swing that lands draws a little back.", "Dreadlord Fang: +80 retaliation when hit."),  // 33
+    ("A denser hide of welded scrap, the kind a Warden bolts on when reaching the tank should cost a limb.", "+300 retaliation damage when hit."),  // 34
+    ("The same improvised barbs, ground keener by a gunner with nothing left to do but sharpen the punishment.", "+50% to all spikes damage."),  // 35
+    ("Every round the war drags on, the Wardens hammer fresh scrap into the hull and the welcome gets crueler.", "Growing Spikes: +80 now, +10 every round."),  // 36
+    ("A Hexwright marking-rite that opens the flesh of everything near; the marked do not heal what is opened.", "Vulnerability Totem: nearby enemies take +5%/sec."),  // 37
+    ("The Relief never came, so the Wardens took their mending off the dying and bolted fresh plate while they were at it.", "Mask of Death: +1000 max HP, +15 HP per kill."),  // 38
+    ("A deeper draught of the same grim arithmetic, each corpse on the line paying back the Relief's debt.", "+60 HP each time an enemy dies."),  // 39
+    ("Conclave rot-spores feed two mouths at once, the dying enemy's and the gunner the Relief abandoned.", "Reanimating Poison: +5 HP every poison tick."),  // 40
+    ("Three flips of a Greycoat token, and the quartermaster's ledger pays out in triplicate before anyone checks the column twice.", "Multiplication Gems: next common yields 3 copies."),  // 41
+    ("The Conclave keeps a second of everything worth having, off the ledger and out of the quartermaster's count.", "Duplicator: next rare bought yields 1 free copy."),  // 42
+    ("A name in the right margin of the ledger, and the Greycoats look the other way once.", "Black Market: next uncommon purchase is free."),  // 43
+    ("Coin the Greycoats buried at Ashmark before the line broke, dug up and still drawing interest.", "Magic Treasure: +250 gold now, +5 income/round."),  // 44
+    ("The Wardens buried this rite with their last chaplain; it answers once, and resents being asked.", "Ankh of Reconstruction: revive once, +2000 max HP."),  // 45
+    ("What field-dressing the Wardens have left, doled out by a surgeon who stopped counting the dead at Ashmark.", "Healing Hand: +25% to all healing received."),  // 46
+    ("Hexwright greenwood grown through the hull, more wall and slower mending the closer to death the gunner runs.", "Living Wood: +2000 max HP, 1.5% missing HP/sec."),  // 47
+    ("Every Warden bow racked beside this one lends its draw to the next; the whole rack of them sights truer for the hoard.", "Enchanted Moon Arrow: +100% piercing, +1% per Bow."),  // 48
+    ("Ranged together, Foundry mortars find the old Ashmark firing tables faster, each barrel correcting the last.", "Refined Explosives: +100% siege, +1% per Mortar."),  // 49
+    ("Feed the Foundry's worst machine more of its own kind and the chaos in it deepens with the count.", "+10% chaos per Death Engine owned."),  // 50
+    ("The Greycoats will buy the meat off a living Warden, and the ledger never asks why the line went thin.", "Philosopher's Stone: -1000 max HP, +2000 gold."),  // 51
+    ("Stop the surgeon's work, sell the bandages, and pay the quartermaster in the healing you'll never get.", "Cursed Treasure: -100 HP regen, +5000 gold."),  // 52
+    ("The Greycoats price the dead by the wound; every hundred you open is a coin in the ledger.", "+1 gold per 100 damage dealt."),  // 53
+    ("A richer contract from the same bloody ledger, paying out every twenty points of ruin you deal.", "+1 gold per 20 damage dealt."),  // 54
+    ("The Hexwrights tithe a quarter of your takings into borrowed math, keeping the skin paid up.", "Income tops up your mana shield, 25%."),  // 55
+    ("Conclave shieldwork that studies the siege as it stands, thickening a little more each round it endures.", "+2500 shield, +400 more each round."),  // 56
+    ("A patched plate off an Ashmark casualty, just enough give before the seam parts.", "Improved Masonry: +500 max HP."),  // 57
+    ("A spare Warden quiver, the heads honed on the same stone the last gunner used.", "Improved Piercing Attacks: +10% piercing damage."),  // 58
+    ("Plain Foundry shot, no markings, no cleverness, stamped out by the crate.", "Improved Normal Attacks: +10% normal damage."),  // 59
+    ("A Foundry overrun of siege charges, serialed for a wall at Ashmark that no longer stands.", "Improved Siege Attacks: +10% siege damage."),  // 60
+    ("Conclave ordnance the Hexwrights signed for but never logged, full of something that resents the barrel.", "Improved Chaos Attacks: +10% chaos damage."),  // 61
+    ("Hull plating cut from a dead Ashmark engine, bolted over the old wounds.", "+1000 max HP."),  // 62
+    ("A Foundry armor ration, thin but stamped and accounted for in the ledger.", "+10 flat armor."),  // 63
+    ("Heavy Warden plate pulled off a tank that held this line three reliefs ago.", "+2000 max HP."),  // 64
+    ("The Greycoats run the corpse-tally generous when the bodies pile this high.", "+50% gold per kill."),  // 65
+    ("A Hexwright recharging-rite for the borrowed skin, drawing the pool back up a quarter faster than it bleeds.", "Recharge: +2000 shield, +25% shield regen."),  // 66
+    ("A standing line in the quartermaster's ledger, paid out of Ashmark salvage each round.", "+20 gold income per round."),  // 67
+    ("A scrap of Foundry plate, half a ration, glancing off what it can.", "Tower Armor: +5 flat armor."),  // 68
+    ("A Foundry gear-kit that shaves the pause between firings, cut from a faster machine.", "+10% attack speed."),  // 69
+    ("The Wardens' field-surgeon at full pace, stitching faster than the line falls apart, and faster still as the wounds mount.", "Renew: +80 HP regen, then +25%."),  // 70
+    ("A slow, stubborn mending, all the relief the Wardens could spare this post.", "Repair Crew: +20 HP regen per tick."),  // 71
+    ("A thin trickle on the Greycoat ledger, the kind command forgets to honor.", "Magic Coin: +5 gold income per round."),  // 72
+    ("A modest seam in the quartermaster's books, paid round on round and skimmed a margin besides.", "Gold Mine: +10 income, +10% income."),  // 73
+    ("The Greycoats pay twice over for the same fallen, the ledger long past honesty.", "+100% gold per kill."),  // 74
+    ("Conclave shot the Hexwrights leaned on too hard, biting back through the barrel each time.", "Improved Magic Attacks: +10% magic damage."),  // 75
+    ("A respectable clip of mending, more than the Relief ever delivered to this line.", "+40 HP regen per tick."),  // 76
+    ("An obscene coat of Hexwright life-work, more borrowed skin than any Warden was meant to wear, and it turns the blows it eats.", "Energy Shield: +10000 mana shield."),  // 77
+    ("A Greycoat's bad habits, learned at Ashmark: one swing in ten finds only air.", "Evasion: +10% chance to dodge a hit."),  // 78
+    ("The Greycoat ledger compounds as the siege drags on, the dead worth more every round Hungry Hungry Happypotamus nears.", "+100% kill gold, +15% more each round."),  // 79
+    ("Warden salvage welded round Warden salvage, the wall thickening every round the line holds.", "+2500 max HP, +500 more each round."),  // 80
+    ("A thin Hexwright coat of borrowed math, enough to spend before your own skin.", "Mana Shield: +1000 mana shield."),  // 81
+    ("The Wardens' last surgeon works faster the longer the war grinds, mending quickening as the siege wears on.", "+120 HP/tick regen, +30 more each round."),  // 82
 ];
 
 #[cfg(test)]
