@@ -151,6 +151,59 @@ func is_dead() -> bool:
 	var a := _arena()
 	return a.size() > 7 and a[7] != 0
 
+# --- pacing / abilities (single-arena; StMatch exposes none of this, so a
+# match-wrapped view returns inert defaults) --------------------------------------
+# clear_state() = [ready_in_ticks, cooldown_total_ticks].
+# Ticks until Clear is ready again; 0 = ready NOW.
+func clear_ready_in() -> int:
+	if _sim == null:
+		return 0
+	var cs: PackedInt64Array = _sim.clear_state()
+	return cs[0] if cs.size() > 0 else 0
+
+# Full Clear cooldown length in ticks (denominator for a cooldown fill; >= 1).
+func clear_cooldown_total() -> int:
+	if _sim == null:
+		return 1
+	var cs: PackedInt64Array = _sim.clear_state()
+	return maxi(int(cs[1]), 1) if cs.size() > 1 else 1
+
+# timing() = [ticks_to_next_round, round_len_ticks, boss_spawn_tick].
+# Ticks until the next round boundary (= the next shop refresh), 1..=round_ticks.
+func ticks_to_next_round() -> int:
+	if _sim == null:
+		return 0
+	var t: PackedInt64Array = _sim.timing()
+	return t[0] if t.size() > 0 else 0
+
+# Round length in ticks (30 s @ 30 Hz).
+func round_ticks() -> int:
+	if _sim == null:
+		return 900
+	var t: PackedInt64Array = _sim.timing()
+	return maxi(int(t[1]), 1) if t.size() > 1 else 900
+
+# The fixed tick the boss enters the arena (0 when unavailable — match view).
+func boss_spawn_tick() -> int:
+	if _sim == null:
+		return 0
+	var t: PackedInt64Array = _sim.timing()
+	return t[2] if t.size() > 2 else 0
+
+# First live boss this tick as {kind, hp_permille}, or {} when no boss is up.
+# Zips the parallel enemy arrays once, here, so the HUD never index-pokes them.
+func boss_info() -> Dictionary:
+	var bosses := enemies_boss()
+	for i in bosses.size():
+		if bosses[i] != 0:
+			var kinds := enemies_kind()
+			var hp := enemies_hp_permille()
+			return {
+				"kind": int(kinds[i]) if i < kinds.size() else 2,
+				"hp_permille": int(hp[i]) if i < hp.size() else 0,
+			}
+	return {}
+
 # --- tank ----------------------------------------------------------------------
 func tank_hp() -> int:
 	var a: PackedInt64Array = _sim.tank() if _sim != null else _arena()

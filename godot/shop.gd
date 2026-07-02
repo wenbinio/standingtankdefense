@@ -5,6 +5,10 @@
 # queued by main.gd (this module only reports hit-tests and draws state).
 extends Node2D
 
+# Sim tick rate (mirrors sim::TICK_HZ) — ticks → seconds for the Clear cooldown
+# readout. Render-only arithmetic.
+const TICK_HZ := 30
+
 var view: SimView = null      # wired by main.gd
 # The intent consumed THIS tick (exactly what sim.step() received), pushed by
 # main.gd for the pressed-state draw feedback. 0 = none.
@@ -159,15 +163,39 @@ func _draw() -> void:
 		draw_rect(reroll_rect, rr_outline, false, 1.0)
 	draw_string(head, reroll_rect.position + Vector2(12, reroll_rect.size.y * 0.5 + 5), rr_label,
 		HORIZONTAL_ALIGNMENT_LEFT, btn_w - 18, 14, ArtTheme.ui("header") if rr_ok else ArtTheme.ui("text_dim"))
+	# Clear button: two visual states driven by the sim's real cooldown (the sim
+	# already ignores Clear while cooling — this makes the button LOOK disabled).
+	var cd_left: int = view.clear_ready_in()
+	var cd_total: int = maxi(view.clear_cooldown_total(), 1)
+	var cl_ready := cd_left <= 0
 	var cl_on := ArtTheme.ui("danger").darkened(0.7)
-	var cl_bg := _btn_bg(cl_on, cl_on, true, clear_rect.has_point(mpos), pending_code == 3)
+	var cl_off := ArtTheme.ui("panel_bg").lightened(0.03)
+	var cl_bg := _btn_bg(cl_on, cl_off, cl_ready, clear_rect.has_point(mpos), pending_code == 3)
 	draw_rect(clear_rect, cl_bg)
-	if clear_rect.has_point(mpos):
-		var cl_outline := ArtTheme.ui("danger")
-		cl_outline.a = 0.5
-		draw_rect(clear_rect, cl_outline, false, 1.0)
-	draw_string(head, clear_rect.position + Vector2(12, clear_rect.size.y * 0.5 + 5), tr("[Space] CLEAR"),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("danger"))
+	if cl_ready:
+		# Subtle ready pulse (render-only clock; never feeds the sim).
+		var cl_pulse := ArtTheme.ui("danger")
+		cl_pulse.a = 0.30 + 0.18 * sin(Time.get_ticks_msec() * 0.004)
+		draw_rect(clear_rect, cl_pulse, false, 1.0)
+		if clear_rect.has_point(mpos):
+			var cl_outline := ArtTheme.ui("danger")
+			cl_outline.a = 0.5
+			draw_rect(clear_rect, cl_outline, false, 1.0)
+		draw_string(head, clear_rect.position + Vector2(12, clear_rect.size.y * 0.5 + 5), tr("[Space] CLEAR"),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("danger"))
+	else:
+		# Cooling: dimmed button, a left-to-right recharge fill, and the seconds
+		# remaining — no hover affordance while it cannot fire.
+		var frac := 1.0 - float(cd_left) / float(cd_total)
+		var cl_fill := ArtTheme.ui("danger").darkened(0.55)
+		cl_fill.a = 0.55
+		draw_rect(Rect2(clear_rect.position, Vector2(clear_rect.size.x * frac, clear_rect.size.y)), cl_fill)
+		draw_string(head, clear_rect.position + Vector2(12, clear_rect.size.y * 0.5 + 5), tr("[Space] CLEAR"),
+			HORIZONTAL_ALIGNMENT_LEFT, btn_w - 52, 14, ArtTheme.ui("text_dim"))
+		var cl_secs := "%ds" % ceili(float(cd_left) / float(TICK_HZ))
+		var csw := head.get_string_size(cl_secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+		draw_string(head, clear_rect.position + Vector2(clear_rect.size.x - csw - 10, clear_rect.size.y * 0.5 + 5),
+			cl_secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("danger").lightened(0.15))
 
 	# Hover tooltip: flavor + mechanical tip for the card under the cursor.
 	for i in shop_rects.size():

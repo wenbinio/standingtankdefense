@@ -184,6 +184,8 @@ Improved Chaos Attacks,Improved Chaos Attacks,混沌强化
 ROUND %d,ROUND %d,第 %d 轮
 BOSS,BOSS,首领
 tick %d,tick %d,帧 %d
+next in %ds,next in %ds,%d 秒后下一轮
+BOSS IN %s,BOSS IN %s,首领来袭 %s
 ARSENAL,ARSENAL,武器库
 — nothing yet —,— nothing yet —,— 空空如也 —
 SHOP,SHOP,商店

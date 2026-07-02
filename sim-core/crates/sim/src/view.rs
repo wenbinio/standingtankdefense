@@ -19,6 +19,15 @@ pub struct RenderView {
     pub tick: u32,
     pub round: u32,
     pub dead: bool,
+    /// Ticks until `Clear` is ready again (0 ⇒ ready NOW). Pure read of
+    /// `tank.clear_cooldown_end` vs the current tick — HUD cooldown indicator.
+    pub clear_ready_in: u32,
+    /// Full `Clear` cooldown length in ticks (the denominator for a cooldown
+    /// fill fraction; constant over a match).
+    pub clear_cooldown_total: u32,
+    /// Ticks until the next round boundary (= the next shop refresh), always
+    /// in `1..=ROUND_TICKS` — HUD round/shop countdown.
+    pub ticks_to_next_round: u32,
     pub tank: RenderTank,
     pub enemies: Vec<RenderEnemy>,
     pub projectiles: Vec<RenderProjectile>,
@@ -285,6 +294,9 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         tick: s.tick,
         round: s.round,
         dead: s.dead,
+        clear_ready_in: s.tank.clear_cooldown_end.saturating_sub(s.tick),
+        clear_cooldown_total: crate::input::CLEAR_COOLDOWN_TICKS,
+        ticks_to_next_round: crate::ROUND_TICKS - s.tick % crate::ROUND_TICKS,
         tank,
         enemies,
         projectiles,
@@ -327,6 +339,35 @@ mod tests {
             assert!(!e.name.is_empty());
             assert!(e.base_hp > 0);
         }
+    }
+
+    #[test]
+    fn clear_and_round_timing_track_state() {
+        let mut s = ArenaState::new(0xBEEF, 0);
+        // Fresh arena: Clear ready, a full round ahead.
+        let v = snapshot(&s);
+        assert_eq!(v.clear_ready_in, 0, "Clear starts ready");
+        assert_eq!(v.clear_cooldown_total, crate::input::CLEAR_COOLDOWN_TICKS);
+        assert_eq!(v.ticks_to_next_round, crate::ROUND_TICKS);
+        // Use Clear: cooldown counts down from the full length.
+        step(&mut s, Input::Clear);
+        let v = snapshot(&s);
+        assert_eq!(
+            v.clear_ready_in,
+            crate::input::CLEAR_COOLDOWN_TICKS - 1,
+            "one tick already elapsed post-step"
+        );
+        for _ in 0..(crate::input::CLEAR_COOLDOWN_TICKS - 1) {
+            step(&mut s, Input::Noop);
+        }
+        let v = snapshot(&s);
+        assert_eq!(v.clear_ready_in, 0, "ready again after the cooldown");
+        // Round countdown: always in 1..=ROUND_TICKS and consistent with tick.
+        assert_eq!(
+            v.ticks_to_next_round,
+            crate::ROUND_TICKS - s.tick % crate::ROUND_TICKS
+        );
+        assert!(v.ticks_to_next_round >= 1 && v.ticks_to_next_round <= crate::ROUND_TICKS);
     }
 
     #[test]

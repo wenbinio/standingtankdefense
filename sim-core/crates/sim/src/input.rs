@@ -7,8 +7,9 @@ use crate::state::*;
 /// enemies instantly, but the boss (The Hippocrate, ~33M HP) takes
 /// ~11 Clears — and `Clear` is the ONLY thing that can hurt the boss.
 const CLEAR_DAMAGE: i64 = 3_000_000;
-/// Cooldown (in ticks) imposed after a `Clear`.
-const CLEAR_COOLDOWN_TICKS: u32 = 300;
+/// Cooldown (in ticks) imposed after a `Clear`. `pub(crate)` so the render
+/// view can report the cooldown fraction (`view::RenderView::clear_cooldown_total`).
+pub(crate) const CLEAR_COOLDOWN_TICKS: u32 = 300;
 /// Gold increment added to `reroll_cost` after a paid reroll.
 const REROLL_COST_STEP: i64 = 100;
 

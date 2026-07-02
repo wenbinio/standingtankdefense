@@ -7,6 +7,8 @@
 //!   var sim = StSim.new_match(seed)
 //!   sim.step(code, slot)          # 0 Noop · 1 Buy(slot) · 2 Reroll · 3 Clear
 //!   sim.tick(); sim.round(); sim.is_dead()
+//!   sim.clear_state() -> [ready_in_ticks, cooldown_total_ticks]
+//!   sim.timing() -> [ticks_to_next_round, round_len_ticks, boss_spawn_tick]
 //!   sim.tank() -> [x,y,hp,max_hp,revives]
 //!   sim.economy() -> [gold,income,rerolls,reroll_cost]
 //!   sim.enemies_pos() / enemies_boss() / enemies_kind() / enemies_id()
@@ -191,6 +193,37 @@ impl StSim {
     #[func]
     fn is_dead(&self) -> bool {
         self.state.dead
+    }
+
+    /// `[ready_in_ticks, cooldown_total_ticks]` for the Clear ability.
+    /// `ready_in_ticks == 0` ⇒ Clear is ready NOW; otherwise it is the ticks
+    /// remaining, out of `cooldown_total_ticks` (HUD cooldown indicator).
+    #[func]
+    fn clear_state(&self) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        for v in [
+            self.view.clear_ready_in as i64,
+            self.view.clear_cooldown_total as i64,
+        ] {
+            a.push(v);
+        }
+        a
+    }
+
+    /// `[ticks_to_next_round, round_len_ticks, boss_spawn_tick]` — match
+    /// pacing for the HUD: countdown to the next round/shop refresh, the round
+    /// length, and the fixed tick the boss enters the arena.
+    #[func]
+    fn timing(&self) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        for v in [
+            self.view.ticks_to_next_round as i64,
+            sim::ROUND_TICKS as i64,
+            sim::content::BOSS_SPAWN_TICK as i64,
+        ] {
+            a.push(v);
+        }
+        a
     }
 
     /// `[x, y, hp, max_hp, revives]`.
