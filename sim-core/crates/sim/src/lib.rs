@@ -40,6 +40,10 @@ pub const ROUND_TICKS: u32 = 30 * TICK_HZ;
 /// validating shadow-sim must apply phases in this exact sequence so their
 /// `checksum()` agree (`docs/05 §5.6.1`).
 pub fn step(s: &mut ArenaState, inp: Input) {
+    // 0. Drop last tick's render events (drained or not — `docs/09 §9.3`). The
+    // clear runs before the dead early-out so a frozen arena never re-serves
+    // its death-tick events.
+    s.events.clear();
     if s.dead {
         // Frozen after death, but keep advancing the tick so checksum traces
         // across runs stay length-aligned.
@@ -51,6 +55,7 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     let new_round = s.tick / ROUND_TICKS;
     if new_round != s.round {
         s.round = new_round;
+        s.emit(SimEvent::RoundStart { round: new_round });
         shop::generate_offers(s);
         economy::on_round_start(s);
         // Stacking spikes (source: Bloody Spikes) reset to 0 at the round boundary
@@ -286,6 +291,7 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_u32(p.len() as u32);
     for x in p {
         c.write_u32(x.id.0);
+        c.write_u32(x.weapon_kind as u32);
         c.write_fixed(x.pos.x);
         c.write_fixed(x.pos.y);
         c.write_u32(x.target.0);

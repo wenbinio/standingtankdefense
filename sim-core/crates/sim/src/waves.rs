@@ -26,6 +26,7 @@ pub(crate) fn spawn(s: &mut ArenaState) {
             edef.base_hp,
             content::SPAWN_RING[0],
         ));
+        s.emit(SimEvent::BossSpawned { id: id.0 });
         // fall through: the escort swarm below also spawns on this tick.
     }
     if s.tick >= content::BOSS_SPAWN_TICK {

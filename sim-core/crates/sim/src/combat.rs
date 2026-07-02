@@ -35,6 +35,9 @@ struct AbilityAccum {
     hazard_at: Option<Vec2>,
     /// Corpses to raise as allies (Summon weapons that killed an enemy this hit).
     summons: Vec<SummonReq>,
+    /// Enemies that hit `FROST_MAX_STACKS` and froze under this attack's on-hit
+    /// status (render events, emitted at flush after the enemy borrow ends).
+    freeze_procs: Vec<u32>,
 }
 
 impl AbilityAccum {
@@ -59,6 +62,17 @@ impl AbilityAccum {
                 radius,
                 ticks_left: ticks,
             });
+            s.emit(SimEvent::HazardPlaced {
+                x: pos.x.floor_to_int(),
+                y: pos.y.floor_to_int(),
+                radius,
+                ticks,
+                damage_type,
+            });
+        }
+        // Freeze procs (Deep Freeze payoff) observed while enemies were borrowed.
+        for id in self.freeze_procs {
+            s.emit(SimEvent::FreezeProc { id });
         }
         // Raise an ally from each corpse this attack made, up to the global cap.
         for req in self.summons {
@@ -141,7 +155,9 @@ fn apply_weapon_hit(
         .mul(cond.mult(e))
         .scale_i64(base);
     e.hp -= dmg;
-    crate::status::apply_on_hit(e, on_hit);
+    if crate::status::apply_on_hit(e, on_hit) {
+        accum.freeze_procs.push(e.id.0);
+    }
     apply_ability_on_hit(e, ability, tank_pos, accum);
     dmg
 }
@@ -264,17 +280,26 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         let mut accum = AbilityAccum::default();
         let mut new_proj = |s: &mut ArenaState, target_idx: usize, splash: Fixed| {
             let e = &s.enemies[target_idx];
+            let (target_id, target_pos) = (e.id, e.pos);
             new_projectiles.push(Projectile {
                 id: EntityId(0), // assigned after the loop
+                weapon_kind: def,
                 pos: s.tank.pos,
-                target: e.id,
-                last_target_pos: e.pos,
+                target: target_id,
+                last_target_pos: target_pos,
                 damage: baked,
                 damage_type: wdef.damage_type,
                 splash_radius: splash,
                 speed: Fixed::from_int(wdef.proj_speed),
                 on_hit,
                 ability,
+            });
+            s.emit(SimEvent::ProjectileSpawned {
+                weapon_kind: def,
+                x: tank_pos.x.floor_to_int(),
+                y: tank_pos.y.floor_to_int(),
+                target_x: target_pos.x.floor_to_int(),
+                target_y: target_pos.y.floor_to_int(),
             });
         };
 
@@ -476,6 +501,15 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     let tank_pos = s.tank.pos;
     let mut impact_damage: i64 = 0;
     for imp in impacts {
+        // Render event: one Impact per detonation (`docs/09 §9.3`), whether or
+        // not an enemy is still standing there.
+        s.emit(SimEvent::Impact {
+            x: imp.point.x.floor_to_int(),
+            y: imp.point.y.floor_to_int(),
+            damage: imp.damage,
+            damage_type: imp.damage_type,
+            splash_radius: imp.splash_radius.floor_to_int(),
+        });
         let mod_mult = Fixed::ONE; // weapon multiplier was baked into projectile damage at fire time
                                    // Each impact's signature ability accumulates over the enemies it hits,
                                    // then flushes (tank heal / mana / hazard) once.
@@ -561,6 +595,8 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
                 survivors.push(e);
             } else {
                 // Normal enemy: self-destruct on contact (no bounty), one hit, gone.
+                // Render event: a DESPAWN, not a kill (`docs/09 §9.3`) — no death FX.
+                s.emit(SimEvent::EnemyDespawned { id: e.id.0 });
                 crate::defense::hit_tank(s, contact);
             }
         } else {
@@ -614,7 +650,10 @@ pub(crate) fn tick_hazards(s: &mut ArenaState) {
         }
         h.ticks_left -= 1;
     }
-    // Drop expired hazards, preserving id order.
+    // Drop expired hazards, preserving id order (announcing each expiry).
+    for h in hazards.iter().filter(|h| h.ticks_left == 0) {
+        s.emit(SimEvent::HazardExpired { id: h.id.0 });
+    }
     hazards.retain(|h| h.ticks_left > 0);
     s.hazards = hazards;
     s.record_player_damage(total);
@@ -982,6 +1021,7 @@ mod tests {
         let pid = s.alloc_entity_id();
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid,
             last_target_pos: pos,
@@ -1007,6 +1047,7 @@ mod tests {
         let pid = s.alloc_entity_id();
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid,
             last_target_pos: pos,
@@ -1043,6 +1084,7 @@ mod tests {
         // Mortar: siege 300, splash 300. Siege vs armor 0 → 1x = 300 dmg, lethal.
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: impact,
             target: near1,
             last_target_pos: impact,
@@ -1070,6 +1112,7 @@ mod tests {
         let pid = s.alloc_entity_id();
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: EntityId(99999), // nonexistent
             last_target_pos: impact,
@@ -1094,6 +1137,7 @@ mod tests {
         let pid = s.alloc_entity_id();
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: EntityId(99999),
             last_target_pos: Vec2::ZERO,
@@ -1286,6 +1330,7 @@ mod tests {
         let pb = &content::WEAPONS[3];
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid,
             last_target_pos: pos,
@@ -1434,6 +1479,7 @@ mod tests {
         let pid = s.alloc_entity_id();
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid,
             last_target_pos: pos,
@@ -1487,6 +1533,7 @@ mod tests {
         let pid = s.alloc_entity_id();
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: s.enemies[0].id,
             last_target_pos: pos,
@@ -1844,6 +1891,7 @@ mod tests {
         let wd = &content::WEAPONS[weapon_idx("Lifeleecher") as usize];
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid,
             last_target_pos: pos,
@@ -1871,6 +1919,7 @@ mod tests {
         let wd = &content::WEAPONS[weapon_idx("Manabolt") as usize];
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid,
             last_target_pos: pos,
@@ -1891,6 +1940,7 @@ mod tests {
         let pid2 = s.alloc_entity_id();
         s.projectiles.push(Projectile {
             id: pid2,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid2,
             last_target_pos: pos,
@@ -1932,6 +1982,7 @@ mod tests {
         let wd = &content::WEAPONS[weapon_idx("Slap") as usize];
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid,
             last_target_pos: pos,
@@ -1964,6 +2015,7 @@ mod tests {
         let wd = &content::WEAPONS[weapon_idx("Tangle") as usize];
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid,
             last_target_pos: pos,
@@ -1995,6 +2047,7 @@ mod tests {
         let wd = &content::WEAPONS[weapon_idx("Demon Eye") as usize];
         s.projectiles.push(Projectile {
             id: pid,
+            weapon_kind: 0,
             pos: Vec2::ZERO,
             target: eid,
             last_target_pos: pos,

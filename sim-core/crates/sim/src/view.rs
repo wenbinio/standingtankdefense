@@ -10,7 +10,7 @@
 //! never feeds the checksum.
 
 use crate::content;
-use crate::state::ArenaState;
+use crate::state::{ArenaState, EnemyStatus};
 use std::collections::BTreeMap;
 
 /// A full render snapshot for one tick.
@@ -21,7 +21,9 @@ pub struct RenderView {
     pub dead: bool,
     pub tank: RenderTank,
     pub enemies: Vec<RenderEnemy>,
-    pub projectiles: Vec<RenderPoint>,
+    pub projectiles: Vec<RenderProjectile>,
+    /// Persistent damaging areas (mines / burning oil) to draw.
+    pub hazards: Vec<RenderHazard>,
     /// Summoned allies (Larvae / Spores) to draw.
     pub minions: Vec<RenderMinion>,
     pub economy: RenderEconomy,
@@ -50,6 +52,31 @@ pub struct RenderPoint {
     pub y: i64,
 }
 
+/// An in-flight projectile to draw. `id` is the stable per-arena entity id
+/// (for interpolation across frames); `kind` indexes `content::WEAPONS`
+/// (sprite selection); `target_*` is the last known target position (for
+/// orienting the sprite along its flight path).
+#[derive(Clone, Copy, Debug)]
+pub struct RenderProjectile {
+    pub id: u32,
+    pub kind: u16,
+    pub x: i64,
+    pub y: i64,
+    pub target_x: i64,
+    pub target_y: i64,
+}
+
+/// A persistent hazard (mine field / burning oil) to draw.
+#[derive(Clone, Copy, Debug)]
+pub struct RenderHazard {
+    pub id: u32,
+    pub x: i64,
+    pub y: i64,
+    pub radius: i64,
+    pub ticks_left: u32,
+    pub damage_type: u8,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct RenderTank {
     pub x: i64,
@@ -59,12 +86,46 @@ pub struct RenderTank {
     pub revives: u32,
 }
 
-/// A summoned ally to render (`kind`: 0 larvae, 1 spores).
+/// A summoned ally to render (`kind`: 0 larvae, 1 spores). `id` is the stable
+/// per-arena entity id (for interpolation across frames).
 #[derive(Clone, Copy, Debug)]
 pub struct RenderMinion {
+    pub id: u32,
     pub x: i64,
     pub y: i64,
     pub kind: u8,
+}
+
+/// Per-enemy status-flag bits for [`RenderEnemy::status_flags`] (tints/FX).
+pub const STATUS_FROST: u8 = 1 << 0;
+pub const STATUS_POISON: u8 = 1 << 1;
+pub const STATUS_FIRE: u8 = 1 << 2;
+pub const STATUS_VULN: u8 = 1 << 3;
+pub const STATUS_STUN: u8 = 1 << 4;
+pub const STATUS_FREEZE: u8 = 1 << 5;
+
+/// Collapse live status counters to render flag bits.
+fn status_flags(st: &EnemyStatus) -> u8 {
+    let mut f = 0;
+    if st.frost_stacks > 0 {
+        f |= STATUS_FROST;
+    }
+    if st.poison_ticks > 0 {
+        f |= STATUS_POISON;
+    }
+    if st.fire_stacks > 0 {
+        f |= STATUS_FIRE;
+    }
+    if st.vuln_stacks > 0 {
+        f |= STATUS_VULN;
+    }
+    if st.stun_ticks > 0 {
+        f |= STATUS_STUN;
+    }
+    if st.freeze_ticks > 0 {
+        f |= STATUS_FREEZE;
+    }
+    f
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -77,6 +138,9 @@ pub struct RenderEnemy {
     pub base_hp: i64,
     pub kind: u16,
     pub boss: bool,
+    /// Active status effects as `STATUS_*` flag bits (frost/poison/fire/vuln/
+    /// stun/freeze) — drives status tints and looping FX.
+    pub status_flags: u8,
     pub name: &'static str,
 }
 
@@ -129,6 +193,7 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
                 base_hp: def.base_hp,
                 kind: e.def,
                 boss: def.boss,
+                status_flags: status_flags(&e.status),
                 name: def.name,
             }
         })
@@ -137,9 +202,26 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
     let projectiles = s
         .projectiles
         .iter()
-        .map(|p| RenderPoint {
+        .map(|p| RenderProjectile {
+            id: p.id.0,
+            kind: p.weapon_kind,
             x: p.pos.x.floor_to_int(),
             y: p.pos.y.floor_to_int(),
+            target_x: p.last_target_pos.x.floor_to_int(),
+            target_y: p.last_target_pos.y.floor_to_int(),
+        })
+        .collect();
+
+    let hazards = s
+        .hazards
+        .iter()
+        .map(|h| RenderHazard {
+            id: h.id.0,
+            x: h.pos.x.floor_to_int(),
+            y: h.pos.y.floor_to_int(),
+            radius: h.radius,
+            ticks_left: h.ticks_left,
+            damage_type: h.damage_type,
         })
         .collect();
 
@@ -147,6 +229,7 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         .minions
         .iter()
         .map(|m| RenderMinion {
+            id: m.id.0,
             x: m.pos.x.floor_to_int(),
             y: m.pos.y.floor_to_int(),
             kind: m.kind,
@@ -205,6 +288,7 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         tank,
         enemies,
         projectiles,
+        hazards,
         minions,
         economy,
         shop,

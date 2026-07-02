@@ -3,7 +3,7 @@
 //! dodge roll from `rng_proc`.
 
 use crate::content;
-use crate::state::ArenaState;
+use crate::state::{ArenaState, SimEvent};
 use determinism::Fixed;
 
 /// Radius (from the tank) of Spikes retaliation.
@@ -50,9 +50,20 @@ pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) {
         // itself (iterate enemies in range, stun them in stable id order) is deferred
         // to `shield_break_stun` so this borrow-only path stays free of the enemy
         // loop. Armed only when the pulse is configured (`range > 0`).
-        if s.tank.mana_shield == 0 && s.tank.shieldbreak_stun_range > 0 {
-            s.shield_broke_this_tick = true;
+        if s.tank.mana_shield == 0 {
+            // Render event: every down-edge announces (independent of whether
+            // the Energy-Pulse stun is owned).
+            s.emit(SimEvent::ShieldBroke);
+            if s.tank.shieldbreak_stun_range > 0 {
+                s.shield_broke_this_tick = true;
+            }
         }
+        // Render event: total applied to shield + HP (post-armor, post-DR).
+        s.emit(SimEvent::TankHit {
+            damage: absorbed + remaining,
+        });
+    } else {
+        s.emit(SimEvent::TankHit { damage: remaining });
     }
     s.tank.hp -= remaining;
 }
@@ -146,6 +157,17 @@ pub(crate) fn spikes(s: &mut ArenaState) {
         }
         if e.hp <= 0 {
             s.pending_kills.push(e.def);
+            // Render event: spikes kills bypass `reap_dead` (existing behavior:
+            // no Fire chain from this path), so announce the kill here.
+            let edef = &content::ENEMIES[e.def as usize];
+            s.emit(SimEvent::EnemyKilled {
+                x: e.pos.x.floor_to_int(),
+                y: e.pos.y.floor_to_int(),
+                kind: e.def,
+                boss: edef.boss,
+                bounty: edef.bounty,
+                fire_explosion_radius: 0,
+            });
         } else {
             survivors.push(e);
         }

@@ -14,7 +14,10 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-pub const SNAPSHOT_VERSION: u32 = 19;
+/// v20: `Projectile::weapon_kind` (render bookkeeping; snapshot-carried so
+/// reconnect redraws correctly, checksummed per the parity rule). The transient
+/// `ArenaState::events` buffer is deliberately NOT serialized (`docs/09 §9.3`).
+pub const SNAPSHOT_VERSION: u32 = 20;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -229,6 +232,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.len(s.projectiles.len());
     for p in &s.projectiles {
         w.id(p.id);
+        w.u16(p.weapon_kind);
         w.vec2(p.pos);
         w.id(p.target);
         w.vec2(p.last_target_pos);
@@ -463,6 +467,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
     for _ in 0..r.len()? {
         projectiles.push(Projectile {
             id: r.id()?,
+            weapon_kind: r.u16()?,
             pos: r.vec2()?,
             target: r.id()?,
             last_target_pos: r.vec2()?,
@@ -651,6 +656,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         pending_perk,
         tank_hit_this_tick: false,
         shield_broke_this_tick: false,
+        events: Events::default(),
         next_entity_id,
         dead,
         death_tick,

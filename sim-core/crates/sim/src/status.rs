@@ -26,7 +26,11 @@ const FIRE_STACKS_PER_DAMAGE: u16 = 5;
 
 /// Apply a weapon's on-hit status to an enemy. Poison refreshes to the stronger
 /// DoT; frost/fire add stacks (frost capped); stun takes the longer remaining.
-pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) {
+/// Returns `true` iff this application triggered the Deep-Freeze payoff (the
+/// enemy reached `FROST_MAX_STACKS` and froze) — callers turn that edge into a
+/// `SimEvent::FreezeProc` render event.
+pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) -> bool {
+    let mut froze = false;
     let st = &mut enemy.status;
     if on_hit.poison_dps > 0 && on_hit.poison_ticks > 0 {
         // Keep whichever poison deals more total remaining damage.
@@ -47,6 +51,7 @@ pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) {
             st.frost_stacks = 0;
             st.frost_ticks = 0;
             st.freeze_ticks = st.freeze_ticks.max(FREEZE_DURATION);
+            froze = true;
         } else {
             st.frost_stacks = st.frost_stacks.min(FROST_MAX_STACKS);
         }
@@ -57,6 +62,7 @@ pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) {
     if on_hit.stun_ticks > 0 {
         st.stun_ticks = st.stun_ticks.max(on_hit.stun_ticks);
     }
+    froze
 }
 
 /// Damage-taken multiplier from status: Fire (+0.5% per stack), generic
@@ -147,11 +153,20 @@ pub(crate) fn reap_dead(s: &mut ArenaState) {
             s.pending_kills.push(def);
             // Mark reaped so it is not collected again next round.
             s.enemies[di].hp = i64::MIN;
-            if fire_stacks == 0 || content::ENEMIES[def as usize].boss {
-                continue;
-            }
+            let edef = &content::ENEMIES[def as usize];
             let dmg = (fire_stacks / FIRE_STACKS_PER_DAMAGE) as i64;
-            if dmg <= 0 {
+            let explodes = !edef.boss && dmg > 0;
+            // Render event: a real KILL (bounty follows via `GoldBounty`), with
+            // the Fire death-explosion radius when this death detonates one.
+            s.emit(SimEvent::EnemyKilled {
+                x: pos.x.floor_to_int(),
+                y: pos.y.floor_to_int(),
+                kind: def,
+                boss: edef.boss,
+                bounty: edef.bounty,
+                fire_explosion_radius: if explodes { FIRE_EXPLOSION_RADIUS } else { 0 },
+            });
+            if !explodes {
                 continue;
             }
             for (i, e) in s.enemies.iter_mut().enumerate() {

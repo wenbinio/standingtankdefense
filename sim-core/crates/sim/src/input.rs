@@ -73,6 +73,7 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
             if s.tick >= s.tank.clear_cooldown_end {
                 let mut survivors = Vec::with_capacity(s.enemies.len());
                 let mut cleared_damage: i64 = 0;
+                let mut cleared = Vec::new();
                 for mut e in s.enemies.drain(..) {
                     let before = e.hp.max(0);
                     e.hp = e.hp.saturating_sub(CLEAR_DAMAGE);
@@ -80,9 +81,23 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
                     cleared_damage += before - e.hp.max(0);
                     if e.hp <= 0 {
                         s.pending_kills.push(e.def);
+                        cleared.push((e.def, e.pos));
                     } else {
                         survivors.push(e);
                     }
+                }
+                // Render events: Clear kills bypass `reap_dead` (existing
+                // behavior: no Fire chain from a Clear), announce them here.
+                for (def, pos) in cleared {
+                    let edef = &crate::content::ENEMIES[def as usize];
+                    s.emit(SimEvent::EnemyKilled {
+                        x: pos.x.floor_to_int(),
+                        y: pos.y.floor_to_int(),
+                        kind: def,
+                        boss: edef.boss,
+                        bounty: edef.bounty,
+                        fire_explosion_radius: 0,
+                    });
                 }
                 s.enemies = survivors;
                 s.record_player_damage(cleared_damage);

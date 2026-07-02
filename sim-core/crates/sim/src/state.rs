@@ -281,6 +281,11 @@ pub struct Minion {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Projectile {
     pub id: EntityId,
+    /// Catalog index of the weapon that fired it (`content::WEAPONS`). Pure
+    /// bookkeeping for rendering (sprite selection) — combat never reads it —
+    /// but it rides the snapshot (so reconnect redraws correctly), and every
+    /// snapshot-carried field must feed `checksum()` (parity rule).
+    pub weapon_kind: u16,
     pub pos: Vec2,
     pub target: EntityId,
     pub last_target_pos: Vec2,
@@ -436,6 +441,107 @@ pub struct ShopState {
     pub shop_seq: u32,
 }
 
+/// One sim→render event (`docs/09 §9.3` v1). Emitted during `step()` phases so
+/// the renderer gets exact edges (a spawn+kill within one tick, multi-hits,
+/// muzzle flashes) instead of lossily diffing snapshots. **Render-only, one-way,
+/// deterministic by construction**: events are a pure function of deterministic
+/// state; emitting them never mutates anything the checksum covers, and the
+/// netcode never ships them. All payloads are integers (positions are
+/// `floor_to_int` world units, like the view).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SimEvent {
+    /// An enemy died to a PLAYER source (weapon/hazard/aura/minion/poison/
+    /// spikes/Clear — every `pending_kills` push has a matching `EnemyKilled`).
+    /// `fire_explosion_radius` is the Fire death-explosion radius when this
+    /// death detonates one (Fire-stacked non-boss via the shared death path),
+    /// else 0. `bounty` is the CATALOG base bounty (the actual gold paid —
+    /// multipliers/procs applied — arrives as `GoldBounty`).
+    EnemyKilled {
+        x: i64,
+        y: i64,
+        kind: u16,
+        boss: bool,
+        bounty: i64,
+        fire_explosion_radius: i64,
+    },
+    /// An enemy left the board WITHOUT dying to the player (contact
+    /// self-destruct on the tank — no bounty, no death FX).
+    EnemyDespawned { id: u32 },
+    /// A projectile detonated: point, carried damage, damage type, and splash
+    /// radius in world units (0 ⇒ single-target).
+    Impact {
+        x: i64,
+        y: i64,
+        damage: i64,
+        damage_type: u8,
+        splash_radius: i64,
+    },
+    /// A weapon emitted a projectile (muzzle flash / launch FX).
+    ProjectileSpawned {
+        weapon_kind: u16,
+        x: i64,
+        y: i64,
+        target_x: i64,
+        target_y: i64,
+    },
+    /// A hit landed on the tank (post-dodge; `damage` is the post-armor,
+    /// post-shield-DR total applied to shield + HP).
+    TankHit { damage: i64 },
+    /// A new round began (shop refresh boundary).
+    RoundStart { round: u32 },
+    /// The boss entered the arena.
+    BossSpawned { id: u32 },
+    /// A weapon ability dropped a persistent hazard.
+    HazardPlaced {
+        x: i64,
+        y: i64,
+        radius: i64,
+        ticks: u32,
+        damage_type: u8,
+    },
+    /// A hazard's lifetime ran out.
+    HazardExpired { id: u32 },
+    /// An enemy hit `FROST_MAX_STACKS` and froze (the Deep Freeze payoff).
+    FreezeProc { id: u32 },
+    /// The Mana Shield transitioned `>0 → 0` from a hit.
+    ShieldBroke,
+    /// Total kill bounty paid this tick (multipliers + procs applied).
+    GoldBounty { amount: i64 },
+}
+
+/// The transient per-tick [`SimEvent`] buffer. **Not authoritative state**: it
+/// is cleared at the top of every `step()`, excluded from `checksum()` and the
+/// wire snapshot (same class as `tank_hit_this_tick`), and — because undrained
+/// events legitimately sit here *between* ticks (the renderer drains after
+/// `step`) — it compares equal to any other buffer so `ArenaState` equality
+/// (snapshot round-trip, shadow-sim identity) stays a statement about
+/// authoritative state only. Clear-on-step bounds it to one tick's events.
+#[derive(Clone, Debug, Default)]
+pub struct Events(pub Vec<SimEvent>);
+
+impl PartialEq for Events {
+    /// Always equal: events are render-side ephemera, not state identity.
+    fn eq(&self, _other: &Events) -> bool {
+        true
+    }
+}
+impl Eq for Events {}
+
+impl Events {
+    /// Drain the buffered events (read-and-clear).
+    pub fn take(&mut self) -> Vec<SimEvent> {
+        std::mem::take(&mut self.0)
+    }
+    /// Borrow the buffered events.
+    pub fn as_slice(&self) -> &[SimEvent] {
+        &self.0
+    }
+    /// Drop all buffered events.
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+}
+
 /// The complete authoritative arena state. `step()` is a pure function of this
 /// plus the tick's `Input` (`docs/03 §3.3`).
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -474,6 +580,12 @@ pub struct ArenaState {
     /// cleared within the same tick (in `defense::shield_break_stun`), so it is
     /// always `false` at a tick boundary and excluded from the checksum/snapshot.
     pub shield_broke_this_tick: bool,
+    /// Transient sim→render event stream for THIS tick (`docs/09 §9.3`).
+    /// Cleared at the top of every `step()`, appended during step phases,
+    /// excluded from `checksum()`/snapshot (and from `ArenaState` equality —
+    /// see [`Events`]). The renderer drains it after `step`; undrained events
+    /// are dropped by the next tick's clear (no unbounded growth).
+    pub events: Events,
 
     pub next_entity_id: u32,
     pub dead: bool,
@@ -582,6 +694,7 @@ impl ArenaState {
             pending_perk: None,
             tank_hit_this_tick: false,
             shield_broke_this_tick: false,
+            events: Events::default(),
             next_entity_id: 1,
             dead: false,
             death_tick: None,
@@ -604,6 +717,13 @@ impl ArenaState {
             next_fire_tick: 0,
         });
         s
+    }
+
+    /// Buffer a render event for this tick (`docs/09 §9.3`). Never perturbs
+    /// authoritative state — the buffer is off-checksum/off-snapshot.
+    #[inline]
+    pub(crate) fn emit(&mut self, ev: SimEvent) {
+        self.events.0.push(ev);
     }
 
     /// Allocate a fresh, never-reused entity id.

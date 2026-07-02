@@ -16,7 +16,11 @@
 //! `snapshot.rs`, to `checksum()`, and to the list below. Transient intra-tick
 //! flags (`tank_hit_this_tick`, `shield_broke_this_tick`) are excluded by
 //! design — they are always `false` at a tick boundary and are neither
-//! serialized nor checksummed.
+//! serialized nor checksummed. The render-event buffer (`ArenaState::events`,
+//! `docs/09 §9.3`) is excluded the same way BY DESIGN: it is cleared at the top
+//! of every `step()`, is a pure derivation of checksummed state, never crosses
+//! the wire, and compares equal regardless of contents — so it cannot desync
+//! and must never enter the snapshot or the checksum.
 
 use determinism::{Fixed, Rng};
 use sim::content::{ModEffect, StatusOnHit, WeaponAbility};
@@ -36,6 +40,7 @@ fn base() -> ArenaState {
         .push(Enemy::new(EntityId(101), 0, 500, Vec2::new(f(10), f(-4))));
     s.projectiles.push(Projectile {
         id: EntityId(102),
+        weapon_kind: 0,
         pos: Vec2::new(f(1), f(2)),
         target: EntityId(101),
         last_target_pos: Vec2::new(f(10), f(-4)),
@@ -328,6 +333,9 @@ fn entity_fields_feed_checksum() {
     });
     // Projectiles (incl. the original B4 field).
     parity("projectiles[0].id", |s| s.projectiles[0].id = EntityId(220));
+    parity("projectiles[0].weapon_kind", |s| {
+        s.projectiles[0].weapon_kind = 7
+    });
     parity("projectiles[0].pos.x", move |s| {
         s.projectiles[0].pos.x = f(5)
     });

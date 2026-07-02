@@ -36,6 +36,10 @@ pub(crate) fn collect_bounties(s: &mut ArenaState) {
     }
     s.pending_kills = kills_vec;
     s.pending_kills.clear();
+    // Render event: the tick's total kill bounty (multipliers + procs applied).
+    if gained > 0 {
+        s.emit(SimEvent::GoldBounty { amount: gained });
+    }
     s.award_gold(gained);
     // On-kill trigger: heal the tank per enemy killed this tick.
     if s.tank.heal_on_kill > 0 && kills > 0 && !s.dead {
