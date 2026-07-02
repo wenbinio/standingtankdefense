@@ -289,6 +289,7 @@ func _drain_events() -> void:
 					if is_you:
 						fx.add_shake(0.15)
 						_edge_ttl[i] = 0.25
+						Audio.play(&"tank_hit")
 				SimView.EV_ROUND_START:
 					if is_you:
 						# Subtle ring pulse in your cell + the round SFX.
