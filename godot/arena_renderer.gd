@@ -24,7 +24,33 @@ const AMBIENT_DIM := Color(0.62, 0.64, 0.7)
 
 const FLASH_TICKS := 6            # hit-flash duration (sim ticks)
 const MUZZLE_TICKS := 5           # muzzle flash duration (sim ticks)
-const POOF_CAP := 64              # death poofs alive at once (pooled)
+const POOF_CAP := 64              # death poofs alive at once (pooled; smoke shares it)
+
+# --- P3 caps (per-effect budgets so a 200-kill tick can't explode draws) ------
+const GOLD_POPS_PER_TICK := 12    # "+Ng" bounty popups emitted per tick, max
+const SPAWN_RINGS_PER_TICK := 6   # spawn-telegraph rings emitted per tick, max
+const HAZARD_DRAW_CAP := 48       # hazard ground decals drawn, max
+const RING_PULSE_TICKS := 15      # spawn-ring emissive pulse length (~0.5 s)
+const BOSS_RAMP_TICKS := 15       # boss-entrance shake ramp length (~0.5 s)
+const DEATH_SEQ_TICKS := 20       # tank death staged sequence length (~0.66 s)
+
+# Damage-type -> hazard decal color (world-space ground circles). Indexed by
+# content.rs DMG_*: 0 Normal, 1 Piercing, 2 Magic, 3 Siege, 4 Chaos. Siege
+# (burning oil) rides >1 red so its rim blooms under glow.
+const HAZARD_COLORS: Array[Color] = [
+	Color(1.0, 0.85, 0.5),    # Normal   — dusty amber
+	Color(0.7, 0.95, 1.15),   # Piercing — pale steel-cyan
+	Color(0.6, 0.65, 1.4),    # Magic    — arcane violet-blue
+	Color(1.55, 0.65, 0.3),   # Siege    — burning-oil ember
+	Color(1.45, 0.45, 1.0),   # Chaos    — fel magenta
+]
+
+# Boss-death gold fountain: 5 fanned combat texts (deterministic offsets — no
+# render RNG needed, and the fan reads as a fountain).
+const FOUNTAIN_OFF: Array[Vector2] = [
+	Vector2(-70, -8), Vector2(-36, -32), Vector2(0, -44),
+	Vector2(36, -32), Vector2(70, -8),
+]
 
 var view: SimView = null      # read-only sim view (wired by main.gd)
 var fx: Fx = null             # shared juice bus (owned by main.gd)
@@ -40,6 +66,7 @@ var _e_ids := PackedInt64Array()
 var _e_pos := PackedVector2Array()
 var _e_kind := PackedByteArray()
 var _e_boss := PackedByteArray()
+var _e_status := PackedByteArray()   # P3.5 status flags (frost/poison/fire/…)
 var _e_idx := {}
 var _e_prev_pos := PackedVector2Array()
 var _e_prev_idx := {}
@@ -66,7 +93,31 @@ var _poof_pos := PackedVector2Array()   # world position
 var _poof_ttl := PackedInt32Array()
 var _poof_life := PackedInt32Array()
 var _poof_scale := PackedFloat32Array() # 1.0 normal · bigger for bosses
+var _poof_gray := PackedByteArray()     # 1 = gray wreck smoke (rises, dimmed)
 var _poof_n := 0
+
+# --- P3 juice state (all render-only) ----------------------------------------
+var _hurt := 0.0              # TankHit vignette spike (1 -> 0 over ~0.4 s)
+var _hb_phase := 0.0          # low-HP heartbeat phase (0..1, wraps)
+var _ring_pulse := 0          # spawn-ring emissive pulse ticks left
+var _boss_ramp := 0           # boss-entrance shake ramp ticks left
+var _death_seq := 0           # tank death staged-FX ticks left
+var _boss_death_at := -1      # tick for boss-death stage 2 (-1 = none; 1 slot)
+var _boss_death_pos := Vector2.ZERO   # screen pos captured at the kill
+var _boss_death_bounty := 0
+var _gold_pops := 0           # gold popups emitted THIS tick (capped)
+var _frozen_alpha := 0.0      # interpolation alpha held during hit-stop
+var _hitstop_was := false
+# Hazard decal snapshot (read once per tick, capped, preallocated).
+var _hz_pos := PackedVector2Array()
+var _hz_r := PackedFloat32Array()
+var _hz_left := PackedInt32Array()
+var _hz_type := PackedByteArray()
+var _hz_n := 0
+# damage_type -> initial hazard ticks (from HazardPlaced), for the last-20%
+# fade — hazards() records carry no id/total, so remember the type's typical
+# lifetime instead.
+var _hz_total := {}
 
 # --- MultiMesh entity rendering (P1.6) -----------------------------------------
 # One MultiMesh per texture: enemies get one per ENEMY_MANIFEST kind (per-kind
@@ -101,6 +152,11 @@ func _ready() -> void:
 	_poof_ttl.resize(POOF_CAP)
 	_poof_life.resize(POOF_CAP)
 	_poof_scale.resize(POOF_CAP)
+	_poof_gray.resize(POOF_CAP)
+	_hz_pos.resize(HAZARD_DRAW_CAP)
+	_hz_r.resize(HAZARD_DRAW_CAP)
+	_hz_left.resize(HAZARD_DRAW_CAP)
+	_hz_type.resize(HAZARD_DRAW_CAP)
 	reload_theme()
 	_setup_environment()
 	_setup_entity_layers()
@@ -135,6 +191,7 @@ func reset(new_view: SimView, new_fx: Fx) -> void:
 	_e_pos = PackedVector2Array()
 	_e_kind = PackedByteArray()
 	_e_boss = PackedByteArray()
+	_e_status = PackedByteArray()
 	_e_idx = {}
 	_e_prev_pos = PackedVector2Array()
 	_e_prev_idx = {}
@@ -156,6 +213,18 @@ func reset(new_view: SimView, new_fx: Fx) -> void:
 	_muzzle_dir = Vector2.UP
 	_poof_n = 0
 	clear_fx = 0
+	_hurt = 0.0
+	_hb_phase = 0.0
+	_ring_pulse = 0
+	_boss_ramp = 0
+	_death_seq = 0
+	_boss_death_at = -1
+	_boss_death_bounty = 0
+	_gold_pops = 0
+	_frozen_alpha = 0.0
+	_hitstop_was = false
+	_hz_n = 0
+	_hz_total = {}
 	for mmi in _enemy_mmi:
 		mmi.multimesh.visible_instance_count = 0
 	if _proj_mmi:
@@ -165,6 +234,11 @@ func reset(new_view: SimView, new_fx: Fx) -> void:
 # Arm the Clear shockwave (called by main.gd the tick a Clear intent stepped).
 func trigger_clear() -> void:
 	clear_fx = 18
+
+# Arm the tank-death staged sequence (called ONCE by main.gd on the is_dead()
+# edge; the stages themselves play out tick-by-tick in tick_juice).
+func trigger_tank_death() -> void:
+	_death_seq = DEATH_SEQ_TICKS
 
 # Build the render-only lighting + post-processing rig in code. All cosmetic;
 # nothing here touches the sim.
@@ -328,8 +402,19 @@ func _blit(tx: Texture2D, center: Vector2, size: float, mod := Color.WHITE) -> v
 	draw_texture_rect(tx, Rect2(center - Vector2(size, size) * 0.5, Vector2(size, size)), false, mod)
 
 # Interpolation weight for this render frame (0 = previous tick, 1 = current).
+# P3.10 hit-stop: while fx.hitstop_active(), the alpha is CLAMPED to its value
+# at freeze start, so every interpolated entity holds its exact pose for the
+# freeze frame. Render-only — the sim keeps stepping at 30 Hz underneath and
+# positions snap forward when the freeze releases (the classic hit-stop pop).
 func _lerp_alpha() -> float:
-	return clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
+	var a := clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
+	if fx != null and fx.hitstop_active():
+		if not _hitstop_was:
+			_frozen_alpha = a
+			_hitstop_was = true
+		return _frozen_alpha
+	_hitstop_was = false
+	return a
 
 # Interpolated world position for entity `id` at current index `i`. A new id
 # (no prev entry) draws at curr — never lerp-from-origin.
@@ -344,7 +429,7 @@ func _lerp_pos(prev_idx: Dictionary, prev_pos: PackedVector2Array,
 # refill the MultiMesh instance buffers at the interpolated positions, and
 # repaint. Shake is NOT applied here — the camera offset carries it for the
 # whole world canvas.
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if view == null:
 		return
 
@@ -371,7 +456,27 @@ func _process(_delta: float) -> void:
 	# A2: danger color-grade ramps with the round number (cosmetic read).
 	if _vig_mat:
 		var danger := clampf(float(view.round_num()) / 18.0, 0.0, 1.0)
-		_vig_mat.set_shader_parameter("danger", danger)
+		_vig_mat.set_shader_parameter(&"danger", danger)
+		# P3.1: TankHit red vignette spike, decays over ~0.4 s.
+		if _hurt > 0.0:
+			_hurt = maxf(0.0, _hurt - delta / 0.4)
+		# P3.13: low-HP heartbeat — below 33% HP the vignette thumps, deeper and
+		# faster as HP drops. Composes with (never replaces) the danger grade.
+		var hb := 0.0
+		var mhp := view.tank_max_hp()
+		if mhp > 0 and not view.is_dead():
+			var ratio := clampf(float(view.tank_hp()) / float(mhp), 0.0, 1.0)
+			var severity := clampf((0.33 - ratio) / 0.33, 0.0, 1.0)
+			if severity > 0.0:
+				_hb_phase = fmod(_hb_phase + delta * (0.9 + severity * 1.1), 1.0)
+				# lub-dub: sharp decay thump + a smaller echo at phase 0.3
+				var thump := exp(-9.0 * _hb_phase) \
+					+ 0.55 * exp(-9.0 * absf(_hb_phase - 0.3))
+				hb = severity * 0.55 * clampf(thump, 0.0, 1.0)
+			else:
+				_hb_phase = 0.0
+		_vig_mat.set_shader_parameter(&"hurt", _hurt)
+		_vig_mat.set_shader_parameter(&"heartbeat", hb)
 
 	# P1.5/P1.6: refill the instanced entity layers at interpolated positions.
 	var alpha := _lerp_alpha()
@@ -419,8 +524,12 @@ func _update_menace_light() -> void:
 # drained array — nothing here touches the Audio bus.
 func tick_juice(events: Array) -> void:
 	t += 1
+	_gold_pops = 0
 	_advance_snapshot()
 
+	# TankHit aggregates across the tick: many contact hits landing in one tick
+	# produce ONE combined number + ONE flash/shake (self-capping by design).
+	var tank_dmg := 0
 	for ev in events:
 		match ev.kind:
 			SimView.EV_ENEMY_KILLED:
@@ -434,18 +543,99 @@ func tick_juice(events: Array) -> void:
 				# no poof, no kill burst (this fixes the old fake-death juice
 				# from snapshot diffing).
 				pass
+			SimView.EV_TANK_HIT:
+				tank_dmg += int(ev.damage)
+			SimView.EV_ROUND_START:
+				# P3.8: round banner slam + spawn-ring emissive pulse (~0.5 s).
+				fx.banner(tr("ROUND %d") % int(ev.round),
+					Color(1.5, 1.6, 1.9), 1.1, 54)
+				_ring_pulse = RING_PULSE_TICKS
+			SimView.EV_BOSS_SPAWNED:
+				# P3.8: boss entrance — banner, ~0.5 s shake ramp, zoom punch.
+				# The music duck already rides main.gd's boss_spawn SFX
+				# (Audio.DUCK_EVENTS), so no extra duck() call here.
+				fx.banner(tr("BOSS"), Color(2.0, 0.5, 0.4), 1.4, 72)
+				fx.zoom_punch(0.04, 0.35)
+				_boss_ramp = BOSS_RAMP_TICKS
+			SimView.EV_FREEZE_PROC:
+				# P3.5: small white shatter burst on the frozen enemy.
+				var fi: int = _e_idx.get(ev.id, -1)
+				if fi >= 0 and fi < _e_pos.size():
+					fx.burst_sparks(to_screen(_e_pos[fi].x, _e_pos[fi].y),
+						Color(1.8, 2.0, 2.4), 7, 170.0, 0.3)
+			SimView.EV_HAZARD_PLACED:
+				# Remember this type's lifetime for the decal's last-20% fade
+				# (hazards() records carry ticks_left but not the total).
+				_hz_total[int(ev.damage_type)] = int(ev.ticks)
 			SimView.EV_GOLD_BOUNTY:
-				# P3 hook: gold-pickup counter / coin pop uses ev.amount.
+				# Per-tick aggregate — deliberately NOT a popup (it would
+				# double-count the per-kill bounty texts). No coin-tick SFX
+				# asset exists in Audio.EVENTS, so no audio either.
 				pass
-			SimView.EV_HAZARD_PLACED, SimView.EV_HAZARD_EXPIRED:
-				# P3 hook: hazard ground decals (see view.hazards()).
-				pass
-			SimView.EV_FREEZE_PROC, SimView.EV_SHIELD_BROKE, SimView.EV_TANK_HIT:
-				# P3 hooks: freeze shatter FX, shield-break flash, tank damage
-				# feedback. TankHit SFX already fires from main.gd.
-				pass
+			SimView.EV_HAZARD_EXPIRED, SimView.EV_SHIELD_BROKE:
+				pass   # decals expire via the hazards() snapshot; shield P3.11+
 			_:
-				pass   # RoundStart/BossSpawned are audio-only for now (main.gd)
+				pass
+
+	# P3.1: tank-hit feedback (red edge flash + vignette spike + shake + number).
+	if tank_dmg > 0:
+		_hurt = 1.0
+		fx.add_flash(Color(0.9, 0.12, 0.1, 0.28), 0.18)
+		fx.add_shake(0.2)
+		fx.combat_text(to_screen(0, 0) + Vector2(0, -46),
+			str(tank_dmg), Color(1.6, 0.35, 0.3), 17, 44.0)
+
+	# P3.2 stage 2 of the boss death (~0.27 s after the kill): second shockwave,
+	# second spark burst, gold fountain.
+	if _boss_death_at == t:
+		_boss_death_at = -1
+		fx.shockwave(_boss_death_pos, Color(2.2, 1.4, 0.5, 0.9), 320.0, 0.6)
+		fx.burst_sparks(_boss_death_pos, Color(2.4, 1.5, 0.6), 24, 360.0, 0.55)
+		fx.add_shake(0.3)
+		@warning_ignore("integer_division")
+		var share := maxi(1, _boss_death_bounty / 5)
+		for i in FOUNTAIN_OFF.size():
+			fx.combat_text(_boss_death_pos + FOUNTAIN_OFF[i], "+%dg" % share,
+				Color(1.9, 1.5, 0.45), 14, 60.0 + float(i) * 6.0)
+
+	# P3.8: boss-entrance shake ramp (small trauma per tick for ~0.5 s).
+	if _boss_ramp > 0:
+		_boss_ramp -= 1
+		fx.add_shake(0.06)
+
+	if _ring_pulse > 0:
+		_ring_pulse -= 1
+
+	# P3.9: tank death staged sequence — flash/slow-mo at t0, then two more
+	# spark bursts across ~0.6 s; afterwards the wreck smolders (below).
+	if _death_seq > 0:
+		var origin := to_screen(0, 0)
+		if _death_seq == DEATH_SEQ_TICKS:
+			fx.add_flash(Color(1, 1, 1, 0.85), 0.3)
+			fx.add_shake(0.5)
+			fx.add_slowmo(0.35, 0.3)
+			fx.burst_sparks(origin, Color(2.4, 1.7, 0.7), 26, 380.0, 0.55)
+			fx.shockwave(origin, Color(2.2, 1.5, 0.6, 0.9), 220.0, 0.5)
+		elif _death_seq == 13:
+			fx.burst_sparks(origin + Vector2(-26, 10), Color(2.2, 1.2, 0.5),
+				16, 300.0, 0.45)
+			fx.add_shake(0.25)
+		elif _death_seq == 6:
+			fx.burst_sparks(origin + Vector2(30, -14), Color(2.2, 1.2, 0.5),
+				16, 300.0, 0.45)
+			fx.add_shake(0.25)
+		_death_seq -= 1
+
+	# P3.9: gray smoke poofs looping on the wreck while dead (shares the poof
+	# pool; deterministic-looking sin/cos jitter — no render RNG).
+	if view.is_dead() and (t % 9) == 0 and _poof_n < POOF_CAP:
+		var jit := Vector2(sin(t * 0.7) * 60.0, cos(t * 1.3) * 45.0)
+		_poof_pos[_poof_n] = jit
+		_poof_ttl[_poof_n] = 24
+		_poof_life[_poof_n] = 24
+		_poof_scale[_poof_n] = 1.3
+		_poof_gray[_poof_n] = 1
+		_poof_n += 1
 
 	# hit-flash expiry (entries are absolute expiry ticks)
 	if not _flash.is_empty():
@@ -463,6 +653,7 @@ func tick_juice(events: Array) -> void:
 			_poof_ttl[i] = _poof_ttl[_poof_n]
 			_poof_life[i] = _poof_life[_poof_n]
 			_poof_scale[i] = _poof_scale[_poof_n]
+			_poof_gray[i] = _poof_gray[_poof_n]
 			continue
 		i += 1
 
@@ -488,10 +679,37 @@ func _advance_snapshot() -> void:
 	_e_pos = view.enemies_pos()
 	_e_kind = view.enemies_kind()
 	_e_boss = view.enemies_boss()
+	_e_status = view.enemies_status()
 	var eidx := {}
 	for i in _e_ids.size():
 		eidx[_e_ids[i]] = i
 	_e_idx = eidx
+
+	# P3.13: spawn telegraph — an id in curr with no prev entry just spawned;
+	# pop a small ring at its position. Capped per tick; the first snapshot
+	# after a reset (empty prev) is skipped so a redeploy doesn't ring the
+	# whole field.
+	if fx != null and not _e_prev_idx.is_empty():
+		var rings := 0
+		for i in _e_ids.size():
+			if rings >= SPAWN_RINGS_PER_TICK:
+				break
+			if not _e_prev_idx.has(_e_ids[i]):
+				fx.shockwave(to_screen(_e_pos[i].x, _e_pos[i].y),
+					Color(1.3, 1.45, 1.7, 0.5), 26.0, 0.25)
+				rings += 1
+
+	# P3.6: hazard decal snapshot (read once per tick, hard-capped). The
+	# accessor decodes to an Array of small Dictionaries — a per-TICK
+	# allocation like take_events(), never per-frame.
+	var hz: Array = view.hazards()
+	_hz_n = mini(hz.size(), HAZARD_DRAW_CAP)
+	for i in _hz_n:
+		var h: Dictionary = hz[i]
+		_hz_pos[i] = Vector2(float(h.x), float(h.y))
+		_hz_r[i] = float(h.radius)
+		_hz_left[i] = int(h.ticks_left)
+		_hz_type[i] = int(h.damage_type)
 
 	_p_prev_pos = _p_pos
 	_p_prev_idx = _p_idx
@@ -517,9 +735,10 @@ func _advance_snapshot() -> void:
 # --- event handlers -----------------------------------------------------------
 
 # EnemyKilled {x, y, enemy_kind, boss, bounty, fire_radius}: death poof at the
-# reported spot + kill burst; bosses get a bigger burst for now (the full boss
-# death sequence is P3). ev.fire_radius (Fire death explosion) and ev.bounty
-# (kill popup) are P3 hooks.
+# reported spot + kill burst + gold bounty popup (capped per tick). A boss kill
+# opens the P3.2 multi-stage death: stage 1 here (white flash + double
+# shockwave + sparks + 0.15 s hit-stop + slow-mo), stage 2 ~8 ticks later in
+# tick_juice (second wave/burst + gold fountain). ev.fire_radius stays a hook.
 func _on_enemy_killed(ev: Dictionary) -> void:
 	var wp := Vector2(float(ev.x), float(ev.y))
 	var sp := to_screen(wp.x, wp.y)
@@ -528,14 +747,27 @@ func _on_enemy_killed(ev: Dictionary) -> void:
 		_poof_ttl[_poof_n] = 12
 		_poof_life[_poof_n] = 12
 		_poof_scale[_poof_n] = 2.2 if ev.boss else 1.0
+		_poof_gray[_poof_n] = 0
 		_poof_n += 1
 	if ev.boss:
+		fx.add_flash(Color(1, 1, 1, 0.7), 0.25)
 		fx.burst_sparks(sp, Color(2.6, 1.8, 0.8), 30, 420.0, 0.6)
-		fx.shockwave(sp, Color(2.4, 1.6, 0.7, 0.9), 160.0, 0.5)
-		fx.add_shake(0.4)
-		fx.add_hitstop(0.06)
+		fx.shockwave(sp, Color(2.4, 1.6, 0.7, 0.9), 200.0, 0.5)
+		fx.shockwave(sp, Color(1.6, 1.9, 2.4, 0.8), 120.0, 0.4)
+		fx.add_shake(0.5)
+		fx.add_hitstop(0.15)
+		fx.add_slowmo(0.4, 0.35)
+		_boss_death_at = t + 8   # single slot: same-tick double boss merges
+		_boss_death_pos = sp
+		_boss_death_bounty = int(ev.bounty)
 	else:
 		fx.kill_burst(sp, Color(2.4, 1.6, 0.7))
+		# P3.3: "+Ng" base-bounty popup — smaller + distinct from damage
+		# numbers, capped so a wave wipe can't flood the text pool.
+		if int(ev.bounty) > 0 and _gold_pops < GOLD_POPS_PER_TICK:
+			_gold_pops += 1
+			fx.combat_text(sp + Vector2(14, -12), "+%dg" % int(ev.bounty),
+				Color(1.5, 1.2, 0.35), 12, 26.0)
 
 # Impact {x, y, damage, damage_type, splash_radius}: sparks + the REAL damage
 # number (replaces the old hp-permille proxy), and arm the hit-flash on the
@@ -624,11 +856,42 @@ func _fill_enemy_instances(alpha: float) -> void:
 		var cur := _kind_cursor[k2]
 		mm2.set_instance_transform_2d(cur,
 			Transform2D(0.0, Vector2(size, size), 0.0, spos))
-		# Per-instance color: hit-flash (>1 blooms). P3 hook: status tints from
-		# view.enemies_status() (frost blue / poison green / fire orange) fold
-		# into this same color once the palette lands.
-		mm2.set_instance_color(cur,
-			Color(2.4, 2.4, 2.4) if _flash.has(id) else Color.WHITE)
+		# Per-instance color (>1 channels bloom under glow). Composition order:
+		# hit-flash WINS outright (brief, FLASH_TICKS), then stun/freeze
+		# white-hold, then the multiplicative status tint stack:
+		#   bit0 frost -> icy blue · bit1 poison -> green pulse ·
+		#   bit2 fire -> ember orange (HDR red, blooms) · bit3 vuln -> faint
+		#   purple · bit4 stun / bit5 freeze -> white flash-hold.
+		var col := Color.WHITE
+		if _flash.has(id):
+			col = Color(2.4, 2.4, 2.4)
+		else:
+			var st: int = _e_status[i] if i < _e_status.size() else 0
+			if st & 0x30:          # stun / freeze: held white flash
+				col = Color(1.9, 1.9, 2.0)
+			elif st != 0:
+				var cr := 1.0
+				var cg := 1.0
+				var cb := 1.0
+				if st & 1:         # frost
+					cr *= 0.62
+					cg *= 0.84
+					cb *= 1.25
+				if st & 2:         # poison (slow green pulse, tips over 1.0)
+					var pg := 1.3 + 0.35 * sin(t * 0.35 + float(id % 61))
+					cr *= 0.62
+					cg *= pg
+					cb *= 0.62
+				if st & 4:         # fire ember glow (HDR red blooms)
+					cr *= 1.75
+					cg *= 0.95
+					cb *= 0.55
+				if st & 8:         # vulnerability
+					cr *= 1.08
+					cg *= 0.82
+					cb *= 1.18
+				col = Color(cr, cg, cb)
+		mm2.set_instance_color(cur, col)
 		_kind_cursor[k2] = cur + 1
 	for k in nk:
 		_enemy_mmi[k].multimesh.visible_instance_count = _kind_count[k]
@@ -685,6 +948,26 @@ func _draw() -> void:
 			draw_texture_rect(ground, Rect2((vp - dsz) * 0.5, dsz), false)
 	var ring_d := 2.0 * 1500.0 * s / 0.90
 	_blit(tex["ring"], origin, ring_d)
+	# P3.8: spawn-ring emissive pulse on RoundStart (~0.5 s; >1 color blooms).
+	if _ring_pulse > 0:
+		var rk := float(_ring_pulse) / float(RING_PULSE_TICKS)
+		_blit(tex["ring"], origin, ring_d * (1.0 + (1.0 - rk) * 0.015),
+			Color(1.6, 1.7, 2.0, rk * 0.55))
+
+	# P3.6: hazard ground decals — pulsing translucent damage-type-colored
+	# circles (gameplay legibility: mines/burning oil were invisible). Fades
+	# out across the last ~20% of the hazard's lifetime.
+	for i in _hz_n:
+		var hc: Color = HAZARD_COLORS[_hz_type[i] % HAZARD_COLORS.size()]
+		var hsp := to_screen(_hz_pos[i].x, _hz_pos[i].y)
+		var hr := maxf(_hz_r[i] * s, 6.0)
+		var pulse := 0.5 + 0.5 * sin(t * 0.22 + float(i) * 1.7)
+		@warning_ignore("integer_division")
+		var fade_win := maxi(1, int(_hz_total.get(int(_hz_type[i]), 90)) / 5)
+		var fade := clampf(float(_hz_left[i]) / float(fade_win), 0.0, 1.0)
+		draw_circle(hsp, hr, Color(hc.r, hc.g, hc.b, (0.10 + 0.07 * pulse) * fade))
+		draw_arc(hsp, hr, 0.0, TAU, 40,
+			Color(hc.r, hc.g, hc.b, (0.35 + 0.25 * pulse) * fade), 2.0, true)
 
 	# Upgraded Clear shockwave: brighter (blooms) + a second trailing ring.
 	if clear_fx > 0:
@@ -696,12 +979,17 @@ func _draw() -> void:
 			_blit(tex["clear"], origin, 200.0 + (prog - 0.15) * (ring_d - 200.0),
 				Color(1.2, 1.5, 2.0, ca * 0.5))
 
-	# death poofs (under the enemy MultiMeshes)
+	# death poofs (under the enemy MultiMeshes); gray entries are P3.9 wreck
+	# smoke — dimmed, and they RISE as they expand instead of sitting still.
 	for i in _poof_n:
 		var pr := 1.0 - float(_poof_ttl[i]) / float(_poof_life[i])
 		var wp := _poof_pos[i]
-		_blit(tex["poof"], to_screen(wp.x, wp.y),
-			(38.0 + pr * 42.0) * _poof_scale[i], Color(1, 1, 1, 1.0 - pr))
+		var psp := to_screen(wp.x, wp.y)
+		var pcol := Color(1, 1, 1, 1.0 - pr)
+		if _poof_gray[i] != 0:
+			psp.y -= pr * 26.0
+			pcol = Color(0.45, 0.46, 0.5, (1.0 - pr) * 0.85)
+		_blit(tex["poof"], psp, (38.0 + pr * 42.0) * _poof_scale[i], pcol)
 
 # Foreground pass (drawn on _fg, ABOVE the MultiMeshes): minions, tank, and
 # the oriented muzzle flash.

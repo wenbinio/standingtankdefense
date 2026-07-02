@@ -21,6 +21,12 @@
 #   fx.add_hitstop(seconds)
 #   fx.add_flash(color, life)              # full-screen tint pulse
 #   fx.flash_color() -> Color              # current screen flash (a==0 if none)
+#   # P3 render-time control (render-only; never touches sim cadence):
+#   fx.add_slowmo(scale, seconds)          # slow FX advance (0<scale<1) for a bit
+#   fx.time_scale() -> float               # 0 in hit-stop, slowmo scale, else 1
+#   fx.zoom_punch(amp, dur)                # brief camera zoom 1 -> 1+amp -> 1
+#   fx.zoom_scale() -> float               # current zoom factor (main.gd applies)
+#   fx.banner(text, color, life, size)     # screen-center text slam (1 slot)
 #
 # POOLING (P1.6): every particle type lives in preallocated, fixed-capacity
 # structure-of-arrays pools kept DENSE by swap-remove — expired slot i is
@@ -76,6 +82,20 @@ var _flash_ttl := 0.0
 var _flash_life := 0.0
 var _rng := RandomNumberGenerator.new()
 var _seed := 0.0                   # phase seed for deterministic-looking shake
+
+# --- P3 render-time control (all wall-clock; never sim state) --------------
+var _slowmo_scale := 1.0           # FX time factor while _slowmo_ttl > 0
+var _slowmo_ttl := 0.0
+var _zoom_amp := 0.0               # zoom punch: 1 -> 1+amp -> 1 over _zoom_life
+var _zoom_ttl := 0.0
+var _zoom_life := 0.0
+
+# Banner: ONE slot (latest wins — banners are rare, sequential moments).
+var _banner_str := ""
+var _banner_ttl := 0.0
+var _banner_life := 0.0
+var _banner_size := 56
+var _banner_col := Color.WHITE
 
 func _init() -> void:
 	_rng.randomize()
@@ -164,6 +184,46 @@ func add_flash(color: Color, life := 0.18) -> void:
 func hitstop_active() -> bool:
 	return _hitstop > 0.0
 
+# Render slow-mo: FX pools (and anything else reading time_scale()) advance at
+# `scale` for `seconds`. Overlapping calls keep the SLOWER scale + LONGER hold.
+# Render-only: the sim keeps its fixed 30 Hz cadence untouched.
+func add_slowmo(scale := 0.35, seconds := 0.3) -> void:
+	scale = clampf(scale, 0.05, 1.0)
+	_slowmo_scale = minf(scale, _slowmo_scale) if _slowmo_ttl > 0.0 else scale
+	_slowmo_ttl = maxf(_slowmo_ttl, seconds)
+
+# Current FX time factor: 0.0 during a hit-stop freeze frame, the slow-mo scale
+# while one is active, else 1.0. update() applies it internally; renderers may
+# also read it to slow their own cosmetic animation.
+func time_scale() -> float:
+	if _hitstop > 0.0:
+		return 0.0
+	if _slowmo_ttl > 0.0:
+		return _slowmo_scale
+	return 1.0
+
+# Brief camera zoom punch: 1.0 -> 1.0+amp -> 1.0 over `dur` (sine ease).
+# main.gd applies zoom_scale() to the Camera2D (world canvas only).
+func zoom_punch(amp := 0.04, dur := 0.35) -> void:
+	_zoom_amp = maxf(_zoom_amp if _zoom_ttl > 0.0 else 0.0, amp)
+	_zoom_ttl = dur
+	_zoom_life = dur
+
+func zoom_scale() -> float:
+	if _zoom_ttl <= 0.0 or _zoom_life <= 0.0:
+		return 1.0
+	return 1.0 + _zoom_amp * sin(PI * (1.0 - _zoom_ttl / _zoom_life))
+
+# Screen-center banner text slam ("ROUND 7" / "BOSS"): scales in hard, holds,
+# fades. Single pooled slot — a new banner replaces the old (alloc: only the
+# String, at emit time).
+func banner(text: String, color := Color.WHITE, life := 1.2, size := 56) -> void:
+	_banner_str = text
+	_banner_col = color
+	_banner_life = life
+	_banner_ttl = life
+	_banner_size = size
+
 # Camera shake offset to add to the world origin this frame. Trauma^2 feels
 # better than linear; two desynced sines + noise give an organic jitter.
 func shake_offset() -> Vector2:
@@ -186,14 +246,28 @@ func flash_color() -> Color:
 
 func update(dt: float) -> void:
 	_seed += dt * 60.0
-	# Hit-stop eats real time but we still bleed it; callers may choose to also
-	# slow their own animation while hitstop_active().
+	# FX time factor for THIS frame (sampled before the timers bleed): 0 while a
+	# hit-stop freeze holds, the slow-mo scale while one runs, else 1. The
+	# accumulators below always bleed on REAL dt (a freeze must end; the screen
+	# flash must decay); only the particle pools advance on the scaled dt.
+	var ts := time_scale()
 	if _hitstop > 0.0:
 		_hitstop = maxf(0.0, _hitstop - dt)
+	if _slowmo_ttl > 0.0:
+		_slowmo_ttl = maxf(0.0, _slowmo_ttl - dt)
+	if _zoom_ttl > 0.0:
+		_zoom_ttl = maxf(0.0, _zoom_ttl - dt)
 	if _trauma > 0.0:
 		_trauma = maxf(0.0, _trauma - SHAKE_DECAY * dt)
 	if _flash_ttl > 0.0:
 		_flash_ttl = maxf(0.0, _flash_ttl - dt)
+	# The banner rides FX time so a boss freeze-frame also holds the banner.
+	if _banner_ttl > 0.0:
+		_banner_ttl = maxf(0.0, _banner_ttl - dt * ts)
+
+	if ts <= 0.0:
+		return   # freeze frame: every pool holds exactly where it is
+	dt *= ts
 
 	# Advance + expire in place: a dead slot i is overwritten by the last live
 	# slot (swap-remove keeps the pool dense; order is irrelevant for FX).
@@ -280,3 +354,24 @@ func draw(canvas: CanvasItem, font := ThemeDB.fallback_font) -> void:
 			HORIZONTAL_ALIGNMENT_CENTER, -1, sz, Color(0, 0, 0, a3 * 0.7))
 		canvas.draw_string(font, p, _text_str[i],
 			HORIZONTAL_ALIGNMENT_CENTER, -1, sz, Color(c.r, c.g, c.b, a3))
+
+	# banner slam ("ROUND N" / "BOSS"): scale-in over the first ~18% of life,
+	# quick fade-in, fade-out over the last 30%. Drawn via a canvas transform so
+	# the glyphs themselves scale (font size stays fixed = no cache churn).
+	if _banner_ttl > 0.0 and _banner_life > 0.0:
+		var kb := 1.0 - _banner_ttl / _banner_life
+		var slam := maxf(0.0, 1.0 - kb / 0.18)
+		var bscale := 1.0 + slam * slam * 1.1
+		var ab := clampf(minf(kb / 0.08, (1.0 - kb) / 0.3), 0.0, 1.0)
+		var vp := canvas.get_viewport_rect().size
+		var bcenter := Vector2(vp.x * 0.5, vp.y * 0.34)
+		var bw := font.get_string_size(_banner_str,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, _banner_size).x
+		var bp := Vector2(-bw * 0.5, float(_banner_size) * 0.35)
+		var bc := _banner_col
+		canvas.draw_set_transform(bcenter, 0.0, Vector2(bscale, bscale))
+		canvas.draw_string(font, bp + Vector2(3.0, 3.0), _banner_str,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, _banner_size, Color(0, 0, 0, ab * bc.a * 0.7))
+		canvas.draw_string(font, bp, _banner_str,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, _banner_size, Color(bc.r, bc.g, bc.b, ab * bc.a))
+		canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

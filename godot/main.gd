@@ -41,6 +41,9 @@ var _au_was_dead := false      # death edge -> tank_destroyed + defeat
 # --- juice / modules (render-only) -----------------------------------------
 var fx: Fx                    # reusable pooled FX + screen-shake/hitstop bus
 var _recorded := false        # match-end achievements credited once
+# P3.9: the results panel holds off ~0.8 s so the death FX sequence can play.
+const RESULTS_DELAY_MS := 800
+var _dead_since_ms := -1      # wall-clock ms of the is_dead() edge (-1 = alive)
 
 @onready var _camera: Camera2D = $Camera
 @onready var _arena: Node2D = $ArenaRenderer
@@ -75,11 +78,19 @@ func _wire_modules() -> void:
 	_sync_dead_panels()
 
 # Shop while alive, results panel while dead — the visibility switch that used
-# to be _draw_hud's if/else.
+# to be _draw_hud's if/else. On the death EDGE this also arms the arena's
+# staged death FX and starts the results-panel delay (~0.8 s) so the sequence
+# reads before the panel covers it. Render-only wall-clock gating.
 func _sync_dead_panels() -> void:
 	var dead: bool = view.is_dead()
+	if dead:
+		if _dead_since_ms < 0:
+			_dead_since_ms = Time.get_ticks_msec()
+			_arena.trigger_tank_death()
+	else:
+		_dead_since_ms = -1
 	_shop.visible = not dead
-	_results.visible = dead
+	_results.visible = dead and Time.get_ticks_msec() - _dead_since_ms >= RESULTS_DELAY_MS
 
 # --- input (InputMap actions; physical-key bindings live in project.godot) ---
 func _unhandled_input(e: InputEvent) -> void:
@@ -213,14 +224,20 @@ func _physics_process(_delta: float) -> void:
 	_update_audio(events, au_intent, au_gold_before)
 	_sync_dead_panels()
 
-# Frame-rate cosmetic update: advance the FX bus and feed its shake into the
-# camera offset (the world canvas shakes as one; the UI CanvasLayer doesn't).
+# Frame-rate cosmetic update: advance the FX bus and feed its shake + zoom
+# punch into the camera (the world canvas moves as one; the UI CanvasLayer
+# doesn't). The camera anchors top-left, so a center-locked zoom needs the
+# offset compensated by vp/2 * (1 - 1/z); at z == 1 that term is zero and only
+# the shake remains.
 func _process(delta: float) -> void:
 	if sim == null or fx == null:
 		return
 	fx.update(delta)
 	if _camera:
-		_camera.offset = fx.shake_offset()
+		var z: float = fx.zoom_scale()
+		_camera.zoom = Vector2(z, z)
+		_camera.offset = fx.shake_offset() \
+			+ get_viewport_rect().size * 0.5 * (1.0 - 1.0 / z)
 
 # AUDIO (render-only): every gameplay SFX now fires from the drained event
 # stream — the SAME Array the juice fan-out consumed, decoded once by SimView.
