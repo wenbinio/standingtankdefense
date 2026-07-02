@@ -108,7 +108,11 @@ fn eight_players_one_drops_and_reconnects() {
             sim::step(&mut s_ref, Input::Noop);
             s_tick += 1;
         };
-        assert!(matched, "player {} shadow not on the canonical trajectory", p.0);
+        assert!(
+            matched,
+            "player {} shadow not on the canonical trajectory",
+            p.0
+        );
     }
 
     // The reconnected P3 adopted authoritative state and stayed on the canonical
@@ -116,7 +120,11 @@ fn eight_players_one_drops_and_reconnects() {
     // reference advanced to its (lower) tick.
     let p3 = clients[(DROPPED - 1) as usize].as_ref().unwrap();
     assert!(p3.started(), "P3 never reconnected");
-    assert_eq!(p3.corrections(), 0, "reconnect should need no in-sync corrections");
+    assert_eq!(
+        p3.corrections(),
+        0,
+        "reconnect should need no in-sync corrections"
+    );
 
     let p3_tick = p3.arena_tick().unwrap();
     assert!(p3_tick > 0, "P3 made no progress after reconnect");

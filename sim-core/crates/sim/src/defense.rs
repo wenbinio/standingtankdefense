@@ -107,7 +107,10 @@ pub(crate) fn spikes(s: &mut ArenaState) {
         if s.tank.spikes_stacks < s.tank.spikes_stacks_max {
             s.tank.spikes_stacks += 1;
         }
-        stack_bonus = s.tank.spikes_stack_per.saturating_mul(s.tank.spikes_stacks as i64);
+        stack_bonus = s
+            .tank
+            .spikes_stack_per
+            .saturating_mul(s.tank.spikes_stacks as i64);
     }
     // Spikes damage = (flat + stacking bonus) × multiplier.
     let base = s.tank.spikes_damage.saturating_add(stack_bonus);
@@ -172,7 +175,7 @@ pub(crate) fn regen(s: &mut ArenaState) {
         s.tank.hp += s.tank.hp_regen_per_tick;
     }
     // Missing-HP heal: once per second, restore a fraction of the HP deficit.
-    if s.tank.missing_hp_heal_pct > Fixed::ZERO && s.tick % TICKS_PER_SECOND == 0 {
+    if s.tank.missing_hp_heal_pct > Fixed::ZERO && s.tick.is_multiple_of(TICKS_PER_SECOND) {
         let missing = s.tank.max_hp - s.tank.hp;
         if missing > 0 {
             let amount = s.tank.missing_hp_heal_pct.scale_i64(missing);
@@ -297,7 +300,11 @@ mod tests {
         s.tank.hp_regen_per_tick = 100;
         s.tank.healing_mult = Fixed::from_int(2); // +100% healing
         regen(&mut s);
-        assert_eq!(s.tank.hp, s.tank.max_hp - 1000 + 200, "regen doubled by healing mult");
+        assert_eq!(
+            s.tank.hp,
+            s.tank.max_hp - 1000 + 200,
+            "regen doubled by healing mult"
+        );
     }
 
     #[test]
@@ -332,7 +339,10 @@ mod tests {
         s.tank.healing_mult = Fixed::from_int(5);
         s.tank.hp = 50;
         regen(&mut s);
-        assert_eq!(s.tank.hp, -50, "drain unaffected by healing_mult, can go fatal");
+        assert_eq!(
+            s.tank.hp, -50,
+            "drain unaffected by healing_mult, can go fatal"
+        );
     }
 
     #[test]
@@ -393,7 +403,10 @@ mod tests {
         let hp0 = s2.tank.hp;
         hit_tank(&mut s2, 500);
         assert_eq!(s2.tank.mana_shield, 999, "clamped DR still lets 1 land");
-        assert_eq!(s2.tank.hp, hp0, "no negative-damage HP gain from over-clamp");
+        assert_eq!(
+            s2.tank.hp, hp0,
+            "no negative-damage HP gain from over-clamp"
+        );
     }
 
     #[test]
@@ -404,7 +417,11 @@ mod tests {
         s.tank.heal_on_damaged = 8;
         let hp_before = s.tank.hp;
         hit_tank(&mut s, 100); // 100 damage, +8 heal → net -92
-        assert_eq!(s.tank.hp, hp_before + 8 - 100, "landed hit heals then takes damage");
+        assert_eq!(
+            s.tank.hp,
+            hp_before + 8 - 100,
+            "landed hit heals then takes damage"
+        );
 
         // healing_mult scales the heal.
         let mut s = fresh();
@@ -413,7 +430,11 @@ mod tests {
         s.tank.healing_mult = Fixed::from_int(2); // +100% healing → 16
         let hp_before = s.tank.hp;
         hit_tank(&mut s, 100);
-        assert_eq!(s.tank.hp, hp_before + 16 - 100, "heal scaled by healing_mult");
+        assert_eq!(
+            s.tank.hp,
+            hp_before + 16 - 100,
+            "heal scaled by healing_mult"
+        );
 
         // Dodged hit does NOT heal (and takes no damage).
         let mut s = fresh();
@@ -431,7 +452,11 @@ mod tests {
         s.tank.hp = s.tank.max_hp; // already full
         s.tank.heal_on_damaged = 8;
         hit_tank(&mut s, 4); // heal clamps to max, then 4 damage lands
-        assert_eq!(s.tank.hp, s.tank.max_hp - 4, "heal capped at max, damage still applies");
+        assert_eq!(
+            s.tank.hp,
+            s.tank.max_hp - 4,
+            "heal capped at max, damage still applies"
+        );
     }
 
     #[test]
@@ -466,7 +491,10 @@ mod tests {
         hit_tank(&mut s, 100); // 100 absorbed, shield 200 left
         assert!(!s.shield_broke_this_tick, "shield still up → no break edge");
         shield_break_stun(&mut s);
-        assert_eq!(s.enemies[0].status.stun_ticks, 0, "no stun while shield holds");
+        assert_eq!(
+            s.enemies[0].status.stun_ticks, 0,
+            "no stun while shield holds"
+        );
 
         // A hit that depletes the shield → the >0→0 down-edge fires the pulse.
         hit_tank(&mut s, 9999); // drains the remaining 200 to 0
@@ -474,7 +502,10 @@ mod tests {
         shield_break_stun(&mut s);
         assert!(!s.shield_broke_this_tick, "break flag consumed");
         assert_eq!(s.enemies[0].status.stun_ticks, 15, "in-range enemy stunned");
-        assert_eq!(s.enemies[1].status.stun_ticks, 0, "out-of-range enemy not stunned");
+        assert_eq!(
+            s.enemies[1].status.stun_ticks, 0,
+            "out-of-range enemy not stunned"
+        );
     }
 
     #[test]
@@ -489,7 +520,10 @@ mod tests {
         hit_tank(&mut s, 500);
         assert!(!s.shield_broke_this_tick, "no shield to break ⇒ no edge");
         shield_break_stun(&mut s);
-        assert_eq!(s.enemies[0].status.stun_ticks, 0, "no stun when shield was already 0");
+        assert_eq!(
+            s.enemies[0].status.stun_ticks, 0,
+            "no stun when shield was already 0"
+        );
     }
 
     #[test]

@@ -241,10 +241,24 @@ mod tests {
     #[test]
     fn poison_application_keeps_stronger_dot() {
         let mut e = enemy(0, 1000);
-        apply_on_hit(&mut e, &StatusOnHit { poison_dps: 20, poison_ticks: 90, ..StatusOnHit::NONE });
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                poison_dps: 20,
+                poison_ticks: 90,
+                ..StatusOnHit::NONE
+            },
+        );
         assert_eq!(e.status.poison_dps, 20);
         // Weaker incoming poison does not replace.
-        apply_on_hit(&mut e, &StatusOnHit { poison_dps: 5, poison_ticks: 10, ..StatusOnHit::NONE });
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                poison_dps: 5,
+                poison_ticks: 10,
+                ..StatusOnHit::NONE
+            },
+        );
         assert_eq!(e.status.poison_dps, 20);
         assert_eq!(e.status.poison_ticks, 90);
     }
@@ -262,7 +276,10 @@ mod tests {
         }
         assert_eq!(s.enemies[0].hp, 700, "3 ticks × 100 dps");
         assert_eq!(s.enemies[0].status.poison_ticks, 0);
-        assert_eq!(s.enemies[0].status.poison_dps, 0, "poison cleared on expiry");
+        assert_eq!(
+            s.enemies[0].status.poison_dps, 0,
+            "poison cleared on expiry"
+        );
     }
 
     #[test]
@@ -282,8 +299,17 @@ mod tests {
     fn frost_slows_below_cap_then_expires() {
         let mut e = enemy(0, 1000);
         // Stay strictly below the cap so no freeze triggers (24 stacks).
-        apply_on_hit(&mut e, &StatusOnHit { frost_stacks: 24, ..StatusOnHit::NONE });
-        assert_eq!(e.status.frost_stacks, 24, "frost stacks accumulate below cap");
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                frost_stacks: 24,
+                ..StatusOnHit::NONE
+            },
+        );
+        assert_eq!(
+            e.status.frost_stacks, 24,
+            "frost stacks accumulate below cap"
+        );
         assert_eq!(e.status.freeze_ticks, 0, "no freeze below cap");
         // 24 stacks × 2% = 48% slow → ×0.52.
         assert_eq!(move_speed_mult(&e).scale_i64(1000), 520);
@@ -291,24 +317,46 @@ mod tests {
         let mut s = arena_with(vec![e]);
         s.enemies[0].status.frost_ticks = 1;
         tick(&mut s);
-        assert_eq!(s.enemies[0].status.frost_stacks, 0, "stacks clear on expiry");
+        assert_eq!(
+            s.enemies[0].status.frost_stacks, 0,
+            "stacks clear on expiry"
+        );
     }
 
     #[test]
     fn frost_freezes_at_max_resetting_stacks_and_boosting_damage() {
         let mut e = enemy(0, 1000);
         // Reaching the cap (25) freezes: stacks reset, freeze timer set.
-        apply_on_hit(&mut e, &StatusOnHit { frost_stacks: FROST_MAX_STACKS, ..StatusOnHit::NONE });
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                frost_stacks: FROST_MAX_STACKS,
+                ..StatusOnHit::NONE
+            },
+        );
         assert_eq!(e.status.frost_stacks, 0, "stacks reset on freeze");
         assert_eq!(e.status.frost_ticks, 0, "frost slow cleared on freeze");
-        assert_eq!(e.status.freeze_ticks, FREEZE_DURATION, "freeze armed for 1.5 s");
+        assert_eq!(
+            e.status.freeze_ticks, FREEZE_DURATION,
+            "freeze armed for 1.5 s"
+        );
         assert!(is_immobile(&e), "frozen enemy is immobile");
         // Frozen enemy takes +50% damage.
-        assert_eq!(vulnerability_mult(&e).scale_i64(1000), 1500, "+50% while frozen");
+        assert_eq!(
+            vulnerability_mult(&e).scale_i64(1000),
+            1500,
+            "+50% while frozen"
+        );
 
         // Overshooting the cap in one application still freezes once.
         let mut e2 = enemy(0, 1000);
-        apply_on_hit(&mut e2, &StatusOnHit { frost_stacks: 30, ..StatusOnHit::NONE });
+        apply_on_hit(
+            &mut e2,
+            &StatusOnHit {
+                frost_stacks: 30,
+                ..StatusOnHit::NONE
+            },
+        );
         assert_eq!(e2.status.frost_stacks, 0);
         assert_eq!(e2.status.freeze_ticks, FREEZE_DURATION);
 
@@ -333,16 +381,35 @@ mod tests {
                 e
             },
             // Neighbor in range, low hp → the 10 explosion damage chains a kill.
-            Enemy::new(EntityId(2), 0, 8, Vec2::new(Fixed::from_int(100), Fixed::ZERO)),
+            Enemy::new(
+                EntityId(2),
+                0,
+                8,
+                Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+            ),
             // Neighbor in range, high hp → survives, takes 10.
-            Enemy::new(EntityId(3), 0, 1000, Vec2::new(Fixed::from_int(200), Fixed::ZERO)),
+            Enemy::new(
+                EntityId(3),
+                0,
+                1000,
+                Vec2::new(Fixed::from_int(200), Fixed::ZERO),
+            ),
             // Out of range (> 300) → untouched.
-            Enemy::new(EntityId(4), 0, 1000, Vec2::new(Fixed::from_int(1000), Fixed::ZERO)),
+            Enemy::new(
+                EntityId(4),
+                0,
+                1000,
+                Vec2::new(Fixed::from_int(1000), Fixed::ZERO),
+            ),
         ]);
         reap_dead(&mut s);
         // Dead source + chained neighbor are reaped; both defs recorded.
         assert_eq!(s.enemies.len(), 2, "two survivors remain");
-        assert_eq!(s.pending_kills, vec![0, 0], "source + chained kill recorded");
+        assert_eq!(
+            s.pending_kills,
+            vec![0, 0],
+            "source + chained kill recorded"
+        );
         let near = s.enemies.iter().find(|e| e.id == EntityId(3)).unwrap();
         assert_eq!(near.hp, 990, "in-range survivor took 10 explosion damage");
         let far = s.enemies.iter().find(|e| e.id == EntityId(4)).unwrap();
@@ -356,7 +423,12 @@ mod tests {
         // A plain (no-fire) death reaps without damaging neighbors.
         let mut s = arena_with(vec![
             Enemy::new(EntityId(1), 0, -1, Vec2::ZERO),
-            Enemy::new(EntityId(2), 0, 100, Vec2::new(Fixed::from_int(50), Fixed::ZERO)),
+            Enemy::new(
+                EntityId(2),
+                0,
+                100,
+                Vec2::new(Fixed::from_int(50), Fixed::ZERO),
+            ),
         ]);
         reap_dead(&mut s);
         assert_eq!(s.enemies.len(), 1);
@@ -373,8 +445,18 @@ mod tests {
                     e.status.fire_stacks = 100;
                     e
                 },
-                Enemy::new(EntityId(2), 0, 5, Vec2::new(Fixed::from_int(80), Fixed::ZERO)),
-                Enemy::new(EntityId(3), 0, 5, Vec2::new(Fixed::from_int(120), Fixed::ZERO)),
+                Enemy::new(
+                    EntityId(2),
+                    0,
+                    5,
+                    Vec2::new(Fixed::from_int(80), Fixed::ZERO),
+                ),
+                Enemy::new(
+                    EntityId(3),
+                    0,
+                    5,
+                    Vec2::new(Fixed::from_int(120), Fixed::ZERO),
+                ),
             ])
         };
         let mut a = build();
@@ -389,7 +471,13 @@ mod tests {
     #[test]
     fn fire_increases_vulnerability() {
         let mut e = enemy(0, 1000);
-        apply_on_hit(&mut e, &StatusOnHit { fire_stacks: 10, ..StatusOnHit::NONE });
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                fire_stacks: 10,
+                ..StatusOnHit::NONE
+            },
+        );
         // 10 × 0.5% = +5% ⇒ ≈×1.05 (fixed-point floors deterministically).
         let v = vulnerability_mult(&e).scale_i64(1_000_000);
         assert!((1_049_000..=1_050_000).contains(&v), "got {v}");
@@ -400,7 +488,13 @@ mod tests {
     #[test]
     fn stun_immobilizes_then_wears_off() {
         let mut e = enemy(0, 1000);
-        apply_on_hit(&mut e, &StatusOnHit { stun_ticks: 2, ..StatusOnHit::NONE });
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                stun_ticks: 2,
+                ..StatusOnHit::NONE
+            },
+        );
         assert!(is_immobile(&e));
         let mut s = arena_with(vec![e]);
         tick(&mut s); // 2 → 1
@@ -414,15 +508,29 @@ mod tests {
         let mut s = ArenaState::new(7, 0);
         let idx = content::MODIFIERS
             .iter()
-            .position(|m| m.effects.iter().any(|e| matches!(e, content::ModEffect::GrantVulnPulse(..))))
+            .position(|m| {
+                m.effects
+                    .iter()
+                    .any(|e| matches!(e, content::ModEffect::GrantVulnPulse(..)))
+            })
             .expect("a Vulnerability Pulse modifier exists") as u16;
         s.buy_modifier(idx);
         assert_eq!(s.vuln_pulses.len(), 1, "pulse registered");
 
         // An enemy in range (≤1200), and one far outside.
         s.enemies = vec![
-            Enemy::new(EntityId(1), 0, 1_000_000, Vec2::new(Fixed::from_int(500), Fixed::ZERO)),
-            Enemy::new(EntityId(2), 0, 1_000_000, Vec2::new(Fixed::from_int(5000), Fixed::ZERO)),
+            Enemy::new(
+                EntityId(1),
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(500), Fixed::ZERO),
+            ),
+            Enemy::new(
+                EntityId(2),
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(5000), Fixed::ZERO),
+            ),
         ];
         assert_eq!(vulnerability_mult(&s.enemies[0]), Fixed::ONE);
 

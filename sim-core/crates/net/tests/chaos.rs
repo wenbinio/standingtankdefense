@@ -34,7 +34,7 @@ use sim::bot::Bot;
 use sim::{ArenaState, Input};
 
 const HASH: u64 = 0xC0DE_C0DE;
-const SEED: u64 = 0x4D35_4348_414F_53; // "M5CHAOS"-ish
+const SEED: u64 = 0x004D_3543_4841_4F53; // "M5CHAOS"-ish
 const CHAOS_SEED: u64 = 0x9E37_79B9; // explicit chaos-PRNG seed
 
 /// What a single link should suffer this run.
@@ -72,6 +72,10 @@ impl Link {
 /// applied inputs at the same apply ticks) and issues `bot.decide(&mirror)` —
 /// exactly what the player "sees" locally — without the client exposing its
 /// private state. A `Noop` pilot never acts (a quiet, isolated baseline peer).
+// Test-harness enum: the `Bot` variant inlines a full `ArenaState` mirror. The
+// size skew vs `Quiet` is irrelevant here (a handful of instances, no hot path),
+// so boxing would only add noise.
+#[allow(clippy::large_enum_variant)]
 enum Pilot {
     Bot {
         mirror: ArenaState,
@@ -93,7 +97,14 @@ impl Pilot {
     /// The action the player intends at the client's current arena tick.
     fn desired(&mut self, client_tick: Option<u32>) -> Input {
         match (self, client_tick) {
-            (Pilot::Bot { mirror, bot, schedule }, Some(t)) => {
+            (
+                Pilot::Bot {
+                    mirror,
+                    bot,
+                    schedule,
+                },
+                Some(t),
+            ) => {
                 let act = bot.decide(mirror);
                 if act != Input::Noop {
                     schedule.set(t + INPUT_LEAD_TICKS, act);
@@ -106,7 +117,10 @@ impl Pilot {
 
     /// Advance the mirror one arena tick (only meaningful for a bot pilot).
     fn step(&mut self) {
-        if let Pilot::Bot { mirror, schedule, .. } = self {
+        if let Pilot::Bot {
+            mirror, schedule, ..
+        } = self
+        {
             let t = mirror.tick;
             let act = schedule.take(t);
             sim::step(mirror, act);
@@ -145,7 +159,13 @@ fn run(
     let mut pilots: Vec<Pilot> = peers
         .iter()
         .zip(piloted)
-        .map(|(p, &on)| if on { Pilot::bot(SEED, p.0) } else { Pilot::Quiet })
+        .map(|(p, &on)| {
+            if on {
+                Pilot::bot(SEED, p.0)
+            } else {
+                Pilot::Quiet
+            }
+        })
         .collect();
 
     let mut hub = Hub::with_chaos_seed(CHAOS_SEED);
@@ -226,12 +246,29 @@ fn lossy_link_recovers_and_does_not_couple() {
 
     // Clean run is also healed at the same iteration (a no-op on a clean hub), so
     // P2's per-iteration trace lines up tick-for-tick with the chaos run.
-    let clean = run(&ps, &piloted, &[NO_LINK, NO_LINK], NO_LINK, iters, Some(lossy_iters));
+    let clean = run(
+        &ps,
+        &piloted,
+        &[NO_LINK, NO_LINK],
+        NO_LINK,
+        iters,
+        Some(lossy_iters),
+    );
 
     // Director link drops 40% — this is the direction (acks/snapshots) that can
     // actually diverge a non-predictive client — then heals at `lossy_iters`.
-    let lossy_host = Link { loss_permille: 400, ..NO_LINK };
-    let chaos = run(&ps, &piloted, &[NO_LINK, NO_LINK], lossy_host, iters, Some(lossy_iters));
+    let lossy_host = Link {
+        loss_permille: 400,
+        ..NO_LINK
+    };
+    let chaos = run(
+        &ps,
+        &piloted,
+        &[NO_LINK, NO_LINK],
+        lossy_host,
+        iters,
+        Some(lossy_iters),
+    );
 
     // SURVIVAL: P1 was forced to recover (lost acks → divergence → snapshot) and,
     // once the outage ended, its arena reconverged to the authoritative shadow.
@@ -251,7 +288,10 @@ fn lossy_link_recovers_and_does_not_couple() {
         "P2's trajectory was perturbed by the lossy link — sharding is broken"
     );
     assert_eq!(chaos.final_cs[1], chaos.shadow_cs[1]);
-    assert_eq!(chaos.corrections[1], 0, "quiet P2 should need no corrections");
+    assert_eq!(
+        chaos.corrections[1], 0,
+        "quiet P2 should need no corrections"
+    );
 }
 
 /// Director input-ordering tolerance + isolation. P1's OWN link (player→director)
@@ -274,7 +314,11 @@ fn reordered_inputs_tolerated_and_isolated() {
     // and genuinely cross. INPUT_LEAD_TICKS (8) absorbs the extra arrival skew, so
     // every input still lands before its apply tick on both sides.
     let mut links = [NO_LINK, NO_LINK];
-    links[0] = Link { reorder: 4, delay: 1, ..NO_LINK };
+    links[0] = Link {
+        reorder: 4,
+        delay: 1,
+        ..NO_LINK
+    };
     let chaos = run(&ps, &piloted, &links, NO_LINK, iters, None);
 
     // Reorder never drops, and apply-ticks are agreed per-input, so a tick-keyed
@@ -312,7 +356,10 @@ fn high_latency_host_does_not_change_local_tick_rate() {
     let clean = run(&ps, &piloted, &no_links, NO_LINK, iters, None);
 
     // ~300ms one-way at 30 Hz on the HOST link.
-    let slow_host = Link { delay: 9, ..NO_LINK };
+    let slow_host = Link {
+        delay: 9,
+        ..NO_LINK
+    };
     let chaos = run(&ps, &piloted, &no_links, slow_host, iters, None);
 
     // The slow host delays every arena's START by the SAME amount — uniform, not
@@ -345,12 +392,12 @@ fn high_latency_host_does_not_change_local_tick_rate() {
     );
     // The deficit is the SAME for every arena (uniform start shift, no per-arena
     // coupling) — already implied by the uniform finals above, asserted explicitly:
-    for i in 0..ps.len() {
+    for (i, p) in ps.iter().enumerate() {
         assert_eq!(
             clean.final_tick[i].unwrap() - chaos.final_tick[i].unwrap(),
             deficit,
             "player {}'s start offset differs — the host latency coupled arenas",
-            ps[i].0
+            p.0
         );
     }
 }
@@ -388,7 +435,10 @@ fn player_a_chaos_leaves_player_b_byte_identical() {
     assert_eq!(baseline.final_tick[1], Some(iters - START_LEAD));
     // B stayed on the canonical line throughout (matches its shadow, no fixes).
     assert_eq!(chaos.final_cs[1], chaos.shadow_cs[1]);
-    assert_eq!(chaos.corrections[1], 0, "player B should never need a correction");
+    assert_eq!(
+        chaos.corrections[1], 0,
+        "player B should never need a correction"
+    );
 
     // Sanity that the chaos was REAL, not a no-op: A's stalled/delayed uplink lands
     // its inputs at later apply ticks, so A's own arena trajectory genuinely
@@ -414,12 +464,23 @@ fn match_resolves_under_chaos() {
     // ~1k ticks, so both arenas resolve well inside this budget even under chaos.
     let iters = 2500;
     let piloted = [false, false];
-    let a_chaos = Link { delay: 6, loss_permille: 150, jitter: 3, reorder: 2, ..NO_LINK };
-    let host = Link { loss_permille: 80, ..NO_LINK };
+    let a_chaos = Link {
+        delay: 6,
+        loss_permille: 150,
+        jitter: 3,
+        reorder: 2,
+        ..NO_LINK
+    };
+    let host = Link {
+        loss_permille: 80,
+        ..NO_LINK
+    };
 
     let tr = run(&ps, &piloted, &[a_chaos, NO_LINK], host, iters, None);
 
-    let result = tr.result.expect("match must resolve to a MatchResult under chaos");
+    let result = tr
+        .result
+        .expect("match must resolve to a MatchResult under chaos");
     assert_eq!(result.len(), ps.len(), "every player must be placed");
     let mut places: Vec<u32> = result.iter().map(|(_, pl)| *pl).collect();
     places.sort();

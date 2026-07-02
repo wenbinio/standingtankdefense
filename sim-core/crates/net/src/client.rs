@@ -69,6 +69,15 @@ pub struct Client {
 /// Resend `Join` at most this often (in iterations) while awaiting state.
 const JOIN_RETRY_TICKS: u32 = 30;
 
+/// Hard cap on un-acked `pending` inputs. Without a bound, lost `InputAck`s
+/// leak entries forever (the map is only drained by acks). A human emits at
+/// most a few inputs per second, so 64 outstanding actions is already
+/// pathological; beyond it the OLDEST entries are stalest and are dropped
+/// first (their acks are overwhelmingly likely lost — and if one does arrive
+/// late, the missed schedule slot is healed by the digest→snapshot
+/// correction path, never by trusting the client).
+const PENDING_CAP: usize = 64;
+
 /// Drift magnitude (ticks) beyond which the server-time estimate is HARD-SNAPPED
 /// to the beacon (and `clock_resync_flagged` is set) instead of eased. Sized
 /// above normal jitter-induced wobble (a beacon's apparent age varies by the
@@ -137,6 +146,11 @@ impl Client {
                     if let Some(action) = self.pending.remove(&seq) {
                         self.schedule.set(apply_tick, action);
                     }
+                    // Acks arrive in order on the Control channel, so anything
+                    // still pending at or below the acked seq is an orphan
+                    // whose ack was lost; drop it (bounds `pending` under ack
+                    // loss). A missed apply is healed by the correction path.
+                    self.pending = self.pending.split_off(&seq.saturating_add(1));
                 }
                 Msg::Snapshot { bytes, .. } => {
                     if let Ok(restored) = sim::snapshot::deserialize(&bytes) {
@@ -146,6 +160,9 @@ impl Client {
                             // behind the director in wall-time, which is
                             // bit-correct because state is indexed by arena tick.
                             self.step_gate = self.iter + 1;
+                            // Anything scheduled before the adopted tick can
+                            // never be consumed by `take` again — drop it.
+                            self.schedule.discard_before(restored.tick);
                             self.arena = Some(restored);
                         } else {
                             // IN-SYNC CORRECTION: fast-forward the authoritative
@@ -167,6 +184,11 @@ impl Client {
                             if changed {
                                 self.corrections += 1;
                             }
+                            // Housekeeping: schedule entries below the
+                            // corrected tick were consumed by the fast-forward
+                            // (or are unreachable) — discard them so the map
+                            // cannot accumulate stale slots across corrections.
+                            self.schedule.discard_before(target);
                         }
                     }
                 }
@@ -226,12 +248,14 @@ impl Client {
         if self.seek_join && self.arena.is_none() {
             let due = self
                 .last_join_iter
-                .map_or(true, |last| self.iter - last >= JOIN_RETRY_TICKS);
+                .is_none_or(|last| self.iter - last >= JOIN_RETRY_TICKS);
             if due {
                 out.push(Outbound {
                     to: DIRECTOR,
                     channel: Channel::Control,
-                    bytes: wire::encode(&Msg::Join { content_hash: self.content_hash }),
+                    bytes: wire::encode(&Msg::Join {
+                        content_hash: self.content_hash,
+                    }),
                 });
                 self.last_join_iter = Some(self.iter);
             }
@@ -250,6 +274,11 @@ impl Client {
             });
             self.pending.insert(seq, desired);
             self.seq += 1;
+            // Bound `pending` even if every ack is lost: evict the oldest
+            // (stalest) entries first.
+            while self.pending.len() > PENDING_CAP {
+                self.pending.pop_first();
+            }
         }
 
         // 5. Periodic liveness/drift digest, labelled by the pre-step tick (the
@@ -322,22 +351,34 @@ mod tests {
     use crate::transport::Channel;
     use crate::wire::Msg;
 
-    const SEED: u64 = 0xC0FFEE_1234;
+    const SEED: u64 = 0x00C0_FFEE_1234;
 
     fn me() -> PeerId {
         PeerId(1)
     }
 
     fn from_director(msg: &Msg, channel: Channel) -> Inbound {
-        Inbound { from: DIRECTOR, channel, bytes: wire::encode(msg) }
+        Inbound {
+            from: DIRECTOR,
+            channel,
+            bytes: wire::encode(msg),
+        }
     }
 
     fn match_start() -> Inbound {
-        from_director(&Msg::MatchStart { start_tick: 0, master_seed: SEED }, Channel::Control)
+        from_director(
+            &Msg::MatchStart {
+                start_tick: 0,
+                master_seed: SEED,
+            },
+            Channel::Control,
+        )
     }
 
     fn decoded(out: &[Outbound]) -> Vec<Msg> {
-        out.iter().map(|o| wire::decode(&o.bytes).unwrap()).collect()
+        out.iter()
+            .map(|o| wire::decode(&o.bytes).unwrap())
+            .collect()
     }
 
     #[test]
@@ -394,7 +435,13 @@ mod tests {
         a.tick(vec![match_start()], Input::Noop);
         b.tick(vec![match_start()], Input::Noop);
         let apply = 20u32;
-        let ack = from_director(&Msg::InputAck { seq: 0, apply_tick: apply }, Channel::Control);
+        let ack = from_director(
+            &Msg::InputAck {
+                seq: 0,
+                apply_tick: apply,
+            },
+            Channel::Control,
+        );
         // 'a' learns of an action it 'sent' (seq 0) — fake the pending entry by
         // sending a desired first.
         for _ in 0..START_LEAD {
@@ -419,6 +466,54 @@ mod tests {
     }
 
     #[test]
+    fn pending_is_bounded_under_total_ack_loss() {
+        // Every InputAck is lost: `pending` must still never exceed the cap,
+        // and the oldest (stalest) seqs must be the ones evicted.
+        let mut c = Client::new(me(), 0);
+        c.tick(vec![match_start()], Input::Noop);
+        for _ in 0..START_LEAD {
+            c.tick(vec![], Input::Noop);
+        }
+        let n = (PENDING_CAP as u32) * 3;
+        for _ in 0..n {
+            c.tick(vec![], Input::Reroll); // emitted, never acked
+            assert!(c.pending.len() <= PENDING_CAP, "pending grew past the cap");
+        }
+        assert_eq!(c.pending.len(), PENDING_CAP);
+        // Oldest evicted, newest kept.
+        let oldest_kept = *c.pending.keys().next().unwrap();
+        assert_eq!(oldest_kept, n - PENDING_CAP as u32);
+    }
+
+    #[test]
+    fn ack_prunes_orphaned_older_pending() {
+        // Acks 0 and 1 are lost; ack 2 arrives. Scheduling seq 2 must also
+        // drop the orphaned seqs 0 and 1 (their acks can no longer be pending
+        // on the ordered Control channel).
+        let mut c = Client::new(me(), 0);
+        c.tick(vec![match_start()], Input::Noop);
+        for _ in 0..START_LEAD {
+            c.tick(vec![], Input::Noop);
+        }
+        c.tick(vec![], Input::Reroll); // seq 0
+        c.tick(vec![], Input::Reroll); // seq 1
+        c.tick(vec![], Input::Clear); // seq 2
+        assert_eq!(c.pending.len(), 3);
+        let ack = from_director(
+            &Msg::InputAck {
+                seq: 2,
+                apply_tick: 60,
+            },
+            Channel::Control,
+        );
+        c.tick(vec![ack], Input::Noop);
+        assert!(
+            c.pending.is_empty(),
+            "acked + orphaned entries must be gone"
+        );
+    }
+
+    #[test]
     fn reconnecting_client_seeks_join_then_adopts_snapshot() {
         // A reconnecting client sends Join until it gets a Snapshot, then adopts.
         let mut c = Client::reconnecting(me(), 0xABCD);
@@ -435,7 +530,10 @@ mod tests {
             sim::step(&mut auth, Input::Noop);
         }
         let snap = from_director(
-            &Msg::Snapshot { tick: 300, bytes: sim::snapshot::serialize(&auth) },
+            &Msg::Snapshot {
+                tick: 300,
+                bytes: sim::snapshot::serialize(&auth),
+            },
             Channel::Bulk,
         );
         c.tick(vec![snap], Input::Noop);

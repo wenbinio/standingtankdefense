@@ -122,9 +122,9 @@ fn eight_player_full_match_soak_stays_correct_and_bounded() {
             // DIGEST-aligned tick a couple of intervals back, firmly inside the
             // retained window).
             let s_tick = d.shadow(PeerId(1)).unwrap().tick;
-            let recent_tick =
-                s_tick.saturating_sub(net::DIGEST_INTERVAL * 2) / net::DIGEST_INTERVAL
-                    * net::DIGEST_INTERVAL;
+            let recent_tick = s_tick.saturating_sub(net::DIGEST_INTERVAL * 2)
+                / net::DIGEST_INTERVAL
+                * net::DIGEST_INTERVAL;
             in_d.push(digest_from(PeerId(1), recent_tick, 0x0BAD_0BAD_0BAD_0BAD));
             probe_fired = true;
         }
@@ -146,7 +146,12 @@ fn eight_player_full_match_soak_stays_correct_and_bounded() {
         for (i, c) in clients.iter().enumerate() {
             if c.arena_tick().is_some() {
                 pilots[i].step();
-                if pilots[i].mirror.enemies.iter().any(|e| content::ENEMIES[e.def as usize].boss) {
+                if pilots[i]
+                    .mirror
+                    .enemies
+                    .iter()
+                    .any(|e| content::ENEMIES[e.def as usize].boss)
+                {
                     boss_seen = true;
                 }
             }
@@ -197,9 +202,15 @@ fn eight_player_full_match_soak_stays_correct_and_bounded() {
     let (stale_ignored, recent_corrected) = probe_history_bound();
 
     // 1. We actually sampled the drift check many times across the long match.
-    assert!(sampled_checks > 50, "too few drift samples ({sampled_checks}) — soak too short?");
+    assert!(
+        sampled_checks > 50,
+        "too few drift samples ({sampled_checks}) — soak too short?"
+    );
     // The boss phase was genuinely reached and exercised through the netcode.
-    assert!(boss_seen, "the boss never appeared — the soak did not reach the boss phase");
+    assert!(
+        boss_seen,
+        "the boss never appeared — the soak did not reach the boss phase"
+    );
 
     // 2. Correction rate ≈ 0 on a clean link, all the way past the boss.
     for (i, c) in clients.iter().enumerate() {
@@ -257,11 +268,15 @@ fn probe_history_bound() -> (bool, bool) {
         d.tick(vec![]);
     }
     let now = d.server_tick();
-    assert!(d.is_alive(p), "probe tank must still be alive ({now} ticks)");
+    assert!(
+        d.is_alive(p),
+        "probe tank must still be alive ({now} ticks)"
+    );
     // A tick from the very start of the match (long since trimmed from history).
     let stale_tick = 0u32;
     // A tick guaranteed inside the recent (retained) window and DIGEST-aligned.
-    let recent_tick = (now - net::DIGEST_INTERVAL * 2) / net::DIGEST_INTERVAL * net::DIGEST_INTERVAL;
+    let recent_tick =
+        (now - net::DIGEST_INTERVAL * 2) / net::DIGEST_INTERVAL * net::DIGEST_INTERVAL;
 
     let stale_out = d.tick(vec![digest_from(p, stale_tick, 0x1234_5678)]);
     let recent_out = d.tick(vec![digest_from(p, recent_tick, 0x8765_4321)]);

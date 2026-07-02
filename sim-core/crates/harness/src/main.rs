@@ -16,8 +16,14 @@ fn main() {
 
     println!("ticks            = {}", sc.total_ticks);
     println!("final_checksum   = {:#018x}", a.last().unwrap());
-    println!("identical_runs   = {}", if identical { "PASS" } else { "FAIL" });
-    println!("seed_sensitive   = {}", if seed_sensitive { "PASS" } else { "FAIL" });
+    println!(
+        "identical_runs   = {}",
+        if identical { "PASS" } else { "FAIL" }
+    );
+    println!(
+        "seed_sensitive   = {}",
+        if seed_sensitive { "PASS" } else { "FAIL" }
+    );
 
     if identical && seed_sensitive {
         println!("M0 DETERMINISM GATE: PASS");

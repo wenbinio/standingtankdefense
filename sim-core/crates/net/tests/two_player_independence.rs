@@ -123,6 +123,13 @@ fn healthy_clients_match_their_shadows() {
 #[test]
 fn healthy_peer_unaffected_while_other_is_stalled() {
     let o = run(Some(200));
-    assert_eq!(o.c2_final, o.shadow2.unwrap(), "stalled P1 perturbed P2 vs its shadow");
-    assert_eq!(o.c2_corrections, 0, "P2 needed a correction due to P1's stall");
+    assert_eq!(
+        o.c2_final,
+        o.shadow2.unwrap(),
+        "stalled P1 perturbed P2 vs its shadow"
+    );
+    assert_eq!(
+        o.c2_corrections, 0,
+        "P2 needed a correction due to P1's stall"
+    );
 }

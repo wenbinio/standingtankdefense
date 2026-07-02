@@ -45,7 +45,11 @@ pub enum Msg {
     /// Authoritative arena snapshot (correction / reconnect).
     Snapshot { tick: u32, bytes: Vec<u8> },
     /// A player has been eliminated; `place` is their final placement.
-    DeathConfirmed { player: u32, died_tick: u32, place: u32 },
+    DeathConfirmed {
+        player: u32,
+        died_tick: u32,
+        place: u32,
+    },
     /// Final standings: `(player, place)` pairs.
     MatchResult { places: Vec<(u32, u32)> },
 
@@ -151,7 +155,10 @@ impl<'a> R<'a> {
 pub fn encode(m: &Msg) -> Vec<u8> {
     let mut w = W(Vec::new());
     match m {
-        Msg::MatchStart { start_tick, master_seed } => {
+        Msg::MatchStart {
+            start_tick,
+            master_seed,
+        } => {
             w.u8(0);
             w.u32(*start_tick);
             w.u64(*master_seed);
@@ -170,7 +177,11 @@ pub fn encode(m: &Msg) -> Vec<u8> {
             w.u32(*tick);
             w.bytes(bytes);
         }
-        Msg::DeathConfirmed { player, died_tick, place } => {
+        Msg::DeathConfirmed {
+            player,
+            died_tick,
+            place,
+        } => {
             w.u8(4);
             w.u32(*player);
             w.u32(*died_tick);
@@ -210,7 +221,9 @@ pub fn decode(bytes: &[u8]) -> Result<Msg, WireError> {
             start_tick: r.u32()?,
             master_seed: r.u64()?,
         },
-        1 => Msg::TimeBeacon { server_tick: r.u32()? },
+        1 => Msg::TimeBeacon {
+            server_tick: r.u32()?,
+        },
         2 => Msg::InputAck {
             seq: r.u32()?,
             apply_tick: r.u32()?,
@@ -232,7 +245,9 @@ pub fn decode(bytes: &[u8]) -> Result<Msg, WireError> {
             }
             Msg::MatchResult { places }
         }
-        6 => Msg::Join { content_hash: r.u64()? },
+        6 => Msg::Join {
+            content_hash: r.u64()?,
+        },
         7 => Msg::Input {
             seq: r.u32()?,
             action: r.input()?,
@@ -253,16 +268,42 @@ mod tests {
     #[test]
     fn roundtrip_all_variants() {
         let msgs = vec![
-            Msg::MatchStart { start_tick: 5, master_seed: 0xDEAD_BEEF_1234 },
+            Msg::MatchStart {
+                start_tick: 5,
+                master_seed: 0xDEAD_BEEF_1234,
+            },
             Msg::TimeBeacon { server_tick: 99 },
-            Msg::InputAck { seq: 7, apply_tick: 42 },
-            Msg::Snapshot { tick: 10, bytes: vec![1, 2, 3, 4] },
-            Msg::DeathConfirmed { player: 2, died_tick: 800, place: 3 },
-            Msg::MatchResult { places: vec![(1, 1), (2, 2)] },
-            Msg::Join { content_hash: 0xABCD },
-            Msg::Input { seq: 3, action: InputCode::BuyOffer(2) },
-            Msg::Input { seq: 4, action: InputCode::Clear },
-            Msg::Digest { tick: 30, checksum: 0x1122_3344_5566_7788 },
+            Msg::InputAck {
+                seq: 7,
+                apply_tick: 42,
+            },
+            Msg::Snapshot {
+                tick: 10,
+                bytes: vec![1, 2, 3, 4],
+            },
+            Msg::DeathConfirmed {
+                player: 2,
+                died_tick: 800,
+                place: 3,
+            },
+            Msg::MatchResult {
+                places: vec![(1, 1), (2, 2)],
+            },
+            Msg::Join {
+                content_hash: 0xABCD,
+            },
+            Msg::Input {
+                seq: 3,
+                action: InputCode::BuyOffer(2),
+            },
+            Msg::Input {
+                seq: 4,
+                action: InputCode::Clear,
+            },
+            Msg::Digest {
+                tick: 30,
+                checksum: 0x1122_3344_5566_7788,
+            },
         ];
         for m in msgs {
             assert_eq!(decode(&encode(&m)).unwrap(), m, "roundtrip {m:?}");

@@ -19,10 +19,18 @@ pub(crate) fn generate_offers(s: &mut ArenaState) {
     for slot in 0..OFFER_SLOTS {
         let offer = if slot < WEAPON_SLOTS {
             let r = s.rng_shop.below(nw) as usize;
-            Offer { kind: OfferKind::Weapon, def: r as u16, cost: content::WEAPONS[r].cost }
+            Offer {
+                kind: OfferKind::Weapon,
+                def: r as u16,
+                cost: content::WEAPONS[r].cost,
+            }
         } else {
             let r = s.rng_shop.below(nm) as usize;
-            Offer { kind: OfferKind::Modifier, def: r as u16, cost: content::MODIFIERS[r].cost }
+            Offer {
+                kind: OfferKind::Modifier,
+                def: r as u16,
+                cost: content::MODIFIERS[r].cost,
+            }
         };
         offers.push(offer);
     }
@@ -106,7 +114,11 @@ mod tests {
     #[test]
     fn replaces_previous_offers() {
         let mut s = fresh();
-        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 99, cost: -1 }];
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Weapon,
+            def: 99,
+            cost: -1,
+        }];
         generate_offers(&mut s);
         assert_eq!(s.shop.offers.len(), OFFER_SLOTS);
         assert!(s.shop.offers.iter().all(|o| o.def != 99 || o.cost != -1));

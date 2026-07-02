@@ -45,6 +45,12 @@ impl Fixed {
     pub const fn floor_to_int(self) -> i64 {
         self.0 >> Self::FRAC_BITS
     }
+    // `mul`/`div` intentionally shadow the `std::ops` names: they are the sim's
+    // ONLY sanctioned Fixed×Fixed operators (saturating, Q-format-aware), and the
+    // explicit method calls keep every checksum-path multiply/divide greppable.
+    // Renaming or moving them behind `impl Mul/Div` would churn every hot-path
+    // call site for zero behavior change.
+    #[allow(clippy::should_implement_trait)]
     #[inline]
     pub fn mul(self, o: Fixed) -> Fixed {
         // SATURATING at the i64 boundary. The i128 product never overflows; only the
@@ -55,11 +61,17 @@ impl Fixed {
         // stacking hundreds of multiplicative damage mods); for all in-range values
         // it is bit-identical to the plain narrowing, so no normal run / checksum
         // changes — it just turns an out-of-range panic into a saturated ceiling.
-        Fixed(sat_i128_to_i64((self.0 as i128 * o.0 as i128) >> Self::FRAC_BITS))
+        Fixed(sat_i128_to_i64(
+            (self.0 as i128 * o.0 as i128) >> Self::FRAC_BITS,
+        ))
     }
+    // See `mul` for why this shadows `std::ops::Div::div` on purpose.
+    #[allow(clippy::should_implement_trait)]
     #[inline]
     pub fn div(self, o: Fixed) -> Fixed {
-        Fixed(sat_i128_to_i64(((self.0 as i128) << Self::FRAC_BITS) / o.0 as i128))
+        Fixed(sat_i128_to_i64(
+            ((self.0 as i128) << Self::FRAC_BITS) / o.0 as i128,
+        ))
     }
     /// Multiply an `i64` magnitude (e.g. damage) by this multiplier, flooring.
     /// Saturating at the i64 boundary (see [`Fixed::mul`]).
@@ -139,7 +151,9 @@ fn isqrt_u128(n: u128) -> u128 {
         return n;
     }
     // Newton's method with an integer initial guess.
-    let mut x = 1u128 << ((128 - n.leading_zeros() + 1) / 2);
+    // `(bits + 1) / 2` == `bits.div_ceil(2)` for all non-negative values — a
+    // bit-identical rewrite (checksum-path safe), just clearer.
+    let mut x = 1u128 << (128 - n.leading_zeros()).div_ceil(2);
     loop {
         let y = (x + n / x) >> 1;
         if y >= x {
@@ -274,8 +288,16 @@ mod tests {
     fn fixed_roundtrip_and_ops() {
         assert_eq!(Fixed::from_int(5).floor_to_int(), 5);
         assert_eq!((Fixed::from_int(3) + Fixed::from_int(4)).floor_to_int(), 7);
-        assert_eq!(Fixed::from_int(6).mul(Fixed::from_ratio(1, 2)).floor_to_int(), 3);
-        assert_eq!(Fixed::from_int(10).div(Fixed::from_int(4)), Fixed::from_ratio(10, 4));
+        assert_eq!(
+            Fixed::from_int(6)
+                .mul(Fixed::from_ratio(1, 2))
+                .floor_to_int(),
+            3
+        );
+        assert_eq!(
+            Fixed::from_int(10).div(Fixed::from_int(4)),
+            Fixed::from_ratio(10, 4)
+        );
         assert_eq!(Fixed::ONE.scale_i64(1000), 1000);
         assert_eq!(Fixed::from_ratio(3, 2).scale_i64(1000), 1500);
     }

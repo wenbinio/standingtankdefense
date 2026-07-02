@@ -26,3 +26,33 @@ jobs:
         run: cargo test --workspace --locked
       - name: M0 determinism gate
         run: cargo run --locked -p harness
+
+  hygiene:
+    name: fmt + clippy (sim-core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: rustfmt
+        run: cargo fmt --check
+      - name: clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  type-check:
+    # `godot/rust` and `adapters/steam-transport` are separate Cargo trees
+    # (GDExtension / Steam SDK link steps keep them out of the sim-core
+    # workspace). `cargo check` type-checks both without the Steam SDK — the
+    # SDK is only needed to LINK, not to check.
+    name: cargo check (godot/rust + steam-transport)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: check godot/rust
+        run: cargo check --locked
+        working-directory: godot/rust
+      - name: check adapters/steam-transport
+        run: cargo check --locked
+        working-directory: adapters/steam-transport

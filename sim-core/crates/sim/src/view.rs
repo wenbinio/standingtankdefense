@@ -189,7 +189,9 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
 
     let mut counts: BTreeMap<&'static str, u32> = BTreeMap::new();
     for w in &s.weapons {
-        *counts.entry(content::WEAPONS[w.def as usize].name).or_insert(0) += 1;
+        *counts
+            .entry(content::WEAPONS[w.def as usize].name)
+            .or_insert(0) += 1;
     }
     let arsenal = counts
         .into_iter()

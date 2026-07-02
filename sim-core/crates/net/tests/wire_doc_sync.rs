@@ -27,8 +27,7 @@ fn manifest_dir() -> PathBuf {
 /// first token of a line that begins a variant, ignoring `//` comments, the
 /// `enum`/brace lines, and section markers).
 fn msg_variants_from_source() -> BTreeSet<String> {
-    let src = fs::read_to_string(manifest_dir().join("src/wire.rs"))
-        .expect("read src/wire.rs");
+    let src = fs::read_to_string(manifest_dir().join("src/wire.rs")).expect("read src/wire.rs");
 
     let start = src
         .find("pub enum Msg {")
@@ -85,8 +84,7 @@ fn msg_variants_from_source() -> BTreeSet<String> {
 
 #[test]
 fn transmitted_messages_match_msg_enum() {
-    let canonical: BTreeSet<String> =
-        TRANSMITTED_MESSAGES.iter().map(|s| s.to_string()).collect();
+    let canonical: BTreeSet<String> = TRANSMITTED_MESSAGES.iter().map(|s| s.to_string()).collect();
     let actual = msg_variants_from_source();
 
     let missing_from_const: Vec<_> = actual.difference(&canonical).collect();

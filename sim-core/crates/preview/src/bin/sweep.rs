@@ -87,7 +87,9 @@ fn main() {
         }
     }
 
-    let runs: Vec<Run> = (0..seeds).map(|seed| run_seed(seed, cap, challenge)).collect();
+    let runs: Vec<Run> = (0..seeds)
+        .map(|seed| run_seed(seed, cap, challenge))
+        .collect();
 
     if rows {
         println!("seed  death_tick  survived  weapons  archetype     result");
@@ -142,24 +144,32 @@ fn main() {
     let max = *secs.last().unwrap();
     let wins = runs.iter().filter(|r| r.won).count();
     // <30s death rate: died (not a cap-win) before 30s.
-    let lt30 = runs.iter().filter(|r| !r.won && r.survived_secs < 30).count();
-    let min_death_tick = runs
+    let lt30 = runs
         .iter()
-        .filter(|r| !r.won)
-        .map(|r| r.death_tick)
-        .min();
+        .filter(|r| !r.won && r.survived_secs < 30)
+        .count();
+    let min_death_tick = runs.iter().filter(|r| !r.won).map(|r| r.death_tick).min();
 
     let pct = |x: usize| 100.0 * x as f64 / n as f64;
     let pctc = |x: u32| 100.0 * x as f64 / n as f64;
 
-    println!("=== survival sweep: {} seeds (0..{}), cap {}t = {}s ===", n, n, cap, cap / TICK_HZ);
+    println!(
+        "=== survival sweep: {} seeds (0..{}), cap {}t = {}s ===",
+        n,
+        n,
+        cap,
+        cap / TICK_HZ
+    );
     println!("buckets:");
     println!("  <5s      : {:>3}  ({:>5.1}%)", b_lt5, pctc(b_lt5));
     println!("  5-30s    : {:>3}  ({:>5.1}%)", b_5_30, pctc(b_5_30));
     println!("  30s-3min : {:>3}  ({:>5.1}%)", b_30_180, pctc(b_30_180));
     println!("  3-10min  : {:>3}  ({:>5.1}%)", b_180_600, pctc(b_180_600));
     println!("  >10min   : {:>3}  ({:>5.1}%)", b_gt600, pctc(b_gt600));
-    println!("survival (s): mean {:.1}  median {:.1}  min {}  max {}", mean, median, min, max);
+    println!(
+        "survival (s): mean {:.1}  median {:.1}  min {}  max {}",
+        mean, median, min, max
+    );
     println!("win rate (reached cap): {}/{} ({:.1}%)", wins, n, pct(wins));
     println!("<30s death rate: {}/{} ({:.1}%)", lt30, n, pct(lt30));
     match min_death_tick {

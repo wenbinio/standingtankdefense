@@ -118,7 +118,11 @@ mod tests {
     #[test]
     fn buy_offer_deducts_gold_and_adds_weapon_when_affordable() {
         let mut s = fresh();
-        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 1, cost: 200 }];
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Weapon,
+            def: 1,
+            cost: 200,
+        }];
         s.economy.gold = 500;
         let weapons_before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 0 });
@@ -132,7 +136,11 @@ mod tests {
     #[test]
     fn buy_offer_ignored_when_unaffordable() {
         let mut s = fresh();
-        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 1, cost: 600 }];
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Weapon,
+            def: 1,
+            cost: 600,
+        }];
         s.economy.gold = 500;
         let weapons_before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 0 });
@@ -143,7 +151,11 @@ mod tests {
     #[test]
     fn buy_offer_ignored_for_invalid_slot() {
         let mut s = fresh();
-        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 0, cost: 0 }];
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Weapon,
+            def: 0,
+            cost: 0,
+        }];
         s.economy.gold = 500;
         let weapons_before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 5 });
@@ -160,7 +172,10 @@ mod tests {
         apply(&mut s, Input::Reroll);
         assert_eq!(s.economy.rerolls_remaining, 1);
         assert_eq!(s.economy.gold, 1000, "free reroll must not charge gold");
-        assert_eq!(s.economy.reroll_cost, cost_before, "cost unchanged on free reroll");
+        assert_eq!(
+            s.economy.reroll_cost, cost_before,
+            "cost unchanged on free reroll"
+        );
         assert_eq!(s.shop.offers.len(), 8);
     }
 
@@ -186,7 +201,11 @@ mod tests {
         s.economy.rerolls_remaining = 0;
         s.economy.gold = 50;
         s.economy.reroll_cost = 100;
-        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: 7, cost: 1 }];
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Weapon,
+            def: 7,
+            cost: 1,
+        }];
         let seq_before = s.shop.shop_seq;
         apply(&mut s, Input::Reroll);
         assert_eq!(s.economy.gold, 50);
@@ -222,11 +241,19 @@ mod tests {
 
         // Buy a rarity-0 WEAPON; should yield 1 + copies instances.
         let common_weapon = content::WEAPONS.iter().position(|w| w.rarity == 0).unwrap() as u16;
-        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: common_weapon, cost: 100 }];
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Weapon,
+            def: common_weapon,
+            cost: 100,
+        }];
         s.economy.gold = 100;
         let before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 0 });
-        assert_eq!(s.weapons.len(), before + 1 + copies, "duplicated copies granted");
+        assert_eq!(
+            s.weapons.len(),
+            before + 1 + copies,
+            "duplicated copies granted"
+        );
         assert!(s.pending_perk.is_none(), "perk consumed");
         assert_eq!(s.economy.gold, 0, "only the base copy costs gold");
     }
@@ -238,10 +265,18 @@ mod tests {
         s.buy_modifier(dup);
         // Buy a rarity-2 weapon: perk (rarity 0) must NOT apply and must remain armed.
         let rare_weapon = content::WEAPONS.iter().position(|w| w.rarity == 2).unwrap() as u16;
-        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: rare_weapon, cost: 0 }];
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Weapon,
+            def: rare_weapon,
+            cost: 0,
+        }];
         let before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 0 });
-        assert_eq!(s.weapons.len(), before + 1, "no extra copies for wrong rarity");
+        assert_eq!(
+            s.weapons.len(),
+            before + 1,
+            "no extra copies for wrong rarity"
+        );
         assert!(s.pending_perk.is_some(), "perk still armed");
     }
 
@@ -252,7 +287,11 @@ mod tests {
         s.buy_modifier(voucher);
         // A rarity-1 weapon costs more gold than we hold, but the voucher zeroes it.
         let unc_weapon = content::WEAPONS.iter().position(|w| w.rarity == 1).unwrap() as u16;
-        s.shop.offers = vec![Offer { kind: OfferKind::Weapon, def: unc_weapon, cost: 9999 }];
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Weapon,
+            def: unc_weapon,
+            cost: 9999,
+        }];
         s.economy.gold = 0;
         let before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 0 });
@@ -270,12 +309,20 @@ mod tests {
         // Buying ANOTHER meta item (a rarity-1 voucher) must not consume the
         // duplicator perk — it replaces it with its own (no self-duplication).
         let voucher = modifier_idx(|e| matches!(e, content::ModEffect::GrantVoucher(1)));
-        s.shop.offers = vec![Offer { kind: OfferKind::Modifier, def: voucher, cost: 0 }];
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Modifier,
+            def: voucher,
+            cost: 0,
+        }];
         s.economy.gold = 0;
         apply(&mut s, Input::BuyOffer { slot: 0 });
         // The duplicator did not duplicate the voucher; the perk is now the voucher.
         assert_ne!(s.pending_perk, armed);
-        assert_eq!(s.pending_perk.map(|p| p.free), Some(true), "perk is the voucher");
+        assert_eq!(
+            s.pending_perk.map(|p| p.free),
+            Some(true),
+            "perk is the voucher"
+        );
     }
 
     #[test]
@@ -304,7 +351,7 @@ mod tests {
         apply(&mut s, Input::Clear);
         assert!(s.enemies.is_empty(), "all enemies wiped");
         assert_eq!(s.pending_kills, vec![0, 1]);
-        assert_eq!(s.tank.clear_cooldown_end, 0 + CLEAR_COOLDOWN_TICKS);
+        assert_eq!(s.tank.clear_cooldown_end, CLEAR_COOLDOWN_TICKS);
         // sanity: those defs exist in content.
         assert!(content::ENEMIES.len() >= 2);
     }

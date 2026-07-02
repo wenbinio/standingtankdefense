@@ -72,7 +72,11 @@ fn standby_takes_over_on_host_loss() {
         }
 
         // Clients hear the primary until the handoff, the standby after.
-        let director_out = if it < MIGRATE_AT { out_primary } else { out_standby };
+        let director_out = if it < MIGRATE_AT {
+            out_primary
+        } else {
+            out_standby
+        };
 
         let mut client_out = Vec::new();
         for (i, c) in clients.iter_mut().enumerate() {
@@ -119,18 +123,28 @@ fn standby_takes_over_on_host_loss() {
         let c = &clients[i];
         let s_tick = standby.shadow(p).unwrap().tick;
         let c_now = c.arena_tick().unwrap();
-        assert!(s_tick <= c_now, "new-director shadow cannot lead the client for player {}", p.0);
-        let expected = client_history[i]
-            .get(&s_tick)
-            .copied()
-            .unwrap_or_else(|| panic!("no client checksum recorded at shadow tick {s_tick} for player {}", p.0));
+        assert!(
+            s_tick <= c_now,
+            "new-director shadow cannot lead the client for player {}",
+            p.0
+        );
+        let expected = client_history[i].get(&s_tick).copied().unwrap_or_else(|| {
+            panic!(
+                "no client checksum recorded at shadow tick {s_tick} for player {}",
+                p.0
+            )
+        });
         assert_eq!(
             standby.shadow_checksum(p),
             Some(expected),
             "player {} lost sync with the new director after migration (at shadow tick {s_tick})",
             p.0
         );
-        assert!(c.corrections() == 0, "player {} needed a correction across migration", p.0);
+        assert!(
+            c.corrections() == 0,
+            "player {} needed a correction across migration",
+            p.0
+        );
     }
 
     // The match actually progressed past the handoff.

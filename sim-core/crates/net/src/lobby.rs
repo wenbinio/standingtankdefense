@@ -46,7 +46,11 @@ pub struct Ruleset {
 impl Ruleset {
     /// A plain default match: map 0, normal speed, no challenge.
     pub fn standard() -> Ruleset {
-        Ruleset { map_id: 0, game_speed: 0, challenge: 0 }
+        Ruleset {
+            map_id: 0,
+            game_speed: 0,
+            challenge: 0,
+        }
     }
 }
 
@@ -135,7 +139,11 @@ impl Lobby {
             content_hash,
             ruleset,
             phase: Phase::Filling,
-            members: vec![Member { peer: host, ready: true, content_hash }],
+            members: vec![Member {
+                peer: host,
+                ready: true,
+                content_hash,
+            }],
         }
     }
 
@@ -196,7 +204,11 @@ impl Lobby {
         if self.members.len() >= MAX_PARTY {
             return Err(JoinReject::Full);
         }
-        self.members.push(Member { peer, ready: false, content_hash: member_content_hash });
+        self.members.push(Member {
+            peer,
+            ready: false,
+            content_hash: member_content_hash,
+        });
         self.members.sort_by_key(|m| m.peer);
         self.recompute_phase();
         Ok(())
@@ -247,7 +259,11 @@ impl Lobby {
     /// Non-host members in stable slot order — the player arenas the director
     /// will shadow.
     pub fn players(&self) -> Vec<PeerId> {
-        self.members.iter().filter(|m| m.peer != self.host).map(|m| m.peer).collect()
+        self.members
+            .iter()
+            .filter(|m| m.peer != self.host)
+            .map(|m| m.peer)
+            .collect()
     }
 
     fn recompute_phase(&mut self) {
@@ -357,9 +373,19 @@ impl Lobby {
             let peer = PeerId(r.u32()?);
             let ready = r.u8()? != 0;
             let hash = r.u64()?;
-            members.push(Member { peer, ready, content_hash: hash });
+            members.push(Member {
+                peer,
+                ready,
+                content_hash: hash,
+            });
         }
-        Ok(Lobby { host, content_hash, ruleset, phase, members })
+        Ok(Lobby {
+            host,
+            content_hash,
+            ruleset,
+            phase,
+            members,
+        })
     }
 }
 
@@ -480,7 +506,10 @@ mod tests {
         let mut l = host_lobby();
         assert_eq!(
             l.join(p(1), 0xBAD),
-            Err(JoinReject::ContentMismatch { lobby: HASH, peer: 0xBAD })
+            Err(JoinReject::ContentMismatch {
+                lobby: HASH,
+                peer: 0xBAD
+            })
         );
         assert!(!l.contains(p(1)), "rejected join seats nobody");
     }
@@ -550,7 +579,11 @@ mod tests {
         const SEED: u64 = 0xDEAD_BEEF_CAFE_F00D;
         let plan = l.start(SEED).expect("ready lobby starts");
         assert_eq!(plan.master_seed, SEED, "seed threaded through unchanged");
-        assert_eq!(plan.players, vec![p(1), p(3)], "non-host members in slot order");
+        assert_eq!(
+            plan.players,
+            vec![p(1), p(3)],
+            "non-host members in slot order"
+        );
         assert_eq!(plan.content_hash, HASH);
         assert_eq!(plan.ruleset, Ruleset::standard());
         assert_eq!(l.phase(), Phase::Started);
@@ -603,7 +636,11 @@ mod tests {
         l.join(p(5), HASH).unwrap();
         l.set_ready(p(1), true);
 
-        let ruleset = Ruleset { map_id: 3, game_speed: 1, challenge: 42 };
+        let ruleset = Ruleset {
+            map_id: 3,
+            game_speed: 1,
+            challenge: 42,
+        };
         let mut l2 = Lobby::new(HOST, HASH, ruleset);
         l2.join(p(1), HASH).unwrap();
         l2.set_ready(p(1), true);

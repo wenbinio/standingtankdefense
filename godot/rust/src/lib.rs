@@ -88,7 +88,12 @@ impl StSim {
     fn economy(&self) -> PackedInt64Array {
         let e = view::snapshot(&self.state).economy;
         let mut a = PackedInt64Array::new();
-        for v in [e.gold, e.income_per_tick, e.rerolls_remaining as i64, e.reroll_cost] {
+        for v in [
+            e.gold,
+            e.income_per_tick,
+            e.rerolls_remaining as i64,
+            e.reroll_cost,
+        ] {
             a.push(v);
         }
         a
@@ -274,7 +279,10 @@ impl StMatch {
         let n = n.clamp(1, 16) as u32;
         let peers: Vec<PeerId> = (1..=n).map(PeerId).collect();
         let director = Director::new(&peers, seed as u64);
-        let clients = peers.iter().map(|p| Client::new(*p, DEMO_CONTENT_HASH)).collect();
+        let clients = peers
+            .iter()
+            .map(|p| Client::new(*p, DEMO_CONTENT_HASH))
+            .collect();
         let bots = peers.iter().map(|_| Bot::default()).collect();
         Gd::from_init_fn(|base| StMatch {
             director,
@@ -334,11 +342,16 @@ impl StMatch {
     }
     #[func]
     fn alive_count(&self) -> i64 {
-        self.peers.iter().filter(|p| self.director.is_alive(**p)).count() as i64
+        self.peers
+            .iter()
+            .filter(|p| self.director.is_alive(**p))
+            .count() as i64
     }
     #[func]
     fn is_alive(&self, i: i64) -> bool {
-        self.peers.get(i as usize).is_some_and(|p| self.director.is_alive(*p))
+        self.peers
+            .get(i as usize)
+            .is_some_and(|p| self.director.is_alive(*p))
     }
     #[func]
     fn match_over(&self) -> bool {
@@ -548,17 +561,26 @@ impl StLobby {
     /// Peer id of the `i`-th member (members are kept sorted by peer id).
     #[func]
     fn member_peer(&self, i: i64) -> i64 {
-        self.lobby.members().get(i as usize).map_or(-1, |m| m.peer.0 as i64)
+        self.lobby
+            .members()
+            .get(i as usize)
+            .map_or(-1, |m| m.peer.0 as i64)
     }
     #[func]
     fn member_ready(&self, i: i64) -> bool {
-        self.lobby.members().get(i as usize).is_some_and(|m| m.ready)
+        self.lobby
+            .members()
+            .get(i as usize)
+            .is_some_and(|m| m.ready)
     }
     /// True if the `i`-th member is the host.
     #[func]
     fn is_host_member(&self, i: i64) -> bool {
         let host = self.lobby.host();
-        self.lobby.members().get(i as usize).is_some_and(|m| m.peer == host)
+        self.lobby
+            .members()
+            .get(i as usize)
+            .is_some_and(|m| m.peer == host)
     }
 
     /// Try to start with host-minted `seed`. Returns 0 on success (the plan is

@@ -20,8 +20,12 @@ pub(crate) fn spawn(s: &mut ArenaState) {
     if s.tick == content::BOSS_SPAWN_TICK {
         let edef = &content::ENEMIES[content::BOSS as usize];
         let id = s.alloc_entity_id();
-        s.enemies
-            .push(Enemy::new(id, content::BOSS, edef.base_hp, content::SPAWN_RING[0]));
+        s.enemies.push(Enemy::new(
+            id,
+            content::BOSS,
+            edef.base_hp,
+            content::SPAWN_RING[0],
+        ));
         // fall through: the escort swarm below also spawns on this tick.
     }
     if s.tick >= content::BOSS_SPAWN_TICK {
@@ -30,7 +34,7 @@ pub(crate) fn spawn(s: &mut ArenaState) {
         // the boss). Deterministic ring picks via `rng_spawn`, same as normal waves.
         let hp_mult = content::enemy_hp_mult(s.tick);
         for ws in content::BOSS_ESCORT {
-            if ws.cadence_ticks != 0 && s.tick % ws.cadence_ticks == 0 {
+            if ws.cadence_ticks != 0 && s.tick.is_multiple_of(ws.cadence_ticks) {
                 let ring_idx = s.rng_spawn.below(content::SPAWN_RING.len() as u32) as usize;
                 let pos = content::SPAWN_RING[ring_idx];
                 let edef = &content::ENEMIES[ws.enemy as usize];
@@ -54,7 +58,7 @@ pub(crate) fn spawn(s: &mut ArenaState) {
         if s.tick < ws.start_tick {
             continue;
         }
-        if s.tick % ws.cadence_ticks == 0 {
+        if s.tick.is_multiple_of(ws.cadence_ticks) {
             let ring_idx = s.rng_spawn.below(content::SPAWN_RING.len() as u32) as usize;
             let pos = content::SPAWN_RING[ring_idx];
             let edef = &content::ENEMIES[ws.enemy as usize];
@@ -121,7 +125,7 @@ mod tests {
         let pos = s.enemies[0].pos;
         // The spawn must be exactly one of the precomputed ring positions.
         assert!(
-            content::SPAWN_RING.iter().any(|&r| r == pos),
+            content::SPAWN_RING.contains(&pos),
             "enemy must spawn on the SPAWN_RING"
         );
         // And its distance-from-origin squared must equal a ring radius^2
@@ -178,25 +182,32 @@ mod tests {
             (54000, 55604), // the 30-min boss tier — the ≈ ×5.56 endpoint.
         ];
         for (tick, mult10k) in post {
-            assert_eq!(m(tick).scale_i64(10000), mult10k, "post-step mult at {tick}");
+            assert_eq!(
+                m(tick).scale_i64(10000),
+                mult10k,
+                "post-step mult at {tick}"
+            );
         }
         // The boss phase HOLDS the endpoint `base(10)` (≈ ×5.56).
         let boss = m(content::BOSS_SPAWN_TICK);
         assert_eq!(boss.scale_i64(10000), 55604);
-        assert_eq!(m(content::BOSS_SPAWN_TICK + 5000), boss, "boss phase holds the endpoint");
+        assert_eq!(
+            m(content::BOSS_SPAWN_TICK + 5000),
+            boss,
+            "boss phase holds the endpoint"
+        );
 
         // (3) Within an interval: a gentle region, then a STEEPER warning region.
         //     Verify on the k=1 interval [5400, 10800).
         let lo = 5400;
         let warn_start = lo + content::GENTLE_TICKS; // 9900
-        // Average slope over a 100-tick span in the gentle region vs the warning
-        // region (×1e6/tick) — a wide window avoids per-tick quantization noise.
+                                                     // Average slope over a 100-tick span in the gentle region vs the warning
+                                                     // region (×1e6/tick) — a wide window avoids per-tick quantization noise.
         let gentle_slope = (m(warn_start - 100).scale_i64(1_000_000)
             - m(warn_start - 200).scale_i64(1_000_000))
             / 100;
-        let warn_slope = (m(warn_start + 100).scale_i64(1_000_000)
-            - m(warn_start).scale_i64(1_000_000))
-            / 100;
+        let warn_slope =
+            (m(warn_start + 100).scale_i64(1_000_000) - m(warn_start).scale_i64(1_000_000)) / 100;
         assert!(gentle_slope > 0, "gentle region must rise");
         assert!(
             warn_slope >= gentle_slope * 3,
@@ -210,7 +221,10 @@ mod tests {
         let pre_step = m(lo + interval - 1); // tick 10799, warning peak
         let post_step = m(lo + interval); //   tick 10800, post-step
         let step = post_step.scale_i64(1_000_000) - pre_step.scale_i64(1_000_000);
-        assert!(step > warn_slope * 50, "boundary step must dwarf a single warning tick");
+        assert!(
+            step > warn_slope * 50,
+            "boundary step must dwarf a single warning tick"
+        );
         // +14% (J): post ≈ pre × 1.14 (within rounding, ×1000).
         assert_eq!(
             post_step.scale_i64(1000),
@@ -229,10 +243,16 @@ mod tests {
         assert_eq!(s.tick % content::EARLY_GRUNT_CADENCE, 0);
         spawn(&mut s);
         let grunt_base = content::ENEMIES[0].base_hp;
-        assert_eq!(s.enemies[0].def, 0, "first spawn this tick is the grunt (entry 0)");
+        assert_eq!(
+            s.enemies[0].def, 0,
+            "first spawn this tick is the grunt (entry 0)"
+        );
         // hp should be scaled up (BALANCE PASS: the curve is ~×2.06 here — k4 warning
         // region, just before the 15-min step — a smooth escalation, not the old hack).
-        assert!(s.enemies[0].hp > grunt_base * 2, "late enemy HP must be scaled up");
+        assert!(
+            s.enemies[0].hp > grunt_base * 2,
+            "late enemy HP must be scaled up"
+        );
         assert!(s.enemies[0].hp <= grunt_base * 3);
     }
 
@@ -258,10 +278,15 @@ mod tests {
         s.tick = content::BOSS_SPAWN_TICK + 4; // an escort grunt-cadence tick (4)
         spawn(&mut s);
         assert!(
-            s.enemies.iter().all(|e| !content::ENEMIES[e.def as usize].boss),
+            s.enemies
+                .iter()
+                .all(|e| !content::ENEMIES[e.def as usize].boss),
             "the boss spawns once, not again during the boss phase"
         );
-        assert!(!s.enemies.is_empty(), "the escort swarm keeps spawning in the boss phase");
+        assert!(
+            !s.enemies.is_empty(),
+            "the escort swarm keeps spawning in the boss phase"
+        );
     }
 
     #[test]
@@ -302,7 +327,10 @@ mod tests {
     fn gated_entries_dormant_until_start_tick() {
         // The Doomduck (def 3) is gated; before its start_tick it must not
         // spawn even on a tick divisible by its cadence.
-        let peon = content::ENEMIES.iter().position(|e| e.name == "Doomduck").unwrap() as u16;
+        let peon = content::ENEMIES
+            .iter()
+            .position(|e| e.name == "Doomduck")
+            .unwrap() as u16;
         let ws = content::WAVE_M0.iter().find(|w| w.enemy == peon).unwrap();
         assert!(ws.start_tick > 0, "peon entry is gated");
         // Largest cadence-multiple strictly below the gate.
@@ -317,7 +345,10 @@ mod tests {
         let before: usize = s.enemies.iter().filter(|e| e.def == peon).count();
         spawn(&mut s);
         let after: usize = s.enemies.iter().filter(|e| e.def == peon).count();
-        assert_eq!(after, before, "gated peon must not spawn before its start_tick");
+        assert_eq!(
+            after, before,
+            "gated peon must not spawn before its start_tick"
+        );
     }
 
     #[test]
@@ -342,8 +373,12 @@ mod tests {
             spawn(&mut c);
             spawn(&mut d);
         }
-        for e in &c.enemies { pc.push(e.pos); }
-        for e in &d.enemies { pd.push(e.pos); }
+        for e in &c.enemies {
+            pc.push(e.pos);
+        }
+        for e in &d.enemies {
+            pd.push(e.pos);
+        }
         assert_eq!(pc, pd);
     }
 }

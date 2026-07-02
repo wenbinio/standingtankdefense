@@ -76,7 +76,10 @@ fn estimate_tracks_director_under_latency_and_jitter() {
     );
     // Finishes well-synced: within a single beacon interval of the truth.
     let final_gap = d.server_tick().abs_diff(c.server_tick().unwrap());
-    assert!(final_gap <= BEACON_INTERVAL, "ended out of sync by {final_gap}");
+    assert!(
+        final_gap <= BEACON_INTERVAL,
+        "ended out of sync by {final_gap}"
+    );
 }
 
 /// A client whose estimate STARTS far behind the truth catches up via beacons:
@@ -85,8 +88,8 @@ fn estimate_tracks_director_under_latency_and_jitter() {
 /// first, then letting real beacons correct it.
 #[test]
 fn behind_client_catches_up_via_beacons() {
-    use net::wire::{self, Msg};
     use net::transport::{Channel, Inbound};
+    use net::wire::{self, Msg};
 
     let mut d = Director::new(&[P1], SEED);
     let mut c = Client::new(P1, HASH);
@@ -109,7 +112,10 @@ fn behind_client_catches_up_via_beacons() {
     };
     c.tick(vec![stale], Input::Noop);
     let behind = d.server_tick().abs_diff(c.server_tick().unwrap());
-    assert!(behind > 100, "setup: client should start far behind, was {behind}");
+    assert!(
+        behind > 100,
+        "setup: client should start far behind, was {behind}"
+    );
 
     // Now let real beacons flow. The next genuine beacon's drift exceeds the snap
     // threshold, so the estimate snaps forward (and flags a resync).
@@ -122,8 +128,14 @@ fn behind_client_catches_up_via_beacons() {
             break;
         }
     }
-    assert!(converged, "behind client never caught up to the director's clock");
-    assert!(c.take_clock_resync(), "a large-drift snap must flag a resync");
+    assert!(
+        converged,
+        "behind client never caught up to the director's clock"
+    );
+    assert!(
+        c.take_clock_resync(),
+        "a large-drift snap must flag a resync"
+    );
 }
 
 /// With NO beacons arriving (the director's telemetry is black-holed), the client
@@ -158,9 +170,15 @@ fn no_beacons_free_runs_gracefully() {
         last = now;
     }
     // No beacon ⇒ drift was never re-measured ⇒ no spurious resync flag.
-    assert!(!c.take_clock_resync(), "free-running client must not flag a resync");
+    assert!(
+        !c.take_clock_resync(),
+        "free-running client must not flag a resync"
+    );
     // And the free-run stayed sane: still within a beacon-ish band of the truth,
     // since both advance at the same rate from a shared anchor.
     let gap = d.server_tick().abs_diff(c.server_tick().unwrap());
-    assert!(gap <= MAX_GAP, "free-run drifted by {gap} despite matched rates");
+    assert!(
+        gap <= MAX_GAP,
+        "free-run drifted by {gap} despite matched rates"
+    );
 }

@@ -81,7 +81,12 @@ mod tests {
         let stats = MatchStats::from_placements(&placements);
         // places 1..=4 win, 5..=8 lose; place 1 is the Last Stand.
         for r in &stats.rows {
-            assert_eq!(r.win, r.place <= 4, "win cutoff wrong for place {}", r.place);
+            assert_eq!(
+                r.win,
+                r.place <= 4,
+                "win cutoff wrong for place {}",
+                r.place
+            );
             assert_eq!(r.last_stand, r.place == 1);
         }
     }
@@ -121,8 +126,16 @@ mod tests {
         forged.claimed.death_tick = forged.claimed.death_tick.saturating_sub(1);
 
         let subs = vec![
-            SubmittedResult { player: pid(1), place: 1, replay: &clean },
-            SubmittedResult { player: pid(2), place: 2, replay: &forged },
+            SubmittedResult {
+                player: pid(1),
+                place: 1,
+                replay: &clean,
+            },
+            SubmittedResult {
+                player: pid(2),
+                place: 2,
+                replay: &forged,
+            },
         ];
         let outcomes = verify_submissions(&subs, CONTENT);
         assert_eq!(outcomes.len(), 2);

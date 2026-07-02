@@ -51,7 +51,14 @@ impl AbilityAccum {
         if let (WeaponAbility::Hazard { dmg, radius, ticks }, Some(pos)) = (ability, self.hazard_at)
         {
             let id = s.alloc_entity_id();
-            s.hazards.push(Hazard { id, pos, dmg, damage_type, radius, ticks_left: ticks });
+            s.hazards.push(Hazard {
+                id,
+                pos,
+                dmg,
+                damage_type,
+                radius,
+                ticks_left: ticks,
+            });
         }
         // Raise an ally from each corpse this attack made, up to the global cap.
         for req in self.summons {
@@ -106,6 +113,10 @@ impl CondDamage {
 /// status. Bosses are immune to weapon fire — only `Clear` damages them.
 /// Returns the integer damage subtracted from the enemy (0 for an immune boss),
 /// for the caller's damage/Bloodmoney accounting.
+// The argument list mirrors the damage pipeline's inputs one-to-one; bundling
+// them into a struct would churn a hot checksum-path call site for no behavior
+// change.
+#[allow(clippy::too_many_arguments)]
 fn apply_weapon_hit(
     e: &mut Enemy,
     base: i64,
@@ -124,7 +135,11 @@ fn apply_weapon_hit(
     }
     let armor = content::damage_multiplier(damage_type, edef.armor_class);
     let vuln = crate::status::vulnerability_mult(e);
-    let dmg = armor.mul(mod_mult).mul(vuln).mul(cond.mult(e)).scale_i64(base);
+    let dmg = armor
+        .mul(mod_mult)
+        .mul(vuln)
+        .mul(cond.mult(e))
+        .scale_i64(base);
     e.hp -= dmg;
     crate::status::apply_on_hit(e, on_hit);
     apply_ability_on_hit(e, ability, tank_pos, accum);
@@ -147,7 +162,12 @@ fn apply_ability_on_hit(
             // Raise from the corpse only if THIS hit was the killing blow.
             // (`apply_weapon_hit` has already subtracted the damage.)
             if e.hp <= 0 {
-                accum.summons.push(SummonReq { pos: e.pos, kind, hp, damage });
+                accum.summons.push(SummonReq {
+                    pos: e.pos,
+                    kind,
+                    hp,
+                    damage,
+                });
             }
         }
         WeaponAbility::LifeDrain { per_hit } => accum.heal += per_hit,
@@ -283,8 +303,15 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 for e in s.enemies.iter_mut() {
                     if tank_pos.dist_sq(e.pos) <= r2 {
                         instant_damage += apply_weapon_hit(
-                            e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit, ability,
-                            tank_pos, &mut accum,
+                            e,
+                            wdef.damage,
+                            wdef.damage_type,
+                            wmult,
+                            cond,
+                            &on_hit,
+                            ability,
+                            tank_pos,
+                            &mut accum,
                         );
                     }
                 }
@@ -297,8 +324,15 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 for e in s.enemies.iter_mut() {
                     if tank_pos.dist_sq(e.pos) <= r2 {
                         instant_damage += apply_weapon_hit(
-                            e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit, ability,
-                            tank_pos, &mut accum,
+                            e,
+                            wdef.damage,
+                            wdef.damage_type,
+                            wmult,
+                            cond,
+                            &on_hit,
+                            ability,
+                            tank_pos,
+                            &mut accum,
                         );
                     }
                 }
@@ -310,9 +344,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 let origin = s.enemies[first].pos;
                 let mut order: Vec<usize> = (0..s.enemies.len()).filter(|&i| i != first).collect();
                 // Sort by (distance to origin, id) for a deterministic chain.
-                order.sort_by_key(|&i| {
-                    (s.enemies[i].pos.dist_sq(origin).raw(), s.enemies[i].id.0)
-                });
+                order.sort_by_key(|&i| (s.enemies[i].pos.dist_sq(origin).raw(), s.enemies[i].id.0));
                 let mut targets = vec![first];
                 targets.extend(order.into_iter().take((n as usize).saturating_sub(1)));
                 for ti in targets {
@@ -392,11 +424,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     let projectiles = std::mem::take(&mut s.projectiles);
     for mut p in projectiles {
         // Resolve current target position (if the enemy still exists).
-        let target_pos = s
-            .enemies
-            .iter()
-            .find(|e| e.id == p.target)
-            .map(|e| e.pos);
+        let target_pos = s.enemies.iter().find(|e| e.id == p.target).map(|e| e.pos);
 
         match target_pos {
             Some(tpos) => {
@@ -449,22 +477,36 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     let mut impact_damage: i64 = 0;
     for imp in impacts {
         let mod_mult = Fixed::ONE; // weapon multiplier was baked into projectile damage at fire time
-        // Each impact's signature ability accumulates over the enemies it hits,
-        // then flushes (tank heal / mana / hazard) once.
+                                   // Each impact's signature ability accumulates over the enemies it hits,
+                                   // then flushes (tank heal / mana / hazard) once.
         let mut accum = AbilityAccum::default();
         if imp.splash_radius > Fixed::ZERO {
             let radius_sq = imp.splash_radius.mul(imp.splash_radius);
             for e in s.enemies.iter_mut() {
                 if imp.point.dist_sq(e.pos) <= radius_sq {
                     impact_damage += apply_weapon_hit(
-                        e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit, imp.ability,
-                        tank_pos, &mut accum,
+                        e,
+                        imp.damage,
+                        imp.damage_type,
+                        mod_mult,
+                        cond,
+                        &imp.on_hit,
+                        imp.ability,
+                        tank_pos,
+                        &mut accum,
                     );
                 }
             }
         } else if let Some(e) = s.enemies.iter_mut().find(|e| e.id == imp.target) {
             impact_damage += apply_weapon_hit(
-                e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit, imp.ability, tank_pos,
+                e,
+                imp.damage,
+                imp.damage_type,
+                mod_mult,
+                cond,
+                &imp.on_hit,
+                imp.ability,
+                tank_pos,
                 &mut accum,
             );
         }
@@ -513,7 +555,7 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
                 // function of `s.tick` (no wall-clock, no new RNG); dodge/armor/shield
                 // are still honored per hit inside `hit_tank`.
                 e.pos = moved; // pin at the tank
-                if s.tick % content::BOSS_CONTACT_CADENCE == 0 {
+                if s.tick.is_multiple_of(content::BOSS_CONTACT_CADENCE) {
                     crate::defense::hit_tank(s, contact);
                 }
                 survivors.push(e);
@@ -557,8 +599,15 @@ pub(crate) fn tick_hazards(s: &mut ArenaState) {
         for e in s.enemies.iter_mut() {
             if h.pos.dist_sq(e.pos) <= r2 {
                 total += apply_weapon_hit(
-                    e, h.dmg, h.damage_type, Fixed::ONE, cond, &content::StatusOnHit::NONE,
-                    WeaponAbility::None, tank_pos, &mut accum,
+                    e,
+                    h.dmg,
+                    h.damage_type,
+                    Fixed::ONE,
+                    cond,
+                    &content::StatusOnHit::NONE,
+                    WeaponAbility::None,
+                    tank_pos,
+                    &mut accum,
                 );
                 any = true;
             }
@@ -616,8 +665,15 @@ pub(crate) fn tick_aura(s: &mut ArenaState) {
     for e in s.enemies.iter_mut() {
         if tank_pos.dist_sq(e.pos) <= r2 {
             total += apply_weapon_hit(
-                e, dmg, content::DMG_MAGIC, Fixed::ONE, cond, &poison,
-                WeaponAbility::None, tank_pos, &mut accum,
+                e,
+                dmg,
+                content::DMG_MAGIC,
+                Fixed::ONE,
+                cond,
+                &poison,
+                WeaponAbility::None,
+                tank_pos,
+                &mut accum,
             );
             any = true;
         }
@@ -629,11 +685,11 @@ pub(crate) fn tick_aura(s: &mut ArenaState) {
 }
 
 /// Tuning for summoned allies (Larvae / Spores).
-const MAX_MINIONS: usize = 16;     // global cap on living minions
-const MINION_LIFETIME: u32 = 450;  // ~15s before a minion vanishes
-const MINION_ATTACK_CD: u32 = 30;  // ticks between a minion's strikes (~1/s)
-const MINION_REACH: i64 = 160;     // melee reach (world units)
-const MINION_SPEED: i64 = 18;      // step toward the target per tick (out of reach)
+const MAX_MINIONS: usize = 16; // global cap on living minions
+const MINION_LIFETIME: u32 = 450; // ~15s before a minion vanishes
+const MINION_ATTACK_CD: u32 = 30; // ticks between a minion's strikes (~1/s)
+const MINION_REACH: i64 = 160; // melee reach (world units)
+const MINION_SPEED: i64 = 18; // step toward the target per tick (out of reach)
 
 /// Phase 6d: summoned allies act. Each minion (stable id order) targets the
 /// nearest non-boss enemy: in reach it strikes on its attack cooldown, else it
@@ -667,7 +723,7 @@ pub(crate) fn tick_minions(s: &mut ArenaState) {
                 continue;
             }
             let d2 = m.pos.dist_sq(e.pos);
-            if best.map_or(true, |(_, _, bd)| d2 < bd) {
+            if best.is_none_or(|(_, _, bd)| d2 < bd) {
                 best = Some((e.id, e.pos, d2));
             }
         }
@@ -696,8 +752,15 @@ pub(crate) fn tick_minions(s: &mut ArenaState) {
     for (tid, dmg, dtype) in strikes {
         if let Some(e) = s.enemies.iter_mut().find(|e| e.id == tid) {
             total += apply_weapon_hit(
-                e, dmg, dtype, Fixed::ONE, cond, &content::StatusOnHit::NONE,
-                WeaponAbility::None, tank_pos, &mut accum,
+                e,
+                dmg,
+                dtype,
+                Fixed::ONE,
+                cond,
+                &content::StatusOnHit::NONE,
+                WeaponAbility::None,
+                tank_pos,
+                &mut accum,
             );
         }
     }
@@ -784,12 +847,24 @@ mod tests {
         // Starting weapon is the Bow (def 0, range 900). Put an enemy far out.
         s.weapons.clear();
         let wid = s.alloc_entity_id();
-        s.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 0 });
+        s.weapons.push(WeaponInstance {
+            instance_id: wid,
+            def: 0,
+            next_fire_tick: 0,
+        });
 
         // Enemy out of range (1500 > 900) → no fire, no cooldown advance.
-        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(1500), Fixed::ZERO));
+        mk_enemy(
+            &mut s,
+            0,
+            200,
+            Vec2::new(Fixed::from_int(1500), Fixed::ZERO),
+        );
         fire_weapons(&mut s);
-        assert!(s.projectiles.is_empty(), "should not fire at out-of-range enemy");
+        assert!(
+            s.projectiles.is_empty(),
+            "should not fire at out-of-range enemy"
+        );
         assert_eq!(s.weapons[0].next_fire_tick, 0, "cooldown must not advance");
 
         // Enemy in range (300 < 900) → fires one projectile, advances cooldown.
@@ -809,7 +884,11 @@ mod tests {
         let mut s = blank_state();
         s.weapons.clear();
         let wid = s.alloc_entity_id();
-        s.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 100 });
+        s.weapons.push(WeaponInstance {
+            instance_id: wid,
+            def: 0,
+            next_fire_tick: 100,
+        });
         mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
         s.tick = 50; // 50 < 100, not ready.
         fire_weapons(&mut s);
@@ -826,8 +905,17 @@ mod tests {
             s.weapons.clear();
             s.modifiers.add_global = add_global;
             let wid = s.alloc_entity_id();
-            s.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 0 });
-            mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+            s.weapons.push(WeaponInstance {
+                instance_id: wid,
+                def: 0,
+                next_fire_tick: 0,
+            });
+            mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+            );
             fire_weapons(&mut s);
             s.projectiles[0].damage
         };
@@ -859,7 +947,10 @@ mod tests {
         let mortar = &content::WEAPONS[1];
         assert_eq!(attack_scope_id(mortar.attack), 1);
         assert!(matches!(mortar.attack, Attack::Splash(_)));
-        assert_eq!(s2.modifiers.weapon_damage_mult(mortar).scale_i64(1000), 2000);
+        assert_eq!(
+            s2.modifiers.weapon_damage_mult(mortar).scale_i64(1000),
+            2000
+        );
     }
 
     #[test]
@@ -867,7 +958,11 @@ mod tests {
         let mut s = blank_state();
         s.weapons.clear();
         let wid = s.alloc_entity_id();
-        s.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 0 });
+        s.weapons.push(WeaponInstance {
+            instance_id: wid,
+            def: 0,
+            next_fire_tick: 0,
+        });
         mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
         s.modifiers.attack_speed = Fixed::from_ratio(1, 1); // +100% ⇒ ×2 ⇒ cd 30→15
         fire_weapons(&mut s);
@@ -938,7 +1033,12 @@ mod tests {
         // Three enemies: two within 300 of impact, one far away.
         let near1 = mk_enemy(&mut s, 0, 100, impact); // distance 0
         let _near2 = mk_enemy(&mut s, 0, 100, Vec2::new(Fixed::from_int(250), Fixed::ZERO)); // 150 away
-        let _far = mk_enemy(&mut s, 0, 100, Vec2::new(Fixed::from_int(1000), Fixed::ZERO)); // 900 away
+        let _far = mk_enemy(
+            &mut s,
+            0,
+            100,
+            Vec2::new(Fixed::from_int(1000), Fixed::ZERO),
+        ); // 900 away
         let pid = s.alloc_entity_id();
         // Mortar: siege 300, splash 300. Siege vs armor 0 → 1x = 300 dmg, lethal.
         s.projectiles.push(Projectile {
@@ -1005,7 +1105,11 @@ mod tests {
             ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
-        assert_eq!(s.enemies.len(), 1, "bystander untouched by single-target miss");
+        assert_eq!(
+            s.enemies.len(),
+            1,
+            "bystander untouched by single-target miss"
+        );
         assert!(s.projectiles.is_empty(), "stale projectile removed");
         assert!(s.pending_kills.is_empty());
     }
@@ -1036,7 +1140,12 @@ mod tests {
         early.weapons.clear();
         early.tick = 0;
         let hp0 = early.tank.hp;
-        mk_enemy(&mut early, 0, 200, Vec2::new(Fixed::from_int(3), Fixed::ZERO));
+        mk_enemy(
+            &mut early,
+            0,
+            200,
+            Vec2::new(Fixed::from_int(3), Fixed::ZERO),
+        );
         move_enemies(&mut early);
         assert_eq!(early.tank.hp, hp0 - base, "tick 0 deals raw contact damage");
 
@@ -1048,9 +1157,18 @@ mod tests {
         let expected = mult.scale_i64(base);
         assert!(expected > base, "scaling must increase contact damage");
         let hp_late = late.tank.hp;
-        mk_enemy(&mut late, 0, 200, Vec2::new(Fixed::from_int(3), Fixed::ZERO));
+        mk_enemy(
+            &mut late,
+            0,
+            200,
+            Vec2::new(Fixed::from_int(3), Fixed::ZERO),
+        );
         move_enemies(&mut late);
-        assert_eq!(late.tank.hp, hp_late - expected, "late contact damage scaled");
+        assert_eq!(
+            late.tank.hp,
+            hp_late - expected,
+            "late contact damage scaled"
+        );
     }
 
     #[test]
@@ -1082,9 +1200,18 @@ mod tests {
         off.tick = content::BOSS_SPAWN_TICK + 1; // not a multiple of cadence (16)
         assert_ne!(off.tick % cadence, 0);
         let hp_off = off.tank.hp;
-        mk_enemy(&mut off, boss_def, 33_000_000, Vec2::new(Fixed::from_int(2), Fixed::ZERO));
+        mk_enemy(
+            &mut off,
+            boss_def,
+            33_000_000,
+            Vec2::new(Fixed::from_int(2), Fixed::ZERO),
+        );
         move_enemies(&mut off);
-        assert_eq!(off.enemies.len(), 1, "boss persists on contact (no self-destruct)");
+        assert_eq!(
+            off.enemies.len(),
+            1,
+            "boss persists on contact (no self-destruct)"
+        );
         assert_eq!(off.enemies[0].pos, Vec2::ZERO, "boss planted on the tank");
         assert_eq!(off.tank.hp, hp_off, "no damage on an off-cadence tick");
 
@@ -1095,10 +1222,23 @@ mod tests {
         assert_eq!(on.tick % cadence, 0);
         let expected = content::enemy_hp_mult(on.tick).scale_i64(raw);
         let hp_on = on.tank.hp;
-        mk_enemy(&mut on, boss_def, 33_000_000, Vec2::new(Fixed::from_int(2), Fixed::ZERO));
+        mk_enemy(
+            &mut on,
+            boss_def,
+            33_000_000,
+            Vec2::new(Fixed::from_int(2), Fixed::ZERO),
+        );
         move_enemies(&mut on);
-        assert_eq!(on.enemies.len(), 1, "boss still present after a contact hit");
-        assert_eq!(on.tank.hp, hp_on - expected, "cadence tick deals one scaled boss hit");
+        assert_eq!(
+            on.enemies.len(),
+            1,
+            "boss still present after a contact hit"
+        );
+        assert_eq!(
+            on.tank.hp,
+            hp_on - expected,
+            "cadence tick deals one scaled boss hit"
+        );
         assert!(on.pending_kills.is_empty(), "boss contact grants no bounty");
     }
 
@@ -1110,15 +1250,27 @@ mod tests {
         let mut a = blank_state();
         a.weapons.clear();
         let wid = a.alloc_entity_id();
-        a.weapons.push(WeaponInstance { instance_id: wid, def: 0, next_fire_tick: 0 });
+        a.weapons.push(WeaponInstance {
+            instance_id: wid,
+            def: 0,
+            next_fire_tick: 0,
+        });
         for i in 0..5 {
-            mk_enemy(&mut a, 0, 200, Vec2::new(Fixed::from_int(100 + i), Fixed::from_int(i)));
+            mk_enemy(
+                &mut a,
+                0,
+                200,
+                Vec2::new(Fixed::from_int(100 + i), Fixed::from_int(i)),
+            );
         }
         let mut b = a.clone();
 
         fire_weapons(&mut a);
         fire_weapons(&mut b);
-        assert_eq!(a.projectiles, b.projectiles, "same seed → same target chosen");
+        assert_eq!(
+            a.projectiles, b.projectiles,
+            "same seed → same target chosen"
+        );
         assert_eq!(a.rng_targeting.state(), b.rng_targeting.state());
         assert_eq!(a.projectiles.len(), 1);
     }
@@ -1159,9 +1311,33 @@ mod tests {
         let mut stunned = Enemy::new(EntityId(1), 0, 1_000_000, Vec2::ZERO);
         stunned.status.stun_ticks = 10;
         // Piercing vs armor 0 = 2× matrix; base 100 ⇒ plain takes 200.
-        apply_weapon_hit(&mut plain, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE, WeaponAbility::None, Vec2::ZERO, &mut AbilityAccum::default());
-        apply_weapon_hit(&mut stunned, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE, WeaponAbility::None, Vec2::ZERO, &mut AbilityAccum::default());
-        assert_eq!(1_000_000 - plain.hp, 200, "no conditional bonus on un-stunned");
+        apply_weapon_hit(
+            &mut plain,
+            100,
+            content::DMG_PIERCING,
+            Fixed::ONE,
+            cond,
+            &content::StatusOnHit::NONE,
+            WeaponAbility::None,
+            Vec2::ZERO,
+            &mut AbilityAccum::default(),
+        );
+        apply_weapon_hit(
+            &mut stunned,
+            100,
+            content::DMG_PIERCING,
+            Fixed::ONE,
+            cond,
+            &content::StatusOnHit::NONE,
+            WeaponAbility::None,
+            Vec2::ZERO,
+            &mut AbilityAccum::default(),
+        );
+        assert_eq!(
+            1_000_000 - plain.hp,
+            200,
+            "no conditional bonus on un-stunned"
+        );
         assert_eq!(1_000_000 - stunned.hp, 400, "+100% vs stunned doubles it");
     }
 
@@ -1176,7 +1352,10 @@ mod tests {
         give_weapon(&mut s, 3); // Poison Bow: poison_dps 20
         fire_weapons(&mut s);
         assert_eq!(s.projectiles.len(), 1);
-        assert_eq!(s.projectiles[0].on_hit.poison_dps, 30, "20 × 1.5 baked at fire time");
+        assert_eq!(
+            s.projectiles[0].on_hit.poison_dps, 30,
+            "20 × 1.5 baked at fire time"
+        );
     }
 
     #[test]
@@ -1184,7 +1363,10 @@ mod tests {
         // A weapon with stun on-hit gets its stun extended by the modifier.
         let mut s = blank_state();
         s.modifiers.stun_dur_mult = Fixed::from_int(2); // ×2
-        let on_hit = content::StatusOnHit { stun_ticks: 30, ..content::StatusOnHit::NONE };
+        let on_hit = content::StatusOnHit {
+            stun_ticks: 30,
+            ..content::StatusOnHit::NONE
+        };
         let scaled = s.modifiers.scale_on_hit(on_hit);
         assert_eq!(scaled.stun_ticks, 60);
         // Identity multiplier leaves it untouched.
@@ -1197,15 +1379,22 @@ mod tests {
         // "+1% Piercing Damage per Bow" (def 0, piercing). Own 3 Bows.
         let mut s = blank_state();
         s.weapons.clear();
-        s.modifiers.weapon_count_scaling.push(crate::state::WeaponCountScale {
-            weapon_def: 0,
-            dmg_type: content::DMG_PIERCING,
-            per: Fixed::from_ratio(1, 100),
-        });
+        s.modifiers
+            .weapon_count_scaling
+            .push(crate::state::WeaponCountScale {
+                weapon_def: 0,
+                dmg_type: content::DMG_PIERCING,
+                per: Fixed::from_ratio(1, 100),
+            });
         for _ in 0..3 {
             give_weapon(&mut s, 0);
         }
-        mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
         fire_weapons(&mut s);
         assert_eq!(s.projectiles.len(), 3, "all three Bows fire");
         // add_self = 3 × 1% = 3% ⇒ 75 × 1.03 = 77 (floored).
@@ -1214,15 +1403,26 @@ mod tests {
         // Wrong damage type is unaffected: a Siege rule does nothing for the Bow.
         let mut s2 = blank_state();
         s2.weapons.clear();
-        s2.modifiers.weapon_count_scaling.push(crate::state::WeaponCountScale {
-            weapon_def: 0,
-            dmg_type: content::DMG_SIEGE,
-            per: Fixed::from_ratio(1, 100),
-        });
+        s2.modifiers
+            .weapon_count_scaling
+            .push(crate::state::WeaponCountScale {
+                weapon_def: 0,
+                dmg_type: content::DMG_SIEGE,
+                per: Fixed::from_ratio(1, 100),
+            });
         give_weapon(&mut s2, 0);
-        mk_enemy(&mut s2, 0, 1_000_000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        mk_enemy(
+            &mut s2,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
         fire_weapons(&mut s2);
-        assert_eq!(s2.projectiles[0].damage, content::WEAPONS[0].damage, "no piercing scaling");
+        assert_eq!(
+            s2.projectiles[0].damage,
+            content::WEAPONS[0].damage,
+            "no piercing scaling"
+        );
     }
 
     #[test]
@@ -1245,7 +1445,10 @@ mod tests {
             ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
-        assert_eq!(s.total_damage_dealt, 400, "actual armor-scaled damage scored");
+        assert_eq!(
+            s.total_damage_dealt, 400,
+            "actual armor-scaled damage scored"
+        );
     }
 
     #[test]
@@ -1255,8 +1458,18 @@ mod tests {
         s.weapons.clear();
         s.economy.gold_per_damage = Fixed::from_ratio(1, 4); // exactly representable
         give_weapon(&mut s, 7);
-        mk_enemy(&mut s, 0, 10_000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
-        mk_enemy(&mut s, 0, 10_000, Vec2::new(Fixed::from_int(250), Fixed::ZERO));
+        mk_enemy(
+            &mut s,
+            0,
+            10_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
+        mk_enemy(
+            &mut s,
+            0,
+            10_000,
+            Vec2::new(Fixed::from_int(250), Fixed::ZERO),
+        );
         let gold0 = s.economy.gold;
         fire_weapons(&mut s);
         // Chaos vs armor 0 = 1×; 80 each × 2 enemies = 160 total.
@@ -1290,7 +1503,11 @@ mod tests {
 
     fn give_weapon(s: &mut ArenaState, def: u16) {
         let id = s.alloc_entity_id();
-        s.weapons.push(WeaponInstance { instance_id: id, def, next_fire_tick: 0 });
+        s.weapons.push(WeaponInstance {
+            instance_id: id,
+            def,
+            next_fire_tick: 0,
+        });
     }
 
     // ---- enemy roster: ranged attacks & Fortified armor ---------------------
@@ -1312,9 +1529,12 @@ mod tests {
         let fb = enemy_def_idx("Spicy");
         let edef = &content::ENEMIES[fb as usize];
         let (range, cd, dmg) = match edef.ability {
-            content::EnemyAbility::RangedAttack { range, cooldown_ticks, damage, .. } => {
-                (range, cooldown_ticks, damage)
-            }
+            content::EnemyAbility::RangedAttack {
+                range,
+                cooldown_ticks,
+                damage,
+                ..
+            } => (range, cooldown_ticks, damage),
             _ => panic!("Spicy must be a ranged attacker"),
         };
         // Place it well inside range but not at the origin.
@@ -1325,10 +1545,17 @@ mod tests {
         let hp0 = s.tank.hp;
         enemy_ranged_attacks(&mut s);
         // Damage applied through the defensive layer (no dodge/armor in blank state).
-        assert_eq!(s.tank.hp, hp0 - dmg, "ranged enemy hit the tank at standoff range");
+        assert_eq!(
+            s.tank.hp,
+            hp0 - dmg,
+            "ranged enemy hit the tank at standoff range"
+        );
         // The enemy is still alive and has not moved (ranged path doesn't move it).
         assert_eq!(s.enemies.len(), 1);
-        assert_eq!(s.enemies[0].pos, pos, "ranged enemy attacks without closing");
+        assert_eq!(
+            s.enemies[0].pos, pos,
+            "ranged enemy attacks without closing"
+        );
     }
 
     #[test]
@@ -1359,7 +1586,12 @@ mod tests {
             let mut s = blank_state();
             s.weapons.clear();
             let fb = enemy_def_idx("Croak");
-            mk_enemy(&mut s, fb, 1000, Vec2::new(Fixed::from_int(200), Fixed::ZERO));
+            mk_enemy(
+                &mut s,
+                fb,
+                1000,
+                Vec2::new(Fixed::from_int(200), Fixed::ZERO),
+            );
             s
         };
         let mut a = build();
@@ -1370,8 +1602,14 @@ mod tests {
             enemy_ranged_attacks(&mut a);
             enemy_ranged_attacks(&mut b);
         }
-        assert_eq!(a.tank.hp, b.tank.hp, "same seed/ids → identical ranged damage");
-        assert!(a.tank.hp < build().tank.hp, "the spitter did damage over the window");
+        assert_eq!(
+            a.tank.hp, b.tank.hp,
+            "same seed/ids → identical ranged damage"
+        );
+        assert!(
+            a.tank.hp < build().tank.hp,
+            "the spitter did damage over the window"
+        );
     }
 
     #[test]
@@ -1388,16 +1626,38 @@ mod tests {
         // Piercing vs Fortified must be far less than piercing vs Light (2× there).
         let mut g_pierce = Enemy::new(EntityId(1), giant, 1_000_000, Vec2::ZERO);
         let mut accum = AbilityAccum::default();
-        let dealt_pierce =
-            apply_weapon_hit(&mut g_pierce, base, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE, content::WeaponAbility::None, Vec2::ZERO, &mut accum);
-        let light_pierce = content::damage_multiplier(content::DMG_PIERCING, content::ARMOR_LIGHT).scale_i64(base);
+        let dealt_pierce = apply_weapon_hit(
+            &mut g_pierce,
+            base,
+            content::DMG_PIERCING,
+            Fixed::ONE,
+            cond,
+            &content::StatusOnHit::NONE,
+            content::WeaponAbility::None,
+            Vec2::ZERO,
+            &mut accum,
+        );
+        let light_pierce =
+            content::damage_multiplier(content::DMG_PIERCING, content::ARMOR_LIGHT).scale_i64(base);
         assert!(dealt_pierce < base, "Fortified resists Piercing (<1×)");
-        assert!(dealt_pierce < light_pierce, "Fortified takes far less Piercing than Light armor");
+        assert!(
+            dealt_pierce < light_pierce,
+            "Fortified takes far less Piercing than Light armor"
+        );
 
         // Siege vs Fortified should be amplified (>1×) — siege is the counter.
         let mut g_siege = Enemy::new(EntityId(2), giant, 1_000_000, Vec2::ZERO);
-        let dealt_siege =
-            apply_weapon_hit(&mut g_siege, base, content::DMG_SIEGE, Fixed::ONE, cond, &content::StatusOnHit::NONE, content::WeaponAbility::None, Vec2::ZERO, &mut accum);
+        let dealt_siege = apply_weapon_hit(
+            &mut g_siege,
+            base,
+            content::DMG_SIEGE,
+            Fixed::ONE,
+            cond,
+            &content::StatusOnHit::NONE,
+            content::WeaponAbility::None,
+            Vec2::ZERO,
+            &mut accum,
+        );
         assert!(dealt_siege > base, "Siege bites Fortified harder (>1×)");
     }
 
@@ -1408,7 +1668,12 @@ mod tests {
         s.weapons.clear();
         give_weapon(&mut s, 6);
         for i in 0..6 {
-            mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(100 + i * 10), Fixed::ZERO));
+            mk_enemy(
+                &mut s,
+                0,
+                200,
+                Vec2::new(Fixed::from_int(100 + i * 10), Fixed::ZERO),
+            );
         }
         fire_weapons(&mut s);
         assert_eq!(s.projectiles.len(), 4, "barrage of 4 emits 4 projectiles");
@@ -1420,8 +1685,18 @@ mod tests {
         let mut s2 = blank_state();
         s2.weapons.clear();
         give_weapon(&mut s2, 6);
-        mk_enemy(&mut s2, 0, 200, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
-        mk_enemy(&mut s2, 0, 200, Vec2::new(Fixed::from_int(150), Fixed::ZERO));
+        mk_enemy(
+            &mut s2,
+            0,
+            200,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
+        mk_enemy(
+            &mut s2,
+            0,
+            200,
+            Vec2::new(Fixed::from_int(150), Fixed::ZERO),
+        );
         fire_weapons(&mut s2);
         assert_eq!(s2.projectiles.len(), 2);
     }
@@ -1434,7 +1709,12 @@ mod tests {
         give_weapon(&mut s, 7);
         mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(100), Fixed::ZERO)); // in
         mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(250), Fixed::ZERO)); // in
-        mk_enemy(&mut s, 0, 200, Vec2::new(Fixed::from_int(1000), Fixed::ZERO)); // out
+        mk_enemy(
+            &mut s,
+            0,
+            200,
+            Vec2::new(Fixed::from_int(1000), Fixed::ZERO),
+        ); // out
         fire_weapons(&mut s);
         assert!(s.projectiles.is_empty(), "area is instant — no projectiles");
         assert_eq!(s.enemies.len(), 3, "200 hp survives 80 dmg");
@@ -1451,7 +1731,12 @@ mod tests {
         give_weapon(&mut s, 8);
         let trigger = mk_enemy(&mut s, 0, 500, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
         let _far_in_reach = mk_enemy(&mut s, 0, 500, Vec2::new(Fixed::from_int(500), Fixed::ZERO));
-        let _out = mk_enemy(&mut s, 0, 500, Vec2::new(Fixed::from_int(1000), Fixed::ZERO));
+        let _out = mk_enemy(
+            &mut s,
+            0,
+            500,
+            Vec2::new(Fixed::from_int(1000), Fixed::ZERO),
+        );
         let _ = trigger;
         fire_weapons(&mut s);
         // Two within reach 600 die (500 dmg); the one at 1000 survives.
@@ -1466,7 +1751,12 @@ mod tests {
         s.weapons.clear();
         give_weapon(&mut s, 9);
         for i in 0..4 {
-            mk_enemy(&mut s, 0, 100, Vec2::new(Fixed::from_int(100 + i * 30), Fixed::ZERO));
+            mk_enemy(
+                &mut s,
+                0,
+                100,
+                Vec2::new(Fixed::from_int(100 + i * 30), Fixed::ZERO),
+            );
         }
         fire_weapons(&mut s);
         assert!(s.projectiles.is_empty(), "bounce is instant");
@@ -1481,7 +1771,12 @@ mod tests {
         a.weapons.clear();
         give_weapon(&mut a, 9); // bounce uses rng for the first target
         for i in 0..6 {
-            mk_enemy(&mut a, 0, 100, Vec2::new(Fixed::from_int(100 + i * 20), Fixed::from_int(i)));
+            mk_enemy(
+                &mut a,
+                0,
+                100,
+                Vec2::new(Fixed::from_int(100 + i * 20), Fixed::from_int(i)),
+            );
         }
         let mut b = a.clone();
         fire_weapons(&mut a);
@@ -1520,10 +1815,19 @@ mod tests {
         s.tank.max_hp = 1_000_000;
         s.tank.hp = 1000;
         for i in 0..4 {
-            mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(100 + i * 20), Fixed::ZERO));
+            mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(100 + i * 20), Fixed::ZERO),
+            );
         }
         fire_weapons(&mut s); // instant Bounce → heals immediately
-        assert_eq!(s.tank.hp, 1000 + 4 * 200, "life-drain healed 200 per enemy hit");
+        assert_eq!(
+            s.tank.hp,
+            1000 + 4 * 200,
+            "life-drain healed 200 per enemy hit"
+        );
     }
 
     #[test]
@@ -1539,9 +1843,16 @@ mod tests {
         let pid = s.alloc_entity_id();
         let wd = &content::WEAPONS[weapon_idx("Lifeleecher") as usize];
         s.projectiles.push(Projectile {
-            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
-            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
-            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+            id: pid,
+            pos: Vec2::ZERO,
+            target: eid,
+            last_target_pos: pos,
+            damage: wd.damage,
+            damage_type: wd.damage_type,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
+            ability: wd.ability,
         });
         advance_projectiles(&mut s);
         assert_eq!(s.tank.hp, 1_000_000, "life-drain heal capped at max hp");
@@ -1559,19 +1870,36 @@ mod tests {
         let pid = s.alloc_entity_id();
         let wd = &content::WEAPONS[weapon_idx("Manabolt") as usize];
         s.projectiles.push(Projectile {
-            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
-            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
-            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+            id: pid,
+            pos: Vec2::ZERO,
+            target: eid,
+            last_target_pos: pos,
+            damage: wd.damage,
+            damage_type: wd.damage_type,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
+            ability: wd.ability,
         });
         advance_projectiles(&mut s);
-        assert_eq!(s.tank.mana_shield, 80, "mana-drain restored 80 to the shield");
+        assert_eq!(
+            s.tank.mana_shield, 80,
+            "mana-drain restored 80 to the shield"
+        );
         // A second hit caps at max (100), not 160.
         let eid2 = mk_enemy(&mut s, 0, 1_000_000, pos);
         let pid2 = s.alloc_entity_id();
         s.projectiles.push(Projectile {
-            id: pid2, pos: Vec2::ZERO, target: eid2, last_target_pos: pos,
-            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
-            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+            id: pid2,
+            pos: Vec2::ZERO,
+            target: eid2,
+            last_target_pos: pos,
+            damage: wd.damage,
+            damage_type: wd.damage_type,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
+            ability: wd.ability,
         });
         advance_projectiles(&mut s);
         assert_eq!(s.tank.mana_shield, 100, "mana-drain shield capped at max");
@@ -1582,10 +1910,15 @@ mod tests {
         let mut s = blank_state();
         s.tank.mana_shield_max = 0;
         s.tank.mana_shield = 0;
-        let mut accum = AbilityAccum::default();
-        accum.mana = 80;
+        let accum = AbilityAccum {
+            mana: 80,
+            ..Default::default()
+        };
         accum.flush(&mut s, content::WeaponAbility::ManaDrain { per_hit: 80 }, 0);
-        assert_eq!(s.tank.mana_shield, 0, "no shield pool → mana-drain is a no-op");
+        assert_eq!(
+            s.tank.mana_shield, 0,
+            "no shield pool → mana-drain is a no-op"
+        );
     }
 
     #[test]
@@ -1598,14 +1931,25 @@ mod tests {
         let pid = s.alloc_entity_id();
         let wd = &content::WEAPONS[weapon_idx("Slap") as usize];
         s.projectiles.push(Projectile {
-            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
-            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
-            speed: Fixed::from_int(2000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+            id: pid,
+            pos: Vec2::ZERO,
+            target: eid,
+            last_target_pos: pos,
+            damage: wd.damage,
+            damage_type: wd.damage_type,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(2000),
+            on_hit: content::StatusOnHit::NONE,
+            ability: wd.ability,
         });
         advance_projectiles(&mut s);
         let e = &s.enemies[0];
         // Pushed 300 directly away (along +x): 400 → 700.
-        assert_eq!(e.pos.x, Fixed::from_int(700), "enemy knocked back 300 along +x");
+        assert_eq!(
+            e.pos.x,
+            Fixed::from_int(700),
+            "enemy knocked back 300 along +x"
+        );
         assert_eq!(e.pos.y, Fixed::ZERO);
     }
 
@@ -1619,9 +1963,16 @@ mod tests {
         let pid = s.alloc_entity_id();
         let wd = &content::WEAPONS[weapon_idx("Tangle") as usize];
         s.projectiles.push(Projectile {
-            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
-            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
-            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+            id: pid,
+            pos: Vec2::ZERO,
+            target: eid,
+            last_target_pos: pos,
+            damage: wd.damage,
+            damage_type: wd.damage_type,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
+            ability: wd.ability,
         });
         advance_projectiles(&mut s);
         let e = &s.enemies[0];
@@ -1643,16 +1994,26 @@ mod tests {
         let pid = s.alloc_entity_id();
         let wd = &content::WEAPONS[weapon_idx("Demon Eye") as usize];
         s.projectiles.push(Projectile {
-            id: pid, pos: Vec2::ZERO, target: eid, last_target_pos: pos,
-            damage: wd.damage, damage_type: wd.damage_type, splash_radius: Fixed::ZERO,
-            speed: Fixed::from_int(1000), on_hit: content::StatusOnHit::NONE, ability: wd.ability,
+            id: pid,
+            pos: Vec2::ZERO,
+            target: eid,
+            last_target_pos: pos,
+            damage: wd.damage,
+            damage_type: wd.damage_type,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
+            ability: wd.ability,
         });
         advance_projectiles(&mut s);
         let e = &s.enemies[0];
         assert_eq!(e.status.vuln_stacks, 10, "10 vulnerability stacks applied");
         // +10% damage taken (10 stacks × 1%); fixed-point floors ≈1099/1000.
         let v = crate::status::vulnerability_mult(e).scale_i64(1000);
-        assert!((1099..=1100).contains(&v), "vuln stacks raise damage taken ≈+10%, got {v}");
+        assert!(
+            (1099..=1100).contains(&v),
+            "vuln stacks raise damage taken ≈+10%, got {v}"
+        );
     }
 
     #[test]
@@ -1686,10 +2047,19 @@ mod tests {
         s.weapons.clear();
         let id = s.alloc_entity_id();
         s.hazards.push(Hazard {
-            id, pos: Vec2::ZERO, dmg: 100, damage_type: content::DMG_SIEGE, radius: 200,
+            id,
+            pos: Vec2::ZERO,
+            dmg: 100,
+            damage_type: content::DMG_SIEGE,
+            radius: 200,
             ticks_left: 2,
         });
-        mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(50), Fixed::ZERO));
+        mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(50), Fixed::ZERO),
+        );
         tick_hazards(&mut s);
         assert_eq!(s.hazards.len(), 1, "still active after 1 tick");
         tick_hazards(&mut s);
@@ -1703,7 +2073,12 @@ mod tests {
         let mut s = blank_state();
         only_weapon(&mut s, "Shroom Doom");
         for i in 0..3 {
-            mk_enemy(&mut s, 0, 100_000_000, Vec2::new(Fixed::from_int(100 + i * 20), Fixed::ZERO));
+            mk_enemy(
+                &mut s,
+                0,
+                100_000_000,
+                Vec2::new(Fixed::from_int(100 + i * 20), Fixed::ZERO),
+            );
         }
         let before = s.enemies.len();
         fire_weapons(&mut s);
@@ -1717,7 +2092,12 @@ mod tests {
             let mut s = blank_state();
             only_weapon(&mut s, "Slap");
             for i in 0..4 {
-                mk_enemy(&mut s, 0, 100_000_000, Vec2::new(Fixed::from_int(120 + i * 7), Fixed::from_int(i)));
+                mk_enemy(
+                    &mut s,
+                    0,
+                    100_000_000,
+                    Vec2::new(Fixed::from_int(120 + i * 7), Fixed::from_int(i)),
+                );
             }
             s
         };
@@ -1741,8 +2121,15 @@ mod tests {
         {
             let e = s.enemies.iter_mut().find(|e| e.id == eid).unwrap();
             apply_weapon_hit(
-                e, 9_999_999, content::DMG_CHAOS, Fixed::ONE, cond,
-                &content::StatusOnHit::NONE, ability, Vec2::ZERO, &mut accum,
+                e,
+                9_999_999,
+                content::DMG_CHAOS,
+                Fixed::ONE,
+                cond,
+                &content::StatusOnHit::NONE,
+                ability,
+                Vec2::ZERO,
+                &mut accum,
             );
         }
         accum.flush(s, ability, content::DMG_CHAOS);
@@ -1752,7 +2139,15 @@ mod tests {
     fn summon_raises_a_minion_from_a_corpse_on_kill() {
         let mut s = blank_state();
         let eid = mk_enemy(&mut s, 0, 10, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
-        summon_kill(&mut s, eid, WeaponAbility::Summon { kind: 0, hp: 500, damage: 250 });
+        summon_kill(
+            &mut s,
+            eid,
+            WeaponAbility::Summon {
+                kind: 0,
+                hp: 500,
+                damage: 250,
+            },
+        );
         assert_eq!(s.minions.len(), 1, "one ally rises from the corpse");
         let m = s.minions[0];
         assert_eq!(m.kind, 0);
@@ -1765,14 +2160,25 @@ mod tests {
     fn summon_does_not_raise_without_a_kill() {
         let mut s = blank_state();
         let eid = mk_enemy(&mut s, 0, 1_000_000, Vec2::ZERO);
-        let ability = WeaponAbility::Summon { kind: 1, hp: 1500, damage: 600 };
+        let ability = WeaponAbility::Summon {
+            kind: 1,
+            hp: 1500,
+            damage: 600,
+        };
         let cond = CondDamage::of(&s);
         let mut accum = AbilityAccum::default();
         {
             let e = s.enemies.iter_mut().find(|e| e.id == eid).unwrap();
             apply_weapon_hit(
-                e, 100, content::DMG_CHAOS, Fixed::ONE, cond,
-                &content::StatusOnHit::NONE, ability, Vec2::ZERO, &mut accum,
+                e,
+                100,
+                content::DMG_CHAOS,
+                Fixed::ONE,
+                cond,
+                &content::StatusOnHit::NONE,
+                ability,
+                Vec2::ZERO,
+                &mut accum,
             );
         }
         accum.flush(&mut s, ability, content::DMG_CHAOS);
@@ -1782,18 +2188,34 @@ mod tests {
     #[test]
     fn summon_respects_the_minion_cap() {
         let mut s = blank_state();
-        let ability = WeaponAbility::Summon { kind: 0, hp: 1, damage: 1 };
+        let ability = WeaponAbility::Summon {
+            kind: 0,
+            hp: 1,
+            damage: 1,
+        };
         let cond = CondDamage::of(&s);
         let mut accum = AbilityAccum::default();
         let mut ids = Vec::new();
         for i in 0..(MAX_MINIONS + 4) {
-            ids.push(mk_enemy(&mut s, 0, 1, Vec2::new(Fixed::from_int(i as i64 * 10), Fixed::ZERO)));
+            ids.push(mk_enemy(
+                &mut s,
+                0,
+                1,
+                Vec2::new(Fixed::from_int(i as i64 * 10), Fixed::ZERO),
+            ));
         }
         for id in &ids {
             let e = s.enemies.iter_mut().find(|e| e.id == *id).unwrap();
             apply_weapon_hit(
-                e, 9_999_999, content::DMG_CHAOS, Fixed::ONE, cond,
-                &content::StatusOnHit::NONE, ability, Vec2::ZERO, &mut accum,
+                e,
+                9_999_999,
+                content::DMG_CHAOS,
+                Fixed::ONE,
+                cond,
+                &content::StatusOnHit::NONE,
+                ability,
+                Vec2::ZERO,
+                &mut accum,
             );
         }
         accum.flush(&mut s, ability, content::DMG_CHAOS);
@@ -1806,10 +2228,21 @@ mod tests {
         let now = s.tick;
         let mid = s.alloc_entity_id();
         s.minions.push(Minion {
-            id: mid, pos: Vec2::ZERO, kind: 0, hp: 500, damage: 1000,
-            damage_type: content::DMG_CHAOS, next_attack_tick: now, expire_tick: now + 1000,
+            id: mid,
+            pos: Vec2::ZERO,
+            kind: 0,
+            hp: 500,
+            damage: 1000,
+            damage_type: content::DMG_CHAOS,
+            next_attack_tick: now,
+            expire_tick: now + 1000,
         });
-        let eid = mk_enemy(&mut s, 0, 100_000, Vec2::new(Fixed::from_int(50), Fixed::ZERO));
+        let eid = mk_enemy(
+            &mut s,
+            0,
+            100_000,
+            Vec2::new(Fixed::from_int(50), Fixed::ZERO),
+        );
         let before = s.enemies.iter().find(|e| e.id == eid).unwrap().hp;
         tick_minions(&mut s);
         let after = s.enemies.iter().find(|e| e.id == eid).unwrap().hp;
@@ -1821,15 +2254,24 @@ mod tests {
         let mut s = blank_state();
         let mid = s.alloc_entity_id();
         s.minions.push(Minion {
-            id: mid, pos: Vec2::ZERO, kind: 1, hp: 1, damage: 1,
-            damage_type: content::DMG_CHAOS, next_attack_tick: 0, expire_tick: 5,
+            id: mid,
+            pos: Vec2::ZERO,
+            kind: 1,
+            hp: 1,
+            damage: 1,
+            damage_type: content::DMG_CHAOS,
+            next_attack_tick: 0,
+            expire_tick: 5,
         });
         s.tick = 4;
         tick_minions(&mut s);
         assert_eq!(s.minions.len(), 1, "alive while tick < expire_tick");
         s.tick = 5;
         tick_minions(&mut s);
-        assert!(s.minions.is_empty(), "removed once tick reaches expire_tick");
+        assert!(
+            s.minions.is_empty(),
+            "removed once tick reaches expire_tick"
+        );
     }
 
     #[test]
@@ -1838,10 +2280,21 @@ mod tests {
             let mut s = blank_state();
             let mid = s.alloc_entity_id();
             s.minions.push(Minion {
-                id: mid, pos: Vec2::ZERO, kind: 0, hp: 500, damage: 200,
-                damage_type: content::DMG_CHAOS, next_attack_tick: 0, expire_tick: 500,
+                id: mid,
+                pos: Vec2::ZERO,
+                kind: 0,
+                hp: 500,
+                damage: 200,
+                damage_type: content::DMG_CHAOS,
+                next_attack_tick: 0,
+                expire_tick: 500,
             });
-            mk_enemy(&mut s, 0, 5000, Vec2::new(Fixed::from_int(400), Fixed::ZERO));
+            mk_enemy(
+                &mut s,
+                0,
+                5000,
+                Vec2::new(Fixed::from_int(400), Fixed::ZERO),
+            );
             for _ in 0..120 {
                 tick_minions(&mut s);
                 s.tick += 1;
@@ -1850,7 +2303,10 @@ mod tests {
         };
         let a = build();
         let b = build();
-        assert_eq!(a.minions, b.minions, "minion movement/attacks are deterministic");
+        assert_eq!(
+            a.minions, b.minions,
+            "minion movement/attacks are deterministic"
+        );
         assert_eq!(a.enemies, b.enemies);
         assert_eq!(crate::checksum(&a), crate::checksum(&b));
     }
@@ -1872,15 +2328,29 @@ mod tests {
     fn aura_fires_only_on_its_integer_cadence_and_hits_only_in_range() {
         let mut s = aura_state();
         // One enemy in range (≤600), one outside. Magic vs armor 0 → ×1 matrix.
-        let near = mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(500), Fixed::ZERO));
-        let far = mk_enemy(&mut s, 0, 1_000_000, Vec2::new(Fixed::from_int(1000), Fixed::ZERO));
+        let near = mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(500), Fixed::ZERO),
+        );
+        let far = mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(1000), Fixed::ZERO),
+        );
 
         // 29 ticks below the cadence: counter climbs, no fire.
         for _ in 0..29 {
             tick_aura(&mut s);
         }
         assert_eq!(s.tank.aura_tick, 29, "counter advanced but not yet fired");
-        assert_eq!(s.enemies.iter().find(|e| e.id == near).unwrap().hp, 1_000_000, "no damage pre-cadence");
+        assert_eq!(
+            s.enemies.iter().find(|e| e.id == near).unwrap().hp,
+            1_000_000,
+            "no damage pre-cadence"
+        );
 
         // The 30th call fires: counter resets, in-range enemy takes damage + poison.
         tick_aura(&mut s);
@@ -1899,12 +2369,20 @@ mod tests {
         let mut s = blank_state();
         s.weapons.clear();
         // aura_cadence == 0 (default) ⇒ disabled.
-        mk_enemy(&mut s, 0, 1000, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        mk_enemy(
+            &mut s,
+            0,
+            1000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
         for _ in 0..120 {
             tick_aura(&mut s);
         }
         assert_eq!(s.enemies[0].hp, 1000, "no aura ⇒ no damage");
-        assert_eq!(s.tank.aura_tick, 0, "counter does not advance when disabled");
+        assert_eq!(
+            s.tank.aura_tick, 0,
+            "counter does not advance when disabled"
+        );
     }
 
     #[test]
@@ -1913,9 +2391,24 @@ mod tests {
             let mut s = aura_state();
             // Several enemies at varied positions, inserted out of spatial order so a
             // stable id-ordered pass is what guarantees the match.
-            mk_enemy(&mut s, 0, 5000, Vec2::new(Fixed::from_int(550), Fixed::ZERO));
-            mk_enemy(&mut s, 0, 5000, Vec2::new(Fixed::from_int(100), Fixed::from_int(200)));
-            mk_enemy(&mut s, 0, 5000, Vec2::new(Fixed::from_int(2000), Fixed::ZERO)); // far
+            mk_enemy(
+                &mut s,
+                0,
+                5000,
+                Vec2::new(Fixed::from_int(550), Fixed::ZERO),
+            );
+            mk_enemy(
+                &mut s,
+                0,
+                5000,
+                Vec2::new(Fixed::from_int(100), Fixed::from_int(200)),
+            );
+            mk_enemy(
+                &mut s,
+                0,
+                5000,
+                Vec2::new(Fixed::from_int(2000), Fixed::ZERO),
+            ); // far
             for _ in 0..95 {
                 tick_aura(&mut s);
                 s.tick += 1;
@@ -1925,6 +2418,10 @@ mod tests {
         let a = build();
         let b = build();
         assert_eq!(a.enemies, b.enemies, "aura AoE identical across runs");
-        assert_eq!(crate::checksum(&a), crate::checksum(&b), "checksum stable across runs");
+        assert_eq!(
+            crate::checksum(&a),
+            crate::checksum(&b),
+            "checksum stable across runs"
+        );
     }
 }

@@ -9,19 +9,19 @@
 //! - behavior modules: `combat`, `waves` (Agent B); `economy`, `shop`, `input` (Agent C).
 
 pub mod bot;
-pub mod content;
-pub mod descriptions;
-pub mod snapshot;
-pub mod view;
 mod combat;
+pub mod content;
 mod defense;
+pub mod descriptions;
 mod economy;
 mod ids;
 mod input;
 mod modifiers;
 mod shop;
+pub mod snapshot;
 mod state;
 mod status;
+pub mod view;
 mod waves;
 
 pub use ids::*;
@@ -125,7 +125,10 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_i64(s.tank.hp_regen_per_tick);
     c.write_i64(s.tank.spikes_damage);
     c.write_fixed(s.tank.spikes_mult);
+    c.write_fixed(s.tank.shield_active_dr);
+    c.write_i64(s.tank.heal_on_damaged);
     c.write_i64(s.tank.heal_on_kill);
+    c.write_i64(s.tank.mana_on_kill);
     c.write_i64(s.tank.heal_on_poison);
     c.write_fixed(s.tank.healing_mult);
     c.write_fixed(s.tank.missing_hp_heal_pct);
@@ -169,6 +172,9 @@ pub fn checksum(s: &ArenaState) -> u64 {
     }
     c.write_i64(s.total_damage_dealt);
     c.write_i64(s.total_gold_earned);
+    c.write_u32(s.bought_attack_mask as u32);
+    c.write_u32(s.weapons_bought);
+    c.write_u32(s.economy_purchases);
 
     c.write_u64(s.rng_spawn.state());
     c.write_u64(s.rng_targeting.state());
@@ -206,6 +212,9 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(r.dmg_type as u32);
         c.write_fixed(r.per);
     }
+    c.write_fixed(s.modifiers.dmg_per_maxhp_rate);
+    c.write_fixed(s.modifiers.dmg_per_bounty_rate);
+    c.write_fixed(s.modifiers.shield_active_dmg);
 
     // Active time-scaling ramps (append-only order).
     c.write_u32(s.ramps.len() as u32);
@@ -280,6 +289,8 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_fixed(x.pos.x);
         c.write_fixed(x.pos.y);
         c.write_u32(x.target.0);
+        c.write_fixed(x.last_target_pos.x);
+        c.write_fixed(x.last_target_pos.y);
         c.write_i64(x.damage);
         c.write_u32(x.damage_type as u32);
         c.write_fixed(x.splash_radius);

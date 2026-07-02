@@ -42,7 +42,7 @@ impl ShadowRunner {
     pub fn step(&mut self, input: Input) {
         step(&mut self.client, input);
         step(&mut self.shadow, input);
-        if self.client.tick % self.digest_interval == 0
+        if self.client.tick.is_multiple_of(self.digest_interval)
             && checksum(&self.client) != checksum(&self.shadow)
         {
             self.client = deserialize(&serialize(&self.shadow)).unwrap();

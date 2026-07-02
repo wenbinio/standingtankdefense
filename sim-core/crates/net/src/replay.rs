@@ -348,7 +348,8 @@ mod tests {
             }
         }
         let digest = digest_at_death.expect("arena must die within max_ticks");
-        cap.finish(&arena, digest).expect("dead arena yields a replay")
+        cap.finish(&arena, digest)
+            .expect("dead arena yields a replay")
     }
 
     const SEED: u64 = 0x5151;

@@ -62,18 +62,35 @@ pub fn frame(v: &RenderView, log: &[String]) -> String {
 
     // ---- header / HUD -------------------------------------------------------
     let _ = writeln!(out, "+{}+", "=".repeat(inner));
-    let _ = writeln!(out, "|{:^width$}|", "STANDING TANK DEFENSE — live preview", width = inner);
+    let _ = writeln!(
+        out,
+        "|{:^width$}|",
+        "STANDING TANK DEFENSE — live preview",
+        width = inner
+    );
     let _ = writeln!(out, "+{}+", "-".repeat(inner));
     let _ = writeln!(
         out,
         "| {:<width$}|",
-        format!("t={:02}:{:02}  tick {}  round {}  [{}]", secs / 60, secs % 60, v.tick, v.round, status),
+        format!(
+            "t={:02}:{:02}  tick {}  round {}  [{}]",
+            secs / 60,
+            secs % 60,
+            v.tick,
+            v.round,
+            status
+        ),
         width = inner - 1
     );
     let _ = writeln!(
         out,
         "| {:<width$}|",
-        format!("HP [{}] {}/{}", bar(v.tank.hp, v.tank.max_hp, 18), v.tank.hp.max(0), v.tank.max_hp),
+        format!(
+            "HP [{}] {}/{}",
+            bar(v.tank.hp, v.tank.max_hp, 18),
+            v.tank.hp.max(0),
+            v.tank.max_hp
+        ),
         width = inner - 1
     );
     let revives = if v.tank.revives > 0 {
@@ -109,13 +126,24 @@ pub fn frame(v: &RenderView, log: &[String]) -> String {
         let _ = writeln!(
             out,
             "| {:<width$}|",
-            format!("[{}] {:<28} {:>6}g {}", off.slot, trunc(off.name, 28), off.cost, mark),
+            format!(
+                "[{}] {:<28} {:>6}g {}",
+                off.slot,
+                trunc(off.name, 28),
+                off.cost,
+                mark
+            ),
             width = inner - 1
         );
     }
 
     // ---- arsenal ------------------------------------------------------------
-    let _ = writeln!(out, "+{} ARSENAL {}+", "-".repeat(2), "-".repeat(inner - 11));
+    let _ = writeln!(
+        out,
+        "+{} ARSENAL {}+",
+        "-".repeat(2),
+        "-".repeat(inner - 11)
+    );
     let arsenal = if v.arsenal.is_empty() {
         "(none)".to_string()
     } else {
@@ -132,7 +160,12 @@ pub fn frame(v: &RenderView, log: &[String]) -> String {
     // ---- event log ----------------------------------------------------------
     let _ = writeln!(out, "+{} LOG {}+", "-".repeat(2), "-".repeat(inner - 7));
     for line in log {
-        let _ = writeln!(out, "| {:<width$}|", trunc(line, inner - 2), width = inner - 1);
+        let _ = writeln!(
+            out,
+            "| {:<width$}|",
+            trunc(line, inner - 2),
+            width = inner - 1
+        );
     }
     let _ = writeln!(out, "+{}+", "=".repeat(inner));
     out

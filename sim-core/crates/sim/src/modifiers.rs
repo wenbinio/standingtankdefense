@@ -31,11 +31,18 @@ pub(crate) fn apply_ramps(s: &mut ArenaState) {
     let mut ramps = std::mem::take(&mut s.ramps);
     for r in ramps.iter_mut() {
         while s.tick >= r.next_apply {
-            s.modifiers.apply_effect(r.effect, &mut s.economy, &mut s.tank);
+            s.modifiers
+                .apply_effect(r.effect, &mut s.economy, &mut s.tank);
             r.next_apply += r.interval_ticks;
         }
     }
     s.ramps = ramps;
+}
+
+impl Default for Modifiers {
+    fn default() -> Modifiers {
+        Modifiers::new()
+    }
 }
 
 impl Modifiers {
@@ -64,6 +71,7 @@ impl Modifiers {
     ///   * Mastercrafted Masonry: `rate × (max_hp / 2000)`.
     ///   * Golden Ring: `rate × ((bounty_mult − 1) / 0.5)`  ( = rate × 2 × bonus ).
     ///   * Arcane Mark: `shield_active_dmg` while `mana_shield > 0`, else nothing.
+    ///
     /// Integer/Fixed only (feeds the checksum). A `bounty_mult` below the 1.0 base
     /// (never happens in normal play) is clamped so the term can't go negative.
     pub fn dynamic_global_add(&self, tank: &Tank, economy: &Economy) -> Fixed {
@@ -101,7 +109,11 @@ impl Modifiers {
     /// Additive self-scaling % for a weapon of `dmg_type`, given the owned
     /// weapons: `Σ rule.per × (count of rule.weapon_def)` over rules matching the
     /// type. Resolved live at fire time (it depends on the current arsenal).
-    pub fn self_scaling_add(&self, dmg_type: u8, weapons: &[crate::state::WeaponInstance]) -> Fixed {
+    pub fn self_scaling_add(
+        &self,
+        dmg_type: u8,
+        weapons: &[crate::state::WeaponInstance],
+    ) -> Fixed {
         let mut add = Fixed::ZERO;
         for rule in &self.weapon_count_scaling {
             if rule.dmg_type != dmg_type {
@@ -198,26 +210,35 @@ impl Modifiers {
             ModEffect::PoisonDamagePct(n, d) => self.poison_dmg_mult += Fixed::from_ratio(n, d),
             ModEffect::StunDurationPct(n, d) => self.stun_dur_mult += Fixed::from_ratio(n, d),
             ModEffect::HealingPct(n, d) => tank.healing_mult += Fixed::from_ratio(n, d),
-            ModEffect::MissingHpHealPct(n, d) => tank.missing_hp_heal_pct += Fixed::from_ratio(n, d),
+            ModEffect::MissingHpHealPct(n, d) => {
+                tank.missing_hp_heal_pct += Fixed::from_ratio(n, d)
+            }
             ModEffect::GrantRevive(bonus) => {
                 tank.revives += 1;
                 tank.revive_bonus_hp = tank.revive_bonus_hp.max(bonus);
             }
             ModEffect::DamagePerWeapon(def, ty, num) => {
-                self.weapon_count_scaling.push(crate::state::WeaponCountScale {
-                    weapon_def: def as u16,
-                    dmg_type: ty as u8,
-                    per: Fixed::from_ratio(num, 100),
-                });
+                self.weapon_count_scaling
+                    .push(crate::state::WeaponCountScale {
+                        weapon_def: def as u16,
+                        dmg_type: ty as u8,
+                        per: Fixed::from_ratio(num, 100),
+                    });
             }
             // DYNAMIC global-damage scalers (resolved live at fire time via
             // `dynamic_global_add`, mirroring `DamagePerWeapon`/`self_scaling_add`).
             // Accumulate only the per-unit RATE / flat bonus here.
             ModEffect::DamagePerMaxHp(n, d) => self.dmg_per_maxhp_rate += Fixed::from_ratio(n, d),
-            ModEffect::DamagePerBountyPct(n, d) => self.dmg_per_bounty_rate += Fixed::from_ratio(n, d),
-            ModEffect::ShieldActiveDamagePct(n, d) => self.shield_active_dmg += Fixed::from_ratio(n, d),
+            ModEffect::DamagePerBountyPct(n, d) => {
+                self.dmg_per_bounty_rate += Fixed::from_ratio(n, d)
+            }
+            ModEffect::ShieldActiveDamagePct(n, d) => {
+                self.shield_active_dmg += Fixed::from_ratio(n, d)
+            }
             ModEffect::GoldPerDamagePct(n, d) => economy.gold_per_damage += Fixed::from_ratio(n, d),
-            ModEffect::IncomeShieldPct(n, d) => economy.income_shield_pct += Fixed::from_ratio(n, d),
+            ModEffect::IncomeShieldPct(n, d) => {
+                economy.income_shield_pct += Fixed::from_ratio(n, d)
+            }
             // Percentage riders evaluated against the CURRENT stat at apply-time
             // (so in a bundle they compound on the flat effect listed before them).
             // Integer/Fixed only — these feed the checksum. The compounding is
@@ -236,11 +257,13 @@ impl Modifiers {
             }
             ModEffect::HpRegenPct(n, d) => {
                 let inc = Fixed::from_ratio(n, d).scale_i64(tank.hp_regen_per_tick);
-                tank.hp_regen_per_tick = (tank.hp_regen_per_tick + inc).clamp(-STAT_CEIL, STAT_CEIL);
+                tank.hp_regen_per_tick =
+                    (tank.hp_regen_per_tick + inc).clamp(-STAT_CEIL, STAT_CEIL);
             }
             ModEffect::ManaRegenPct(n, d) => {
                 let inc = Fixed::from_ratio(n, d).scale_i64(tank.mana_regen_per_tick);
-                tank.mana_regen_per_tick = (tank.mana_regen_per_tick + inc).clamp(-STAT_CEIL, STAT_CEIL);
+                tank.mana_regen_per_tick =
+                    (tank.mana_regen_per_tick + inc).clamp(-STAT_CEIL, STAT_CEIL);
             }
             // EXPANSION E2 — plain tank-field setters (no aggregate; integer only).
             // Shield-break stun (Energy Pulse): arm the pulse range/duration. Keep the
@@ -253,7 +276,9 @@ impl Modifiers {
             // Spikes poison (Poison Armor): keep whichever DoT deals more total
             // remaining damage (mirrors the poison-application rule in `status`).
             ModEffect::SpikesPoison(dps, t) => {
-                let existing = tank.spikes_poison_dps.saturating_mul(tank.spikes_poison_ticks as i64);
+                let existing = tank
+                    .spikes_poison_dps
+                    .saturating_mul(tank.spikes_poison_ticks as i64);
                 let incoming = dps.saturating_mul(t);
                 if incoming >= existing {
                     tank.spikes_poison_dps = dps;
@@ -323,7 +348,13 @@ mod tests {
         // A single-effect def matching the catalog's one-effect entries. Leaks a
         // 'static slice so the test def can hold `effects: &'static [ModEffect]`.
         let effects: &'static [ModEffect] = Box::leak(Box::new([effect]));
-        ModifierDef { name: "t", rarity: 0, cost: 0, effects, ramp: None }
+        ModifierDef {
+            name: "t",
+            rarity: 0,
+            cost: 0,
+            effects,
+            ramp: None,
+        }
     }
 
     #[test]
@@ -349,14 +380,18 @@ mod tests {
         let (mut m, mut e, mut t) = parts();
         m.apply(&modifier(ModEffect::DamageGlobalPct(1, 1)), &mut e, &mut t); // +100% additive ⇒ ×2
         m.apply(&modifier(ModEffect::DamageMulPct(1, 1)), &mut e, &mut t); // ×(1+1)=×2 multiplicative
-        // (1 + 1.0) × 2 = 4
+                                                                           // (1 + 1.0) × 2 = 4
         assert_eq!(m.damage_mult(0).scale_i64(1000), 4000);
     }
 
     #[test]
     fn per_type_only_affects_that_type() {
         let (mut m, mut e, mut t) = parts();
-        m.apply(&modifier(ModEffect::DamageTypePct(DMG_PIERCING, 1, 2)), &mut e, &mut t);
+        m.apply(
+            &modifier(ModEffect::DamageTypePct(DMG_PIERCING, 1, 2)),
+            &mut e,
+            &mut t,
+        );
         assert_eq!(m.damage_mult(DMG_PIERCING).scale_i64(1000), 1500); // +50%
         assert_eq!(m.damage_mult(content::DMG_SIEGE), Fixed::ONE); // unaffected
     }
@@ -391,8 +426,13 @@ mod tests {
         // Find a ramping modifier in the catalog (Building Power: +2% now, +1%/round).
         let idx = content::MODIFIERS
             .iter()
-            .position(|md| md.ramp.is_some()
-                && md.effects.iter().any(|e| matches!(e, ModEffect::DamageGlobalPct(2, 100))))
+            .position(|md| {
+                md.ramp.is_some()
+                    && md
+                        .effects
+                        .iter()
+                        .any(|e| matches!(e, ModEffect::DamageGlobalPct(2, 100)))
+            })
             .expect("a +2%/+1% global-damage ramp exists") as u16;
 
         let mut s = ArenaState::new(1, 0);
@@ -409,7 +449,10 @@ mod tests {
         let after = s.modifiers.damage_mult(0); // ≈ ×1.05 (0.02 + 3×0.01)
         assert!(after > base, "ramp increased the multiplier");
         let v = after.scale_i64(1_000_000);
-        assert!((1_049_000..=1_050_000).contains(&v), "expected ≈1.05, got {v}");
+        assert!(
+            (1_049_000..=1_050_000).contains(&v),
+            "expected ≈1.05, got {v}"
+        );
 
         // The ramp's next_apply advanced past the last interval (no double-apply).
         assert_eq!(s.ramps[0].next_apply, interval * 4);
@@ -460,7 +503,10 @@ mod tests {
         s.tank.hp_regen_per_tick = 0;
         let gold0 = s.economy.gold;
         s.buy_modifier(idx);
-        assert_eq!(s.tank.hp_regen_per_tick, -regen_cost, "regen may go negative");
+        assert_eq!(
+            s.tank.hp_regen_per_tick, -regen_cost,
+            "regen may go negative"
+        );
         assert_eq!(s.economy.gold, gold0 + gold_gain);
     }
 
@@ -487,7 +533,9 @@ mod tests {
         // Death Engine weapon; owning N Death Engines adds N × per to its damage.
         let mut s = ArenaState::new(1, 0);
         s.weapons.clear();
-        let idx = modifier_idx(|e| matches!(e, ModEffect::DamagePerWeapon(d, _, _) if d == content::DEATH_ENGINE as i64));
+        let idx = modifier_idx(
+            |e| matches!(e, ModEffect::DamagePerWeapon(d, _, _) if d == content::DEATH_ENGINE as i64),
+        );
         s.buy_modifier(idx);
         for _ in 0..3 {
             let id = s.alloc_entity_id();
@@ -519,13 +567,20 @@ mod tests {
         // bonus = (max_hp / 2000) × 1% ; at the post-buy max_hp.
         let expect = Fixed::from_ratio(s.tank.max_hp, 2000).mul(Fixed::from_ratio(1, 100));
         assert_eq!(add, expect, "per-MaxHp add tracks the live max_hp");
-        assert!(s.tank.max_hp >= max_before + 5000, "flat Max HP applied too");
+        assert!(
+            s.tank.max_hp >= max_before + 5000,
+            "flat Max HP applied too"
+        );
 
         // Buying more Max HP afterwards retroactively raises the bonus (live, not baked).
         let before = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
-        s.modifiers.apply_effect(ModEffect::MaxHp(20000), &mut s.economy, &mut s.tank);
+        s.modifiers
+            .apply_effect(ModEffect::MaxHp(20000), &mut s.economy, &mut s.tank);
         let after = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
-        assert!(after > before, "later Max-HP buys boost the per-MaxHp damage");
+        assert!(
+            after > before,
+            "later Max-HP buys boost the per-MaxHp damage"
+        );
     }
 
     #[test]
@@ -544,9 +599,13 @@ mod tests {
 
         // More bounty afterwards raises the bonus.
         let before = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
-        s.modifiers.apply_effect(ModEffect::BountyPct(100, 100), &mut s.economy, &mut s.tank);
+        s.modifiers
+            .apply_effect(ModEffect::BountyPct(100, 100), &mut s.economy, &mut s.tank);
         let after = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
-        assert!(after > before, "later bounty buys boost the per-Bounty damage");
+        assert!(
+            after > before,
+            "later bounty buys boost the per-Bounty damage"
+        );
     }
 
     #[test]
@@ -558,7 +617,10 @@ mod tests {
         assert!(s.tank.mana_shield > 0, "Arcane Mark grants a shield pool");
         let up = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
         // 0.20 isn't exactly representable; Fixed floors deterministically (≈199).
-        assert!((199..=200).contains(&up.scale_i64(1000)), "≈+20% while shield up");
+        assert!(
+            (199..=200).contains(&up.scale_i64(1000)),
+            "≈+20% while shield up"
+        );
         // Drop the shield: the bonus disappears.
         s.tank.mana_shield = 0;
         let down = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
@@ -567,7 +629,10 @@ mod tests {
 
     #[test]
     fn ramp_apply_is_idempotent_between_intervals() {
-        let idx = content::MODIFIERS.iter().position(|md| md.ramp.is_some()).unwrap() as u16;
+        let idx = content::MODIFIERS
+            .iter()
+            .position(|md| md.ramp.is_some())
+            .unwrap() as u16;
         let mut s = ArenaState::new(2, 0);
         s.buy_modifier(idx);
         let snap = (s.modifiers.clone(), s.economy.clone(), s.tank.clone());

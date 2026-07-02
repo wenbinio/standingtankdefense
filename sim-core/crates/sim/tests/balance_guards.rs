@@ -52,7 +52,11 @@ fn run_modest_opener(seed: u64, cap: u32) -> u32 {
     let mut s = ArenaState::new(seed, 0);
     // + Mortar Launcher (def 1 — cheap reliable splash).
     let id = s.alloc_entity_id();
-    s.weapons.push(WeaponInstance { instance_id: id, def: 1, next_fire_tick: 0 });
+    s.weapons.push(WeaponInstance {
+        instance_id: id,
+        def: 1,
+        next_fire_tick: 0,
+    });
     // Modest defense: +12000 Max HP and +5 armor.
     s.tank.max_hp += 12_000;
     s.tank.hp = s.tank.max_hp;
@@ -85,7 +89,9 @@ fn naked_eco_rush_punish_holds_for_the_broad_majority() {
     // (≥ 75%). The minority that survive are the Clear-phase-lock artifact (see the
     // module note) — a property of the untouchable Clear mechanic, not a real build.
     let n = 24u64;
-    let dead_by_deadline = (0..n).filter(|&seed| run_naked_eco_rush(seed, 56_000) <= DEADLINE).count();
+    let dead_by_deadline = (0..n)
+        .filter(|&seed| run_naked_eco_rush(seed, 56_000) <= DEADLINE)
+        .count();
     assert!(
         dead_by_deadline * 100 >= (n as usize) * 75,
         "eco-rush punish must hold for ≥75% of seeds; only {dead_by_deadline}/{n} died by tick {DEADLINE}"

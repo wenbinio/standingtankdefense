@@ -40,13 +40,21 @@
 use crate::replay::{Capture, Replay};
 use crate::transport::{Channel, Inbound, Outbound, PeerId};
 use crate::wire::{self, InputCode, Msg};
-use crate::{BEACON_INTERVAL, INPUT_LEAD_TICKS, START_LEAD};
 use crate::Schedule;
+use crate::{BEACON_INTERVAL, INPUT_LEAD_TICKS, START_LEAD};
 use sim::ArenaState;
 use std::collections::BTreeMap;
 
 /// How many `arena_tick -> checksum` entries to retain per player.
 const HISTORY_LEN: usize = 256;
+
+/// Minimum arena ticks between full-snapshot replies to a peer's mid-match
+/// `Join`s. Snapshots are the most expensive message the director emits; a
+/// misbehaving (or badly lagged) peer spamming `Join` must not be able to
+/// draw one per inbound message. Tick-based (never wall-clock) so it is
+/// deterministic. Matches the client's own `JOIN_RETRY_TICKS` cadence, so a
+/// healthy reconnect is never throttled.
+const JOIN_SNAPSHOT_MIN_INTERVAL: u32 = 30;
 
 /// Per-player authoritative state held by the director.
 struct Player {
@@ -71,6 +79,10 @@ struct Player {
     /// The minted replay, set the instant the shadow first becomes dead. Pulled
     /// by [`Director::replay`] / the match-result path for leaderboard checks.
     replay: Option<Replay>,
+    /// Arena tick of the last full snapshot sent in reply to this peer's
+    /// mid-match `Join` (rate-limits Join→Snapshot; see
+    /// [`JOIN_SNAPSHOT_MIN_INTERVAL`]). `None` until the first such reply.
+    last_join_snapshot_tick: Option<u32>,
 }
 
 pub struct Director {
@@ -118,6 +130,7 @@ impl Director {
                 challenge: sim::bot::Challenge::None,
                 capture: Some(Capture::new(master_seed, p.0, content_hash)),
                 replay: None,
+                last_join_snapshot_tick: None,
             })
             .collect();
         Director {
@@ -179,12 +192,25 @@ impl Director {
                     // reconnecting client can adopt and catch up (docs/03 §3.7).
                     if self.iter >= START_LEAD {
                         if let Some(i) = self.index_of(from) {
-                            let bytes = sim::snapshot::serialize(&self.players[i].shadow);
-                            out.push(send(
-                                from,
-                                Channel::Bulk,
-                                &Msg::Snapshot { tick: arena_tick, bytes },
-                            ));
+                            // Rate-limit: a peer gets at most one Join-driven
+                            // snapshot per JOIN_SNAPSHOT_MIN_INTERVAL arena
+                            // ticks, so Join spam cannot amplify into a flood
+                            // of the most expensive message we emit.
+                            let due = self.players[i].last_join_snapshot_tick.is_none_or(|t| {
+                                arena_tick.saturating_sub(t) >= JOIN_SNAPSHOT_MIN_INTERVAL
+                            });
+                            if due {
+                                self.players[i].last_join_snapshot_tick = Some(arena_tick);
+                                let bytes = sim::snapshot::serialize(&self.players[i].shadow);
+                                out.push(send(
+                                    from,
+                                    Channel::Bulk,
+                                    &Msg::Snapshot {
+                                        tick: arena_tick,
+                                        bytes,
+                                    },
+                                ));
+                            }
                         }
                     } else {
                         out.push(send(
@@ -198,17 +224,18 @@ impl Director {
                     }
                 }
                 Msg::Input { seq, action } => {
-                    let apply_tick = arena_tick + INPUT_LEAD_TICKS;
+                    // Only peers IN the match get scheduled — and only they get
+                    // an ack. Acking strangers would leak match timing to
+                    // arbitrary senders and confirm the director as a target.
                     if let Some(i) = self.index_of(from) {
-                        self.players[i]
-                            .schedule
-                            .set(apply_tick, action.to_input());
+                        let apply_tick = arena_tick + INPUT_LEAD_TICKS;
+                        self.players[i].schedule.set(apply_tick, action.to_input());
+                        out.push(send(
+                            from,
+                            Channel::Control,
+                            &Msg::InputAck { seq, apply_tick },
+                        ));
                     }
-                    out.push(send(
-                        from,
-                        Channel::Control,
-                        &Msg::InputAck { seq, apply_tick },
-                    ));
                 }
                 Msg::Digest { tick, checksum } => {
                     if let Some(i) = self.index_of(from) {
@@ -241,7 +268,9 @@ impl Director {
                 let was_dead = self.players[i].death_recorded;
                 if !was_dead {
                     let raw = self.players[i].schedule.take(arena_tick);
-                    let inp = self.players[i].challenge.filter(raw, &self.players[i].shadow);
+                    let inp = self.players[i]
+                        .challenge
+                        .filter(raw, &self.players[i].shadow);
                     // Record the EXACT post-filter action fed to `sim::step` at
                     // its authoritative apply tick (`arena_tick`). This is the
                     // same value passed to `step` below, so the captured input
@@ -259,10 +288,7 @@ impl Director {
                         self.players[i].history.remove(&oldest);
                     }
                     if self.players[i].shadow.dead {
-                        let died_tick = self.players[i]
-                            .shadow
-                            .death_tick
-                            .unwrap_or(arena_tick);
+                        let died_tick = self.players[i].shadow.death_tick.unwrap_or(arena_tick);
                         self.players[i].death_recorded = true;
                         // Mint the replay at the FIRST tick the shadow is dead.
                         // `cs` is `sim::checksum(&shadow)` taken immediately after
@@ -325,7 +351,7 @@ impl Director {
         }
 
         // 4. Time beacon on the interval.
-        if self.iter >= START_LEAD && arena_tick % BEACON_INTERVAL == 0 {
+        if self.iter >= START_LEAD && arena_tick.is_multiple_of(BEACON_INTERVAL) {
             broadcast(
                 &mut out,
                 &self.peers,
@@ -388,7 +414,8 @@ impl Director {
     /// (`docs/07 §7.6`). `None` while the player is still alive (no claimable
     /// death tick yet).
     pub fn replay(&self, p: PeerId) -> Option<&Replay> {
-        self.index_of(p).and_then(|i| self.players[i].replay.as_ref())
+        self.index_of(p)
+            .and_then(|i| self.players[i].replay.as_ref())
     }
 }
 
@@ -444,7 +471,9 @@ mod tests {
 
     /// Decode every outbound message regardless of recipient.
     fn decoded_all(out: &[Outbound]) -> Vec<Msg> {
-        out.iter().map(|o| wire::decode(&o.bytes).unwrap()).collect()
+        out.iter()
+            .map(|o| wire::decode(&o.bytes).unwrap())
+            .collect()
     }
 
     #[test]
@@ -467,7 +496,10 @@ mod tests {
         // After START_LEAD, no more MatchStart.
         let out = d.tick(vec![]);
         for m in decoded_all(&out) {
-            assert!(!matches!(m, Msg::MatchStart { .. }), "no MatchStart after start");
+            assert!(
+                !matches!(m, Msg::MatchStart { .. }),
+                "no MatchStart after start"
+            );
         }
     }
 
@@ -481,7 +513,14 @@ mod tests {
         assert_eq!(d.server_tick(), 0);
 
         // Feed an Input at arena_tick 0; it must be acked with apply_tick = 0 + LEAD.
-        let inb = inbound(p(1), Channel::Control, &Msg::Input { seq: 42, action: InputCode::Reroll });
+        let inb = inbound(
+            p(1),
+            Channel::Control,
+            &Msg::Input {
+                seq: 42,
+                action: InputCode::Reroll,
+            },
+        );
         let out = d.tick(vec![inb]);
         let acks: Vec<Msg> = decoded_to(&out, p(1))
             .into_iter()
@@ -489,7 +528,10 @@ mod tests {
             .collect();
         assert_eq!(
             acks,
-            vec![Msg::InputAck { seq: 42, apply_tick: INPUT_LEAD_TICKS }],
+            vec![Msg::InputAck {
+                seq: 42,
+                apply_tick: INPUT_LEAD_TICKS
+            }],
             "ack must echo seq and pin apply_tick = arena_tick + LEAD"
         );
 
@@ -511,11 +553,92 @@ mod tests {
         // Reference: a fresh shadow stepped identically, Reroll applied at tick==target.
         let mut reference = ArenaState::new(7, 1);
         for t in 0..=target {
-            let inp = if t == target { Input::Reroll } else { Input::Noop };
+            let inp = if t == target {
+                Input::Reroll
+            } else {
+                Input::Noop
+            };
             sim::step(&mut reference, inp);
         }
         let ref_cs = sim::checksum(&reference);
-        assert_eq!(dir_cs, ref_cs, "director shadow must match reference with Reroll at apply_tick");
+        assert_eq!(
+            dir_cs, ref_cs,
+            "director shadow must match reference with Reroll at apply_tick"
+        );
+    }
+
+    #[test]
+    fn input_from_unknown_peer_is_not_acked_or_scheduled() {
+        let mut d = Director::new(&[p(1)], 7);
+        for _ in 0..START_LEAD {
+            d.tick(vec![]);
+        }
+        let baseline = {
+            let mut r = Director::new(&[p(1)], 7);
+            for _ in 0..=START_LEAD {
+                r.tick(vec![]);
+            }
+            r.shadow_checksum(p(1)).unwrap()
+        };
+        // A peer that is NOT in the match sends an Input: no ack (to anyone),
+        // and player 1's shadow is unaffected.
+        let stranger = p(99);
+        let inb = inbound(
+            stranger,
+            Channel::Control,
+            &Msg::Input {
+                seq: 0,
+                action: InputCode::Reroll,
+            },
+        );
+        let out = d.tick(vec![inb]);
+        assert!(
+            !decoded_all(&out)
+                .iter()
+                .any(|m| matches!(m, Msg::InputAck { .. })),
+            "an unknown peer's Input must not be acked"
+        );
+        assert!(
+            decoded_to(&out, stranger).is_empty(),
+            "nothing goes back to a stranger"
+        );
+        assert_eq!(d.shadow_checksum(p(1)), Some(baseline), "shadow unaffected");
+    }
+
+    #[test]
+    fn join_snapshot_replies_are_rate_limited_per_peer() {
+        let mut d = Director::new(&[p(1)], 7);
+        for _ in 0..START_LEAD {
+            d.tick(vec![]);
+        }
+        let join = |ch| inbound(p(1), ch, &Msg::Join { content_hash: 0 });
+        let snaps = |out: &[Outbound]| {
+            decoded_to(out, p(1))
+                .iter()
+                .filter(|m| matches!(m, Msg::Snapshot { .. }))
+                .count()
+        };
+        // First mid-match Join draws a snapshot.
+        let out = d.tick(vec![join(Channel::Control)]);
+        assert_eq!(snaps(&out), 1, "first Join gets a snapshot");
+        // Joins inside the minimum interval are suppressed — even several in
+        // one inbox.
+        let out = d.tick(vec![join(Channel::Control), join(Channel::Control)]);
+        assert_eq!(
+            snaps(&out),
+            0,
+            "Join spam inside the interval draws nothing"
+        );
+        for _ in 0..(JOIN_SNAPSHOT_MIN_INTERVAL - 3) {
+            let out = d.tick(vec![join(Channel::Control)]);
+            assert_eq!(snaps(&out), 0, "still inside the interval");
+        }
+        // Once the interval has elapsed, a Join is served again.
+        while d.server_tick() < JOIN_SNAPSHOT_MIN_INTERVAL + 1 {
+            d.tick(vec![]);
+        }
+        let out = d.tick(vec![join(Channel::Control)]);
+        assert_eq!(snaps(&out), 1, "a Join after the interval is served");
     }
 
     #[test]
@@ -528,7 +651,9 @@ mod tests {
         // arena_tick 0 -> beacon (0 % INTERVAL == 0).
         let out = d.tick(vec![]);
         assert!(
-            decoded_to(&out, p(1)).iter().any(|m| matches!(m, Msg::TimeBeacon { server_tick: 0 })),
+            decoded_to(&out, p(1))
+                .iter()
+                .any(|m| matches!(m, Msg::TimeBeacon { server_tick: 0 })),
             "expected beacon at arena_tick 0"
         );
 
@@ -544,8 +669,15 @@ mod tests {
                 seen_at.push(t);
             }
         }
-        assert!(seen_at.contains(&BEACON_INTERVAL), "beacon at {BEACON_INTERVAL}");
-        assert!(seen_at.contains(&(BEACON_INTERVAL * 2)), "beacon at {}", BEACON_INTERVAL * 2);
+        assert!(
+            seen_at.contains(&BEACON_INTERVAL),
+            "beacon at {BEACON_INTERVAL}"
+        );
+        assert!(
+            seen_at.contains(&(BEACON_INTERVAL * 2)),
+            "beacon at {}",
+            BEACON_INTERVAL * 2
+        );
         for t in seen_at {
             assert_eq!(t % BEACON_INTERVAL, 0, "beacon only on interval, saw {t}");
         }
@@ -568,15 +700,31 @@ mod tests {
         let cs0 = sim::checksum(&reference);
 
         // Matching digest -> no Snapshot.
-        let good = inbound(p(1), Channel::Telemetry, &Msg::Digest { tick: 0, checksum: cs0 });
+        let good = inbound(
+            p(1),
+            Channel::Telemetry,
+            &Msg::Digest {
+                tick: 0,
+                checksum: cs0,
+            },
+        );
         let out = d.tick(vec![good]);
         assert!(
-            !decoded_to(&out, p(1)).iter().any(|m| matches!(m, Msg::Snapshot { .. })),
+            !decoded_to(&out, p(1))
+                .iter()
+                .any(|m| matches!(m, Msg::Snapshot { .. })),
             "no snapshot when digest matches"
         );
 
         // Mismatching digest -> Snapshot on Bulk.
-        let bad = inbound(p(1), Channel::Telemetry, &Msg::Digest { tick: 0, checksum: cs0 ^ 0x1 });
+        let bad = inbound(
+            p(1),
+            Channel::Telemetry,
+            &Msg::Digest {
+                tick: 0,
+                checksum: cs0 ^ 0x1,
+            },
+        );
         let out = d.tick(vec![bad]);
         let snaps: Vec<&Outbound> = out
             .iter()
@@ -593,7 +741,10 @@ mod tests {
         // director's post-tick shadow is correct, not a bug.
         if let Ok(Msg::Snapshot { bytes, tick }) = wire::decode(&snaps[0].bytes) {
             let restored = sim::snapshot::deserialize(&bytes).unwrap();
-            assert_eq!(restored.tick, tick, "snapshot contents must match its label");
+            assert_eq!(
+                restored.tick, tick,
+                "snapshot contents must match its label"
+            );
             let mut reference = ArenaState::new(99, 1);
             for _ in 0..restored.tick {
                 sim::step(&mut reference, Input::Noop);
@@ -603,9 +754,18 @@ mod tests {
             panic!("not a snapshot");
         }
         // Unknown tick in digest -> no snapshot.
-        let unknown = inbound(p(1), Channel::Telemetry, &Msg::Digest { tick: 999_999, checksum: 0 });
+        let unknown = inbound(
+            p(1),
+            Channel::Telemetry,
+            &Msg::Digest {
+                tick: 999_999,
+                checksum: 0,
+            },
+        );
         let out = d.tick(vec![unknown]);
-        assert!(!decoded_to(&out, p(1)).iter().any(|m| matches!(m, Msg::Snapshot { .. })));
+        assert!(!decoded_to(&out, p(1))
+            .iter()
+            .any(|m| matches!(m, Msg::Snapshot { .. })));
     }
 
     #[test]
@@ -624,7 +784,9 @@ mod tests {
             for m in decoded_all(&out) {
                 match m {
                     Msg::DeathConfirmed { .. } if death_seen.is_none() => death_seen = Some(m),
-                    Msg::MatchResult { .. } if result_seen.is_none() => result_seen = Some(m.clone()),
+                    Msg::MatchResult { .. } if result_seen.is_none() => {
+                        result_seen = Some(m.clone())
+                    }
                     _ => {}
                 }
             }
@@ -641,7 +803,12 @@ mod tests {
             _ => unreachable!(),
         }
         let result = result_seen.expect("a MatchResult must be emitted");
-        assert_eq!(result, Msg::MatchResult { places: vec![(1, 1)] });
+        assert_eq!(
+            result,
+            Msg::MatchResult {
+                places: vec![(1, 1)]
+            }
+        );
         assert!(!d.is_alive(p(1)), "shadow must be dead after resolution");
         assert_eq!(d.result(), Some(vec![(p(1), 1)]));
     }
@@ -661,7 +828,12 @@ mod tests {
         for _ in 0..500_000u32 {
             let out = d.tick(vec![]);
             for m in decoded_all(&out) {
-                if let Msg::DeathConfirmed { player, died_tick, place } = m {
+                if let Msg::DeathConfirmed {
+                    player,
+                    died_tick,
+                    place,
+                } = m
+                {
                     if !deaths.iter().any(|(pl, _, _)| *pl == player) {
                         deaths.push((player, died_tick, place));
                     }
@@ -738,9 +910,23 @@ mod tests {
         // arena_tick 0 is now the next live tick. Submit a couple of inputs; the
         // director schedules each at arena_tick + INPUT_LEAD_TICKS and applies +
         // records it there.
-        let in1 = inbound(p(1), Channel::Control, &Msg::Input { seq: 1, action: InputCode::Reroll });
+        let in1 = inbound(
+            p(1),
+            Channel::Control,
+            &Msg::Input {
+                seq: 1,
+                action: InputCode::Reroll,
+            },
+        );
         d.tick(vec![in1]);
-        let in2 = inbound(p(1), Channel::Control, &Msg::Input { seq: 2, action: InputCode::Reroll });
+        let in2 = inbound(
+            p(1),
+            Channel::Control,
+            &Msg::Input {
+                seq: 2,
+                action: InputCode::Reroll,
+            },
+        );
         d.tick(vec![in2]);
         // Run to death.
         let mut replay = None;

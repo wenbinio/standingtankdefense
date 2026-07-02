@@ -26,13 +26,16 @@ fn is_self_harm_trade(off: &Offer) -> bool {
     // Scan the def's effects: a trade is self-harm if ANY effect drains the
     // axis the bot is graded on. (Each catalog entry carries one effect today,
     // so `any` reproduces the prior single-effect decision exactly.)
-    content::MODIFIERS[off.def as usize].effects.iter().any(|e| match e {
-        // Reduces Max HP for gold — a smaller HP pool the bot never offsets.
-        ModEffect::TradeMaxHpForGold(hp_cost, _) => *hp_cost > 0,
-        // Reduces HP regen for gold (may go negative → a drain) — self-damage.
-        ModEffect::TradeRegenForGold(regen_cost, _) => *regen_cost > 0,
-        _ => false,
-    })
+    content::MODIFIERS[off.def as usize]
+        .effects
+        .iter()
+        .any(|e| match e {
+            // Reduces Max HP for gold — a smaller HP pool the bot never offsets.
+            ModEffect::TradeMaxHpForGold(hp_cost, _) => *hp_cost > 0,
+            // Reduces HP regen for gold (may go negative → a drain) — self-damage.
+            ModEffect::TradeRegenForGold(regen_cost, _) => *regen_cost > 0,
+            _ => false,
+        })
 }
 
 /// A self-imposed playstyle constraint the bot will honor while buying, so the
@@ -225,16 +228,35 @@ fn mod_axis(def: u16) -> ModAxis {
             // snowballing build inflates damage past the Fixed range. Leaving them
             // as "Other" keeps the bot from compounding them into an overflow while
             // it still buys plain damage for its offense identity.
-            DamageGlobalPct(..) | DamageTypePct(..) | DamageMulPct(..) | AttackSpeedPct(..)
-            | DamageScopePct(..) | DamageVsStunnedPct(..) | DamageVsPoisonedPct(..)
-            | PoisonDamagePct(..) | StunDurationPct(..) | SpikesFlat(..) | SpikesPct(..)
+            DamageGlobalPct(..)
+            | DamageTypePct(..)
+            | DamageMulPct(..)
+            | AttackSpeedPct(..)
+            | DamageScopePct(..)
+            | DamageVsStunnedPct(..)
+            | DamageVsPoisonedPct(..)
+            | PoisonDamagePct(..)
+            | StunDurationPct(..)
+            | SpikesFlat(..)
+            | SpikesPct(..)
             | GrantVulnPulse(..) => offense = true,
-            MaxHp(..) | MaxHpPct(..) | Armor(..) | ManaShield(..) | HpRegen(..)
-            | HpRegenPct(..) | ManaRegenPct(..) | Dodge(..) | HealOnKill(..)
-            | HealOnPoison(..) | HealOnDamaged(..) | HealingPct(..) | MissingHpHealPct(..)
-            | GrantRevive(..) | ShieldActiveDrPct(..) | IncomeShieldPct(..) | ManaOnKill(..) => {
-                defense = true
-            }
+            MaxHp(..)
+            | MaxHpPct(..)
+            | Armor(..)
+            | ManaShield(..)
+            | HpRegen(..)
+            | HpRegenPct(..)
+            | ManaRegenPct(..)
+            | Dodge(..)
+            | HealOnKill(..)
+            | HealOnPoison(..)
+            | HealOnDamaged(..)
+            | HealingPct(..)
+            | MissingHpHealPct(..)
+            | GrantRevive(..)
+            | ShieldActiveDrPct(..)
+            | IncomeShieldPct(..)
+            | ManaOnKill(..) => defense = true,
             _ => {}
         }
     }
@@ -304,12 +326,17 @@ impl Default for Bot {
 impl Bot {
     /// A bot that honors `c` while buying (otherwise identical to `default`).
     pub fn with_challenge(c: Challenge) -> Self {
-        Bot { challenge: c, ..Bot::default() }
+        Bot {
+            challenge: c,
+            ..Bot::default()
+        }
     }
 
     /// This match's archetype, resolved from the seed on first use and cached.
     fn archetype(&mut self, s: &ArenaState) -> Archetype {
-        *self.archetype.get_or_insert_with(|| Archetype::for_seed(s.master_seed))
+        *self
+            .archetype
+            .get_or_insert_with(|| Archetype::for_seed(s.master_seed))
     }
 
     /// Whether the bot may still buy MODIFIERS (it stops once it has stacked
@@ -363,7 +390,7 @@ impl Bot {
             if off.cost > s.economy.gold || !self.allowed(off) || !pred(off) {
                 continue;
             }
-            if best.map_or(true, |(_, c)| off.cost > c) {
+            if best.is_none_or(|(_, c)| off.cost > c) {
                 best = Some((i, off.cost));
             }
         }
@@ -399,7 +426,7 @@ impl Bot {
                 }
                 _ => false,
             };
-            if wanted && pick.map_or(true, |(_, c)| off.cost < c) {
+            if wanted && pick.is_none_or(|(_, c)| off.cost < c) {
                 pick = Some((i, off.cost));
             }
         }
@@ -418,7 +445,7 @@ impl Bot {
             if off.cost > s.economy.gold || !pred(off) {
                 continue;
             }
-            if best.map_or(true, |(_, c)| off.cost < c) {
+            if best.is_none_or(|(_, c)| off.cost < c) {
                 best = Some((i, off.cost));
             }
         }
@@ -438,7 +465,11 @@ impl Bot {
         // Emergency: swarmed and the Clear is off cooldown → wipe the board.
         // A constrained run is weaker, so it leans on Clear sooner to survive
         // long enough for its achievement to land.
-        let clear_at = if self.challenge == Challenge::None { 14 } else { 8 };
+        let clear_at = if self.challenge == Challenge::None {
+            14
+        } else {
+            8
+        };
         if s.enemies.len() >= clear_at && s.tick >= s.tank.clear_cooldown_end {
             self.cooldown = 30;
             return Input::Clear;
@@ -480,7 +511,8 @@ impl Bot {
             let floor = arch.weapon_floor(round);
             // (1) Weapon floor.
             if s.weapons.len() < floor {
-                if let Some(slot) = self.cheapest_where(s, |o| matches!(o.kind, OfferKind::Weapon)) {
+                if let Some(slot) = self.cheapest_where(s, |o| matches!(o.kind, OfferKind::Weapon))
+                {
                     self.cooldown = 6;
                     return Input::BuyOffer { slot: slot as u8 };
                 }
@@ -496,7 +528,8 @@ impl Bot {
             }
             // (3) Keep the arsenal topped up toward the archetype's weapon target.
             if self.can_buy_weapon(s) && s.weapons.len() < arch_target_weapons {
-                if let Some(slot) = self.cheapest_where(s, |o| matches!(o.kind, OfferKind::Weapon)) {
+                if let Some(slot) = self.cheapest_where(s, |o| matches!(o.kind, OfferKind::Weapon))
+                {
                     self.cooldown = 6;
                     return Input::BuyOffer { slot: slot as u8 };
                 }
@@ -517,9 +550,9 @@ impl Bot {
                 // Try the wanted axis first (priciest = most impactful), then the other
                 // axis as a fallback so a shop missing the wanted axis still progresses.
                 for axis in [want, other_axis(want)] {
-                    if let Some(slot) =
-                        self.priciest_where(s, |o| matches!(o.kind, OfferKind::Modifier) && mod_axis(o.def) == axis)
-                    {
+                    if let Some(slot) = self.priciest_where(s, |o| {
+                        matches!(o.kind, OfferKind::Modifier) && mod_axis(o.def) == axis
+                    }) {
                         return self.buy_mod(slot, axis);
                     }
                 }

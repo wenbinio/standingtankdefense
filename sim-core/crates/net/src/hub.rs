@@ -310,9 +310,15 @@ mod tests {
         let a = delivered(0xABC);
         let b = delivered(0xABC);
         assert_eq!(a, b, "loss must be reproducible for a fixed seed");
-        assert!(a > 0 && a < 1000, "≈40% loss should drop some, keep some: {a}");
+        assert!(
+            a > 0 && a < 1000,
+            "≈40% loss should drop some, keep some: {a}"
+        );
         // Roughly in the expected band (wide tolerance — this is a spot check).
-        assert!((400..=800).contains(&a), "delivered {a} not near ~60% of 1000");
+        assert!(
+            (400..=800).contains(&a),
+            "delivered {a} not near ~60% of 1000"
+        );
         // A different seed yields a different (but still partial) drop pattern.
         assert!(delivered(0x999) > 0);
     }
@@ -326,7 +332,10 @@ mod tests {
             h.send(PeerId(0), vec![out(1)]);
         }
         h.advance();
-        assert!(h.take(PeerId(1)).is_empty(), "a 1000‰ link delivers nothing");
+        assert!(
+            h.take(PeerId(1)).is_empty(),
+            "a 1000‰ link delivers nothing"
+        );
     }
 
     /// Jitter keeps every message (no loss) but spreads deliveries across a few
@@ -345,7 +354,10 @@ mod tests {
             h.advance();
             total += h.take(PeerId(1)).len();
         }
-        assert_eq!(total as u32, n, "jitter must not drop or duplicate messages");
+        assert_eq!(
+            total as u32, n,
+            "jitter must not drop or duplicate messages"
+        );
     }
 
     /// Reorder makes same-step messages arrive out of send order for at least one
@@ -354,7 +366,11 @@ mod tests {
     #[test]
     fn reorder_permutes_within_window() {
         fn tagged(to: u32, tag: u8) -> Outbound {
-            Outbound { to: PeerId(to), channel: Channel::Control, bytes: vec![tag] }
+            Outbound {
+                to: PeerId(to),
+                channel: Channel::Control,
+                bytes: vec![tag],
+            }
         }
         let mut h = Hub::with_chaos_seed(0xD15);
         h.set_reorder(PeerId(0), 3);
@@ -372,7 +388,11 @@ mod tests {
         assert_eq!(got.len(), 16, "no message lost under reorder");
         let mut sorted = got.clone();
         sorted.sort();
-        assert_eq!(sorted, (0..16u8).collect::<Vec<_>>(), "every tag delivered once");
+        assert_eq!(
+            sorted,
+            (0..16u8).collect::<Vec<_>>(),
+            "every tag delivered once"
+        );
         assert_ne!(got, sorted, "reorder must actually permute the send order");
     }
 
@@ -387,7 +407,11 @@ mod tests {
         h.clear_chaos();
         h.send(PeerId(0), vec![out(1)]);
         h.advance();
-        assert_eq!(h.take(PeerId(1)).len(), 1, "link delivers again after clear_chaos");
+        assert_eq!(
+            h.take(PeerId(1)).len(),
+            1,
+            "link delivers again after clear_chaos"
+        );
     }
 
     /// A hub with NO chaos knobs set behaves exactly like the legacy hub: the
@@ -404,7 +428,11 @@ mod tests {
         h.advance();
         assert!(h.take(PeerId(1)).is_empty());
         h.advance();
-        assert_eq!(h.take(PeerId(1)).len(), 5, "clean link delivers all, on time");
+        assert_eq!(
+            h.take(PeerId(1)).len(),
+            5,
+            "clean link delivers all, on time"
+        );
     }
 
     // Drive two participants purely through the `Transport` trait (no direct

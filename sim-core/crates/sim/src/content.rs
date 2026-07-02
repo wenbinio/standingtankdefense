@@ -93,8 +93,16 @@ impl WeaponAbility {
             3 => WeaponAbility::Knockback { dist: a },
             4 => WeaponAbility::Root { ticks: a as u32 },
             5 => WeaponAbility::VulnOnHit { stacks: a as u16 },
-            6 => WeaponAbility::Hazard { dmg: a, radius: b, ticks: c as u32 },
-            7 => WeaponAbility::Summon { kind: a as u8, hp: b, damage: c },
+            6 => WeaponAbility::Hazard {
+                dmg: a,
+                radius: b,
+                ticks: c as u32,
+            },
+            7 => WeaponAbility::Summon {
+                kind: a as u8,
+                hp: b,
+                damage: c,
+            },
             _ => return None,
         })
     }
@@ -571,126 +579,382 @@ impl ModifierDef {
 /// name, and bundled multi-effect source upgrades are re-bundled into one
 /// `ModifierDef { effects: &[…] }` (effects apply in slice order). Some source
 /// secondaries need combat/defense mechanics not yet built — those keep the NAME
-/// + the modelable PRIMARY effect, with a `// TODO(M1c/M2/M3)` note for the
+/// plus the modelable PRIMARY effect, with a `// TODO(M1c/M2/M3)` note for the
 /// exotic part. A handful of entries have no clean source mapping and are kept as
 /// representative slices (flagged "representative"). Numbers track the source
 /// effect text; existing cost/rarity preserved.
 pub static MODIFIERS: &[ModifierDef] = &[
     // representative: "+10% to ALL damage" has no single source upgrade (closest
     // is Improved Attacks "+5% all types"); kept as a generic global-damage item.
-    ModifierDef { name: "+10% Damage", rarity: 0, cost: 500, effects: &[ModEffect::DamageGlobalPct(1, 10)], ramp: None },
-    ModifierDef { name: "Improved Piercing Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 1, 10)], ramp: None },
-    ModifierDef { name: "Improved Siege Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 1, 10)], ramp: None },
-    ModifierDef { name: "Improved Magic Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_MAGIC, 1, 10)], ramp: None },
+    ModifierDef {
+        name: "+10% Damage",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::DamageGlobalPct(1, 10)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Improved Piercing Attacks",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 1, 10)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Improved Siege Attacks",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 1, 10)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Improved Magic Attacks",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::DamageTypePct(DMG_MAGIC, 1, 10)],
+        ramp: None,
+    },
     // representative Epic multiplier (no source upgrade is a flat ×-damage item):
     // a true force-multiplier on an already-spiky build.
-    ModifierDef { name: "+25% Damage (Epic)", rarity: 3, cost: 5000, effects: &[ModEffect::DamageMulPct(2, 5)], ramp: None },
-    ModifierDef { name: "Rapidfire", rarity: 0, cost: 500, effects: &[ModEffect::AttackSpeedPct(1, 10)], ramp: None },
-    ModifierDef { name: "Bounty Hunter", rarity: 1, cost: 1500, effects: &[ModEffect::BountyPct(1, 2)], ramp: None },
+    ModifierDef {
+        name: "+25% Damage (Epic)",
+        rarity: 3,
+        cost: 5000,
+        effects: &[ModEffect::DamageMulPct(2, 5)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Rapidfire",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::AttackSpeedPct(1, 10)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Bounty Hunter",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::BountyPct(1, 2)],
+        ramp: None,
+    },
     // Entangled Gold Mine (A0H0): "+20 Gold Income | +25% of Gold Income as instant
     // HP Regen". RE-BUNDLED — the live catalog had split this into "+20 Gold Income"
     // + a standalone "Golden Vitality (... as HP Regen)"; that standalone is DELETED
     // and folded back here (source ratio 25%, was 40% on the spun-off item).
-    ModifierDef { name: "Entangled Gold Mine", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(20), ModEffect::IncomeRegenPct(25, 100)], ramp: None },
+    ModifierDef {
+        name: "Entangled Gold Mine",
+        rarity: 0,
+        cost: 500,
+        effects: &[
+            ModEffect::IncomeFlat(20),
+            ModEffect::IncomeRegenPct(25, 100),
+        ],
+        ramp: None,
+    },
     // ECONOMY SNOWBALL (high-ceiling/high-risk): income multipliers are the engine
     // of the snowball-or-die path. Cheap, but they buy gold not survival.
     // representative income-multiplier items (Gold Mine below is the true source
     // "+10 Income +10% Income"; these pure ×income items are kept as a slice).
-    ModifierDef { name: "+10% Gold Income", rarity: 1, cost: 1000, effects: &[ModEffect::IncomePct(20, 100)], ramp: None },
-    ModifierDef { name: "+25% Gold Income", rarity: 2, cost: 2000, effects: &[ModEffect::IncomePct(50, 100)], ramp: None },
+    ModifierDef {
+        name: "+10% Gold Income",
+        rarity: 1,
+        cost: 1000,
+        effects: &[ModEffect::IncomePct(20, 100)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "+25% Gold Income",
+        rarity: 2,
+        cost: 2000,
+        effects: &[ModEffect::IncomePct(50, 100)],
+        ramp: None,
+    },
     // Transmute (A0AE): "+100% Kill Bounty | +200% Bounty Gold with 5% activation
     // chance". RE-BUNDLED — the live catalog modeled ONLY the proc ("Lucky Strikes");
     // now both the flat bounty and the gambling proc ride one named upgrade.
-    ModifierDef { name: "Transmute", rarity: 2, cost: 3000, effects: &[ModEffect::BountyPct(100, 100), ModEffect::BountyProc(5, 200)], ramp: None },
+    ModifierDef {
+        name: "Transmute",
+        rarity: 2,
+        cost: 3000,
+        effects: &[
+            ModEffect::BountyPct(100, 100),
+            ModEffect::BountyProc(5, 200),
+        ],
+        ramp: None,
+    },
     // Imbued Masonry (A04J): "+2000 Max HP | +25% Max HP". RE-BUNDLED via the new
     // MaxHpPct rider (the +25% is taken of max_hp AFTER the +2000 flat applies).
-    ModifierDef { name: "Imbued Masonry", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(2000), ModEffect::MaxHpPct(25, 100)], ramp: None },
-    ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(10)], ramp: None },
+    ModifierDef {
+        name: "Imbued Masonry",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::MaxHp(2000), ModEffect::MaxHpPct(25, 100)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "+10 Armor",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::Armor(10)],
+        ramp: None,
+    },
     // Moonwell (A0FA): "+2000 Mana Shield | +10 Mana Shield every second" — the
     // per-second shield regen is modeled as the ManaShield regen-per-tick field.
-    ModifierDef { name: "Moonwell", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(2000, 10)], ramp: None },
+    ModifierDef {
+        name: "Moonwell",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::ManaShield(2000, 10)],
+        ramp: None,
+    },
     // representative flat-regen item (the true source +50-regen upgrades all bundle
     // a secondary; this plain +50 is kept as a slice).
-    ModifierDef { name: "+50 HP Regen", rarity: 0, cost: 500, effects: &[ModEffect::HpRegen(50)], ramp: None },
-    ModifierDef { name: "Evasion", rarity: 1, cost: 1500, effects: &[ModEffect::Dodge(10)], ramp: None },
+    ModifierDef {
+        name: "+50 HP Regen",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::HpRegen(50)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Evasion",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::Dodge(10)],
+        ramp: None,
+    },
     // Time-scaling growth modifiers (`docs/06`): a base effect now + a smaller
     // effect re-applied every round, so they compound over a match.
     // Power Generator (A099): "+2% Damage | +1% Damage every 30 seconds".
-    ModifierDef { name: "Power Generator", rarity: 2, cost: 3000,
+    ModifierDef {
+        name: "Power Generator",
+        rarity: 2,
+        cost: 3000,
         effects: &[ModEffect::DamageGlobalPct(2, 100)],
-        ramp: Some(RampSpec { effect: ModEffect::DamageGlobalPct(1, 100), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::DamageGlobalPct(1, 100),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // Scroll of Chaos (A0IB): "+20% Chaos | +3% Chaos every 30 seconds".
-    ModifierDef { name: "Scroll of Chaos", rarity: 2, cost: 3000,
+    ModifierDef {
+        name: "Scroll of Chaos",
+        rarity: 2,
+        cost: 3000,
         effects: &[ModEffect::DamageTypePct(DMG_CHAOS, 20, 100)],
-        ramp: Some(RampSpec { effect: ModEffect::DamageTypePct(DMG_CHAOS, 3, 100), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::DamageTypePct(DMG_CHAOS, 3, 100),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // representative compounding-income ramp (no exact source; Gold Mine/Magic
     // Treasure are the named income items). Kept as a slice.
-    ModifierDef { name: "Compounding Greed (+10 Income, +5/round)", rarity: 1, cost: 1500,
+    ModifierDef {
+        name: "Compounding Greed (+10 Income, +5/round)",
+        rarity: 1,
+        cost: 1500,
         effects: &[ModEffect::IncomeFlat(10)],
-        ramp: Some(RampSpec { effect: ModEffect::IncomeFlat(5), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::IncomeFlat(5),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // Blessed Armor (A096): "+10 Armor | +15 Bonus Armor every 30 seconds | -1 when
     // damaged". The flat-now + per-round growth is modeled; the small -1-on-damage
     // decay is dropped (a minor exotic, not worth a mechanic). Ramp kept at the
     // live +5/round (the source's +15/round would be a balance retune — flagged).
-    ModifierDef { name: "Blessed Armor", rarity: 1, cost: 1500,
+    ModifierDef {
+        name: "Blessed Armor",
+        rarity: 1,
+        cost: 1500,
         effects: &[ModEffect::Armor(10)],
-        ramp: Some(RampSpec { effect: ModEffect::Armor(5), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::Armor(5),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // Per-scope damage (`docs/06`): +% for weapons matching an attack class /
     // range bucket / rarity (scope ids from attack_scope_id/range_scope_id/rarity_scope_id).
     // Focusfire (A07I): "+25% Damage for Single Target Weapons".
-    ModifierDef { name: "Focusfire", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(0, 25, 100)], ramp: None },
+    ModifierDef {
+        name: "Focusfire",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageScopePct(0, 25, 100)],
+        ramp: None,
+    },
     // representative per-attack-class items (the source has no clean +Splash/
     // +Barrage/+Area/+Bounce upgrade — it bundles "Bounce and Barrage" together);
     // kept as a slice exposing each attack scope.
-    ModifierDef { name: "+25% Splash Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(1, 25, 100)], ramp: None },
-    ModifierDef { name: "+25% Barrage Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(2, 25, 100)], ramp: None },
-    ModifierDef { name: "+25% Area Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(3, 25, 100)], ramp: None },
+    ModifierDef {
+        name: "+25% Splash Damage",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageScopePct(1, 25, 100)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "+25% Barrage Damage",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageScopePct(2, 25, 100)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "+25% Area Damage",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageScopePct(3, 25, 100)],
+        ramp: None,
+    },
     // Wavefire (A0JO): "+25% Damage for Wave Weapons".
-    ModifierDef { name: "Wavefire", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(4, 25, 100)], ramp: None },
-    ModifierDef { name: "+25% Bounce Damage", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(5, 25, 100)], ramp: None },
+    ModifierDef {
+        name: "Wavefire",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageScopePct(4, 25, 100)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "+25% Bounce Damage",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageScopePct(5, 25, 100)],
+        ramp: None,
+    },
     // Command Aura (A078): "+25% Damage for 300 and 600 Attack Range Weapons".
-    ModifierDef { name: "Command Aura", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(6, 25, 100)], ramp: None },
+    ModifierDef {
+        name: "Command Aura",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageScopePct(6, 25, 100)],
+        ramp: None,
+    },
     // Trueshot Aura (A04T): "+25% Damage for 900 and 1200 Attack Range Weapons".
-    ModifierDef { name: "Trueshot Aura", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(7, 25, 100)], ramp: None },
+    ModifierDef {
+        name: "Trueshot Aura",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageScopePct(7, 25, 100)],
+        ramp: None,
+    },
     // Engineering Upgrade (A09F): "+100% Damage for 500 Gold (Common) Weapons".
-    ModifierDef { name: "Engineering Upgrade", rarity: 1, cost: 1500, effects: &[ModEffect::DamageScopePct(8, 100, 100)], ramp: None },
+    ModifierDef {
+        name: "Engineering Upgrade",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageScopePct(8, 100, 100)],
+        ramp: None,
+    },
     // Status-conditional & flavor damage (`docs/06` #4): bonus damage vs enemies
     // in a status, and scalers on the statuses the tank applies.
     // Bash (A032): "+20% Damage to Stunned enemies".
-    ModifierDef { name: "Bash", rarity: 1, cost: 1500, effects: &[ModEffect::DamageVsStunnedPct(20, 100)], ramp: None },
+    ModifierDef {
+        name: "Bash",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageVsStunnedPct(20, 100)],
+        ramp: None,
+    },
     // Corrosive Poison (A04R): "+25% Damage to Poisoned enemies".
-    ModifierDef { name: "Corrosive Poison", rarity: 1, cost: 1500, effects: &[ModEffect::DamageVsPoisonedPct(25, 100)], ramp: None },
+    ModifierDef {
+        name: "Corrosive Poison",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::DamageVsPoisonedPct(25, 100)],
+        ramp: None,
+    },
     // Potent Poison (A034): "+10% Poison damage".
-    ModifierDef { name: "Potent Poison", rarity: 0, cost: 500, effects: &[ModEffect::PoisonDamagePct(10, 100)], ramp: None },
+    ModifierDef {
+        name: "Potent Poison",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::PoisonDamagePct(10, 100)],
+        ramp: None,
+    },
     // Dazing Stuns (A0CH): "+50% Stun Duration".
-    ModifierDef { name: "Dazing Stuns", rarity: 1, cost: 1500, effects: &[ModEffect::StunDurationPct(50, 100)], ramp: None },
+    ModifierDef {
+        name: "Dazing Stuns",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::StunDurationPct(50, 100)],
+        ramp: None,
+    },
     // Spikes (`docs/06`): retaliation damage to nearby enemies when the tank is hit.
     // Dreadlord Fang (A03A): "+80 Spikes Damage | +8 Heal when damaged". Both
     // effects modeled: flat spikes retaliation + a flat heal on every landed hit.
-    ModifierDef { name: "Dreadlord Fang", rarity: 0, cost: 500, effects: &[ModEffect::SpikesFlat(80), ModEffect::HealOnDamaged(8)], ramp: None },
+    ModifierDef {
+        name: "Dreadlord Fang",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::SpikesFlat(80), ModEffect::HealOnDamaged(8)],
+        ramp: None,
+    },
     // representative big-flat-spikes item (source has +160/+400 flats, not +300);
     // kept as a slice.
-    ModifierDef { name: "+300 Spikes Damage", rarity: 1, cost: 1500, effects: &[ModEffect::SpikesFlat(300)], ramp: None },
+    ModifierDef {
+        name: "+300 Spikes Damage",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::SpikesFlat(300)],
+        ramp: None,
+    },
     // representative pure-%-spikes item (source always bundles flat+%); kept as a slice.
-    ModifierDef { name: "+50% Spikes Damage", rarity: 1, cost: 1500, effects: &[ModEffect::SpikesPct(50, 100)], ramp: None },
+    ModifierDef {
+        name: "+50% Spikes Damage",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::SpikesPct(50, 100)],
+        ramp: None,
+    },
     // Growing Spikes (A0DU): "+80 Spikes Damage | +10 Spikes Damage every 30 seconds".
-    ModifierDef { name: "Growing Spikes", rarity: 2, cost: 3000,
+    ModifierDef {
+        name: "Growing Spikes",
+        rarity: 2,
+        cost: 3000,
         effects: &[ModEffect::SpikesFlat(80)],
-        ramp: Some(RampSpec { effect: ModEffect::SpikesFlat(10), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::SpikesFlat(10),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // Vulnerability Totem (A0EN): "Vulnerability Pulse: +5% damage taken to all
     // enemies within 1200 range every second, stacking."
-    ModifierDef { name: "Vulnerability Totem", rarity: 2, cost: 3000,
-        effects: &[ModEffect::GrantVulnPulse(5, 1200, 30)], ramp: None },
+    ModifierDef {
+        name: "Vulnerability Totem",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::GrantVulnPulse(5, 1200, 30)],
+        ramp: None,
+    },
     // On-event triggers (`docs/06`): heal the tank on enemy-kill / on-poison-tick.
     // Mask of Death (A07S): "+1000 Max HP | +15 Heal when an enemy dies". RE-BUNDLED
     // — the live "+15 Heal on Kill" gains its Max-HP half from the source upgrade.
-    ModifierDef { name: "Mask of Death", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(1000), ModEffect::HealOnKill(15)], ramp: None },
+    ModifierDef {
+        name: "Mask of Death",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::MaxHp(1000), ModEffect::HealOnKill(15)],
+        ramp: None,
+    },
     // representative larger heal-on-kill item (no source for a bare +60-on-kill).
-    ModifierDef { name: "+60 Heal on Kill", rarity: 2, cost: 3000, effects: &[ModEffect::HealOnKill(60)], ramp: None },
+    ModifierDef {
+        name: "+60 Heal on Kill",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::HealOnKill(60)],
+        ramp: None,
+    },
     // Reanimating Poison (A0FL): "+5 instant HP Regen when an enemy takes Poison
     // damage from a Weapon | +1 ... from an Upgrade". Primary (weapon-poison heal)
     // modeled; the upgrade-poison half collapses into the same per-tick heal.
-    ModifierDef { name: "Reanimating Poison", rarity: 2, cost: 3000, effects: &[ModEffect::HealOnPoison(5)], ramp: None },
+    ModifierDef {
+        name: "Reanimating Poison",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::HealOnPoison(5)],
+        ramp: None,
+    },
     // Meta / shop items (`docs/06` #5): they bend the purchase flow, not the
     // tank's stats. Resolved deterministically in `input::apply` (a one-shot
     // `PendingPerk`), and flagged `is_meta` so they never trigger or duplicate
@@ -698,129 +962,405 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // Multiplication Gems (A0BC): "+3 extra copies of the next 500 Gold (Common)
     // Upgrade" (the live name "Magic Coin" was wrong — Magic Coin is "+5 Gold
     // Income"; the common-duplicator is Multiplication Gems).
-    ModifierDef { name: "Multiplication Gems", rarity: 1, cost: 1500, effects: &[ModEffect::GrantDuplicator(0, 3)], ramp: None },
+    ModifierDef {
+        name: "Multiplication Gems",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::GrantDuplicator(0, 3)],
+        ramp: None,
+    },
     // Duplicator (A0EH): "+1 extra copy of the next Rare Weapon or Spikes Upgrade".
-    ModifierDef { name: "Duplicator", rarity: 2, cost: 3000, effects: &[ModEffect::GrantDuplicator(2, 1)], ramp: None },
+    ModifierDef {
+        name: "Duplicator",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::GrantDuplicator(2, 1)],
+        ramp: None,
+    },
     // Black Market (A0GR): "Buy 1 Uncommon Weapon or Spikes Upgrade of your choosing".
-    ModifierDef { name: "Black Market", rarity: 1, cost: 1500, effects: &[ModEffect::GrantVoucher(1)], ramp: None },
+    ModifierDef {
+        name: "Black Market",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::GrantVoucher(1)],
+        ramp: None,
+    },
     // Magic Treasure (A0FP): "+250 Gold | Gold value increases by 2 per second" —
     // the growing-value is modeled as a per-round income ramp.
-    ModifierDef { name: "Magic Treasure", rarity: 1, cost: 1000,
+    ModifierDef {
+        name: "Magic Treasure",
+        rarity: 1,
+        cost: 1000,
         effects: &[ModEffect::GrantGold(250)],
-        ramp: Some(RampSpec { effect: ModEffect::IncomeFlat(5), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::IncomeFlat(5),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // Self-scaling / healing / revive (`docs/06` #6): bespoke survival & growth.
     // Ankh of Reconstruction (A01T): "Upon fatal damage, fully repair the tower,
     // using up the Ankh but gaining +2000 Max HP."
-    ModifierDef { name: "Ankh of Reconstruction", rarity: 3, cost: 5000, effects: &[ModEffect::GrantRevive(2000)], ramp: None },
+    ModifierDef {
+        name: "Ankh of Reconstruction",
+        rarity: 3,
+        cost: 5000,
+        effects: &[ModEffect::GrantRevive(2000)],
+        ramp: None,
+    },
     // Healing Hand (A0BI): "+25% Healing".
-    ModifierDef { name: "Healing Hand", rarity: 1, cost: 1500, effects: &[ModEffect::HealingPct(25, 100)], ramp: None },
+    ModifierDef {
+        name: "Healing Hand",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::HealingPct(25, 100)],
+        ramp: None,
+    },
     // Living Wood (A09C): "+2000 Max HP | +1.5% Missing HP Heal every second".
     // RE-BUNDLED — the live "Regeneration" modeled only the missing-HP heal; the
     // Max-HP half now rides the named upgrade.
-    ModifierDef { name: "Living Wood", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(2000), ModEffect::MissingHpHealPct(15, 1000)], ramp: None },
+    ModifierDef {
+        name: "Living Wood",
+        rarity: 2,
+        cost: 3000,
+        effects: &[
+            ModEffect::MaxHp(2000),
+            ModEffect::MissingHpHealPct(15, 1000),
+        ],
+        ramp: None,
+    },
     // Enchanted Moon Arrow (A0CZ): "+100% Piercing Damage | +1% Piercing per Bow".
     // RE-BUNDLED — the live item modeled only the per-Bow self-scaling; the flat
     // +100% Piercing half now rides the named upgrade.
-    ModifierDef { name: "Enchanted Moon Arrow", rarity: 2, cost: 3000, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 100, 100), ModEffect::DamagePerWeapon(0, DMG_PIERCING as i64, 1)], ramp: None },
+    ModifierDef {
+        name: "Enchanted Moon Arrow",
+        rarity: 2,
+        cost: 3000,
+        effects: &[
+            ModEffect::DamageTypePct(DMG_PIERCING, 100, 100),
+            ModEffect::DamagePerWeapon(0, DMG_PIERCING as i64, 1),
+        ],
+        ramp: None,
+    },
     // Refined Explosives (A0D3): "+100% Siege Damage | +1% Siege per Boulder".
     // RE-BUNDLED (flat +100% Siege + per-Boulder self-scaling). NOTE: the source
     // keys "per Boulder"; here it keys per Mortar Launcher (weapon def 1) as the
     // live catalog did — the Boulder weapon lives in the GEN block at a non-stable
     // index, so the stable index 1 (Mortar) is used. Flagged as a judgement call.
-    ModifierDef { name: "Refined Explosives", rarity: 2, cost: 3000, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 100, 100), ModEffect::DamagePerWeapon(1, DMG_SIEGE as i64, 1)], ramp: None },
+    ModifierDef {
+        name: "Refined Explosives",
+        rarity: 2,
+        cost: 3000,
+        effects: &[
+            ModEffect::DamageTypePct(DMG_SIEGE, 100, 100),
+            ModEffect::DamagePerWeapon(1, DMG_SIEGE as i64, 1),
+        ],
+        ramp: None,
+    },
     // Stacking damage generator (`docs/06` #5): the Death Engine weapon's Chaos
     // damage scales +10% per Death Engine owned (self-referential count).
     // representative self-referential generator (a self-scaling generator weapon
     // does +10% per copy; this models that as a +Chaos-per-Death-Engine
     // modifier keyed to the stable Death Engine weapon index — kept, ramp test
     // depends on it).
-    ModifierDef { name: "Overclocked Death Engine (+10% Chaos per Death Engine)", rarity: 2, cost: 3000, effects: &[ModEffect::DamagePerWeapon(DEATH_ENGINE as i64, DMG_CHAOS as i64, 10)], ramp: None },
+    ModifierDef {
+        name: "Overclocked Death Engine (+10% Chaos per Death Engine)",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::DamagePerWeapon(
+            DEATH_ENGINE as i64,
+            DMG_CHAOS as i64,
+            10,
+        )],
+        ramp: None,
+    },
     // Damage ↔ economy trades & damage-scaled bounty (`docs/06` #5): pay survival
     // stats for gold, and convert dealt damage into gold, and income into a buffer.
     // Philosopher's Stone (A01S): "-1000 Max HP | +2000 Gold".
-    ModifierDef { name: "Philosopher's Stone", rarity: 1, cost: 0, effects: &[ModEffect::TradeMaxHpForGold(1000, 2000)], ramp: None },
+    ModifierDef {
+        name: "Philosopher's Stone",
+        rarity: 1,
+        cost: 0,
+        effects: &[ModEffect::TradeMaxHpForGold(1000, 2000)],
+        ramp: None,
+    },
     // Cursed Treasure (A04P): "-100 HP Regen | +5000 Gold".
-    ModifierDef { name: "Cursed Treasure", rarity: 2, cost: 0, effects: &[ModEffect::TradeRegenForGold(100, 5000)], ramp: None },
+    ModifierDef {
+        name: "Cursed Treasure",
+        rarity: 2,
+        cost: 0,
+        effects: &[ModEffect::TradeRegenForGold(100, 5000)],
+        ramp: None,
+    },
     // representative damage→gold items (the source's "Bloodmoney" gold-per-damage
     // mechanic, no single named upgrade); kept as a slice.
-    ModifierDef { name: "Bloodmoney (+1 Gold per 100 Damage)", rarity: 1, cost: 1500, effects: &[ModEffect::GoldPerDamagePct(1, 60)], ramp: None },
-    ModifierDef { name: "Bloodmoney II (+1 Gold per 20 Damage)", rarity: 2, cost: 3000, effects: &[ModEffect::GoldPerDamagePct(1, 12)], ramp: None },
+    ModifierDef {
+        name: "Bloodmoney (+1 Gold per 100 Damage)",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::GoldPerDamagePct(1, 60)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Bloodmoney II (+1 Gold per 20 Damage)",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::GoldPerDamagePct(1, 12)],
+        ramp: None,
+    },
     // representative income→shield item (mirrors income→HP for the shield); no
     // single source name. Kept as a slice.
-    ModifierDef { name: "Wartithe (25% of Income as Mana Shield)", rarity: 2, cost: 3000, effects: &[ModEffect::IncomeShieldPct(25, 100)], ramp: None },
+    ModifierDef {
+        name: "Wartithe (25% of Income as Mana Shield)",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::IncomeShieldPct(25, 100)],
+        ramp: None,
+    },
     // GEN-MODIFIERS-BEGIN (originally generated by research/tower-survivors-map/
     // gen_catalog.py; names restored / re-bundled in the content-fidelity pass).
     // representative ramping epic shield (no exact source; closest named shields
     // are Recharge / Energy Shield below). Kept as a slice.
-    ModifierDef { name: "Aegis Protocol (+2500 Shield, +400/round)", rarity: 3, cost: 5000,
+    ModifierDef {
+        name: "Aegis Protocol (+2500 Shield, +400/round)",
+        rarity: 3,
+        cost: 5000,
         effects: &[ModEffect::ManaShield(2500, 20)],
-        ramp: Some(RampSpec { effect: ModEffect::ManaShield(400, 4), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::ManaShield(400, 4),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // Improved Masonry (A001): "+500 Max HP".
-    ModifierDef { name: "Improved Masonry", rarity: 0, cost: 500, effects: &[ModEffect::MaxHp(500)], ramp: None },
-    ModifierDef { name: "Greater Piercing Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 10, 100)], ramp: None },
-    ModifierDef { name: "Improved Normal Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_NORMAL, 10, 100)], ramp: None },
-    ModifierDef { name: "Improved Siege Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 10, 100)], ramp: None },
-    ModifierDef { name: "Improved Chaos Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_CHAOS, 10, 100)], ramp: None },
+    ModifierDef {
+        name: "Improved Masonry",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::MaxHp(500)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Greater Piercing Attacks",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 10, 100)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Improved Normal Attacks",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::DamageTypePct(DMG_NORMAL, 10, 100)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Improved Siege Attacks",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 10, 100)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Improved Chaos Attacks",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::DamageTypePct(DMG_CHAOS, 10, 100)],
+        ramp: None,
+    },
     // representative +1000-Max-HP item (the source bundles +1000 with a secondary
     // on Mask of Death / Magic Seeds); kept as a plain slice.
-    ModifierDef { name: "+1000 Max HP", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(1000)], ramp: None },
+    ModifierDef {
+        name: "+1000 Max HP",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::MaxHp(1000)],
+        ramp: None,
+    },
     // representative +10-armor item (every source +10-armor upgrade bundles a
     // secondary — Blessed/Spiky/Frost/Poison Armor); kept as a plain slice.
-    ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(10)], ramp: None },
+    ModifierDef {
+        name: "+10 Armor",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::Armor(10)],
+        ramp: None,
+    },
     // representative +2000-Max-HP item (Imbued Masonry above is the bundled source).
-    ModifierDef { name: "+2000 Max HP", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(2000)], ramp: None },
+    ModifierDef {
+        name: "+2000 Max HP",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::MaxHp(2000)],
+        ramp: None,
+    },
     // representative +50%-bounty item (Bounty Hunter above is the named source).
-    ModifierDef { name: "+50% Kill Bounty", rarity: 2, cost: 3000, effects: &[ModEffect::BountyPct(50, 100)], ramp: None },
+    ModifierDef {
+        name: "+50% Kill Bounty",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::BountyPct(50, 100)],
+        ramp: None,
+    },
     // Recharge (A0EX): "+4000 Mana Shield | +25% Mana Regeneration". RE-BUNDLED via
     // the new ManaRegenPct rider (+25% of the shield's per-tick regen, applied after
     // the flat pool). NOTE: kept this entry's existing pool (2000) per rule 5 rather
     // than the source's 4000 — flagged as a judgement call.
-    ModifierDef { name: "Recharge", rarity: 2, cost: 3000, effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ManaRegenPct(25, 100)], ramp: None },
+    ModifierDef {
+        name: "Recharge",
+        rarity: 2,
+        cost: 3000,
+        effects: &[
+            ModEffect::ManaShield(2000, 10),
+            ModEffect::ManaRegenPct(25, 100),
+        ],
+        ramp: None,
+    },
     // representative +20-income item (Entangled Gold Mine above is the bundled source).
-    ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(20)], ramp: None },
+    ModifierDef {
+        name: "+20 Gold Income",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::IncomeFlat(20)],
+        ramp: None,
+    },
     // Tower Armor (A02G): "+5 Armor".
-    ModifierDef { name: "Tower Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(5)], ramp: None },
+    ModifierDef {
+        name: "Tower Armor",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::Armor(5)],
+        ramp: None,
+    },
     // representative +attack-speed item (Rapidfire above is the named source).
-    ModifierDef { name: "+10% Attack Speed", rarity: 0, cost: 500, effects: &[ModEffect::AttackSpeedPct(10, 100)], ramp: None },
+    ModifierDef {
+        name: "+10% Attack Speed",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::AttackSpeedPct(10, 100)],
+        ramp: None,
+    },
     // Renew (A066): "+80 HP Regen | +25% HP Regen". RE-BUNDLED via the new HpRegenPct
     // rider (+25% of the per-tick regen, applied after the flat +80).
-    ModifierDef { name: "Renew", rarity: 1, cost: 1500, effects: &[ModEffect::HpRegen(80), ModEffect::HpRegenPct(25, 100)], ramp: None },
+    ModifierDef {
+        name: "Renew",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::HpRegen(80), ModEffect::HpRegenPct(25, 100)],
+        ramp: None,
+    },
     // Repair Crew (A00G): "+20 HP Regen".
-    ModifierDef { name: "Repair Crew", rarity: 0, cost: 500, effects: &[ModEffect::HpRegen(20)], ramp: None },
+    ModifierDef {
+        name: "Repair Crew",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::HpRegen(20)],
+        ramp: None,
+    },
     // Magic Coin (A01L): "+5 Gold Income".
-    ModifierDef { name: "Magic Coin", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(5)], ramp: None },
+    ModifierDef {
+        name: "Magic Coin",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::IncomeFlat(5)],
+        ramp: None,
+    },
     // Gold Mine (A02J): "+10 Gold Income | +10% Gold Income". RE-BUNDLED — the live
     // "+10 Gold Income" gains its +10% income-multiplier half from the source.
-    ModifierDef { name: "Gold Mine", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(10), ModEffect::IncomePct(10, 100)], ramp: None },
+    ModifierDef {
+        name: "Gold Mine",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::IncomeFlat(10), ModEffect::IncomePct(10, 100)],
+        ramp: None,
+    },
     // representative +100%-bounty item (Transmute above is the bundled named source).
-    ModifierDef { name: "+100% Kill Bounty", rarity: 2, cost: 3000, effects: &[ModEffect::BountyPct(100, 100)], ramp: None },
-    ModifierDef { name: "Improved Magic Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_MAGIC, 10, 100)], ramp: None },
+    ModifierDef {
+        name: "+100% Kill Bounty",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::BountyPct(100, 100)],
+        ramp: None,
+    },
+    ModifierDef {
+        name: "Improved Magic Attacks",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::DamageTypePct(DMG_MAGIC, 10, 100)],
+        ramp: None,
+    },
     // representative +40-regen item (Wisp/Rejuvenating Petal bundle a secondary);
     // kept as a plain slice.
-    ModifierDef { name: "+40 HP Regen", rarity: 0, cost: 500, effects: &[ModEffect::HpRegen(40)], ramp: None },
+    ModifierDef {
+        name: "+40 HP Regen",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::HpRegen(40)],
+        ramp: None,
+    },
     // Energy Shield (A0FD): "+10000 Mana Shield | +30% Damage Reduction while Mana
     // Shield is active". Both effects modeled: the huge shield pool plus the
     // conditional -30% DR that applies to ALL incoming damage while the shield holds.
-    ModifierDef { name: "Energy Shield", rarity: 3, cost: 5000, effects: &[ModEffect::ManaShield(10000, 50), ModEffect::ShieldActiveDrPct(30, 100)], ramp: None },
+    ModifierDef {
+        name: "Energy Shield",
+        rarity: 3,
+        cost: 5000,
+        effects: &[
+            ModEffect::ManaShield(10000, 50),
+            ModEffect::ShieldActiveDrPct(30, 100),
+        ],
+        ramp: None,
+    },
     // Evasion (A0CL): "+10% Dodge".
-    ModifierDef { name: "Evasion", rarity: 0, cost: 500, effects: &[ModEffect::Dodge(10)], ramp: None },
+    ModifierDef {
+        name: "Evasion",
+        rarity: 0,
+        cost: 500,
+        effects: &[ModEffect::Dodge(10)],
+        ramp: None,
+    },
     // representative ramping-bounty item (Golden Ring's "+1% Damage per 50% Bounty"
     // secondary is exotic; this models a plain bounty ramp). Kept as a slice.
-    ModifierDef { name: "Escalating Plunder (+100% Bounty, +15%/round)", rarity: 2, cost: 3000,
+    ModifierDef {
+        name: "Escalating Plunder (+100% Bounty, +15%/round)",
+        rarity: 2,
+        cost: 3000,
         effects: &[ModEffect::BountyPct(100, 100)],
-        ramp: Some(RampSpec { effect: ModEffect::BountyPct(15, 100), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::BountyPct(15, 100),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // representative ramping-Max-HP item (Magic Seeds "+1000 +5/sec" is the closest
     // source; this is a bigger epic slice). Kept.
-    ModifierDef { name: "Living Fortress (+2500 Max HP, +500/round)", rarity: 3, cost: 5000,
+    ModifierDef {
+        name: "Living Fortress (+2500 Max HP, +500/round)",
+        rarity: 3,
+        cost: 5000,
         effects: &[ModEffect::MaxHp(2500)],
-        ramp: Some(RampSpec { effect: ModEffect::MaxHp(500), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::MaxHp(500),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // Mana Shield (A0EQ): "+1000 Mana Shield".
-    ModifierDef { name: "Mana Shield", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(1000, 5)], ramp: None },
+    ModifierDef {
+        name: "Mana Shield",
+        rarity: 1,
+        cost: 1500,
+        effects: &[ModEffect::ManaShield(1000, 5)],
+        ramp: None,
+    },
     // representative ramping-regen item (no exact source; closest named regen items
     // are Renew / Repair Crew). Kept as a slice.
-    ModifierDef { name: "Mending Engine (+120 Regen, +30/round)", rarity: 1, cost: 1500,
+    ModifierDef {
+        name: "Mending Engine (+120 Regen, +30/round)",
+        rarity: 1,
+        cost: 1500,
         effects: &[ModEffect::HpRegen(120)],
-        ramp: Some(RampSpec { effect: ModEffect::HpRegen(30), interval_ticks: RAMP_PER_ROUND }) },
+        ramp: Some(RampSpec {
+            effect: ModEffect::HpRegen(30),
+            interval_ticks: RAMP_PER_ROUND,
+        }),
+    },
     // GEN-MODIFIERS-END
     // EXPANSION batch E1 — four NEW source upgrades with DYNAMIC damage scalers
     // (resolved live at fire time, never baked at purchase). The source map prices
@@ -830,24 +1370,50 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // Mastercrafted Masonry (A0CR): "+5000 Max HP | +1% Damage per 2000 Max HP
     // Gained". The damage half scales LIVE with the tank's current Max HP (so later
     // Max-HP buys retroactively boost it), via DamagePerMaxHp.
-    ModifierDef { name: "Mastercrafted Masonry", rarity: 2, cost: 3000,
-        effects: &[ModEffect::MaxHp(5000), ModEffect::DamagePerMaxHp(1, 100)], ramp: None },
+    ModifierDef {
+        name: "Mastercrafted Masonry",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::MaxHp(5000), ModEffect::DamagePerMaxHp(1, 100)],
+        ramp: None,
+    },
     // Golden Ring (A0H3): "+200% Kill Bounty | +1% Damage per 50% Kill Bounty". The
     // damage half scales LIVE with the bounty multiplier (above the 1.0 base), via
     // DamagePerBountyPct. rarity 3 / cost 5000 (a top-end bounty-snowball payoff).
-    ModifierDef { name: "Golden Ring", rarity: 3, cost: 5000,
-        effects: &[ModEffect::BountyPct(200, 100), ModEffect::DamagePerBountyPct(1, 100)], ramp: None },
+    ModifierDef {
+        name: "Golden Ring",
+        rarity: 3,
+        cost: 5000,
+        effects: &[
+            ModEffect::BountyPct(200, 100),
+            ModEffect::DamagePerBountyPct(1, 100),
+        ],
+        ramp: None,
+    },
     // Arcane Mark (A0F3): "+4000 Mana Shield | +20% Damage while Mana Shield is
     // active". The offensive mirror of Energy Shield's defensive +DR. Shield regen
     // 20/tick matches Energy Shield's pool→regen ratio (10000→50, i.e. 4000→20).
     // rarity 3 / cost 5000.
-    ModifierDef { name: "Arcane Mark", rarity: 3, cost: 5000,
-        effects: &[ModEffect::ManaShield(4000, 20), ModEffect::ShieldActiveDamagePct(20, 100)], ramp: None },
+    ModifierDef {
+        name: "Arcane Mark",
+        rarity: 3,
+        cost: 5000,
+        effects: &[
+            ModEffect::ManaShield(4000, 20),
+            ModEffect::ShieldActiveDamagePct(20, 100),
+        ],
+        ramp: None,
+    },
     // Maw of Death (A0EU): "+2000 Mana Shield | +15 Mana regenerated when an enemy
     // dies". The shield half uses Moonwell's 2000→10/tick regen ratio; the on-kill
     // half restores 15 to the shield per kill (cap-respecting). rarity 2 / cost 3000.
-    ModifierDef { name: "Maw of Death", rarity: 2, cost: 3000,
-        effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ManaOnKill(15)], ramp: None },
+    ModifierDef {
+        name: "Maw of Death",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ManaOnKill(15)],
+        ramp: None,
+    },
     // EXPANSION batch E2 — four MEDIUM-RISK exotic mechanics from the source map.
     // The source prices upgrades via a separate in-game gold system with no per-item
     // cost in the catalog, so cost/rarity follow the batch guidance (rarity 2-3 /
@@ -857,8 +1423,16 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // 1200 range when the Mana Shield de-activates." The shield half uses Moonwell's
     // 2000→10/tick regen ratio; the stun half fires on the shield's >0→0 down-edge
     // (range 1200 source units; 0.5 s = 15 ticks @ 30 Hz). rarity 2 / cost 3000.
-    ModifierDef { name: "Energy Pulse", rarity: 2, cost: 3000,
-        effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ShieldBreakStun(1200, 15)], ramp: None },
+    ModifierDef {
+        name: "Energy Pulse",
+        rarity: 2,
+        cost: 3000,
+        effects: &[
+            ModEffect::ManaShield(2000, 10),
+            ModEffect::ShieldBreakStun(1200, 15),
+        ],
+        ramp: None,
+    },
     // Poison Armor (A0DE/F/G): "+10 Armor | +40 Poison damage per second for 3 s to
     // an enemy when damaged." Modeled as flat armor + a Spikes-applied Poison DoT on
     // the reflected attacker (reuses the existing poison status). Source "40/s for
@@ -866,8 +1440,17 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // 90 ticks (≈60/s) so the DoT is integer-meaningful — flagged as a judgement
     // call. Pairs with a small flat Spikes so retaliation can land the poison.
     // rarity 1 / cost 1500.
-    ModifierDef { name: "Poison Armor", rarity: 1, cost: 1500,
-        effects: &[ModEffect::Armor(10), ModEffect::SpikesFlat(40), ModEffect::SpikesPoison(2, 90)], ramp: None },
+    ModifierDef {
+        name: "Poison Armor",
+        rarity: 1,
+        cost: 1500,
+        effects: &[
+            ModEffect::Armor(10),
+            ModEffect::SpikesFlat(40),
+            ModEffect::SpikesPoison(2, 90),
+        ],
+        ramp: None,
+    },
     // Bloody Spikes (A0KT): "+80 Spikes Damage | +10 Spikes damage per second to an
     // enemy when damaged, stacking; each stack adds +100% more." The source is a
     // per-second stacking DoT with no cap; here it is adapted to the per-HIT Spikes
@@ -876,16 +1459,26 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // `20 × stacks` (up to +500). Resets at the round boundary (matching the
     // Spiky/Growing-Spikes "resets when a new shop is made"). rarity 2 / cost 3000 —
     // flagged as a judgement call for the per-hit adaptation + cap/reset.
-    ModifierDef { name: "Bloody Spikes", rarity: 2, cost: 3000,
-        effects: &[ModEffect::SpikesFlat(80), ModEffect::StackingSpikes(20, 25)], ramp: None },
+    ModifierDef {
+        name: "Bloody Spikes",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::SpikesFlat(80), ModEffect::StackingSpikes(20, 25)],
+        ramp: None,
+    },
     // Blight Aura (A0CP/T/U): "+200 HP Regen | Deal 200 Poison damage to all enemies
     // in 600 range every 1 second." Modeled as a periodic AoE: every 30 ticks (1 s @
     // 30 Hz) deal 200 damage AND apply a Poison DoT (2/tick × 90 ticks, mirroring
     // Poison Armor's DoT) to every enemy within 600 source units, in stable id order.
     // The +200 HP Regen half is modeled too (Repair-Crew-style flat regen).
     // rarity 3 / cost 5000.
-    ModifierDef { name: "Blight Aura", rarity: 3, cost: 5000,
-        effects: &[ModEffect::HpRegen(200), ModEffect::DamageAura(600, 30, 200)], ramp: None },
+    ModifierDef {
+        name: "Blight Aura",
+        rarity: 3,
+        cost: 5000,
+        effects: &[ModEffect::HpRegen(200), ModEffect::DamageAura(600, 30, 200)],
+        ramp: None,
+    },
 ];
 
 /// The weapon the tank starts with (index into [`WEAPONS`]).
@@ -941,7 +1534,10 @@ pub static WEAPONS: &[WeaponDef] = &[
         // stacker that drives a single target to the 25-stack FREEZE payoff fast
         // (7/hit → freeze in ~4 hits). Floor is mediocre solo; ceiling is huge
         // once the freeze-at-25 lock lands or paired with Damage-to-Frozen.
-        on_hit: StatusOnHit { frost_stacks: 7, ..StatusOnHit::NONE },
+        on_hit: StatusOnHit {
+            frost_stacks: 7,
+            ..StatusOnHit::NONE
+        },
         ability: WeaponAbility::None,
     },
     // 3 — Poison Bow: light hit + a strong damage-over-time.
@@ -958,7 +1554,11 @@ pub static WEAPONS: &[WeaponDef] = &[
         // STEADY ANCHOR: cheap, reliable damage-over-time floor. Scales with
         // Poison-damage / Damage-to-Poisoned mods but has a low solo ceiling.
         // (poison_dps pinned at 20 — production combat tests assert it.)
-        on_hit: StatusOnHit { poison_dps: 20, poison_ticks: 90, ..StatusOnHit::NONE },
+        on_hit: StatusOnHit {
+            poison_dps: 20,
+            poison_ticks: 90,
+            ..StatusOnHit::NONE
+        },
         ability: WeaponAbility::None,
     },
     // 4 — Flamecaster: applies Fire stacks (vulnerability + explode on death).
@@ -976,7 +1576,10 @@ pub static WEAPONS: &[WeaponDef] = &[
         // stacks across a pack. With the explode-on-death payoff this chain-
         // detonates whole waves (massive ceiling); without setup it is a modest
         // short-range splasher (real but unspectacular floor).
-        on_hit: StatusOnHit { fire_stacks: 6, ..StatusOnHit::NONE },
+        on_hit: StatusOnHit {
+            fire_stacks: 6,
+            ..StatusOnHit::NONE
+        },
         ability: WeaponAbility::None,
     },
     // 5 — Storm Hammer: hard single hit that Stuns.
@@ -994,7 +1597,10 @@ pub static WEAPONS: &[WeaponDef] = &[
         // and single-target (poor at crowd control), so its floor is swingy vs
         // swarms; but it perma-locks elites and combos explosively with
         // Damage-to-Stunned for a very high ceiling.
-        on_hit: StatusOnHit { stun_ticks: 45, ..StatusOnHit::NONE },
+        on_hit: StatusOnHit {
+            stun_ticks: 45,
+            ..StatusOnHit::NONE
+        },
         ability: WeaponAbility::None,
     },
     // 6 — Ballista: a Barrage hitting several targets at once.
@@ -1023,7 +1629,10 @@ pub static WEAPONS: &[WeaponDef] = &[
         cooldown_ticks: 30,
         range: 300,
         proj_speed: 0,
-        on_hit: StatusOnHit { fire_stacks: 2, ..StatusOnHit::NONE },
+        on_hit: StatusOnHit {
+            fire_stacks: 2,
+            ..StatusOnHit::NONE
+        },
         ability: WeaponAbility::None,
     },
     // 8 — Shockwave Axe: an instant sweeping Wave.
@@ -1090,83 +1699,1205 @@ pub static WEAPONS: &[WeaponDef] = &[
     // a few are steadier anchors. Fire/Frost weapons are tuned HIGH-CEILING on the
     // assumption the explode-on-death / freeze-at-25 payoffs exist.
     // --- Single-target commons: the steady gold-efficiency floor (random-pick safe) ---
-    WeaponDef { name: "Magic Missile", rarity: 0, cost: 500, damage: 100, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 27, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Boulder", rarity: 0, cost: 500, damage: 110, damage_type: DMG_SIEGE, attack: Attack::SingleTarget, cooldown_ticks: 27, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Magic Bolt", rarity: 0, cost: 500, damage: 100, damage_type: DMG_MAGIC, attack: Attack::SingleTarget, cooldown_ticks: 27, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Chaos Orb", rarity: 0, cost: 500, damage: 95, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 27, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Throwing Axes", rarity: 0, cost: 500, damage: 55, damage_type: DMG_PIERCING, attack: Attack::Bounce(3), cooldown_ticks: 21, range: 300, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Chaos Skulls", rarity: 0, cost: 500, damage: 50, damage_type: DMG_CHAOS, attack: Attack::Bounce(3), cooldown_ticks: 21, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
+    WeaponDef {
+        name: "Magic Missile",
+        rarity: 0,
+        cost: 500,
+        damage: 100,
+        damage_type: DMG_NORMAL,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 27,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Boulder",
+        rarity: 0,
+        cost: 500,
+        damage: 110,
+        damage_type: DMG_SIEGE,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 27,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Magic Bolt",
+        rarity: 0,
+        cost: 500,
+        damage: 100,
+        damage_type: DMG_MAGIC,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 27,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Chaos Orb",
+        rarity: 0,
+        cost: 500,
+        damage: 95,
+        damage_type: DMG_CHAOS,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 27,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Throwing Axes",
+        rarity: 0,
+        cost: 500,
+        damage: 55,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Bounce(3),
+        cooldown_ticks: 21,
+        range: 300,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Chaos Skulls",
+        rarity: 0,
+        cost: 500,
+        damage: 50,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Bounce(3),
+        cooldown_ticks: 21,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
     // --- HIGH-CEILING RARES/EPICS: big payoff, real risk (slow / point-blank / setup) ---
-    WeaponDef { name: "Suckula", rarity: 2, cost: 3000, damage: 1100, damage_type: DMG_CHAOS, attack: Attack::Wave(300), cooldown_ticks: 75, range: 300, proj_speed: 0, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 40 } },  // exotic: Heal (base only); point-blank board-wipe, slow
-    WeaponDef { name: "Missile Barrage", rarity: 3, cost: 5000, damage: 1400, damage_type: DMG_PIERCING, attack: Attack::Barrage(8), cooldown_ticks: 75, range: 1200, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 90 }, ability: WeaponAbility::None },  // HIGH-CEILING: 8×1400 stun-volley, swingy on small boards
-    WeaponDef { name: "Seeker Axe", rarity: 0, cost: 500, damage: 60, damage_type: DMG_PIERCING, attack: Attack::Bounce(3), cooldown_ticks: 27, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Steam Cannon", rarity: 1, cost: 1500, damage: 320, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 30, range: 300, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 15 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Demon Eye", rarity: 2, cost: 3000, damage: 1050, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 10 } },  // exotic: reduce enemy (base only); high single-target ceiling
-    WeaponDef { name: "Impaler", rarity: 1, cost: 1500, damage: 240, damage_type: DMG_PIERCING, attack: Attack::SingleTarget, cooldown_ticks: 15, range: 600, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 22 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Chaos Swarm", rarity: 0, cost: 500, damage: 105, damage_type: DMG_CHAOS, attack: Attack::Splash(300), cooldown_ticks: 30, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Catapult", rarity: 1, cost: 1500, damage: 380, damage_type: DMG_SIEGE, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Slap", rarity: 3, cost: 5000, damage: 2600, damage_type: DMG_PIERCING, attack: Attack::SingleTarget, cooldown_ticks: 21, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Knockback { dist: 300 } },  // exotic: Knockback (base only); GLASS-CANNON nuke, single-target only
-    WeaponDef { name: "Crippler", rarity: 2, cost: 3000, damage: 1150, damage_type: DMG_PIERCING, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 8 } },  // exotic: permanent (base only)
-    WeaponDef { name: "Lifeleecher", rarity: 2, cost: 3000, damage: 850, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 40 } },  // exotic: Heal (base only)
-    WeaponDef { name: "Spell Glaive", rarity: 1, cost: 1500, damage: 260, damage_type: DMG_MAGIC, attack: Attack::Bounce(4), cooldown_ticks: 36, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Glaive Thrower", rarity: 0, cost: 500, damage: 70, damage_type: DMG_NORMAL, attack: Attack::Bounce(3), cooldown_ticks: 27, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Spikewheel Launcher", rarity: 1, cost: 1500, damage: 230, damage_type: DMG_SIEGE, attack: Attack::Bounce(6), cooldown_ticks: 42, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Meatapult", rarity: 2, cost: 3000, damage: 820, damage_type: DMG_NORMAL, attack: Attack::Splash(300), cooldown_ticks: 45, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 60 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Arcane Blaster", rarity: 1, cost: 1500, damage: 360, damage_type: DMG_MAGIC, attack: Attack::SingleTarget, cooldown_ticks: 30, range: 600, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 45 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Quills", rarity: 1, cost: 1500, damage: 230, damage_type: DMG_PIERCING, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 8, poison_ticks: 90, frost_stacks: 0, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Living Spittle", rarity: 1, cost: 1500, damage: 230, damage_type: DMG_MAGIC, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 8, poison_ticks: 90, frost_stacks: 0, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Poison Bomb", rarity: 1, cost: 1500, damage: 320, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 36, range: 1200, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 8, poison_ticks: 90, frost_stacks: 0, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Serpent", rarity: 2, cost: 3000, damage: 700, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 600, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 22, poison_ticks: 90, frost_stacks: 0, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },  // poison-stacking ceiling
-    WeaponDef { name: "Overloaded Catapult", rarity: 2, cost: 3000, damage: 780, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 36, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Chaos Claw", rarity: 1, cost: 1500, damage: 320, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 45 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Net Thrower", rarity: 1, cost: 1500, damage: 230, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 15, range: 1200, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 22 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Thornburst", rarity: 0, cost: 500, damage: 60, damage_type: DMG_PIERCING, attack: Attack::Area(400), cooldown_ticks: 45, range: 400, proj_speed: 0, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Chaotic Spirit", rarity: 3, cost: 5000, damage: 1600, damage_type: DMG_MAGIC, attack: Attack::Bounce(8), cooldown_ticks: 75, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },  // HIGH-CEILING: 8× chain, slow
-    WeaponDef { name: "Energy Pulse", rarity: 2, cost: 3000, damage: 900, damage_type: DMG_MAGIC, attack: Attack::Wave(300), cooldown_ticks: 75, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 60 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Cluster Rockets", rarity: 2, cost: 3000, damage: 520, damage_type: DMG_CHAOS, attack: Attack::Barrage(12), cooldown_ticks: 75, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },  // HIGH-CEILING: 12-projectile saturation, swingy on thin boards
-    WeaponDef { name: "Frost Bomb", rarity: 2, cost: 3000, damage: 360, damage_type: DMG_PIERCING, attack: Attack::Splash(150), cooldown_ticks: 18, range: 600, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 3, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Bouncy Cannonball", rarity: 2, cost: 3000, damage: 620, damage_type: DMG_NORMAL, attack: Attack::Bounce(4), cooldown_ticks: 45, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 90 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Soulstealer", rarity: 3, cost: 5000, damage: 2400, damage_type: DMG_NORMAL, attack: Attack::Bounce(4), cooldown_ticks: 36, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 200 } },  // exotic: Heal (base only); APEX EPIC, high ceiling
-    WeaponDef { name: "Splasher", rarity: 0, cost: 500, damage: 65, damage_type: DMG_NORMAL, attack: Attack::Splash(300), cooldown_ticks: 15, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Fire Bow", rarity: 1, cost: 1500, damage: 190, damage_type: DMG_PIERCING, attack: Attack::Barrage(4), cooldown_ticks: 30, range: 600, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 4, stun_ticks: 0 }, ability: WeaponAbility::None },  // fire enabler, ramps with explode payoff
-    WeaponDef { name: "Chaos Web", rarity: 1, cost: 1500, damage: 180, damage_type: DMG_CHAOS, attack: Attack::Bounce(6), cooldown_ticks: 36, range: 600, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 6, poison_ticks: 90, frost_stacks: 0, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Magic Claw", rarity: 1, cost: 1500, damage: 240, damage_type: DMG_MAGIC, attack: Attack::Bounce(4), cooldown_ticks: 30, range: 300, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::ManaDrain { per_hit: 20 } },  // exotic: Mana (base only)
-    WeaponDef { name: "Liquid Fire Hurler", rarity: 1, cost: 1500, damage: 210, damage_type: DMG_SIEGE, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 4, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 3 } },  // exotic: damage taken (base only); fast fire stacker
-    WeaponDef { name: "Boulder Toss", rarity: 2, cost: 3000, damage: 980, damage_type: DMG_NORMAL, attack: Attack::Splash(300), cooldown_ticks: 45, range: 300, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: reduce enemy (base only)
-    WeaponDef { name: "Bloody Spikes", rarity: 3, cost: 5000, damage: 2200, damage_type: DMG_NORMAL, attack: Attack::Wave(300), cooldown_ticks: 36, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 30 }, ability: WeaponAbility::None },  // HIGH-CEILING wave nuke, point-blank
-    WeaponDef { name: "Shroom Doom", rarity: 3, cost: 5000, damage: 3200, damage_type: DMG_CHAOS, attack: Attack::Area(300), cooldown_ticks: 90, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 60, stun_ticks: 60 }, ability: WeaponAbility::Summon { kind: 1, hp: 1500, damage: 600 } },  // BOOM-OR-BUST: huge nuke + 60 fire, very slow cd; wiping a pack RAISES a host of Spores
-    WeaponDef { name: "Flame Generator", rarity: 3, cost: 5000, damage: 1700, damage_type: DMG_MAGIC, attack: Attack::Area(300), cooldown_ticks: 60, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 200, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 4 } },  // exotic: damage taken (base only); FIRE PAYOFF ENGINE: drenches packs in 200 fire each pulse → explode-chain ceiling is enormous
-    WeaponDef { name: "Firebreather", rarity: 1, cost: 1500, damage: 180, damage_type: DMG_PIERCING, attack: Attack::Splash(150), cooldown_ticks: 15, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 5, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only); rapid fire stacker
-    WeaponDef { name: "Lavaspitter", rarity: 3, cost: 5000, damage: 1800, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 150, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only); long-range fire payoff
-    WeaponDef { name: "Frostbolt", rarity: 1, cost: 1500, damage: 170, damage_type: DMG_PIERCING, attack: Attack::SingleTarget, cooldown_ticks: 15, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 5, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },  // frost enabler toward freeze-at-25
-    WeaponDef { name: "Living Ice", rarity: 1, cost: 1500, damage: 300, damage_type: DMG_MAGIC, attack: Attack::Splash(150), cooldown_ticks: 30, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 2, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Ice Generator", rarity: 3, cost: 5000, damage: 1000, damage_type: DMG_MAGIC, attack: Attack::Area(375), cooldown_ticks: 45, range: 900, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 5, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },  // FROST PAYOFF ENGINE: AoE 5-stacks → mass-freeze ceiling
-    WeaponDef { name: "Ice Spears", rarity: 2, cost: 3000, damage: 440, damage_type: DMG_NORMAL, attack: Attack::Barrage(4), cooldown_ticks: 36, range: 600, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 5, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Knives", rarity: 0, cost: 500, damage: 80, damage_type: DMG_PIERCING, attack: Attack::Barrage(3), cooldown_ticks: 18, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Blaster", rarity: 1, cost: 1500, damage: 210, damage_type: DMG_SIEGE, attack: Attack::SingleTarget, cooldown_ticks: 15, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only)
-    WeaponDef { name: "Bandit Sniper", rarity: 1, cost: 1500, damage: 240, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 18, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 5 } },  // exotic: damage taken (base only)
-    WeaponDef { name: "Bombs", rarity: 1, cost: 1500, damage: 300, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 30, range: 300, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 15 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Sting", rarity: 1, cost: 1500, damage: 300, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 24, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 10 } },  // exotic: damage taken (base only)
-    WeaponDef { name: "Chaos Skull Bomb", rarity: 2, cost: 3000, damage: 720, damage_type: DMG_CHAOS, attack: Attack::Splash(300), cooldown_ticks: 45, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 45 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Icebreather", rarity: 2, cost: 3000, damage: 760, damage_type: DMG_SIEGE, attack: Attack::Splash(300), cooldown_ticks: 45, range: 900, proj_speed: 45, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 2, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 4 } },  // exotic: explode (base only)
-    WeaponDef { name: "Frostwave", rarity: 2, cost: 3000, damage: 720, damage_type: DMG_MAGIC, attack: Attack::Wave(150), cooldown_ticks: 45, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 3, fire_stacks: 0, stun_ticks: 0 }, ability: WeaponAbility::None },
-    WeaponDef { name: "Flamewave", rarity: 1, cost: 1500, damage: 360, damage_type: DMG_NORMAL, attack: Attack::Wave(200), cooldown_ticks: 45, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 20, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 6 } },  // exotic: damage taken (base only)
-    WeaponDef { name: "Chaotic Spirit Bolt", rarity: 1, cost: 1500, damage: 190, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 600, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 40 } },  // exotic: Heal (base only); fast cheap floor
-    WeaponDef { name: "Manabolt", rarity: 1, cost: 1500, damage: 320, damage_type: DMG_MAGIC, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::ManaDrain { per_hit: 80 } },  // exotic: drain (base only); fast long-range
-    WeaponDef { name: "Squirm", rarity: 3, cost: 5000, damage: 1300, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 18, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Summon { kind: 0, hp: 500, damage: 250 } },  // steady high-rarity anchor; every kill RAISES a Larva
-    WeaponDef { name: "Immolation Aura", rarity: 0, cost: 500, damage: 75, damage_type: DMG_MAGIC, attack: Attack::Wave(150), cooldown_ticks: 12, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 2, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 3 } },  // exotic: damage taken (base only); cheap point-blank pulse
-    WeaponDef { name: "Boom Bloom", rarity: 3, cost: 5000, damage: 2600, damage_type: DMG_SIEGE, attack: Attack::Wave(200), cooldown_ticks: 45, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 90 }, ability: WeaponAbility::Hazard { dmg: 1000, radius: 200, ticks: 90 } },  // exotic: mine field (base only); point-blank stun-wave nuke
-    WeaponDef { name: "Quill Burst", rarity: 1, cost: 1500, damage: 340, damage_type: DMG_PIERCING, attack: Attack::Splash(300), cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 10 } },  // exotic: damage taken (base only)
-    WeaponDef { name: "Arcane Burst", rarity: 1, cost: 1500, damage: 360, damage_type: DMG_MAGIC, attack: Attack::Splash(300), cooldown_ticks: 45, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::VulnOnHit { stacks: 10 } },  // exotic: damage taken (base only)
-    WeaponDef { name: "Meteor Barrage", rarity: 3, cost: 5000, damage: 3400, damage_type: DMG_SIEGE, attack: Attack::Barrage(8), cooldown_ticks: 120, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },  // BOOM-OR-BUST: 8×3400 meteor volley on a very long cooldown — feast (whole-screen wipe) or famine (caught reloading)
-    WeaponDef { name: "Ale Launcher", rarity: 1, cost: 1500, damage: 230, damage_type: DMG_SIEGE, attack: Attack::Splash(200), cooldown_ticks: 15, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::LifeDrain { per_hit: 4 } },  // exotic: Heal (base only)
-    WeaponDef { name: "Chaos Bolt", rarity: 1, cost: 1500, damage: 290, damage_type: DMG_CHAOS, attack: Attack::SingleTarget, cooldown_ticks: 10, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },
-    WeaponDef { name: "Rotating Orb of Lightning", rarity: 2, cost: 3000, damage: 360, damage_type: DMG_MAGIC, attack: Attack::Area(600), cooldown_ticks: 30, range: 600, proj_speed: 0, on_hit: StatusOnHit::NONE, ability: WeaponAbility::None },  // wide always-on aura, steady rare anchor
-    WeaponDef { name: "Lightning Generator", rarity: 2, cost: 3000, damage: 780, damage_type: DMG_MAGIC, attack: Attack::SingleTarget, cooldown_ticks: 30, range: 1200, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::ManaDrain { per_hit: 20 } },  // exotic: Mana (base only)
-    WeaponDef { name: "Flame Nova", rarity: 1, cost: 1500, damage: 220, damage_type: DMG_CHAOS, attack: Attack::Area(300), cooldown_ticks: 36, range: 300, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 20, stun_ticks: 0 }, ability: WeaponAbility::VulnOnHit { stacks: 6 } },  // exotic: damage taken (base only); fire-payoff AoE
-    WeaponDef { name: "Shocker", rarity: 1, cost: 1500, damage: 130, damage_type: DMG_SIEGE, attack: Attack::Area(300), cooldown_ticks: 18, range: 600, proj_speed: 0, on_hit: StatusOnHit { poison_dps: 0, poison_ticks: 0, frost_stacks: 0, fire_stacks: 0, stun_ticks: 60 }, ability: WeaponAbility::None },  // fast perma-stun aura
-    WeaponDef { name: "Tangle", rarity: 3, cost: 5000, damage: 1300, damage_type: DMG_NORMAL, attack: Attack::SingleTarget, cooldown_ticks: 12, range: 900, proj_speed: 45, on_hit: StatusOnHit::NONE, ability: WeaponAbility::Root { ticks: 30 } },  // exotic: Root (base only); fast steady epic anchor
-    // GEN-WEAPONS-END
+    WeaponDef {
+        name: "Suckula",
+        rarity: 2,
+        cost: 3000,
+        damage: 1100,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Wave(300),
+        cooldown_ticks: 75,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::LifeDrain { per_hit: 40 },
+    }, // exotic: Heal (base only); point-blank board-wipe, slow
+    WeaponDef {
+        name: "Missile Barrage",
+        rarity: 3,
+        cost: 5000,
+        damage: 1400,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Barrage(8),
+        cooldown_ticks: 75,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 90,
+        },
+        ability: WeaponAbility::None,
+    }, // HIGH-CEILING: 8×1400 stun-volley, swingy on small boards
+    WeaponDef {
+        name: "Seeker Axe",
+        rarity: 0,
+        cost: 500,
+        damage: 60,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Bounce(3),
+        cooldown_ticks: 27,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Steam Cannon",
+        rarity: 1,
+        cost: 1500,
+        damage: 320,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 30,
+        range: 300,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 15,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Demon Eye",
+        rarity: 2,
+        cost: 3000,
+        damage: 1050,
+        damage_type: DMG_CHAOS,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 24,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::VulnOnHit { stacks: 10 },
+    }, // exotic: reduce enemy (base only); high single-target ceiling
+    WeaponDef {
+        name: "Impaler",
+        rarity: 1,
+        cost: 1500,
+        damage: 240,
+        damage_type: DMG_PIERCING,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 15,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 22,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Chaos Swarm",
+        rarity: 0,
+        cost: 500,
+        damage: 105,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 30,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Catapult",
+        rarity: 1,
+        cost: 1500,
+        damage: 380,
+        damage_type: DMG_SIEGE,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 24,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Slap",
+        rarity: 3,
+        cost: 5000,
+        damage: 2600,
+        damage_type: DMG_PIERCING,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 21,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::Knockback { dist: 300 },
+    }, // exotic: Knockback (base only); GLASS-CANNON nuke, single-target only
+    WeaponDef {
+        name: "Crippler",
+        rarity: 2,
+        cost: 3000,
+        damage: 1150,
+        damage_type: DMG_PIERCING,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 24,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::VulnOnHit { stacks: 8 },
+    }, // exotic: permanent (base only)
+    WeaponDef {
+        name: "Lifeleecher",
+        rarity: 2,
+        cost: 3000,
+        damage: 850,
+        damage_type: DMG_NORMAL,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 45,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::LifeDrain { per_hit: 40 },
+    }, // exotic: Heal (base only)
+    WeaponDef {
+        name: "Spell Glaive",
+        rarity: 1,
+        cost: 1500,
+        damage: 260,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Bounce(4),
+        cooldown_ticks: 36,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Glaive Thrower",
+        rarity: 0,
+        cost: 500,
+        damage: 70,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Bounce(3),
+        cooldown_ticks: 27,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Spikewheel Launcher",
+        rarity: 1,
+        cost: 1500,
+        damage: 230,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Bounce(6),
+        cooldown_ticks: 42,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Meatapult",
+        rarity: 2,
+        cost: 3000,
+        damage: 820,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 45,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 60,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Arcane Blaster",
+        rarity: 1,
+        cost: 1500,
+        damage: 360,
+        damage_type: DMG_MAGIC,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 30,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 45,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Quills",
+        rarity: 1,
+        cost: 1500,
+        damage: 230,
+        damage_type: DMG_PIERCING,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 24,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 8,
+            poison_ticks: 90,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Living Spittle",
+        rarity: 1,
+        cost: 1500,
+        damage: 230,
+        damage_type: DMG_MAGIC,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 24,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 8,
+            poison_ticks: 90,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Poison Bomb",
+        rarity: 1,
+        cost: 1500,
+        damage: 320,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 36,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 8,
+            poison_ticks: 90,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Serpent",
+        rarity: 2,
+        cost: 3000,
+        damage: 700,
+        damage_type: DMG_NORMAL,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 24,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 22,
+            poison_ticks: 90,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    }, // poison-stacking ceiling
+    WeaponDef {
+        name: "Overloaded Catapult",
+        rarity: 2,
+        cost: 3000,
+        damage: 780,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 36,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Chaos Claw",
+        rarity: 1,
+        cost: 1500,
+        damage: 320,
+        damage_type: DMG_CHAOS,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 24,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 45,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Net Thrower",
+        rarity: 1,
+        cost: 1500,
+        damage: 230,
+        damage_type: DMG_NORMAL,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 15,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 22,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Thornburst",
+        rarity: 0,
+        cost: 500,
+        damage: 60,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Area(400),
+        cooldown_ticks: 45,
+        range: 400,
+        proj_speed: 0,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Chaotic Spirit",
+        rarity: 3,
+        cost: 5000,
+        damage: 1600,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Bounce(8),
+        cooldown_ticks: 75,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    }, // HIGH-CEILING: 8× chain, slow
+    WeaponDef {
+        name: "Energy Pulse",
+        rarity: 2,
+        cost: 3000,
+        damage: 900,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Wave(300),
+        cooldown_ticks: 75,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 60,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Cluster Rockets",
+        rarity: 2,
+        cost: 3000,
+        damage: 520,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Barrage(12),
+        cooldown_ticks: 75,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    }, // HIGH-CEILING: 12-projectile saturation, swingy on thin boards
+    WeaponDef {
+        name: "Frost Bomb",
+        rarity: 2,
+        cost: 3000,
+        damage: 360,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Splash(150),
+        cooldown_ticks: 18,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 3,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Bouncy Cannonball",
+        rarity: 2,
+        cost: 3000,
+        damage: 620,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Bounce(4),
+        cooldown_ticks: 45,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 90,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Soulstealer",
+        rarity: 3,
+        cost: 5000,
+        damage: 2400,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Bounce(4),
+        cooldown_ticks: 36,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::LifeDrain { per_hit: 200 },
+    }, // exotic: Heal (base only); APEX EPIC, high ceiling
+    WeaponDef {
+        name: "Splasher",
+        rarity: 0,
+        cost: 500,
+        damage: 65,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 15,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Fire Bow",
+        rarity: 1,
+        cost: 1500,
+        damage: 190,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Barrage(4),
+        cooldown_ticks: 30,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 4,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    }, // fire enabler, ramps with explode payoff
+    WeaponDef {
+        name: "Chaos Web",
+        rarity: 1,
+        cost: 1500,
+        damage: 180,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Bounce(6),
+        cooldown_ticks: 36,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 6,
+            poison_ticks: 90,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Magic Claw",
+        rarity: 1,
+        cost: 1500,
+        damage: 240,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Bounce(4),
+        cooldown_ticks: 30,
+        range: 300,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::ManaDrain { per_hit: 20 },
+    }, // exotic: Mana (base only)
+    WeaponDef {
+        name: "Liquid Fire Hurler",
+        rarity: 1,
+        cost: 1500,
+        damage: 210,
+        damage_type: DMG_SIEGE,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 10,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 4,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::VulnOnHit { stacks: 3 },
+    }, // exotic: damage taken (base only); fast fire stacker
+    WeaponDef {
+        name: "Boulder Toss",
+        rarity: 2,
+        cost: 3000,
+        damage: 980,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 45,
+        range: 300,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::VulnOnHit { stacks: 5 },
+    }, // exotic: reduce enemy (base only)
+    WeaponDef {
+        name: "Bloody Spikes",
+        rarity: 3,
+        cost: 5000,
+        damage: 2200,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Wave(300),
+        cooldown_ticks: 36,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 30,
+        },
+        ability: WeaponAbility::None,
+    }, // HIGH-CEILING wave nuke, point-blank
+    WeaponDef {
+        name: "Shroom Doom",
+        rarity: 3,
+        cost: 5000,
+        damage: 3200,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Area(300),
+        cooldown_ticks: 90,
+        range: 600,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 60,
+            stun_ticks: 60,
+        },
+        ability: WeaponAbility::Summon {
+            kind: 1,
+            hp: 1500,
+            damage: 600,
+        },
+    }, // BOOM-OR-BUST: huge nuke + 60 fire, very slow cd; wiping a pack RAISES a host of Spores
+    WeaponDef {
+        name: "Flame Generator",
+        rarity: 3,
+        cost: 5000,
+        damage: 1700,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Area(300),
+        cooldown_ticks: 60,
+        range: 600,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 200,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::VulnOnHit { stacks: 4 },
+    }, // exotic: damage taken (base only); FIRE PAYOFF ENGINE: drenches packs in 200 fire each pulse → explode-chain ceiling is enormous
+    WeaponDef {
+        name: "Firebreather",
+        rarity: 1,
+        cost: 1500,
+        damage: 180,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Splash(150),
+        cooldown_ticks: 15,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 5,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::VulnOnHit { stacks: 5 },
+    }, // exotic: damage taken (base only); rapid fire stacker
+    WeaponDef {
+        name: "Lavaspitter",
+        rarity: 3,
+        cost: 5000,
+        damage: 1800,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 45,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 150,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::VulnOnHit { stacks: 5 },
+    }, // exotic: damage taken (base only); long-range fire payoff
+    WeaponDef {
+        name: "Frostbolt",
+        rarity: 1,
+        cost: 1500,
+        damage: 170,
+        damage_type: DMG_PIERCING,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 15,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 5,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    }, // frost enabler toward freeze-at-25
+    WeaponDef {
+        name: "Living Ice",
+        rarity: 1,
+        cost: 1500,
+        damage: 300,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Splash(150),
+        cooldown_ticks: 30,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 2,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Ice Generator",
+        rarity: 3,
+        cost: 5000,
+        damage: 1000,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Area(375),
+        cooldown_ticks: 45,
+        range: 900,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 5,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    }, // FROST PAYOFF ENGINE: AoE 5-stacks → mass-freeze ceiling
+    WeaponDef {
+        name: "Ice Spears",
+        rarity: 2,
+        cost: 3000,
+        damage: 440,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Barrage(4),
+        cooldown_ticks: 36,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 5,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Knives",
+        rarity: 0,
+        cost: 500,
+        damage: 80,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Barrage(3),
+        cooldown_ticks: 18,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Blaster",
+        rarity: 1,
+        cost: 1500,
+        damage: 210,
+        damage_type: DMG_SIEGE,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 15,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::VulnOnHit { stacks: 5 },
+    }, // exotic: damage taken (base only)
+    WeaponDef {
+        name: "Bandit Sniper",
+        rarity: 1,
+        cost: 1500,
+        damage: 240,
+        damage_type: DMG_NORMAL,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 18,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::VulnOnHit { stacks: 5 },
+    }, // exotic: damage taken (base only)
+    WeaponDef {
+        name: "Bombs",
+        rarity: 1,
+        cost: 1500,
+        damage: 300,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 30,
+        range: 300,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 15,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Sting",
+        rarity: 1,
+        cost: 1500,
+        damage: 300,
+        damage_type: DMG_CHAOS,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 24,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::VulnOnHit { stacks: 10 },
+    }, // exotic: damage taken (base only)
+    WeaponDef {
+        name: "Chaos Skull Bomb",
+        rarity: 2,
+        cost: 3000,
+        damage: 720,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 45,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 45,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Icebreather",
+        rarity: 2,
+        cost: 3000,
+        damage: 760,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 45,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 2,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::VulnOnHit { stacks: 4 },
+    }, // exotic: explode (base only)
+    WeaponDef {
+        name: "Frostwave",
+        rarity: 2,
+        cost: 3000,
+        damage: 720,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Wave(150),
+        cooldown_ticks: 45,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 3,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Flamewave",
+        rarity: 1,
+        cost: 1500,
+        damage: 360,
+        damage_type: DMG_NORMAL,
+        attack: Attack::Wave(200),
+        cooldown_ticks: 45,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 20,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::VulnOnHit { stacks: 6 },
+    }, // exotic: damage taken (base only)
+    WeaponDef {
+        name: "Chaotic Spirit Bolt",
+        rarity: 1,
+        cost: 1500,
+        damage: 190,
+        damage_type: DMG_CHAOS,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 10,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::LifeDrain { per_hit: 40 },
+    }, // exotic: Heal (base only); fast cheap floor
+    WeaponDef {
+        name: "Manabolt",
+        rarity: 1,
+        cost: 1500,
+        damage: 320,
+        damage_type: DMG_MAGIC,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 10,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::ManaDrain { per_hit: 80 },
+    }, // exotic: drain (base only); fast long-range
+    WeaponDef {
+        name: "Squirm",
+        rarity: 3,
+        cost: 5000,
+        damage: 1300,
+        damage_type: DMG_CHAOS,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 18,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::Summon {
+            kind: 0,
+            hp: 500,
+            damage: 250,
+        },
+    }, // steady high-rarity anchor; every kill RAISES a Larva
+    WeaponDef {
+        name: "Immolation Aura",
+        rarity: 0,
+        cost: 500,
+        damage: 75,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Wave(150),
+        cooldown_ticks: 12,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 2,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::VulnOnHit { stacks: 3 },
+    }, // exotic: damage taken (base only); cheap point-blank pulse
+    WeaponDef {
+        name: "Boom Bloom",
+        rarity: 3,
+        cost: 5000,
+        damage: 2600,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Wave(200),
+        cooldown_ticks: 45,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 90,
+        },
+        ability: WeaponAbility::Hazard {
+            dmg: 1000,
+            radius: 200,
+            ticks: 90,
+        },
+    }, // exotic: mine field (base only); point-blank stun-wave nuke
+    WeaponDef {
+        name: "Quill Burst",
+        rarity: 1,
+        cost: 1500,
+        damage: 340,
+        damage_type: DMG_PIERCING,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 45,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::VulnOnHit { stacks: 10 },
+    }, // exotic: damage taken (base only)
+    WeaponDef {
+        name: "Arcane Burst",
+        rarity: 1,
+        cost: 1500,
+        damage: 360,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Splash(300),
+        cooldown_ticks: 45,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::VulnOnHit { stacks: 10 },
+    }, // exotic: damage taken (base only)
+    WeaponDef {
+        name: "Meteor Barrage",
+        rarity: 3,
+        cost: 5000,
+        damage: 3400,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Barrage(8),
+        cooldown_ticks: 120,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    }, // BOOM-OR-BUST: 8×3400 meteor volley on a very long cooldown — feast (whole-screen wipe) or famine (caught reloading)
+    WeaponDef {
+        name: "Ale Launcher",
+        rarity: 1,
+        cost: 1500,
+        damage: 230,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Splash(200),
+        cooldown_ticks: 15,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::LifeDrain { per_hit: 4 },
+    }, // exotic: Heal (base only)
+    WeaponDef {
+        name: "Chaos Bolt",
+        rarity: 1,
+        cost: 1500,
+        damage: 290,
+        damage_type: DMG_CHAOS,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 10,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    },
+    WeaponDef {
+        name: "Rotating Orb of Lightning",
+        rarity: 2,
+        cost: 3000,
+        damage: 360,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Area(600),
+        cooldown_ticks: 30,
+        range: 600,
+        proj_speed: 0,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    }, // wide always-on aura, steady rare anchor
+    WeaponDef {
+        name: "Lightning Generator",
+        rarity: 2,
+        cost: 3000,
+        damage: 780,
+        damage_type: DMG_MAGIC,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 30,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::ManaDrain { per_hit: 20 },
+    }, // exotic: Mana (base only)
+    WeaponDef {
+        name: "Flame Nova",
+        rarity: 1,
+        cost: 1500,
+        damage: 220,
+        damage_type: DMG_CHAOS,
+        attack: Attack::Area(300),
+        cooldown_ticks: 36,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 20,
+            stun_ticks: 0,
+        },
+        ability: WeaponAbility::VulnOnHit { stacks: 6 },
+    }, // exotic: damage taken (base only); fire-payoff AoE
+    WeaponDef {
+        name: "Shocker",
+        rarity: 1,
+        cost: 1500,
+        damage: 130,
+        damage_type: DMG_SIEGE,
+        attack: Attack::Area(300),
+        cooldown_ticks: 18,
+        range: 600,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 0,
+            fire_stacks: 0,
+            stun_ticks: 60,
+        },
+        ability: WeaponAbility::None,
+    }, // fast perma-stun aura
+    WeaponDef {
+        name: "Tangle",
+        rarity: 3,
+        cost: 5000,
+        damage: 1300,
+        damage_type: DMG_NORMAL,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 12,
+        range: 900,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::Root { ticks: 30 },
+    }, // exotic: Root (base only); fast steady epic anchor
+       // GEN-WEAPONS-END
 ];
 
 /// Enemy catalog. Indices 0/1/2 are STABLE (render maps sprites by index, the
@@ -1278,7 +3009,12 @@ pub static ENEMIES: &[EnemyDef] = &[
         bounty: 30,
         armor_class: ARMOR_LIGHT,
         archetype: Archetype::Caster,
-        ability: EnemyAbility::RangedAttack { range: 900, cooldown_ticks: 45, damage: 250, damage_type: DMG_MAGIC },
+        ability: EnemyAbility::RangedAttack {
+            range: 900,
+            cooldown_ticks: 45,
+            damage: 250,
+            damage_type: DMG_MAGIC,
+        },
         boss: false,
     },
     // 8 — Croak: ranged spitter; light, frequent piercing spit.
@@ -1290,7 +3026,12 @@ pub static ENEMIES: &[EnemyDef] = &[
         bounty: 22,
         armor_class: ARMOR_LIGHT,
         archetype: Archetype::Ranged,
-        ability: EnemyAbility::RangedAttack { range: 700, cooldown_ticks: 30, damage: 180, damage_type: DMG_PIERCING },
+        ability: EnemyAbility::RangedAttack {
+            range: 700,
+            cooldown_ticks: 30,
+            damage: 180,
+            damage_type: DMG_PIERCING,
+        },
         boss: false,
     },
     // 9 — Spicy: ranged breather; harder-hitting chaos breath at standoff.
@@ -1302,7 +3043,12 @@ pub static ENEMIES: &[EnemyDef] = &[
         bounty: 34,
         armor_class: ARMOR_LIGHT,
         archetype: Archetype::Ranged,
-        ability: EnemyAbility::RangedAttack { range: 600, cooldown_ticks: 36, damage: 420, damage_type: DMG_CHAOS },
+        ability: EnemyAbility::RangedAttack {
+            range: 600,
+            cooldown_ticks: 36,
+            damage: 420,
+            damage_type: DMG_CHAOS,
+        },
         boss: false,
     },
     // 10 — Popsicle: slow, durable ranged breather with siege breath.
@@ -1314,7 +3060,12 @@ pub static ENEMIES: &[EnemyDef] = &[
         bounty: 40,
         armor_class: ARMOR_MEDIUM,
         archetype: Archetype::Ranged,
-        ability: EnemyAbility::RangedAttack { range: 650, cooldown_ticks: 48, damage: 500, damage_type: DMG_SIEGE },
+        ability: EnemyAbility::RangedAttack {
+            range: 650,
+            cooldown_ticks: 48,
+            damage: 500,
+            damage_type: DMG_SIEGE,
+        },
         boss: false,
     },
     // 11 — Dodo: inert practice target — never moves, no contact, easy bounty.
@@ -1374,6 +3125,7 @@ pub const WARN_TICKS: u32 = RAMP_INTERVAL - GENTLE_TICKS; // 900 — final 30 s
 ///   1. GENTLE climb  `b → b·G`           over the first `GENTLE_TICKS`,
 ///   2. WARNING ramp  `b·G → b·G·W`       over the final `WARN_TICKS` (steeper),
 ///   3. STEP UP       `b·G·W → b·G·W·J`   instantaneously AT the 3-min boundary.
+///
 /// So each interval multiplies difficulty by `G·W·J`, and over 10 intervals that
 /// compounds to the boss endpoint `base(10)` (the boss tick rides the same value).
 ///
@@ -1471,10 +3223,26 @@ const MIN: u32 = 60 * 30;
 /// cycling (every Clear also chips the Clear-only boss). Tuned so the boss phase is
 /// the wall MOST runs end at — survivable only by a genuinely prepared snowball.
 pub static BOSS_ESCORT: &[WaveSpawn] = &[
-    WaveSpawn { enemy: 0, cadence_ticks: 4, start_tick: BOSS_SPAWN_TICK },  // Squeakzilla — dense floor (was 5)
-    WaveSpawn { enemy: 4, cadence_ticks: 12, start_tick: BOSS_SPAWN_TICK }, // Bacon — fast pressure (was 18)
-    WaveSpawn { enemy: 5, cadence_ticks: 15, start_tick: BOSS_SPAWN_TICK }, // Honk — very fast (was 22)
-    WaveSpawn { enemy: 1, cadence_ticks: 45, start_tick: BOSS_SPAWN_TICK }, // Fanged Death — periodic bruiser (was 60)
+    WaveSpawn {
+        enemy: 0,
+        cadence_ticks: 4,
+        start_tick: BOSS_SPAWN_TICK,
+    }, // Squeakzilla — dense floor (was 5)
+    WaveSpawn {
+        enemy: 4,
+        cadence_ticks: 12,
+        start_tick: BOSS_SPAWN_TICK,
+    }, // Bacon — fast pressure (was 18)
+    WaveSpawn {
+        enemy: 5,
+        cadence_ticks: 15,
+        start_tick: BOSS_SPAWN_TICK,
+    }, // Honk — very fast (was 22)
+    WaveSpawn {
+        enemy: 1,
+        cadence_ticks: 45,
+        start_tick: BOSS_SPAWN_TICK,
+    }, // Fanged Death — periodic bruiser (was 60)
 ];
 
 /// Match wave schedule: an ESCALATING mix. Early ticks are the original Grunt +
@@ -1506,43 +3274,111 @@ pub static WAVE_M0: &[WaveSpawn] = &[
     // 10 s Clear, and the fast-rusher streams (Raider/Bandit) arrive inside that
     // cooldown, so leak accumulates. Cadences come from the `EARLY_*_CADENCE`
     // constants above (the primary early-game knob).
-    WaveSpawn { enemy: 0, cadence_ticks: EARLY_GRUNT_CADENCE, start_tick: 0 }, // Squeakzilla — swarm floor
-    WaveSpawn { enemy: 1, cadence_ticks: 95, start_tick: 0 }, // Fanged Death — periodic bruiser (slow, 1500 contact)
+    WaveSpawn {
+        enemy: 0,
+        cadence_ticks: EARLY_GRUNT_CADENCE,
+        start_tick: 0,
+    }, // Squeakzilla — swarm floor
+    WaveSpawn {
+        enemy: 1,
+        cadence_ticks: 95,
+        start_tick: 0,
+    }, // Fanged Death — periodic bruiser (slow, 1500 contact)
     // --- early escalation (≈12s+): cheap chaff streams in early ---
-    WaveSpawn { enemy: 3, cadence_ticks: EARLY_PEON_CADENCE, start_tick: MIN / 5 }, // Doomduck
-    WaveSpawn { enemy: 11, cadence_ticks: 600, start_tick: MIN / 2 }, // Dodo (rare, inert)
+    WaveSpawn {
+        enemy: 3,
+        cadence_ticks: EARLY_PEON_CADENCE,
+        start_tick: MIN / 5,
+    }, // Doomduck
+    WaveSpawn {
+        enemy: 11,
+        cadence_ticks: 600,
+        start_tick: MIN / 2,
+    }, // Dodo (rare, inert)
     // --- ≈25s: fast melee rushers — the core of the eco-rush punish. Raiders are
     //     fast (speed 16) and hit hard (700 contact), so they reach the tank inside
     //     the Clear cooldown and a weaponless tank can't keep them off. ---
-    WaveSpawn { enemy: 4, cadence_ticks: EARLY_RAIDER_CADENCE, start_tick: 5 * MIN / 12 }, // Bacon
+    WaveSpawn {
+        enemy: 4,
+        cadence_ticks: EARLY_RAIDER_CADENCE,
+        start_tick: 5 * MIN / 12,
+    }, // Bacon
     // --- ≈1 min: a second chaff trickle thickens the wall ---
-    WaveSpawn { enemy: 3, cadence_ticks: 70, start_tick: MIN }, // Doomduck (second stream from 1 min)
+    WaveSpawn {
+        enemy: 3,
+        cadence_ticks: 70,
+        start_tick: MIN,
+    }, // Doomduck (second stream from 1 min)
     // --- ≈45 s: even faster bandit rushers pile on (pulled early — fastest enemy,
     //     arrives inside the Clear cooldown, so it's the main eco-rush punisher) ---
-    WaveSpawn { enemy: 5, cadence_ticks: EARLY_BANDIT_CADENCE, start_tick: 3 * MIN / 4 }, // Honk (very fast)
+    WaveSpawn {
+        enemy: 5,
+        cadence_ticks: EARLY_BANDIT_CADENCE,
+        start_tick: 3 * MIN / 4,
+    }, // Honk (very fast)
     // --- ≈90 s: ranged spitters start pelting from STANDOFF. Pulled early on the
     //     balance pass: standoff DPS (it pelts without reaching the tank, and a
     //     weaponless tank can't kill it between Clears) is what closes the eco-rush
     //     stalemate — it breaks the "Clear keeps the board empty forever" loophole
     //     so a naked tank reliably dies by ≤3600, while a real build just shoots it. ---
-    WaveSpawn { enemy: 8, cadence_ticks: 120, start_tick: 3 * MIN / 2 }, // Croak (ranged, early standoff)
+    WaveSpawn {
+        enemy: 8,
+        cadence_ticks: 120,
+        start_tick: 3 * MIN / 2,
+    }, // Croak (ranged, early standoff)
     // --- ≈4 min: casters + heavier ranged breath ---
-    WaveSpawn { enemy: 7, cadence_ticks: 180, start_tick: 4 * MIN }, // Nope Rope (caster)
-    WaveSpawn { enemy: 9, cadence_ticks: 200, start_tick: 4 * MIN }, // Spicy (ranged)
+    WaveSpawn {
+        enemy: 7,
+        cadence_ticks: 180,
+        start_tick: 4 * MIN,
+    }, // Nope Rope (caster)
+    WaveSpawn {
+        enemy: 9,
+        cadence_ticks: 200,
+        start_tick: 4 * MIN,
+    }, // Spicy (ranged)
     // --- ≈6 min: fortified bruisers + slow ice breath, the late-game wall ---
-    WaveSpawn { enemy: 6, cadence_ticks: 300, start_tick: 6 * MIN }, // Bonk (Fortified)
-    WaveSpawn { enemy: 10, cadence_ticks: 240, start_tick: 6 * MIN }, // Popsicle (ranged)
+    WaveSpawn {
+        enemy: 6,
+        cadence_ticks: 300,
+        start_tick: 6 * MIN,
+    }, // Bonk (Fortified)
+    WaveSpawn {
+        enemy: 10,
+        cadence_ticks: 240,
+        start_tick: 6 * MIN,
+    }, // Popsicle (ranged)
     // --- POST-15 CLIFF SURGES: discrete roster jumps coinciding with the HP cliffs
     //     so each step is felt as MORE enemies AND tougher enemies, not just an HP
     //     bump. Telegraphed by the HP ramp in `enemy_hp_mult` landing at the same
     //     tick. These keep a snowballing player pressured between/at the cliffs.
     // Cliff #2 @20 min: a heavy fortified surge + extra fast rushers.
-    WaveSpawn { enemy: 6, cadence_ticks: 150, start_tick: CLIFF_20_TICK }, // Bonk (surge, was 300)
-    WaveSpawn { enemy: 5, cadence_ticks: 60, start_tick: CLIFF_20_TICK },  // Honk (fast surge)
+    WaveSpawn {
+        enemy: 6,
+        cadence_ticks: 150,
+        start_tick: CLIFF_20_TICK,
+    }, // Bonk (surge, was 300)
+    WaveSpawn {
+        enemy: 5,
+        cadence_ticks: 60,
+        start_tick: CLIFF_20_TICK,
+    }, // Honk (fast surge)
     // Cliff #3 @25 min: relentless breathers + a swarm flood into the boss.
-    WaveSpawn { enemy: 9, cadence_ticks: 90, start_tick: CLIFF_25_TICK },  // Spicy (surge)
-    WaveSpawn { enemy: 10, cadence_ticks: 100, start_tick: CLIFF_25_TICK }, // Popsicle (surge)
-    WaveSpawn { enemy: 0, cadence_ticks: 8, start_tick: CLIFF_25_TICK },   // Squeakzilla (pre-boss flood)
+    WaveSpawn {
+        enemy: 9,
+        cadence_ticks: 90,
+        start_tick: CLIFF_25_TICK,
+    }, // Spicy (surge)
+    WaveSpawn {
+        enemy: 10,
+        cadence_ticks: 100,
+        start_tick: CLIFF_25_TICK,
+    }, // Popsicle (surge)
+    WaveSpawn {
+        enemy: 0,
+        cadence_ticks: 8,
+        start_tick: CLIFF_25_TICK,
+    }, // Squeakzilla (pre-boss flood)
 ];
 
 /// Enemies spawn on this ring and march toward the tank. The eight angular
@@ -1556,14 +3392,14 @@ pub static WAVE_M0: &[WaveSpawn] = &[
 /// eco-rush punish). A real build just shoots them, so it is unaffected.
 /// Precomputed (no trig) so spawn positions are deterministic.
 pub static SPAWN_RING: &[Vec2] = &[
-    v(1200, 0),       // near (arrives soonest)
-    v(1273, 1273),    // far  (≈1800 diag)
-    v(0, 1500),       // mid
-    v(-849, 849),     // near (≈1200 diag)
-    v(1800, 0),       // far
-    v(-1061, -1061),  // mid (≈1500 diag)
-    v(0, -1200),      // near
-    v(1273, -1273),   // far (≈1800 diag)
+    v(1200, 0),      // near (arrives soonest)
+    v(1273, 1273),   // far  (≈1800 diag)
+    v(0, 1500),      // mid
+    v(-849, 849),    // near (≈1200 diag)
+    v(1800, 0),      // far
+    v(-1061, -1061), // mid (≈1500 diag)
+    v(0, -1200),     // near
+    v(1273, -1273),  // far (≈1800 diag)
 ];
 
 const fn v(x: i64, y: i64) -> Vec2 {
@@ -1583,15 +3419,14 @@ pub const NUM_ARMOR_CLASSES: usize = 3;
 pub fn damage_multiplier(damage_type: u8, armor_class: u8) -> Fixed {
     // rows = Normal, Piercing, Magic, Siege, Chaos ; cols = Light, Medium, Fortified
     const M: [[(i64, i64); NUM_ARMOR_CLASSES]; 5] = [
-        [(1, 1), (1, 1), (1, 2)], // Normal:   0.5x vs Fortified
+        [(1, 1), (1, 1), (1, 2)],  // Normal:   0.5x vs Fortified
         [(2, 1), (1, 1), (7, 20)], // Piercing: 2x vs Light, 0.35x vs Fortified
-        [(1, 1), (2, 1), (1, 2)], // Magic:    2x vs Medium, 0.5x vs Fortified
-        [(1, 1), (1, 2), (3, 2)], // Siege:    0.5x vs Medium, 1.5x vs Fortified
-        [(1, 1), (1, 1), (1, 1)], // Chaos:    ignores armor (1x everywhere)
+        [(1, 1), (2, 1), (1, 2)],  // Magic:    2x vs Medium, 0.5x vs Fortified
+        [(1, 1), (1, 2), (3, 2)],  // Siege:    0.5x vs Medium, 1.5x vs Fortified
+        [(1, 1), (1, 1), (1, 1)],  // Chaos:    ignores armor (1x everywhere)
     ];
     let dt = damage_type as usize % 5;
     let ac = (armor_class as usize).min(NUM_ARMOR_CLASSES - 1);
     let (n, d) = M[dt][ac];
     Fixed::from_ratio(n, d)
 }
-

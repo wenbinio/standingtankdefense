@@ -227,7 +227,13 @@ pub struct Enemy {
 impl Enemy {
     /// Construct an enemy with no status (the common case).
     pub fn new(id: EntityId, def: u16, hp: i64, pos: Vec2) -> Enemy {
-        Enemy { id, def, hp, pos, status: EnemyStatus::default() }
+        Enemy {
+            id,
+            def,
+            hp,
+            pos,
+            status: EnemyStatus::default(),
+        }
     }
 }
 
@@ -300,7 +306,7 @@ pub struct Economy {
     /// Fraction of each income award also granted to the tank as instant HP
     /// (the source's "% of Gold Income as instant HP Regen"; starts `ZERO`).
     pub income_regen_pct: Fixed,
-    pub bounty_mult: Fixed,   // applies to kill bounty only
+    pub bounty_mult: Fixed, // applies to kill bounty only
     /// Chance (in percent, 0–100) that a kill pays a bonus bounty; `0` ⇒ no roll.
     pub bounty_proc_chance_pct: i64,
     /// Bonus fraction of the base bounty paid when a proc fires (e.g. `2.0` ⇒ +200%).
@@ -486,9 +492,12 @@ pub struct ArenaState {
 
     /// Playstyle telemetry for cosmetic achievements (which weapon *attack
     /// classes* the player chose to BUY, how many weapons, how many income
-    /// purchases). Render/profile-only — NOT fed to the checksum, so it can
-    /// never affect determinism. The free starting Bow is granted, not bought,
-    /// so it does not set a bit here. Bit `n` == `attack_scope_id` `n` (0..6).
+    /// purchases). Mostly render/profile-facing, but `bought_attack_mask` is
+    /// read by `bot::Challenge::filter` (which shapes the inputs fed to `step`
+    /// on both client and director), so all three ride the snapshot AND feed
+    /// the checksum (snapshot↔checksum parity). The free starting Bow is
+    /// granted, not bought, so it does not set a bit here. Bit `n` ==
+    /// `attack_scope_id` `n` (0..6).
     pub bought_attack_mask: u16,
     pub weapons_bought: u32,
     pub economy_purchases: u32,
@@ -691,7 +700,9 @@ impl ArenaState {
                     self.tank.hp_regen_per_tick -= regen_cost;
                     self.award_gold(gold_gain);
                 }
-                other => self.modifiers.apply_effect(other, &mut self.economy, &mut self.tank),
+                other => self
+                    .modifiers
+                    .apply_effect(other, &mut self.economy, &mut self.tank),
             }
         }
         if let Some(r) = ramp {

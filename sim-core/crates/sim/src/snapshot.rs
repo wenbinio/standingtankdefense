@@ -8,8 +8,8 @@
 //! - **Deterministic & portable**: little-endian, no padding, no floats, no deps.
 //! - Field order mirrors `checksum()` so the two are easy to keep in sync.
 
-use crate::ids::EntityId;
 use crate::content::{ModEffect, StatusOnHit, WeaponAbility};
+use crate::ids::EntityId;
 use crate::state::*;
 use determinism::{Fixed, Rng};
 
@@ -93,8 +93,14 @@ impl<'a> R<'a> {
         R { buf, pos: 0 }
     }
     fn take(&mut self, n: usize) -> Result<&'a [u8], SnapshotError> {
-        let end = self.pos.checked_add(n).ok_or(SnapshotError::UnexpectedEof)?;
-        let s = self.buf.get(self.pos..end).ok_or(SnapshotError::UnexpectedEof)?;
+        let end = self
+            .pos
+            .checked_add(n)
+            .ok_or(SnapshotError::UnexpectedEof)?;
+        let s = self
+            .buf
+            .get(self.pos..end)
+            .ok_or(SnapshotError::UnexpectedEof)?;
         self.pos = end;
         Ok(s)
     }
@@ -740,7 +746,11 @@ mod tests {
         for tick in 400..900u32 {
             step(&mut a, scripted_input(tick));
             step(&mut b, scripted_input(tick));
-            assert_eq!(checksum(&a), checksum(&b), "diverged after restore at {tick}");
+            assert_eq!(
+                checksum(&a),
+                checksum(&b),
+                "diverged after restore at {tick}"
+            );
         }
     }
 
@@ -748,7 +758,10 @@ mod tests {
     fn bad_version_is_rejected() {
         let mut bytes = serialize(&ArenaState::new(1, 0));
         bytes[0] = 0xFF; // corrupt version
-        assert!(matches!(deserialize(&bytes), Err(SnapshotError::BadVersion(_))));
+        assert!(matches!(
+            deserialize(&bytes),
+            Err(SnapshotError::BadVersion(_))
+        ));
     }
 
     #[test]

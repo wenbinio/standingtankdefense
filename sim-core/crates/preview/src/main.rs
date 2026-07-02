@@ -8,7 +8,6 @@
 //!
 //! Flags: --seed <u64>  --every <ticks>  --frames <n>  --max-ticks <n>  --speed <n>
 
-
 mod render;
 
 use sim::bot::Bot;
@@ -105,14 +104,20 @@ fn main() {
         }
         prev_weapons = s.weapons.len();
 
-        let boss_now = s.enemies.iter().any(|e| content::ENEMIES[e.def as usize].boss);
+        let boss_now = s
+            .enemies
+            .iter()
+            .any(|e| content::ENEMIES[e.def as usize].boss);
         if boss_now && !prev_boss {
-            push(&mut log, "*** BOSS: The Hippocrate has arrived! Bedside manner: terminal. ***".to_string());
+            push(
+                &mut log,
+                "*** BOSS: The Hippocrate has arrived! Bedside manner: terminal. ***".to_string(),
+            );
         }
         prev_boss = boss_now;
 
         // ---- render on cadence ----
-        if s.tick % args.every == 0 {
+        if s.tick.is_multiple_of(args.every) {
             let f = render::frame(&sim::view::snapshot(&s), &log);
             if args.watch {
                 print!("\x1b[2J\x1b[H{}", f);
@@ -132,7 +137,10 @@ fn main() {
 
         if s.dead {
             let secs = s.tick / sim::TICK_HZ;
-            push(&mut log, format!("TANK DESTROYED at {:02}:{:02}", secs / 60, secs % 60));
+            push(
+                &mut log,
+                format!("TANK DESTROYED at {:02}:{:02}", secs / 60, secs % 60),
+            );
             // Show one final frame, then stop.
             println!("{}", render::frame(&sim::view::snapshot(&s), &log));
             break;

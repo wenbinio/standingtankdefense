@@ -45,6 +45,10 @@ mod tests {
         assert_eq!(steam_send_flags(Channel::Bulk), STEAM_SEND_RELIABLE);
         let tele = steam_send_flags(Channel::Telemetry);
         assert_eq!(tele & STEAM_SEND_NO_NAGLE, STEAM_SEND_NO_NAGLE);
-        assert_eq!(tele & STEAM_SEND_RELIABLE, 0, "telemetry must be unreliable");
+        assert_eq!(
+            tele & STEAM_SEND_RELIABLE,
+            0,
+            "telemetry must be unreliable"
+        );
     }
 }
