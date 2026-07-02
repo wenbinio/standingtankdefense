@@ -241,10 +241,13 @@ func _update_audio(events: Array, intent: int, gold_before: int) -> void:
 		return   # frozen run: no further gameplay SFX while on the results panel
 
 	# --- event-driven SFX (Audio's per-event throttle absorbs bursts) --------
+	# Kills aggregate per tick into ONE count-scaled voice (Audio.play_many):
+	# a 50-kill wave wipe sounds bigger than a single kill instead of identical.
+	var kills := 0
 	for ev in events:
 		match ev.kind:
 			SimView.EV_ENEMY_KILLED:
-				Audio.play(&"enemy_death")
+				kills += 1
 			SimView.EV_ENEMY_DESPAWNED:
 				# Deliberately silent: contact self-destructs are not kills
 				# (this fixes the old fake death sound from snapshot diffing).
@@ -264,6 +267,8 @@ func _update_audio(events: Array, intent: int, gold_before: int) -> void:
 				pass
 			_:
 				pass   # Hazard*/FreezeProc/ShieldBroke: P3 SFX
+	if kills > 0:
+		Audio.play_many(&"enemy_death", kills)
 
 	# --- economy actions: input-driven (no sim event for buy/reroll) ---------
 	if intent == 1 and view.gold() < gold_before:

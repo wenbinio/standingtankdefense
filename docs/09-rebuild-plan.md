@@ -1,8 +1,10 @@
 # [09] Full Rebuild Plan — Presentation Overhaul & Fix Program
 
-**Status:** P0 complete; P1 next. Produced from six parallel audits (art, VFX/game-feel, UI/UX/frontend, Rust sim/net core, audio, docs-vs-implementation) run against commit `e656163`, with the full test suite executed live (at audit time: 254 tests pass, M0 gate PASS, golden checksum `0x436067271f1956d8`).
+**Status:** P0 and P1 complete (plus P4's systems layer); P3 juice fan-out next. Produced from six parallel audits (art, VFX/game-feel, UI/UX/frontend, Rust sim/net core, audio, docs-vs-implementation) run against commit `e656163`, with the full test suite executed live (at audit time: 254 tests pass, M0 gate PASS, golden checksum `0x436067271f1956d8`).
 
 > **P0 executed (2026-07):** all §9.1 defects fixed; docs truth pass landed with mechanical doc-sync tests; checksum coverage expanded beyond B4 (ten snapshot-carried fields total — the parity test found nine more of the same class), which deliberately re-baselined the golden checksum to `0x58d77dad0cc11999` per the documented runbook. Suite now **269 tests**, fmt/clippy/CI hygiene gates active. Pending: one Godot editor import pass to regenerate two stale `.translation` rows.
+
+> **P1 executed (2026-07):** §9.3 event stream live end-to-end (record layout documented in `godot/rust/src/lib.rs`; `Projectile::weapon_kind` added → snapshot v20, golden re-baselined to `0x09058789ad2df90a`; suite 286 tests). Frontend restructured (main.gd 969→276 + arena_renderer/hud/shop/results/fx_overlay/sim_view modules), InputMap physical-key actions, `canvas_items` stretch, Camera2D shake, prev/curr tick interpolation, MultiMesh entity rendering, pooled FX. Audio systems layer (P4 items 1–5): jitter, limiter, ducking, `play_many` count scaling (wired for kills), crossfade + vertical-intensity music. Presentation consumes events — diff-inference deleted. Known follow-ups: Impact events carry a point, not a victim id (dense-clump flash mapping is approximate — candidate v2 event field); per-impact damage numbers may need a display threshold; all noted "needs live editor" risks from the restructure.
 
 ---
 
