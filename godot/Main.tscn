@@ -1,6 +1,33 @@
-[gd_scene load_steps=2 format=3 uid="uid://b0standtankmain01"]
+[gd_scene load_steps=7 format=3 uid="uid://b0standtankmain01"]
 
 [ext_resource type="Script" path="res://main.gd" id="1_main"]
+[ext_resource type="Script" path="res://arena_renderer.gd" id="2_arena"]
+[ext_resource type="Script" path="res://fx_overlay.gd" id="3_fxo"]
+[ext_resource type="Script" path="res://hud.gd" id="4_hud"]
+[ext_resource type="Script" path="res://shop.gd" id="5_shop"]
+[ext_resource type="Script" path="res://results.gd" id="6_results"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
+
+[node name="Camera" type="Camera2D" parent="."]
+anchor_mode = 0
+
+[node name="ArenaRenderer" type="Node2D" parent="."]
+script = ExtResource("2_arena")
+
+[node name="UiLayer" type="CanvasLayer" parent="."]
+layer = 1
+
+[node name="FxOverlay" type="Node2D" parent="UiLayer"]
+script = ExtResource("3_fxo")
+
+[node name="Hud" type="Node2D" parent="UiLayer"]
+script = ExtResource("4_hud")
+
+[node name="Shop" type="Node2D" parent="UiLayer"]
+script = ExtResource("5_shop")
+
+[node name="Results" type="Node2D" parent="UiLayer"]
+visible = false
+script = ExtResource("6_results")

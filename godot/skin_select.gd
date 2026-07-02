@@ -23,14 +23,8 @@ func _ready() -> void:
 func _cache_thumbs() -> void:
 	thumbs.clear()
 	for s in Profile.SKINS:
-		thumbs[s.id] = _load_skin_tex(s)
-
-func _load_skin_tex(s: Dictionary) -> Texture2D:
-	if s.file != "":
-		var p: String = ArtTheme.base() + "tank/" + s.file
-		if ResourceLoader.exists(p):
-			return load(p)
-	return ArtTheme.tex("tank/player_tank.svg")
+		# One shared (theme, skin) resolver on ArtTheme replaces the local copy.
+		thumbs[s.id] = ArtTheme.tank_tex_for(ArtTheme.active, s.id)
 
 func _deploy() -> void:
 	var s: Dictionary = Profile.SKINS[sel]
@@ -39,29 +33,57 @@ func _deploy() -> void:
 		Profile.active_challenge_code = 0   # plain deploy = you play, free of any rule
 		get_tree().change_scene_to_file("res://Main.tscn")
 
-func _input(e: InputEvent) -> void:
+# InputMap actions (bindings in project.godot [input]); was raw keycodes in
+# _input — moved to _unhandled_input like every other screen.
+func _unhandled_input(e: InputEvent) -> void:
+	if e is InputEventMouseButton:
+		if e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			for i in cards.size():
+				if cards[i].has_point(e.position):
+					if i == sel:
+						_deploy()
+					else:
+						sel = i
+					queue_redraw()
+		return
+	if not (e is InputEventKey or e is InputEventJoypadButton):
+		return
 	var n := Profile.SKINS.size()
-	if e is InputEventKey and e.pressed and not e.echo:
-		match e.keycode:
-			KEY_LEFT, KEY_A:  sel = (sel - 1 + n) % n; queue_redraw()
-			KEY_RIGHT, KEY_D: sel = (sel + 1) % n; queue_redraw()
-			KEY_UP, KEY_W:    sel = (sel - COLS + n) % n; queue_redraw()
-			KEY_DOWN, KEY_S:  sel = (sel + COLS) % n; queue_redraw()
-			KEY_C: get_tree().change_scene_to_file("res://ChallengeSelect.tscn")
-			KEY_L: get_tree().change_scene_to_file("res://Lobby.tscn")   # multiplayer lobby (host-authoritative)
-			KEY_M: get_tree().change_scene_to_file("res://Match.tscn")   # multi-arena net demo
-			KEY_T: ArtTheme.cycle(); _cache_thumbs(); queue_redraw()
-			KEY_G: _toggle_language()
-			KEY_U: Profile.unlock_all(); queue_redraw()         # dev: preview the gallery
-			KEY_R: Profile.reset(); sel = 0; queue_redraw()     # dev: relock everything
-			KEY_ENTER, KEY_KP_ENTER, KEY_SPACE: _deploy()
-			KEY_ESCAPE: get_tree().quit()
-	elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
-		for i in cards.size():
-			if cards[i].has_point(e.position):
-				if i == sel: _deploy()
-				else: sel = i
-				queue_redraw()
+	if e.is_action_pressed(&"ui_nav_left"):
+		sel = (sel - 1 + n) % n
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_nav_right"):
+		sel = (sel + 1) % n
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_nav_up"):
+		sel = (sel - COLS + n) % n
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_nav_down"):
+		sel = (sel + COLS) % n
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_challenges"):
+		get_tree().change_scene_to_file("res://ChallengeSelect.tscn")
+	elif e.is_action_pressed(&"ui_lobby"):
+		get_tree().change_scene_to_file("res://Lobby.tscn")   # multiplayer lobby (host-authoritative)
+	elif e.is_action_pressed(&"ui_net_view"):
+		get_tree().change_scene_to_file("res://Match.tscn")   # multi-arena net demo
+	elif e.is_action_pressed(&"ui_theme_cycle"):
+		ArtTheme.cycle()
+		_cache_thumbs()
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_language"):
+		_toggle_language()
+	elif e.is_action_pressed(&"ui_dev_unlock"):
+		Profile.unlock_all()          # dev: preview the gallery
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_dev_reset"):
+		Profile.reset()               # dev: relock everything
+		sel = 0
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_confirm"):
+		_deploy()
+	elif e.is_action_pressed(&"ui_back"):
+		get_tree().quit()
 
 # Flip the UI language between English and Simplified Chinese, persist it, and
 # redraw so every tr()'d string re-resolves. Render-layer only.

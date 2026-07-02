@@ -35,14 +35,8 @@ var _tank_tex := {}             # peer id → Texture2D (resolved by explicit pa
 # "ready"). Removed peers drop their pending timer.
 var _pending_ready := {}
 
-# Fixed, hand-picked rotation of skin ids for simulated peers (stable order,
-# visibly varied) — same roster match.gd uses for its peer spread.
-const PEER_SKINS := [
-	"deadeye", "spicy_meatball", "octo_blaster", "disco_doom",
-	"tidal_terry", "bouncy_boi", "stone_broke", "franken_tank",
-	"gore_hound", "chilly_willy", "sir_toots", "lord_spookington",
-]
-# Flavor names for simulated peers (cosmetic only).
+# Flavor names for simulated peers (cosmetic only). Their skin spread comes
+# from the shared ArtTheme.PEER_SKIN_ROTATION (same roster match.gd uses).
 const PEER_NAMES := [
 	"Ironhide", "Boomstick", "Gunny", "Discoteq",
 	"Wavebreak", "Pinball", "Brokey", "Frank",
@@ -69,12 +63,13 @@ func _assign_cos_for_peer(peer: int) -> void:
 	if peer == 0:
 		_cos[0] = {"theme": ArtTheme.active, "skin": Profile.selected, "name": "YOU"}
 	else:
+		var skins: Array = ArtTheme.PEER_SKIN_ROTATION
 		var theme_count: int = ArtTheme.themes.size()
 		var theme_idx: int = (ArtTheme.active + peer) % theme_count
-		var skin_id: String = PEER_SKINS[(peer - 1) % PEER_SKINS.size()]
+		var skin_id: String = skins[(peer - 1) % skins.size()]
 		var nm: String = PEER_NAMES[(peer - 1) % PEER_NAMES.size()]
 		_cos[peer] = {"theme": theme_idx, "skin": skin_id, "name": nm}
-	_tank_tex[peer] = _tank_for(_cos[peer]["theme"], _cos[peer]["skin"])
+	_tank_tex[peer] = ArtTheme.tank_tex_for(_cos[peer]["theme"], _cos[peer]["skin"])
 
 # Re-derive YOUR cosmetics AND the whole peer spread after a theme cycle, so the
 # offset-from-you rotation stays consistent (mirrors match.gd's re-assign on T).
@@ -82,28 +77,8 @@ func _refresh_all_cos() -> void:
 	for peer in _cos.keys():
 		_assign_cos_for_peer(peer)
 
-# --- Theme path helpers (mirror match.gd; never mutate ArtTheme.active) --------
-func _theme_base(theme_idx: int) -> String:
-	return "res://art/themes/%s/" % ArtTheme.themes[theme_idx]
-
-func _theme_load(theme_idx: int, rel: String) -> Texture2D:
-	return load(_theme_base(theme_idx) + rel)
-
-# Resolve a tank texture for (theme, skin) by ArtTheme.tank_tex's rule:
-# tank/skins/<file> if it exists in THAT theme, else that theme's player_tank.svg.
-func _tank_for(theme_idx: int, skin_id: String) -> Texture2D:
-	var f: String = Profile.skin_def(skin_id).file
-	if f != "":
-		var p := _theme_base(theme_idx) + "tank/" + f
-		if ResourceLoader.exists(p):
-			return load(p)
-	return _theme_load(theme_idx, "tank/player_tank.svg")
-
-func _theme_tag(theme_idx: int) -> String:
-	match ArtTheme.themes[theme_idx]:
-		"grimdark":        return "GRIMDARK"
-		"gaslamp_bulwark": return "GASLAMP"
-	return ArtTheme.themes[theme_idx].to_upper()
+# (Theme-path / tank-texture / theme-tag helpers now live on ArtTheme:
+#  theme_base / tex_of / tank_tex_for / theme_tag — one copy for all screens.)
 
 # --- Lobby mutations (drive StLobby; cosmetics follow the returned peer id) ----
 # Seat the next free peer via StLobby, assign its cosmetics, and queue its auto-
@@ -199,18 +174,26 @@ func _flash(msg: String) -> void:
 	_start_msg_t = 3.0
 	queue_redraw()
 
-# --- input --------------------------------------------------------------------
-func _unhandled_key_input(e: InputEvent) -> void:
-	if not (e is InputEventKey and e.pressed and not e.echo):
+# --- input (InputMap actions; bindings in project.godot [input]) ---------------
+func _unhandled_input(e: InputEvent) -> void:
+	if not (e is InputEventKey or e is InputEventJoypadButton):
 		return
-	match e.keycode:
-		KEY_SPACE, KEY_Y:                 _toggle_my_ready()
-		KEY_A, KEY_KP_ADD, KEY_EQUAL:     _add_peer()
-		KEY_X, KEY_KP_SUBTRACT, KEY_MINUS: _remove_last_peer()
-		KEY_R:                            _ready_all()
-		KEY_ENTER, KEY_KP_ENTER:          _attempt_start()
-		KEY_T:                            ArtTheme.cycle(); _refresh_all_cos(); queue_redraw()
-		KEY_ESCAPE:                       get_tree().change_scene_to_file("res://SkinSelect.tscn")
+	if e.is_action_pressed(&"ui_ready_toggle"):
+		_toggle_my_ready()
+	elif e.is_action_pressed(&"ui_lobby_add"):
+		_add_peer()
+	elif e.is_action_pressed(&"ui_lobby_remove"):
+		_remove_last_peer()
+	elif e.is_action_pressed(&"ui_ready_all"):
+		_ready_all()
+	elif e.is_action_pressed(&"ui_lobby_start"):
+		_attempt_start()
+	elif e.is_action_pressed(&"ui_theme_cycle"):
+		ArtTheme.cycle()
+		_refresh_all_cos()
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_back"):
+		get_tree().change_scene_to_file("res://SkinSelect.tscn")
 
 # --- per-frame: advance peer auto-ready timers --------------------------------
 func _process(delta: float) -> void:
@@ -335,7 +318,7 @@ func _draw_member_card(i: int, r: Rect2) -> void:
 		HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20, 14, rcol)
 
 	# THEME pill, top-right — fill from accent (dimmed), border + text from header.
-	var tag := tr(_theme_tag(theme_idx))
+	var tag := tr(ArtTheme.theme_tag(theme_idx))
 	var pill_fs := 11
 	var tag_w: float = font.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, pill_fs).x + 14.0
 	var pill := Rect2(r.position.x + r.size.x - tag_w - 8.0, r.position.y + 8.0, tag_w, 18.0)

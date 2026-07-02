@@ -8,6 +8,43 @@ extends Node
 var themes := ["grimdark", "gaslamp_bulwark"]
 var active := 0
 
+# --- Sprite manifest (THE single source of truth for entity art) --------------
+# One entry per entity kind: theme-relative path + draw sizes. `size` is the
+# single-arena (Main) blit size in px; `net_size` is the multi-arena net-view
+# (Match) cell blit size. Art agents extend/retarget THESE tables — no other
+# file may hardcode an entity sprite path or size.
+# (Reserved for the art rebuild: entries may grow {frames, fps} for flipbooks.)
+const ENEMY_MANIFEST: Array[Dictionary] = [
+	{"path": "enemies/squeakzilla_rat.svg", "size": 74.0, "net_size": 20.0},   # 0 Squeakzilla
+	{"path": "enemies/fanged_death.svg", "size": 74.0, "net_size": 20.0},     # 1 Fanged Death
+	{"path": "enemies/boss_hippo.svg", "size": 230.0, "net_size": 56.0},      # 2 boss (The Hippocrate)
+	{"path": "enemies/doomduck.svg", "size": 74.0, "net_size": 20.0},         # 3 Doomduck
+	{"path": "enemies/bacon_warthog.svg", "size": 74.0, "net_size": 20.0},    # 4 Bacon
+	{"path": "enemies/bandit_rider.svg", "size": 74.0, "net_size": 20.0},     # 5 Honk
+	{"path": "enemies/bonk_golem.svg", "size": 118.0, "net_size": 30.0},      # 6 Bonk
+	{"path": "enemies/noperope_cobra.svg", "size": 74.0, "net_size": 20.0},   # 7 Nope Rope
+	{"path": "enemies/poisonspitter.svg", "size": 74.0, "net_size": 20.0},    # 8 Croak
+	{"path": "enemies/firebreather.svg", "size": 74.0, "net_size": 20.0},     # 9 Spicy
+	{"path": "enemies/icebreather.svg", "size": 74.0, "net_size": 20.0},      # 10 Popsicle
+	{"path": "enemies/target_dummy.svg", "size": 74.0, "net_size": 20.0},     # 11 Dodo
+]
+const MINION_MANIFEST: Array[Dictionary] = [
+	{"path": "minions/larvae.svg", "size": 64.0, "net_size": 18.0},           # 0 Larvae
+	{"path": "minions/spores.svg", "size": 64.0, "net_size": 18.0},           # 1 Spores
+]
+const TANK_MANIFEST: Dictionary = {"path": "tank/player_tank.svg", "size": 124.0, "net_size": 40.0}
+const PROJECTILE_MANIFEST: Dictionary = {"path": "projectiles/magic_orb.svg", "size": 26.0}
+# Environment art shared by Main and Match (was duplicated as literals in both).
+const ENV_MANIFEST: Dictionary = {"ground": "env/arena_ground.svg", "ring": "env/spawn_ring.svg"}
+
+# Fixed, hand-picked rotation of skin ids for simulated peers (stable order,
+# visibly varied). Shared by match.gd's peer spread and lobby.gd's seats.
+const PEER_SKIN_ROTATION: Array[String] = [
+	"deadeye", "spicy_meatball", "octo_blaster", "disco_doom",
+	"tidal_terry", "bouncy_boi", "stone_broke", "franken_tank",
+	"gore_hound", "chilly_willy", "sir_toots", "lord_spookington",
+]
+
 # --- Per-theme UI palette ----------------------------------------------------
 # A theme owns not just its art but its UI chrome colors, so the HUD/shop/net
 # labels recolor when you switch themes (and each player's net-view cell paints
@@ -94,7 +131,21 @@ func ui_font(bold: bool) -> Font:
 	return f
 
 func base() -> String:
-	return "res://art/themes/%s/" % themes[active]
+	return theme_base(active)
+
+# Base folder for a SPECIFIC theme index (net view / lobby load peers' themes by
+# explicit path without mutating `active`).
+func theme_base(theme_idx: int) -> String:
+	return "res://art/themes/%s/" % themes[clampi(theme_idx, 0, themes.size() - 1)]
+
+# A short uppercase tag for a theme index (per-cell/per-card theme pill).
+func theme_tag(theme_idx: int) -> String:
+	match themes[clampi(theme_idx, 0, themes.size() - 1)]:
+		"grimdark":
+			return "GRIMDARK"
+		"gaslamp_bulwark":
+			return "GASLAMP"
+	return themes[theme_idx].to_upper()
 
 # UI color for the ACTIVE theme (single-arena HUD/shop). Falls back to a neutral
 # so a missing key never crashes a draw.
@@ -108,19 +159,80 @@ func ui_of(theme_idx: int, key: String) -> Color:
 	var pal: Dictionary = THEME_UI.get(name, {})
 	return pal.get(key, Color(0.8, 0.8, 0.85))
 
+# Guarded texture load for the ACTIVE theme: a missing file warns and returns a
+# visible magenta placeholder instead of crashing the draw.
 func tex(rel: String) -> Texture2D:
-	return load(base() + rel)
+	return tex_of(active, rel)
+
+# Guarded texture load for a SPECIFIC theme index.
+func tex_of(theme_idx: int, rel: String) -> Texture2D:
+	var p := theme_base(theme_idx) + rel
+	if not ResourceLoader.exists(p):
+		push_warning("ArtTheme: missing texture '%s' — using placeholder" % p)
+		return _placeholder_tex()
+	return load(p)
+
+# The loud "art is missing" texture: solid magenta, cached.
+var _placeholder: Texture2D = null
+func _placeholder_tex() -> Texture2D:
+	if _placeholder == null:
+		var img := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+		img.fill(Color(1.0, 0.0, 1.0, 1.0))
+		_placeholder = ImageTexture.create_from_image(img)
+	return _placeholder
+
+# --- Manifest-driven texture sets ---------------------------------------------
+# Enemy textures for a theme, in enemy-kind order (indexable by sim kind).
+func enemy_textures_of(theme_idx: int) -> Array:
+	var out: Array = []
+	for e in ENEMY_MANIFEST:
+		out.append(tex_of(theme_idx, e["path"]))
+	return out
+
+func enemy_textures() -> Array:
+	return enemy_textures_of(active)
+
+# Minion textures for a theme, in minion-kind order.
+func minion_textures_of(theme_idx: int) -> Array:
+	var out: Array = []
+	for m in MINION_MANIFEST:
+		out.append(tex_of(theme_idx, m["path"]))
+	return out
+
+func minion_textures() -> Array:
+	return minion_textures_of(active)
+
+# Draw size (px) for an enemy kind; `net` picks the multi-arena cell size.
+func enemy_draw_size(kind: int, net := false) -> float:
+	var e: Dictionary = ENEMY_MANIFEST[kind] if kind >= 0 and kind < ENEMY_MANIFEST.size() else ENEMY_MANIFEST[0]
+	return e["net_size"] if net else e["size"]
+
+func minion_draw_size(kind: int, net := false) -> float:
+	var m: Dictionary = MINION_MANIFEST[kind] if kind >= 0 and kind < MINION_MANIFEST.size() else MINION_MANIFEST[0]
+	return m["net_size"] if net else m["size"]
+
+func tank_draw_size(net := false) -> float:
+	return TANK_MANIFEST["net_size"] if net else TANK_MANIFEST["size"]
+
+func projectile_draw_size() -> float:
+	return PROJECTILE_MANIFEST["size"]
 
 # The player tank, honoring the profile's selected skin. Skins live at
 # tank/skins/<id>.svg per theme; "" (and any skin missing from the current
 # theme) falls back to the theme's default player_tank.svg.
 func tank_tex() -> Texture2D:
-	var f: String = Profile.skin_def(Profile.selected).file
+	return tank_tex_for(active, Profile.selected)
+
+# Tank texture for an arbitrary (theme, skin) pair by the same resolution rule —
+# the ONE copy of the lookup that match.gd / lobby.gd / skin_select.gd /
+# challenge_select.gd used to each reimplement. Never mutates `active`.
+func tank_tex_for(theme_idx: int, skin_id: String) -> Texture2D:
+	var f: String = Profile.skin_def(skin_id).file
 	if f != "":
-		var p := base() + "tank/" + f
+		var p := theme_base(theme_idx) + "tank/" + f
 		if ResourceLoader.exists(p):
 			return load(p)
-	return tex("tank/player_tank.svg")
+	return tex_of(theme_idx, TANK_MANIFEST["path"])
 
 func theme_name() -> String:
 	return themes[active]

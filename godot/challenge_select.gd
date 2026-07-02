@@ -20,12 +20,9 @@ func _ready() -> void:
 		thumbs[sk.id] = _tex(sk)
 	queue_redraw()
 
+# One shared (theme, skin) resolver on ArtTheme replaces the local copy.
 func _tex(s: Dictionary) -> Texture2D:
-	if s.file != "":
-		var p: String = ArtTheme.base() + "tank/" + s.file
-		if ResourceLoader.exists(p):
-			return load(p)
-	return ArtTheme.tex("tank/player_tank.svg")
+	return ArtTheme.tank_tex_for(ArtTheme.active, s.id)
 
 func _count() -> int:
 	return Profile.CHALLENGES.size() + 1   # + free play
@@ -34,20 +31,32 @@ func _deploy() -> void:
 	Profile.active_challenge_code = 0 if sel == 0 else int(Profile.CHALLENGES[sel - 1].code)
 	get_tree().change_scene_to_file("res://Match.tscn")
 
-func _input(e: InputEvent) -> void:
+# InputMap actions (bindings in project.godot [input]); was raw keycodes in
+# _input — moved to _unhandled_input like every other screen.
+func _unhandled_input(e: InputEvent) -> void:
+	if e is InputEventMouseButton:
+		if e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			for i in rows.size():
+				if rows[i].has_point(e.position):
+					if i == sel:
+						_deploy()
+					else:
+						sel = i
+					queue_redraw()
+		return
+	if not (e is InputEventKey or e is InputEventJoypadButton):
+		return
 	var n := _count()
-	if e is InputEventKey and e.pressed and not e.echo:
-		match e.keycode:
-			KEY_UP, KEY_W:    sel = (sel - 1 + n) % n; queue_redraw()
-			KEY_DOWN, KEY_S:  sel = (sel + 1) % n; queue_redraw()
-			KEY_ENTER, KEY_KP_ENTER, KEY_SPACE: _deploy()
-			KEY_ESCAPE, KEY_C: get_tree().change_scene_to_file("res://SkinSelect.tscn")
-	elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
-		for i in rows.size():
-			if rows[i].has_point(e.position):
-				if i == sel: _deploy()
-				else: sel = i
-				queue_redraw()
+	if e.is_action_pressed(&"ui_nav_up"):
+		sel = (sel - 1 + n) % n
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_nav_down"):
+		sel = (sel + 1) % n
+		queue_redraw()
+	elif e.is_action_pressed(&"ui_confirm"):
+		_deploy()
+	elif e.is_action_pressed(&"ui_back") or e.is_action_pressed(&"ui_challenges"):
+		get_tree().change_scene_to_file("res://SkinSelect.tscn")
 
 func _draw() -> void:
 	var vp: Vector2 = get_viewport_rect().size
