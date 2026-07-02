@@ -43,6 +43,7 @@ The key realization that drives this whole spec: **the arenas are independent.**
 | [`docs/06-roadmap-risks-testing.md`](docs/06-roadmap-risks-testing.md) | Milestones / vertical slices, the risk register (networking‑weighted), the determinism & netcode test plan, and open questions. |
 | [`docs/07-steamworks-integration.md`](docs/07-steamworks-integration.md) | **Steam deployment.** Host‑authoritative‑over‑SDR for a free game, the Steamworks API mapping (sockets, lobbies, auth, stats, cloud), host migration on Steam, and the honest anti‑cheat trade‑offs of free P2P. |
 | [`docs/08-engine-choice.md`](docs/08-engine-choice.md) | Engine decision: decouple the deterministic sim core from the renderer; recommended **Godot 4 + Rust sim core** (with the alternatives and the one factor that flips it). |
+| [`docs/09-rebuild-plan.md`](docs/09-rebuild-plan.md) | **Rebuild program.** Audit-driven plan for the presentation overhaul (art, VFX/particles, audio, UX), the sim→render event-stream contract, confirmed defect list, docs truth pass, and the Steam ship track — with phase gates and a delegation map. |
 | [`docs/appendix-A-map-extraction.md`](docs/appendix-A-map-extraction.md) | Evidence appendix: the full extracted catalog (118 units, 79 weapons, 87 upgrades in `catalog.json` — 89 counting two HP‑for‑gold trades the parser split off) from `TowerSurvivors v1.58.w3x`. |
 | [`research/tower-survivors-map/`](research/tower-survivors-map/) | The finalized map extraction: raw WC3 files, a re‑runnable `extract.py`, and `parsed/catalog.json`. |
 
