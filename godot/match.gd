@@ -56,6 +56,23 @@ const ELIM_STAMP_T := 0.35         # stamp overshoot->settle duration
 var fx: Fx = null                  # the ONE shared juice bus
 @onready var _camera: Camera2D = $Camera   # shake via offset (mirrors main.gd)
 
+# --- P5 end-of-match results panel (docs/09 §9.4-P5 item 5) -------------------
+# Appears RESULTS_DELAY seconds after match_over so the final juice (victory/
+# defeat flash, last elimination stamp) reads first. Everything the panel draws
+# is precomputed ONCE by _build_results at match_over — _draw formats nothing.
+const RESULTS_DELAY := 2.2         # seconds from match_over to panel
+const RESULTS_FADE := 0.3          # backdrop dim ease-in
+
+var _from_lobby := false           # launched by the lobby (Session handoff)?
+var _over_t := 0.0                 # seconds since match_over (render clock)
+var _rows: Array = []              # results rows by placement, built once
+var _res_sub := ""                 # cached panel strings (zero per-frame fmt)
+var _res_btn_label := ""
+var _res_menu_label := ""
+var _res_hint := ""
+var _rematch_rect := Rect2()       # click hit-targets (recomputed each _draw,
+var _menu_rect := Rect2()          # results.gd's redeploy_rect pattern)
+
 # Per-cell transient state — preallocated to player_count() in _ready, decayed
 # in _process; nothing here resizes or allocates per frame.
 var _cell_pulse := PackedFloat32Array()      # kill-feedback frame pulse ttl
@@ -76,6 +93,7 @@ func _ready() -> void:
 	# hand-off so a later direct launch falls back to the demo behavior.
 	if Session.lobby_players > 0:
 		m = StMatch.new_match(Session.lobby_players + 1, Session.lobby_seed)
+		_from_lobby = true   # remembered past clear() for the results panel's rematch
 		Session.clear()
 	else:
 		m = StMatch.new_match(N, randi())
@@ -174,7 +192,21 @@ var _recorded := false        # match-end achievements credited once
 var _toast: Array = []        # newly-unlocked achievement names to flash
 
 func _unhandled_input(e: InputEvent) -> void:
+	# Results-panel click targets (mirrors main.gd's _handle_click routing);
+	# rects are only live while the panel is actually displayed.
+	if e is InputEventMouseButton:
+		if e.pressed and e.button_index == MOUSE_BUTTON_LEFT and _results_visible():
+			if _rematch_rect.has_point(e.position):
+				_rematch()
+			elif _menu_rect.has_point(e.position):
+				get_tree().change_scene_to_file("res://SkinSelect.tscn")
+		return
 	if not (e is InputEventKey or e is InputEventJoypadButton):
+		return
+	# [Enter/Space] on the results panel: rematch (gated on the panel being up,
+	# so it can never fire mid-match).
+	if _results_visible() and e.is_action_pressed(&"ui_confirm"):
+		_rematch()
 		return
 	if e.is_action_pressed(&"ui_theme_cycle"):
 		# Cycling YOUR theme re-assigns your cell (player 0) and refreshes the
@@ -210,6 +242,9 @@ func _physics_process(_delta: float) -> void:
 			# Full-screen flash is reserved for your own death/victory; this is
 			# the victory half (your death half lives in _detect_eliminations).
 			fx.add_flash(Color(1.0, 0.9, 0.6, 0.35), 0.5)
+		# Build the results-panel rows once, now that the director has finalized
+		# every placement. The panel itself appears after RESULTS_DELAY.
+		_build_results()
 
 # Frame-rate cosmetic update: advance the FX bus, feed its shake into the
 # camera offset (whole grid shakes as one — mirrors main.gd's camera pattern),
@@ -220,6 +255,8 @@ func _process(delta: float) -> void:
 	fx.update(delta)
 	if _camera:
 		_camera.offset = fx.shake_offset()
+	if _recorded:
+		_over_t += delta   # render clock toward (and past) the results panel
 	if _round_pulse > 0.0:
 		_round_pulse = maxf(0.0, _round_pulse - delta)
 	for i in _elim_t.size():
@@ -381,15 +418,6 @@ func _draw() -> void:
 	var you_w: float = font.get_string_size(you, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
 	draw_string(font, Vector2(maxf(vp.x - 16.0 - you_w, 20.0), 26),
 		you, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.72, 0.66, 0.5))
-	if not _toast.is_empty():
-		# Each toast entry is an achievement name (in the translation table).
-		var toast_names: Array = []
-		for t in _toast:
-			toast_names.append(tr(t))
-		draw_string(font, Vector2(16, vp.y - 16),
-			tr("ACHIEVEMENT UNLOCKED:  %s") % ", ".join(toast_names),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1.0, 0.82, 0.4))
-
 	# Featured layout via _cell_rect (shared with the event drain): player 0
 	# (YOU) gets a large panel on the left taking ~60% of the width and the full
 	# height under the header; the other n-1 peers wrap into a tidy 2-column
@@ -404,6 +432,21 @@ func _draw() -> void:
 	var fc := fx.flash_color()
 	if fc.a > 0.001:
 		draw_rect(Rect2(Vector2.ZERO, vp), fc)
+
+	# End-of-match results panel over the dimmed final grid (the sims stay
+	# rendered beneath; the match_over gate lives in _results_visible).
+	if _results_visible():
+		_draw_results(font, vp)
+
+	# Achievement toasts draw LAST so they stay visible above the results panel.
+	if not _toast.is_empty():
+		# Each toast entry is an achievement name (in the translation table).
+		var toast_names: Array = []
+		for t in _toast:
+			toast_names.append(tr(t))
+		draw_string(font, Vector2(16, vp.y - 16),
+			tr("ACHIEVEMENT UNLOCKED:  %s") % ", ".join(toast_names),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1.0, 0.82, 0.4))
 
 # The one source of truth for cell geometry, used by BOTH _draw and the event
 # drain so juice lands exactly where the cell renders. Pure function of
@@ -611,3 +654,161 @@ func _score(i: int) -> int:
 	if dmg < 1.0:
 		return 0
 	return int(round(30.0 * log(1.0 + dmg) / log(10.0)))
+
+# --- P5 results panel (docs/09 §9.4-P5 item 5) ---------------------------------
+# The panel is gated on match_over (it can never appear mid-match): _recorded
+# only flips inside the `m.match_over()` branch, and _over_t only advances after.
+func _results_visible() -> bool:
+	return _recorded and _over_t >= RESULTS_DELAY
+
+# Build every string the results panel draws, ONCE, at match_over — the director
+# has finalized all placements by then. WIN/LOSS uses the results semantics from
+# net::results::MatchStats: win = top half of the lobby, ceil cutoff (1st..4th
+# of 8 WIN, 5th..8th LOSS) — placement itself stays the director's 1-based rank.
+func _build_results() -> void:
+	var n: int = m.player_count()
+	@warning_ignore("integer_division")
+	var win_cutoff: int = (n + 1) / 2
+	_rows.clear()
+	for i in n:
+		var view: SimView = _views[i] if i < _views.size() else null
+		var place: int = view.placement() if view != null and view.is_valid() else 0
+		var pc: Dictionary = players[i] if i < players.size() else {"skin": "ol_reliable"}
+		var nm: String = "P%d · %s" % [i + 1, tr(Profile.skin_def(pc["skin"]).name)]
+		if i == 0:
+			nm += "  " + tr("★ YOU")
+		_rows.append({
+			"place_txt": ("#%d" % place) if place > 0 else "—",
+			"sort": place if place > 0 else 99,   # unresolved sorts last (shouldn't happen)
+			"name": nm,
+			"is_you": i == 0,
+			"won": place > 0 and place <= win_cutoff,
+			"result_txt": tr("WIN") if place > 0 and place <= win_cutoff else tr("LOSS"),
+			"score_txt": "%d" % _score(i),
+			"weapons_txt": "%d" % (view.weapon_count() if view != null else 0),
+		})
+	_rows.sort_custom(func(a, b): return a["sort"] < b["sort"])
+	_res_sub = tr("You placed #%d of %d") % [_views[0].placement(), n]
+	_res_menu_label = tr("MENU")
+	if _from_lobby:
+		_res_btn_label = tr("BACK TO LOBBY")
+		_res_hint = tr("[Enter] Back to Lobby   ·   [Esc / S] Menu")
+	else:
+		_res_btn_label = tr("REMATCH")
+		_res_hint = tr("[Enter] Rematch   ·   [Esc / S] Menu")
+
+# Rematch semantics: a lobby-launched match goes BACK TO THE LOBBY — lobby.gd
+# reads nothing from Session on _ready and the Session plan is one-shot, so a
+# re-plan forged here would bypass StLobby's host-authoritative try_start;
+# "play again" is re-ready + start. A direct demo/challenge launch reloads
+# Match.tscn: Session is clear (fresh demo seed via randi()) and the active
+# challenge persists in the Profile autoload, so it stays applied.
+func _rematch() -> void:
+	if _from_lobby:
+		get_tree().change_scene_to_file("res://Lobby.tscn")
+	else:
+		get_tree().reload_current_scene()
+
+# Centered end-of-match summary over the dimmed final grid: every player by
+# final placement, WIN/LOSS per the top-half rule, score + weapons bought, and
+# the Rematch/Menu actions (keyboard + click). Visual language mirrors
+# results.gd (panel_bg body, emissive top rule, darkened-accent button). Draws
+# ONLY strings cached by _build_results — no per-frame formatting.
+func _draw_results(font: Font, vp: Vector2) -> void:
+	var head: Font = ArtTheme.ui_font(true)   # cached per weight in ArtTheme
+	var k := clampf((_over_t - RESULTS_DELAY) / RESULTS_FADE, 0.0, 1.0)
+	# Dim the finished arenas behind the panel (they keep rendering beneath).
+	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.02, 0.02, 0.04, 0.62 * k))
+
+	var n := _rows.size()
+	var row_h := 26.0
+	var pw := 640.0
+	var ph := 226.0 + row_h * float(n)
+	var px := vp.x * 0.5 - pw * 0.5
+	var py := vp.y * 0.5 - ph * 0.5
+	var panel := Rect2(Vector2(px, py), Vector2(pw, ph))
+	draw_rect(panel, ArtTheme.ui("panel_bg"))
+	draw_rect(panel, ArtTheme.ui("panel_border"), false, 2.0)
+	# Emissive top rule so it blooms under glow (accent: outcome-neutral header).
+	draw_rect(Rect2(Vector2(px, py), Vector2(pw, 3)), ArtTheme.ui("accent") * 1.4)
+
+	var cx := vp.x * 0.5
+	var title := tr("MATCH RESULTS")
+	var tw := head.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 32).x
+	draw_string(head, Vector2(cx - tw * 0.5, py + 46), title,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 32, ArtTheme.ui("accent") * 1.3)
+	var subw := font.get_string_size(_res_sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+	draw_string(font, Vector2(cx - subw * 0.5, py + 70), _res_sub,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("text_dim"))
+
+	# Column header row (numeric columns right-aligned by measured width).
+	var lx := px + 30.0
+	var name_x := lx + 52.0
+	var res_x := px + pw - 236.0
+	var score_rx := px + pw - 128.0
+	var wpn_rx := px + pw - 34.0
+	var hy := py + 100.0
+	var c_head: Color = ArtTheme.ui("header")
+	draw_string(head, Vector2(lx, hy), "#", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c_head)
+	draw_string(head, Vector2(name_x, hy), tr("PLAYER"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c_head)
+	draw_string(head, Vector2(res_x, hy), tr("RESULT"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c_head)
+	var sco_h := tr("SCORE")
+	draw_string(head, Vector2(score_rx - head.get_string_size(sco_h, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x, hy),
+		sco_h, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c_head)
+	var wpn_h := tr("WEAPONS")
+	draw_string(head, Vector2(wpn_rx - head.get_string_size(wpn_h, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x, hy),
+		wpn_h, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c_head)
+
+	# Placement rows (already sorted best -> worst by _build_results).
+	var c_text: Color = ArtTheme.ui("text")
+	var c_dim: Color = ArtTheme.ui("text_dim")
+	var c_accent: Color = ArtTheme.ui("accent")
+	var c_win := Color(0.42, 0.85, 0.55)          # lobby's ready-green
+	var c_loss: Color = ArtTheme.ui("danger")
+	c_loss.a = 0.85
+	for j in n:
+		var row: Dictionary = _rows[j]
+		var y := hy + 26.0 + row_h * float(j)
+		if row["is_you"]:
+			# Subtle accent wash so YOUR row pops (matches your-cell highlight).
+			draw_rect(Rect2(px + 8.0, y - 17.0, pw - 16.0, row_h - 2.0),
+				Color(c_accent.r, c_accent.g, c_accent.b, 0.12))
+		var rc: Color = c_accent if row["is_you"] else c_text
+		draw_string(head, Vector2(lx, y), row["place_txt"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, rc)
+		draw_string(font, Vector2(name_x, y), row["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, rc)
+		draw_string(head, Vector2(res_x, y), row["result_txt"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, c_win if row["won"] else c_loss)
+		var scw := font.get_string_size(row["score_txt"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+		draw_string(font, Vector2(score_rx - scw, y), row["score_txt"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, c_accent if row["is_you"] else c_dim)
+		var ww := font.get_string_size(row["weapons_txt"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+		draw_string(font, Vector2(wpn_rx - ww, y), row["weapons_txt"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, c_dim)
+
+	# Actions: primary Rematch/Back-to-Lobby + secondary Menu, hover-lit click
+	# targets (results.gd's button pattern) with the keyboard hint beneath.
+	var btn_h := 40.0
+	var by := py + ph - 66.0
+	var bw1 := 250.0
+	var bw2 := 130.0
+	var gap := 16.0
+	_rematch_rect = Rect2(cx - (bw1 + gap + bw2) * 0.5, by, bw1, btn_h)
+	_menu_rect = Rect2(_rematch_rect.position.x + bw1 + gap, by, bw2, btn_h)
+	var mpos := get_viewport().get_mouse_position()
+	var btn_base: Color = c_accent.darkened(0.7)
+	draw_rect(_rematch_rect, btn_base.lightened(0.08) if _rematch_rect.has_point(mpos) else btn_base)
+	var btn_border := c_accent
+	btn_border.a = 0.7
+	draw_rect(_rematch_rect, btn_border, false, 1.5)
+	var blw := head.get_string_size(_res_btn_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x
+	draw_string(head, _rematch_rect.position + Vector2(bw1 * 0.5 - blw * 0.5, 26),
+		_res_btn_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, c_accent.lightened(0.3))
+	var menu_base := Color(0.14, 0.14, 0.18)
+	draw_rect(_menu_rect, menu_base.lightened(0.06) if _menu_rect.has_point(mpos) else menu_base)
+	draw_rect(_menu_rect, ArtTheme.ui("panel_border"), false, 1.5)
+	var mlw := head.get_string_size(_res_menu_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+	draw_string(head, _menu_rect.position + Vector2(bw2 * 0.5 - mlw * 0.5, 26),
+		_res_menu_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, c_text)
+	var hintw := font.get_string_size(_res_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	draw_string(font, Vector2(cx - hintw * 0.5, py + ph - 12.0), _res_hint,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, c_dim)

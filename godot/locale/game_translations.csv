@@ -674,3 +674,15 @@ The Conclave fed this thing on the dying and it learned to drink; each corpse on
 Bloody Spikes: +80 spikes; retaliation stacks more damage each hit (resets each round).,Bloody Spikes: +80 spikes; retaliation stacks more damage each hit (resets each round).,血腥尖刺：尖刺 +80；反伤每次受击叠加更多伤害（每回合重置）。
 "A Hexwright rot-totem bolted to the tank, breathing a slow green ruin into the ground around it that the close-pressed never leave clean.","A Hexwright rot-totem bolted to the tank, breathing a slow green ruin into the ground around it that the close-pressed never leave clean.",一根拴在坦克上的符文匠腐烂图腾，向周身土地缓缓吐出绿色的毁灭，逼近的敌人从不能干净脱身。
 Blight Aura: +200 regen; pulse 200 poison damage in 600 every second.,Blight Aura: +200 regen; pulse 200 poison damage in 600 every second.,枯萎光环：再生 +200；每秒在 600 范围内脉冲 200 点中毒伤害。
+MATCH RESULTS,MATCH RESULTS,对局结算
+You placed #%d of %d,You placed #%d of %d,你获得第 %d 名（共 %d 人）
+PLAYER,PLAYER,玩家
+RESULT,RESULT,结果
+SCORE,SCORE,得分
+WIN,WIN,胜
+LOSS,LOSS,负
+REMATCH,REMATCH,再来一局
+BACK TO LOBBY,BACK TO LOBBY,返回大厅
+MENU,MENU,菜单
+[Enter] Rematch   ·   [Esc / S] Menu,[Enter] Rematch   ·   [Esc / S] Menu,[Enter] 再来一局   ·   [Esc / S] 菜单
+[Enter] Back to Lobby   ·   [Esc / S] Menu,[Enter] Back to Lobby   ·   [Esc / S] Menu,[Enter] 返回大厅   ·   [Esc / S] 菜单
