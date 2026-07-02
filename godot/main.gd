@@ -9,9 +9,20 @@
 #   UiLayer/Hud       — top bar + arsenal panel
 #   UiLayer/Shop      — shop cards / reroll / clear (alive)
 #   UiLayer/Results   — death panel + redeploy (dead)
+#   UiLayer/PauseMenu — pause/settings overlay (alive; owns input while open)
 # All sim reads go through the SimView wrapper; only THIS file calls sim.step.
 # Controls: click a shop card or press 1-8 to buy · R reroll · Space clear ·
-# Esc back to skin select · M multi-arena net demo (see project.godot [input]).
+# Esc pause menu (resume/settings/quit — quit is confirm-gated so a live run
+# can't be abandoned by one keypress) · M multi-arena net demo (see
+# project.godot [input]).
+#
+# PAUSE (single-player only): while the PauseMenu overlay is open this file
+# stops calling sim.step() and stops draining the intent FIFO — the LOCAL,
+# offline sim simply holds its tick counter (the classic freeze; safe because
+# nobody else consumes this sim). The FX bus freezes too (fx.update skipped),
+# so the pause is a true still frame behind the dimmed menu. NETPLAY MUST
+# NEVER DO THIS: match.gd / the director model keeps every sim ticking —
+# there is no global pause in docs/03's architecture.
 extends Node2D
 
 const BUY_ACTIONS: Array[StringName] = [
@@ -51,6 +62,7 @@ var _dead_since_ms := -1      # wall-clock ms of the is_dead() edge (-1 = alive)
 @onready var _hud: Node2D = $UiLayer/Hud
 @onready var _shop: Node2D = $UiLayer/Shop
 @onready var _results: Node2D = $UiLayer/Results
+@onready var _pause_menu: Node2D = $UiLayer/PauseMenu
 
 func _ready() -> void:
 	randomize()
@@ -60,7 +72,7 @@ func _ready() -> void:
 	# The world canvas is dimmed by ArenaRenderer's CanvasModulate; the UI layer
 	# lives outside that canvas, so give its nodes the same ambient modulate to
 	# keep FX/HUD/shop colors identical to the pre-split rendering.
-	for ui_node in [_fx_overlay, _hud, _shop, _results]:
+	for ui_node in [_fx_overlay, _hud, _shop, _results, _pause_menu]:
 		ui_node.modulate = _arena.AMBIENT_DIM
 	_wire_modules()
 	# AUDIO (render-only): start the looping ambient bed.
@@ -94,18 +106,27 @@ func _sync_dead_panels() -> void:
 
 # --- input (InputMap actions; physical-key bindings live in project.godot) ---
 func _unhandled_input(e: InputEvent) -> void:
+	# [N] mute is a global UX toggle (render-only) — handled first so it works
+	# alive, on the results panel AND inside the pause menu (whose settings pane
+	# mirrors the state live). Plays a confirm blip when unmuting.
+	if (e is InputEventKey or e is InputEventJoypadButton) \
+			and e.is_action_pressed(&"ui_mute"):
+		var muted := Audio.toggle_mute()
+		if not muted:
+			Audio.play(&"ui_move")
+		return
+	# While the pause/settings overlay is open it owns EVERY remaining event —
+	# keys, clicks, and mouse motion (slider drags). Nothing below (shop input,
+	# scene changes) can fire. The overlay is a plain child node of THIS scene,
+	# not a global: the net view (match.gd) has no PauseMenu and can never pause.
+	if _pause_menu.is_open():
+		_pause_menu.handle_input(e)
+		return
 	if e is InputEventMouseButton:
 		if e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
 			_handle_click(e.position)
 		return
 	if not (e is InputEventKey or e is InputEventJoypadButton):
-		return
-	# [N] mute is a global UX toggle (render-only) — handled before the dead-guard
-	# so it works on the results panel too. Plays a confirm blip when unmuting.
-	if e.is_action_pressed(&"ui_mute"):
-		var muted := Audio.toggle_mute()
-		if not muted:
-			Audio.play(&"ui_move")
 		return
 	# While dead, the only live controls are Redeploy (confirm) and Menu (back);
 	# swallow the shop/number/reroll actions so a fresh run isn't dirtied.
@@ -129,7 +150,10 @@ func _unhandled_input(e: InputEvent) -> void:
 	elif e.is_action_pressed(&"ui_net_view"):
 		get_tree().change_scene_to_file("res://Match.tscn")   # multi-arena net demo
 	elif e.is_action_pressed(&"ui_back"):
-		get_tree().change_scene_to_file("res://SkinSelect.tscn")
+		# Esc while alive PAUSES (was: instant scene change — the run-abandon
+		# footgun). Quit lives inside the menu behind a confirm step. Dead-state
+		# Esc (above) keeps its direct back-to-menu behavior on the results panel.
+		_pause_menu.open_pause()
 
 # Route a left-click by the modules' hit-targets. While dead, the only
 # clickable target is the Redeploy button on the results panel; shop rects are
@@ -184,6 +208,12 @@ func _redeploy() -> void:
 func _physics_process(_delta: float) -> void:
 	if sim == null:
 		return
+	# PAUSE GATE (single-player only): overlay open -> no sim.step, no intent
+	# drain, no event fan-out. The local sim's tick counter/checksum hold exactly
+	# where they were; queued intents (≤4) stay queued and resume in order.
+	# Netplay must never gate a shared sim like this (see header note).
+	if _pause_menu.is_open():
+		return
 	# Drain exactly ONE queued intent this tick (FIFO — earlier of two same-tick
 	# inputs is no longer lost; the later one simply runs next tick). What the
 	# sim receives per tick is unchanged: a single (code, slot) pair.
@@ -232,11 +262,21 @@ func _physics_process(_delta: float) -> void:
 func _process(delta: float) -> void:
 	if sim == null or fx == null:
 		return
+	# Paused: the FX bus freezes too (pools/timers hold in place) so the pause
+	# reads as a true still frame behind the dimmed menu — chosen over "FX keep
+	# animating" so nothing decays or expires while the player is away.
+	if _pause_menu.is_open():
+		return
 	fx.update(delta)
 	if _camera:
-		var z: float = fx.zoom_scale()
+		# Screen-shake pref (reduce motion, persisted via Profile): when off, the
+		# camera pins to identity — no shake offset AND no zoom punch. This is
+		# the single point where main.gd applies fx camera motion, so the toggle
+		# covers all of it without touching fx.gd.
+		var shake_on: bool = Profile.screen_shake()
+		var z: float = fx.zoom_scale() if shake_on else 1.0
 		_camera.zoom = Vector2(z, z)
-		_camera.offset = fx.shake_offset() \
+		_camera.offset = (fx.shake_offset() if shake_on else Vector2.ZERO) \
 			+ get_viewport_rect().size * 0.5 * (1.0 - 1.0 / z)
 
 # AUDIO (render-only): every gameplay SFX now fires from the drained event

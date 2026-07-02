@@ -686,3 +686,23 @@ BACK TO LOBBY,BACK TO LOBBY,返回大厅
 MENU,MENU,菜单
 [Enter] Rematch   ·   [Esc / S] Menu,[Enter] Rematch   ·   [Esc / S] Menu,[Enter] 再来一局   ·   [Esc / S] 菜单
 [Enter] Back to Lobby   ·   [Esc / S] Menu,[Enter] Back to Lobby   ·   [Esc / S] Menu,[Enter] 返回大厅   ·   [Esc / S] 菜单
+PAUSED,PAUSED,已暂停
+Resume,Resume,继续游戏
+Settings,Settings,设置
+Quit to Menu,Quit to Menu,退出到主菜单
+QUIT TO MENU?,QUIT TO MENU?,退出到主菜单？
+This run is still live — quitting abandons it.,This run is still live — quitting abandons it.,本局仍在进行中——退出即放弃这局。
+Keep Playing,Keep Playing,继续作战
+SETTINGS,SETTINGS,设置
+Master Volume,Master Volume,主音量
+SFX Volume,SFX Volume,音效音量
+Music Volume,Music Volume,音乐音量
+Mute,Mute,静音
+Language,Language,语言
+Screen Shake,Screen Shake,屏幕震动
+On,On,开
+Off,Off,关
+Back,Back,返回
+[↑↓] select   [Enter] confirm   [Esc] resume,[↑↓] select   [Enter] confirm   [Esc] resume,[↑↓] 选择   [Enter] 确认   [Esc] 继续
+[↑↓] select   [Enter] confirm   [Esc] back,[↑↓] select   [Enter] confirm   [Esc] back,[↑↓] 选择   [Enter] 确认   [Esc] 返回
+[↑↓] select   [←→] adjust   [Enter] apply   [Esc] back,[↑↓] select   [←→] adjust   [Enter] apply   [Esc] back,[↑↓] 选择   [←→] 调整   [Enter] 应用   [Esc] 返回

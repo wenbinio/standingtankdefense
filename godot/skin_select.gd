@@ -5,10 +5,15 @@ extends Node2D
 
 const COLS := 7
 
+# Shared pause/settings overlay script, instanced here in settings-only mode
+# ([O]; volumes/mute/language/screen-shake — same pane the in-run pause shows).
+const PAUSE_MENU := preload("res://pause_menu.gd")
+
 var font: Font
 var sel := 0
 var cards: Array[Rect2] = []
 var thumbs := {}              # skin id -> Texture2D (cached up-front, per theme)
+var _settings: Node2D = null  # lazily created PAUSE_MENU child (standalone mode)
 
 func _ready() -> void:
 	font = ArtTheme.ui_font(false)   # Barlow + Noto SC fallback (renders CJK)
@@ -36,6 +41,13 @@ func _deploy() -> void:
 # InputMap actions (bindings in project.godot [input]); was raw keycodes in
 # _input — moved to _unhandled_input like every other screen.
 func _unhandled_input(e: InputEvent) -> void:
+	# The settings overlay owns EVERY event while open (keys, clicks, motion for
+	# slider drags). Redraw on close so a language flip re-resolves every tr().
+	if _settings != null and _settings.is_open():
+		_settings.handle_input(e)
+		if not _settings.is_open():
+			queue_redraw()
+		return
 	if e is InputEventMouseButton:
 		if e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
 			for i in cards.size():
@@ -73,6 +85,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		queue_redraw()
 	elif e.is_action_pressed(&"ui_language"):
 		_toggle_language()
+	elif e.is_action_pressed(&"ui_settings"):
+		_open_settings()
 	elif e.is_action_pressed(&"ui_dev_unlock"):
 		Profile.unlock_all()          # dev: preview the gallery
 		queue_redraw()
@@ -84,6 +98,16 @@ func _unhandled_input(e: InputEvent) -> void:
 		_deploy()
 	elif e.is_action_pressed(&"ui_back"):
 		get_tree().quit()
+
+# Open the shared settings pane (pause_menu.gd, settings-only mode) on top of
+# the gallery. Created lazily once, reused across opens; drawn above the cards
+# (last child). No sim exists on this screen, so "pause" semantics don't apply.
+func _open_settings() -> void:
+	if _settings == null:
+		_settings = PAUSE_MENU.new()
+		_settings.standalone_settings = true
+		add_child(_settings)
+	_settings.open_settings()
 
 # Flip the UI language between English and Simplified Chinese, persist it, and
 # redraw so every tr()'d string re-resolves. Render-layer only.
@@ -112,8 +136,9 @@ func _draw() -> void:
 	draw_string(font, Vector2(36, 72),
 		tr("Unlock skins via achievements — purist runs (one weapon type), no-economy, and more.   [arrows] move   [Enter] play   [C] challenges   [L] lobby   [M] net demo   [T] theme   [U] dev-unlock"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.56, 0.6, 0.68))
-	# Language toggle hint + current language (own line; label shown in its script).
-	draw_string(font, Vector2(36, 90), "[G] %s" % _lang_label(),
+	# Language toggle hint + current language (own line; label shown in its
+	# script) + the settings-pane key.
+	draw_string(font, Vector2(36, 90), "[G] %s   ·   [O] %s" % [_lang_label(), tr("Settings")],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.62, 0.72, 0.9))
 
 	cards.clear()

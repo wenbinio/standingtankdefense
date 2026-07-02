@@ -74,6 +74,7 @@ var selected := "ol_reliable"
 var active_challenge_code := 0   # transient: applied to player 0 on next deploy
 var last_unlocks: Array = []     # ach ids granted by the most recent record_match()
 var _locale := "en"              # persisted UI language ("en" / "zh_CN")
+var _screen_shake := true        # persisted render pref: camera shake/zoom punch
 
 func _ready() -> void:
 	_load()
@@ -108,6 +109,16 @@ func locale() -> String:
 
 func set_locale_pref(loc: String) -> void:
 	_locale = loc
+	_save()
+
+# --- screen shake (cosmetic render pref, persisted) ----------------------------
+# Consumed by main.gd at its camera-offset application point (the one place fx
+# shake/zoom-punch reach the camera). Never feeds the sim.
+func screen_shake() -> bool:
+	return _screen_shake
+
+func set_screen_shake(on: bool) -> void:
+	_screen_shake = on
 	_save()
 
 func is_unlocked(skin_id: String) -> bool:
@@ -171,6 +182,7 @@ func _load() -> void:
 		return
 	selected = cf.get_value("profile", "selected", "ol_reliable")
 	_locale = cf.get_value("profile", "locale", "en")
+	_screen_shake = bool(cf.get_value("profile", "screen_shake", true))
 	for id in cf.get_value("profile", "earned", []):
 		earned[id] = true
 	if not is_unlocked(selected):   # a skin that lost its unlock falls back
@@ -184,5 +196,6 @@ func _save() -> void:
 	cf.load(SAVE_PATH)   # ignore failure: a missing file just starts empty
 	cf.set_value("profile", "selected", selected)
 	cf.set_value("profile", "locale", _locale)
+	cf.set_value("profile", "screen_shake", _screen_shake)
 	cf.set_value("profile", "earned", earned.keys())
 	cf.save(SAVE_PATH)
