@@ -4,7 +4,7 @@ Guidance for Claude Code working in this repository.
 
 ## Project
 
-**Standing Tank Defense** — a free, multiplayer, last-man-standing, randomized tower-defense / survival game with **one immobile tank** per player, inspired by the WC3 map *Tower Survivors*. Currently a **specification package** (`docs/`), moving toward implementation.
+**Standing Tank Defense** — a free, multiplayer, last-man-standing, randomized tower-defense / survival game with **one immobile tank** per player, inspired by the WC3 map *Tower Survivors*. The spec (`docs/`) is implemented: a **playable game** — deterministic Rust core (`sim-core/`, M0–M4 shipped + M5 partial), Godot 4 front-end (`godot/`), and a prebuilt demo (`demos/`); the live-Steam ship track remains open (`docs/06`, `docs/09`).
 
 Read these before acting; do not re-derive what they already decide:
 - `README.md` — overview + doc index.

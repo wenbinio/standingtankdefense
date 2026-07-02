@@ -8,7 +8,7 @@ Design spec for **Standing Tank Defense**, grounded in the extracted Tower Survi
 2. **Everything stacks, multiplicatively across sources.** The map's rule — *"different damage increases are multiplicative with each other"* — is the power-curve engine. Power comes from layering, not from a tech tree you outgrow.
 3. **Randomized offers, meaningful choices.** Each round opens a new shop of random offers, weighted by rarity; rerolls and targeted shop items let you steer the randomness at a cost.
 4. **You race the lobby, not fight it.** Players never touch each other's arenas. The competition is *relative survival time*. This is a pillar **and** the reason the netcode can be cheap.
-5. **Readable escalation.** Difficulty ramps on a fixed clock with known breakpoints (10 min, 15 min, then the boss).
+5. **Readable escalation.** Difficulty ramps on a fixed clock with known breakpoints — as shipped, a stepped ramp every **3 minutes** (k = 1..10) across a **30-minute** arc, then the boss. (The WC3 source used a 15-min arc with 10/15-min breakpoints; see `docs/01`.)
 
 ## 2.2 The tank (player avatar)
 
@@ -23,10 +23,12 @@ Design spec for **Standing Tank Defense**, grounded in the extracted Tower Survi
 | --- | --- | --- |
 | Lobby | until ready/countdown | Server assigns slots + master seed |
 | Countdown | ~5 s **[design choice]** | Time-sync converges here |
-| Rounds | **~30 s each**, a new **shop every round** | ~15 min of escalating waves |
-| Scaling steps | at **10 min** and **15 min** | enemy HP/damage jump; 15-min step "brings the game to a swift end" |
-| Boss | after ~15 min | **Samwise** spawns; **fixed** HP/damage (does not scale); shop "flees in fear"; only `Clear` damages it |
+| Rounds | **~30 s each**, a new **shop every round** | **30 min** of escalating waves |
+| Scaling steps | every **3 min** (`RAMP_INTERVAL` = 5400 ticks; steps at 3, 6, …, 30 min) | enemy HP **and** damage step up ≈ +14% per interval, compounding smoothly to ≈ ×5.56 at the boss (`sim::content::enemy_hp_mult`) |
+| Boss | at **30 min** (`BOSS_SPAWN_TICK` = 54000) | **The Hippocrate** spawns with a dense escort; **fixed** HP/damage (does not scale); immune to weapon fire — only `Clear` damages it (a multi-`Clear` race) |
 | Resolution | — | placement + Last Stand awarded |
+
+*(As shipped. The WC3 source ran ~15 min with 10/15-min scaling steps and its "Samwise" boss — `docs/01`; the standalone game stretched the arc to 30 min with an even 3-min ramp.)*
 
 - **Round number and global clock are server-authoritative** and identical for everyone, so "round N" / "minute N" are comparable across the leaderboard.
 - Within a round each arena runs **independently**: your round-N wave is the same *composition* as everyone else's round-N wave (shared wave table) but **per-player seeded**, so spawn timing/positions differ and can't be mirror-copied.
@@ -82,16 +84,16 @@ Each weapon = `{base damage types, attack type, damage, DPS, attack cooldown, ra
 
 ## 2.6 Enemies & waves
 
-- Enemy fields: `{HP, move speed, contact damage, bounty, armor class, archetype, abilities}`. Archetypes seen in the roster: melee swarmers (Fel Orc Peon/Grunt/Raider), casters (Warlock, Necromancer), ranged "breathers/spitters" (Fire/Ice/Poison/Lava breathers that attack in rotating arcs).
+- Enemy fields: `{HP, move speed, contact damage, bounty, armor class, archetype, abilities}`. The shipped roster is an **original 12-entry funny-animal cast** (`sim::content::ENEMIES` — Squeakzilla, Doomduck, Bacon, Honk, Bonk, Nope Rope, Croak, Spicy, Popsicle, Dodo, Fanged Death, plus the boss) covering the source's archetypes: melee swarmers, fast rushers, armored bruisers, casters, and ranged breathers/spitters. (The WC3 roster — Fel Orc Peons, Warlocks, Fire/Ice/Poison/Lava breathers — is cataloged in `docs/01` / Appendix A; no WC3 names or assets ship.)
 - **Wave table per round** defines composition, counts, and cadence; shared across players for a given round, **per-player seeded** for individual spawn timing/position.
-- **Scaling**: enemy base HP/damage step up over time (notably at 10 and 15 min).
-- **Boss** (~15 min): **Samwise**, fixed stats. *(Inferred: source confirms Samwise has fixed/non-scaling stats and is the kill objective; the "immune to weapons, killable only by `Clear`" rule is a carried-over design assumption, not stated in the extracted strings.)*
+- **Scaling**: enemy base HP **and** damage step up on the 3-min ramp (steps at 3, 6, …, 30 min — §2.3).
+- **Boss** (30 min): **The Hippocrate**, fixed stats, **immune to weapon fire — only `Clear` damages it** — and it grinds the tank with cadenced contact hits while a dense escort keeps spawning, so the climax is a sustained multi-`Clear` race. *(The source's boss, "Samwise", likewise had fixed/non-scaling stats; the Clear-only rule was a carried-over design assumption there, and is implemented fact here.)*
 
 ## 2.7 Win / lose & placement (last man standing)
 
 - **Eliminated** at 0 HP; server records the **death tick**.
 - **Placement = reverse order of elimination** (last to die = 1st).
-- **Win = surviving (top) half of the lobby; lose = bottom half.** Sole survivor = **Last Stand**. The prestige objective (source score +250): *survive 15 min, outlive everyone, kill Samwise.*
+- **Win = surviving (top) half of the lobby; lose = bottom half.** Sole survivor = **Last Stand**. The prestige objective (the source's +250 score, carried forward): *survive the full arc, outlive everyone, kill the boss.*
 - **Tiebreak** (deterministic, no coin flip) **[design choice]**: simultaneous deaths broken by (1) higher round reached, then (2) more damage dealt, then (3) lower slot index — so placement is a total order.
 - The match **ends** when ≤1 tank remains or the boss is resolved.
 

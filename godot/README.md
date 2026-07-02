@@ -28,11 +28,19 @@ cd ..
 If Godot can't find `StSim`, confirm the library exists at the path in
 `standing_tank_defense.gdextension` for your platform, then reopen the project.
 
-## Controls (single-arena)
+## Controls
+Single-arena (the main game):
 - **1–8** — buy that shop slot (1–4 weapons, 5–8 economy/passives/spikes)
 - **R** — reroll the shop
 - **Space** — Clear (board wipe; the only thing that hurts the boss)
-- **T** — cycle art theme · **M** — multi-arena net demo · **Esc** — Tank Select
+- **T** — cycle art theme · **N** — mute/unmute · **M** — multi-arena net demo · **Esc** — Tank Select
+
+Tank Select (start screen):
+- **C** — challenge picker · **L** — multiplayer lobby · **M** — net demo
+- **G** — language toggle (English ⇄ 简体中文) · **T** — art theme
+
+Lobby: **Space/Y** ready · **A/+** add peer · **X/−** remove peer · **R** ready
+all · **Enter** start · **Esc** back. Net view: **T** theme · **S/Esc** back.
 
 See **[`../TUTORIAL.md`](../TUTORIAL.md)** for the full playtest guide (every
 screen, the start/challenge/net flows, and how to play well).

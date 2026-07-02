@@ -80,7 +80,7 @@ Responsibilities:
 
 The simulation is tick-based and local, so we don't need tight cross-client frame-sync. We need each client to agree on **match time** for round boundaries, scaling steps, and the boss.
 
-- Server emits **time beacons** `(server_tick, server_unix_ns)` a few times per second.
+- Server emits **time beacons** (as implemented: `server_tick` only — see `docs/04 §4.4.2`) a few times per second.
 - Clients estimate offset/RTT with an NTP-like filter (track min-RTT samples, smooth the offset) and run their local sim against *estimated server tick*.
 - Round/scaling/boss events are scheduled by **absolute server tick**, not "N seconds from when I received the message," so they fire coherently everywhere despite jitter.
 - A client that drifts past a tolerance re-syncs from the next snapshot rather than fast-forwarding visibly.

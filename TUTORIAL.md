@@ -65,8 +65,10 @@ achievement that unlocks them.
 | **Enter / Space** | Deploy with the selected tank |
 | **Click** a tank | Select it (click again to deploy) |
 | **C** | Open the **Challenge picker** |
+| **L** | Open the **multiplayer Lobby** |
 | **M** | Open the **Multi-arena net demo** |
 | **T** | Cycle the **art theme** (Grimdark ⇄ Gaslamp) |
+| **G** | Toggle **language** (English ⇄ 简体中文) |
 | **U** | *Dev:* unlock every skin (to preview the gallery) |
 | **R** | *Dev:* relock everything (reset progress) |
 | **Esc** | Quit |
@@ -93,6 +95,7 @@ you currently own. The **shop bar** is along the bottom.
 | **R** | Reroll the shop |
 | **Space** | **Clear** — board wipe; the only thing that hurts the boss |
 | **T** | Cycle the art theme |
+| **N** | Mute / unmute sound (works on the run-summary panel too) |
 | **M** | Jump to the multi-arena net demo |
 | **Esc** | Back to Tank Select |
 
@@ -112,6 +115,23 @@ matching achievement is earnable on demand.
 | **Enter / Space / click** | Deploy with that rule |
 | **C / Esc** | Back |
 
+### Lobby (press **L** from Tank Select)
+The front door to a networked match: a **host-authoritative lobby** driven by the
+real netcode's lobby state machine (you are the host, seat 0). Simulated peers
+join, pick their own cosmetics, and ready up after a moment (until live Steam
+matchmaking lands, peers are simulated); when everyone is ready, start the match
+— it launches the multi-arena view with the lobby's seats.
+
+| Key | Action |
+| --- | --- |
+| **Space / Y** | Toggle *your* ready flag |
+| **A / +** | Add a (simulated) player |
+| **X / −** | Remove the last player |
+| **R** | Ready everyone (impatience button) |
+| **Enter** | Start the match (host-only; needs ≥2 players, all ready) |
+| **T** | Cycle the art theme |
+| **Esc** | Back to Tank Select |
+
 ### Multi-arena net demo (press **M**)
 The headline architecture, made visible: **8 independent arenas under one
 authoritative director**, each its own player. **Your arena is the large featured
@@ -122,12 +142,13 @@ players get knocked out until one is left standing.
 | Key | Action |
 | --- | --- |
 | **T** | Cycle the art theme |
-| **S** | Back to Tank Select |
-| **Esc** | Quit |
+| **S / Esc** | Back to Tank Select |
 
-### Themes
+### Themes & language
 Press **T** on most screens to swap the whole look between **Grimdark** and
 **Gaslamp Bulwark** — different art *and* UI colors (gold/blood vs brass/aether).
+Press **G** on Tank Select to toggle the language (English ⇄ 简体中文), and **N**
+in the arena to mute/unmute sound. Both stick between sessions.
 
 ---
 
@@ -182,5 +203,3 @@ this to play the single-player and net-demo flows above.
 When you playtest, the most useful feedback: **how far did a run feel decided by
 the shop vs. by luck?** Did any purchase feel like an obvious trap or an obvious
 must-buy? Were the first ~30 seconds fair? Did anything read as unclear on screen?
-</content>
-</invoke>

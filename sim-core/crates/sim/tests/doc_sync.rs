@@ -1,0 +1,156 @@
+//! Mechanical drift guard between the shipped sim content and the docs
+//! (`docs/02`, `docs/04`, `docs/05`, `docs/06`) — the match-arc twin of
+//! `net/tests/wire_doc_sync.rs` (which guards the wire catalog in `docs/04`).
+//!
+//! History: five docs described a 15-minute arc and a boss the shipped game
+//! doesn't have. The one doc that stayed true (`docs/04`'s wire catalog) was
+//! the one with a test, so the pattern is extended: this test fails the build
+//! if the docs drift from `sim::content` again on
+//!   1. the 30-minute match arc (`BOSS_SPAWN_TICK`, `RAMP_INTERVAL`),
+//!   2. the boss identity (display name derived from `ENEMIES[BOSS]`, and no
+//!      resurrection of the WC3 source's boss name as *this* game's boss), and
+//!   3. the catalog counts (derived from the `WEAPONS`/`MODIFIERS` tables, so
+//!      growing the catalog forces the doc number to move with it).
+//!
+//! Robust-not-brittle: all doc checks are plain substring presence, so prose
+//! may evolve freely as long as the load-bearing facts still appear.
+
+use std::fs;
+use std::path::PathBuf;
+
+use sim::content::{BOSS, BOSS_SPAWN_TICK, ENEMIES, MODIFIERS, RAMP_INTERVAL, WEAPONS};
+
+/// Read a doc from the repo `docs/` dir (CARGO_MANIFEST_DIR = sim-core/crates/sim).
+fn doc(name: &str) -> String {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../docs")
+        .join(name)
+        .canonicalize()
+        .unwrap_or_else(|e| panic!("canonicalize docs/{name}: {e}"));
+    fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+}
+
+fn boss_name() -> &'static str {
+    let def = &ENEMIES[BOSS as usize];
+    assert!(def.boss, "ENEMIES[BOSS] is not flagged as the boss");
+    def.name
+}
+
+/// The arc constants themselves: a 30-minute match of ten 3-minute ramp
+/// intervals, boss at the end. If a deliberate redesign changes these, the
+/// docs listed in the tests below must be updated in the same change.
+#[test]
+fn match_arc_constants_are_the_30_minute_arc() {
+    assert_eq!(
+        BOSS_SPAWN_TICK,
+        30 * 60 * 30,
+        "boss spawn is 30 min @ 30 Hz"
+    );
+    assert_eq!(RAMP_INTERVAL, 3 * 60 * 30, "ramp interval is 3 min @ 30 Hz");
+    assert_eq!(
+        BOSS_SPAWN_TICK,
+        10 * RAMP_INTERVAL,
+        "the arc is exactly ten ramp intervals (k = 1..10)"
+    );
+    // Exactly one boss in the roster, and it's the one `BOSS` points at.
+    assert_eq!(
+        ENEMIES.iter().filter(|e| e.boss).count(),
+        1,
+        "expected exactly one boss in ENEMIES"
+    );
+}
+
+#[test]
+fn design_doc_states_the_shipped_arc_and_boss() {
+    let d02 = doc("02-game-design.md");
+    assert!(
+        d02.contains(boss_name()),
+        "docs/02 must name the shipped boss ({:?})",
+        boss_name()
+    );
+    assert!(
+        d02.contains("30 min"),
+        "docs/02 must state the 30-minute match arc"
+    );
+    assert!(
+        d02.contains("3 min") || d02.contains("3-min") || d02.contains("3 minutes"),
+        "docs/02 must state the 3-minute scaling steps"
+    );
+}
+
+#[test]
+fn protocol_doc_states_the_shipped_arc_and_boss() {
+    let d04 = doc("04-protocol-and-messages.md");
+    assert!(
+        d04.contains(boss_name()),
+        "docs/04's match state machine must name the shipped boss ({:?})",
+        boss_name()
+    );
+    assert!(
+        d04.contains("30:00") && d04.contains("BOSS_SPAWN_TICK"),
+        "docs/04 must place the BOSS transition at 30:00 (BOSS_SPAWN_TICK)"
+    );
+    assert!(
+        !d04.to_lowercase().contains("samwise"),
+        "docs/04 describes the shipped protocol; the WC3 source's boss name \
+         must not reappear here (source-map analysis belongs in docs/01)"
+    );
+}
+
+#[test]
+fn data_model_doc_states_the_shipped_boss_and_spawn_tick() {
+    let d05 = doc("05-data-model.md");
+    assert!(
+        d05.contains(boss_name()),
+        "docs/05 §5.4 must name the shipped boss ({:?})",
+        boss_name()
+    );
+    assert!(
+        d05.contains(&BOSS_SPAWN_TICK.to_string()),
+        "docs/05 must state the boss spawn tick ({BOSS_SPAWN_TICK})"
+    );
+    assert!(
+        !d05.to_lowercase().contains("samwise"),
+        "docs/05 schemas describe the shipped game; the WC3 source's boss \
+         name must not reappear here"
+    );
+    assert!(
+        d05.contains("Q47.16"),
+        "docs/05 must state the implemented fixed-point format (Q47.16)"
+    );
+    // §5.7 amendment states the compiled-catalog sizes; derive them so growth
+    // in content.rs forces the doc to move.
+    let counts = format!("{} weapons / {} modifiers", WEAPONS.len(), MODIFIERS.len());
+    assert!(
+        d05.contains(&counts) && d05.contains(&format!("{}-entry enemy roster", ENEMIES.len())),
+        "docs/05 §5.7 must state the current compiled-catalog sizes \
+         ({counts} / {}-entry enemy roster)",
+        ENEMIES.len()
+    );
+}
+
+#[test]
+fn roadmap_doc_states_the_shipped_catalog_and_arc() {
+    let d06 = doc("06-roadmap-risks-testing.md");
+    // Derived, not hardcoded: growing the catalog moves this string, forcing
+    // the doc's headline counts to move with it.
+    let counts = format!("{} weapons / {} modifiers", WEAPONS.len(), MODIFIERS.len());
+    assert!(
+        d06.contains(&counts),
+        "docs/06 must state the current catalog counts ({counts})"
+    );
+    assert!(
+        d06.contains(boss_name()),
+        "docs/06 must name the shipped boss ({:?})",
+        boss_name()
+    );
+    assert!(
+        d06.contains("3-min"),
+        "docs/06 must describe the 3-minute ramp cadence"
+    );
+    assert!(
+        !d06.to_lowercase().contains("samwise"),
+        "docs/06 milestones describe the shipped game; the WC3 source's boss \
+         name must not reappear here"
+    );
+}

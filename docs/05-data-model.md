@@ -34,7 +34,7 @@ Tank {
 }
 ```
 
-> **Integer/fixed-point everywhere in the hot path.** Damage, HP, gold reach very large values and must be bit-stable across machines for cheap checksums. Use `i64` for HP/gold/damage and a `Fixed` (e.g. 32.32) type for rates/multipliers. No raw floats in anything that feeds the `state_checksum`.
+> **Integer/fixed-point everywhere in the hot path.** Damage, HP, gold reach very large values and must be bit-stable across machines for cheap checksums. Use `i64` for HP/gold/damage and a `Fixed` type for rates/multipliers — implemented as **Q47.16** (an `i64` with 16 fractional bits, saturating arithmetic) in `sim-core/crates/determinism`. No raw floats in anything that feeds the `state_checksum`.
 
 ## 5.2 Weapon schema
 
@@ -125,15 +125,15 @@ final = base_damage
 
 ```
 EnemyDef {
-  id: string                       // "felorc_grunt", "firebreather", "samwise"
+  id: string                       // "squeakzilla", "nope_rope", "the_hippocrate"
   base_hp: i64
   move_speed: Fixed
   contact_damage: i64
   bounty: u32
   armor_class: u8                  // indexes the damage matrix (war3mapMisc)
   archetype: Swarm|Tank|Fast|Caster|Ranged|Splitter|Boss
-  abilities: EnemyAbility[]        // rotating breath arcs, summons, etc.
-  scales: bool                     // Samwise = false (fixed)
+  abilities: EnemyAbility[]        // standoff ranged attacks, summons, etc.
+  scales: bool                     // the boss (The Hippocrate) = false (fixed)
 }
 
 WaveTable {
@@ -143,12 +143,13 @@ WaveTable {
 }
 
 ScalingCurve {
-  step: base | post_10min | post_15min
+  step: u8                         // ramp interval k = 0..=10; steps land at k*RAMP_INTERVAL
+                                   //   (3-min intervals: 3, 6, …, 30 min — sim::content::enemy_hp_mult)
   hp_mult: Fixed
   damage_mult: Fixed
 }
 ```
-Spawn *positions/timing jitter* come from the per-player `spawn` RNG stream (5.6); composition is shared. Samwise ignores `ScalingCurve` (`scales=false`).
+Spawn *positions/timing jitter* come from the per-player `spawn` RNG stream (5.6); composition is shared. The boss (**The Hippocrate**, spawned at `BOSS_SPAWN_TICK` = 54000 — 30 min) ignores `ScalingCurve` (`scales=false`).
 
 ## 5.5 Shop / offer state machine (stateful — must replay exactly)
 
@@ -204,4 +205,8 @@ A rolling 32/64-bit hash over the **authoritative-relevant** fields each tick-ba
 
 ## 5.7 Content authoring
 
-Weapons/modifiers/enemies/waves are **data**, not code — authored as files (JSON/TOML) validated against the schemas above and hashed into the `content_hash` used at join time ([`04 §4.4.1`](04-protocol-and-messages.md)). The extracted `research/tower-survivors-map/parsed/catalog.json` is the seed corpus for the v1 content set; Appendix A is its human-readable form.
+Weapons/modifiers/enemies/waves are **data**, not code — declarative definitions validated against the schemas above and hashed into the `content_hash` used at join time ([`04 §4.4.1`](04-protocol-and-messages.md)). The extracted `research/tower-survivors-map/parsed/catalog.json` is the seed corpus for the v1 content set; Appendix A is its human-readable form.
+
+> **Amended 2026-07** (flagged locked-decision drift, approved in [`09 §9.2`](09-rebuild-plan.md)): as shipped, the content catalog is **compiled Rust** — static `WeaponDef`/`ModifierDef`/`EnemyDef` tables in `sim-core/crates/sim/src/content.rs` (86 weapons / 91 modifiers / a 12-entry enemy roster — counts gated against the tables by `crates/sim/tests/doc_sync.rs`), bootstrapped from `catalog.json` by `gen_catalog.py` and then hand-curated. The **schema discipline above is retained** — the Rust structs mirror these shapes field-for-field, and drift is caught by doc-sync tests — but the "authored as JSON/TOML files" clause is not how the game is built. This has served the balance/test workflow well and is the accepted state. Two consequences:
+> - **`content_hash` is currently a placeholder** (`DEMO_CONTENT_HASH = 0xC0DE_C0DE` in the GDExtension), which defeats the version-drift gate the join handshake exists for. A **real `content_hash`** — a deterministic serialization of the compiled tables, hashed — is planned in the ship track ([`09 §9.4-P6`](09-rebuild-plan.md)).
+> - **Externalized JSON/TOML data files remain a possible future** (e.g. for modding or hot-tuning), **not a requirement**; if adopted, they load into the same schema-shaped tables and feed the same hash.

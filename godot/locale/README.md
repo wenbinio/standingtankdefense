@@ -1,6 +1,6 @@
 # Localization — Simplified Chinese (zh-CN)
 
-A ready-to-wire Simplified-Chinese localization package for **Standing Tank Defense**.
+The Simplified-Chinese localization package for **Standing Tank Defense** — **wired up and live in the game** (press **G** on Tank Select to toggle English ⇄ 简体中文; the choice persists in the profile).
 
 ## Contents
 
@@ -11,24 +11,17 @@ A ready-to-wire Simplified-Chinese localization package for **Standing Tank Defe
 
 Format: `keys,en,zh_CN`. The **key is the English source string**, so `tr("English text")` works with no re-keying, and English stays the natural fallback for any locale.
 
-## Wiring (integration step — not yet applied to the game)
+## Wiring (live — how it's hooked up)
 
-1. **Import:** Godot auto-imports a CSV whose header begins with `keys` into per-locale `.translation` resources (`game_translations.en.translation`, `game_translations.zh_CN.translation`).
-2. **Register** in `project.godot`:
-   ```
-   [internationalization]
-   locale/translations=PackedStringArray("res://locale/game_translations.zh_CN.translation","res://locale/game_translations.en.translation")
-   ```
-3. **Select locale** at runtime, e.g. a language toggle in `SkinSelect`:
-   ```gdscript
-   TranslationServer.set_locale("zh_CN")  # or "en"
-   ```
-4. **Wrap display strings in `tr()`**:
-   - UI literals in the GDScript front-end (`main.gd`, `match.gd`, `lobby.gd`, `challenge_select.gd`, `skin_select.gd`, `profile.gd`).
-   - **Rust-sourced content** (enemy/weapon/modifier names + descriptions arrive from the sim via the GDExtension) — wrap them at the GDScript display site, e.g. `tr(shop_name)`, `tr(desc_line)`. The sim core stays English-only and engine-independent; translation happens only at the render boundary.
+1. **Import:** Godot auto-imports the CSV (header begins with `keys`) into per-locale `.translation` resources (`game_translations.en.translation`, `game_translations.zh_CN.translation`).
+2. **Registered** in `project.godot` under `[internationalization]` (`locale/translations` lists both `.translation` resources).
+3. **Locale selection** at runtime: the **[G]** toggle in `skin_select.gd` calls `TranslationServer.set_locale(...)` and persists the choice via `Profile.set_locale_pref()` (`user://profile.cfg`).
+4. **Display strings go through `tr()`**:
+   - UI literals in the GDScript front-end (`main.gd`, `match.gd`, `lobby.gd`, `challenge_select.gd`, `skin_select.gd`).
+   - **Rust-sourced content** (enemy/weapon/modifier names + descriptions arrive from the sim via the GDExtension) is wrapped at the GDScript display site, e.g. `tr(shop_name)`, `tr(desc_line)`. The sim core stays English-only and engine-independent; translation happens only at the render boundary.
 
 ## Notes
 
-- Scope: this package is the translation **data** + wiring guide. The `tr()` plumbing and a language selector are the follow-on integration task.
 - Mechanical tip strings preserved numbers/operators verbatim (e.g. `<=600`, `+20%`), so balance text stays accurate in zh-CN.
+- New display strings must be added to the CSV **keyed by their exact English text**, or they silently fall back to English.
 - Traditional Chinese (zh-TW) can be added later as an extra column.
