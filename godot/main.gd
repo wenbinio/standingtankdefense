@@ -1,9 +1,10 @@
 # Standing Tank Defense — single-arena ROOT COORDINATOR. Drives the Rust
 # `StSim` (one deterministic tick per 30 Hz physics frame), owns the
-# input-intent FIFO, routes InputMap actions + clicks, and wires the render
+# input-intent FIFO, routes InputMap actions + clicks, drains the sim event
+# stream once per tick (fanning it to juice + audio), and wires the render
 # modules (children of Main.tscn):
 #   Camera            — screen shake via offset (world canvas only)
-#   ArenaRenderer     — world drawing + lighting rig + juice diff
+#   ArenaRenderer     — world drawing + lighting rig + event-driven juice
 #   UiLayer/FxOverlay — screen-space FX bus drawing + full-screen flash
 #   UiLayer/Hud       — top bar + arsenal panel
 #   UiLayer/Shop      — shop cards / reroll / clear (alive)
@@ -31,16 +32,11 @@ var _intents: Array = []
 var pending_code := 0
 var pending_slot := 0
 
-# --- audio trackers (render-only; read sim deltas, never write the sim) ------
-# Mirror of the small set of sim values the audio hooks diff each tick to decide
-# which placeholder SFX to fire. Exactly the same one-way pattern as the juice
-# trackers in ArenaRenderer: we sample sim state, compare to last tick, and
-# play a sound.
-var _au_prev_tank_hp := -1     # tank hp last tick (drop -> tank_hit)
-var _au_prev_round := -1       # round last tick (change -> round_start)
-var _au_prev_boss := false     # was a boss on screen last tick (rise -> boss_spawn)
+# --- audio (render-only; reads the drained event stream, never the sim) ------
+# Gameplay SFX are driven by the SAME event Array the juice fan-out consumes
+# (drained once per tick in _physics_process). The only remaining edge tracker
+# is the death edge — your own death has no sim event, so is_dead() is diffed.
 var _au_was_dead := false      # death edge -> tank_destroyed + defeat
-var _au_prev_gold := -1        # gold last tick (confirms a buy/reroll actually spent)
 
 # --- juice / modules (render-only) -----------------------------------------
 var fx: Fx                    # reusable pooled FX + screen-shake/hitstop bus
@@ -64,10 +60,9 @@ func _ready() -> void:
 	for ui_node in [_fx_overlay, _hud, _shop, _results]:
 		ui_node.modulate = _arena.AMBIENT_DIM
 	_wire_modules()
-	# AUDIO (render-only): start the looping ambient bed. Seed the audio trackers
-	# from the fresh sim so the first tick doesn't false-trigger round_start etc.
+	# AUDIO (render-only): start the looping ambient bed.
 	Audio.set_music("ambient_bed.wav")
-	_seed_audio_trackers()
+	_au_was_dead = false
 
 # Hand every module its read-only view (+ the shared FX bus where needed) and
 # sync visibility with the alive/dead state.
@@ -85,15 +80,6 @@ func _sync_dead_panels() -> void:
 	var dead: bool = view.is_dead()
 	_shop.visible = not dead
 	_results.visible = dead
-
-# Re-seed the audio delta trackers from the current sim (fresh run: no
-# cross-run false triggers).
-func _seed_audio_trackers() -> void:
-	_au_prev_round = view.round_num()
-	_au_prev_tank_hp = view.tank_hp()
-	_au_prev_gold = view.gold()
-	_au_prev_boss = false
-	_au_was_dead = false
 
 # --- input (InputMap actions; physical-key bindings live in project.godot) ---
 func _unhandled_input(e: InputEvent) -> void:
@@ -180,8 +166,8 @@ func _redeploy() -> void:
 	pending_slot = 0
 	_shop.pending_code = 0
 	_shop.pending_slot = 0
-	# AUDIO trackers re-seeded from the fresh sim (no cross-run false triggers).
-	_seed_audio_trackers()
+	# Re-arm the death-edge audio tracker for the fresh run.
+	_au_was_dead = false
 	_wire_modules()
 
 func _physics_process(_delta: float) -> void:
@@ -204,10 +190,18 @@ func _physics_process(_delta: float) -> void:
 	# successful buy (gold actually dropped) from a no-op click. Read-only.
 	var au_intent := pending_code
 	var au_gold_before: int = view.gold()
+	# This tick's sim→render events, drained EXACTLY ONCE right after step and
+	# fanned out below to (a) the arena juice and (b) the audio hooks. Nobody
+	# re-queries the stream (take_events is read-and-clear at the binding).
+	var events: Array = []
 	if not view.is_dead():
 		sim.step(pending_code, pending_slot)
+		events = view.take_events()
 		if pending_code == 3:
+			# Clear is input-driven (no sim event): arm the shockwave + voice it
+			# here, the one place the consumed intent is known.
 			_arena.trigger_clear()
+			Audio.play(&"clear")
 	elif not _recorded:
 		# Credit your own run's achievements from how you actually played.
 		_recorded = true
@@ -215,8 +209,8 @@ func _physics_process(_delta: float) -> void:
 		rec["won"] = false                                  # single-arena: no opponents
 		for id in Profile.record_match(rec):
 			print("Achievement unlocked: ", Profile.ach_def(id).get("name", id))
-	_arena.tick_juice()
-	_update_audio(au_intent, au_gold_before)
+	_arena.tick_juice(events)
+	_update_audio(events, au_intent, au_gold_before)
 	_sync_dead_panels()
 
 # Frame-rate cosmetic update: advance the FX bus and feed its shake into the
@@ -228,16 +222,16 @@ func _process(delta: float) -> void:
 	if _camera:
 		_camera.offset = fx.shake_offset()
 
-# AUDIO (render-only): the "slow" / state-change sound hooks, diffed once per
-# sim tick. STRICTLY ONE-WAY — every line here only READS sim state (tank_hp(),
-# round_num(), has_boss(), is_dead(), gold() via SimView) or the captured input
-# intent, then plays a placeholder SFX. Nothing in here calls sim.step() or
-# otherwise writes the sim; audio cannot influence determinism. Mirrors how the
-# render modules read the same snapshot to draw.
+# AUDIO (render-only): every gameplay SFX now fires from the drained event
+# stream — the SAME Array the juice fan-out consumed, decoded once by SimView.
+# STRICTLY ONE-WAY: nothing here calls sim.step() or otherwise writes the sim;
+# audio cannot influence determinism.
+#   `events`     = this tick's drained sim events (empty while dead)
 #   `intent`     = this tick's pending_code (1 buy · 2 reroll · 3 clear · else none)
 #   `gold_before`= gold sampled BEFORE the step, to confirm a buy actually spent.
-func _update_audio(intent: int, gold_before: int) -> void:
-	# --- death edge: tank_destroyed + defeat (single-arena has no victory) ----
+func _update_audio(events: Array, intent: int, gold_before: int) -> void:
+	# --- death edge: tank_destroyed + defeat (single-arena has no victory).
+	# Your own death has NO sim event, so this edge tracker stays.
 	var dead: bool = view.is_dead()
 	if dead and not _au_was_dead:
 		Audio.play(&"tank_destroyed")
@@ -246,31 +240,36 @@ func _update_audio(intent: int, gold_before: int) -> void:
 	if dead:
 		return   # frozen run: no further gameplay SFX while on the results panel
 
-	# --- tank hit: current hp below last tick's (and not the death frame) -----
-	var hp: int = view.tank_hp()
-	if _au_prev_tank_hp >= 0 and hp < _au_prev_tank_hp and hp > 0:
-		Audio.play(&"tank_hit")
-	_au_prev_tank_hp = hp
+	# --- event-driven SFX (Audio's per-event throttle absorbs bursts) --------
+	for ev in events:
+		match ev.kind:
+			SimView.EV_ENEMY_KILLED:
+				Audio.play(&"enemy_death")
+			SimView.EV_ENEMY_DESPAWNED:
+				# Deliberately silent: contact self-destructs are not kills
+				# (this fixes the old fake death sound from snapshot diffing).
+				pass
+			SimView.EV_IMPACT:
+				Audio.play(&"hit")
+			SimView.EV_PROJECTILE_SPAWNED:
+				Audio.play(&"fire")
+			SimView.EV_TANK_HIT:
+				Audio.play(&"tank_hit")
+			SimView.EV_ROUND_START:
+				Audio.play(&"round_start")
+			SimView.EV_BOSS_SPAWNED:
+				Audio.play(&"boss_spawn")
+			SimView.EV_GOLD_BOUNTY:
+				# P3 hook: gold-pickup chime (no asset in Audio.EVENTS yet).
+				pass
+			_:
+				pass   # Hazard*/FreezeProc/ShieldBroke: P3 SFX
 
-	# --- round change -> round_start fanfare ---------------------------------
-	var rnd: int = view.round_num()
-	if _au_prev_round >= 0 and rnd != _au_prev_round:
-		Audio.play(&"round_start")
-	_au_prev_round = rnd
-
-	# --- boss appears: a boss flag present now that wasn't last tick ----------
-	var boss_now: bool = view.has_boss()
-	if boss_now and not _au_prev_boss:
-		Audio.play(&"boss_spawn")
-	_au_prev_boss = boss_now
-
-	# --- economy actions: buy (gold actually dropped) / reroll ---------------
-	var gold: int = view.gold()
-	if intent == 1 and gold < gold_before:
+	# --- economy actions: input-driven (no sim event for buy/reroll) ---------
+	if intent == 1 and view.gold() < gold_before:
 		# A buy that spent gold this tick (a click on an unaffordable card spends
 		# nothing, so it stays silent).
 		Audio.play(&"buy")
-	elif intent == 2 and _au_prev_gold >= 0:
+	elif intent == 2:
 		# Reroll: refreshes the shop whether free or paid, so always voice it.
 		Audio.play(&"reroll")
-	_au_prev_gold = gold

@@ -14,15 +14,31 @@
 #   var view := SimView.of_match(m, i)     # StMatch, player i's shadow arena
 #
 # ---------------------------------------------------------------------------
-# EXTENSION POINT (do not implement yet): when the P1.1 event stream lands in
-# the Rust binding, drain-and-expose it here as e.g.
-#   func take_events() -> Array          # one-shot render/audio event queue
-#   func enemies_status() -> Packed...   # per-enemy status-effect flags
-# so every consumer (FX, audio, damage numbers) reads events through this one
-# seam. Until those accessors exist in godot/rust, they MUST NOT be called.
+# EVENTS: `take_events()` drains the P1.1 sim→render event stream (see the
+# EVENT RECORD LAYOUT table in godot/rust/src/lib.rs) and decodes the flat
+# 6-int records into small typed Dictionaries ONCE. Read-and-clear: the owning
+# coordinator (main.gd) drains exactly once per tick, right after step, and
+# fans the same Array out to every consumer (juice, audio). Nobody re-queries.
 # ---------------------------------------------------------------------------
 class_name SimView
 extends RefCounted
+
+# Event kinds (mirror the EVENT RECORD LAYOUT in godot/rust/src/lib.rs).
+const EV_ENEMY_KILLED := 1        # {x, y, enemy_kind, boss, bounty, fire_radius}
+const EV_ENEMY_DESPAWNED := 2     # {id} — left WITHOUT dying (no death FX!)
+const EV_IMPACT := 3              # {x, y, damage, damage_type, splash_radius}
+const EV_PROJECTILE_SPAWNED := 4  # {weapon_kind, x, y, target_x, target_y}
+const EV_TANK_HIT := 5            # {damage}
+const EV_ROUND_START := 6         # {round}
+const EV_BOSS_SPAWNED := 7        # {id}
+const EV_HAZARD_PLACED := 8       # {x, y, radius, ticks, damage_type}
+const EV_HAZARD_EXPIRED := 9      # {id}
+const EV_FREEZE_PROC := 10        # {id}
+const EV_SHIELD_BROKE := 11       # {}
+const EV_GOLD_BOUNTY := 12        # {amount}
+
+# Ints per flat event record (matches EVENT_RECORD_WIDTH in lib.rs).
+const _EV_W := 6
 
 # Exactly one of these is set. `_sim` is an StSim; `_match` an StMatch with
 # `_pi` the player index whose shadow arena this view reads.
@@ -54,6 +70,67 @@ func is_valid() -> bool:
 	if _sim != null:
 		return true
 	return _match != null and _arena().size() >= _ARENA_LEN
+
+# --- events --------------------------------------------------------------------
+# Drain this tick's sim→render events. READ-AND-CLEAR at the binding: call it
+# exactly once per tick (main.gd, right after sim.step) and pass the returned
+# Array to every consumer. Each entry is a small Dictionary with "kind" set to
+# an EV_* constant plus the kind's named fields (see the constants above).
+# Positions are integer world units in the same space as enemies_pos().
+func take_events() -> Array:
+	var raw: PackedInt64Array
+	if _sim != null:
+		raw = _sim.take_events()
+	elif _match != null:
+		raw = _match.take_events(_pi)
+	else:
+		return []
+	var out: Array = []
+	@warning_ignore("integer_division")
+	var n := raw.size() / _EV_W
+	for i in n:
+		var o := i * _EV_W
+		var kind := int(raw[o])
+		match kind:
+			EV_ENEMY_KILLED:
+				# c packs enemy_kind + 65536*boss_flag.
+				out.append({
+					"kind": kind, "x": raw[o + 1], "y": raw[o + 2],
+					"enemy_kind": int(raw[o + 3]) & 0xFFFF,
+					"boss": (int(raw[o + 3]) >> 16) != 0,
+					"bounty": raw[o + 4], "fire_radius": raw[o + 5],
+				})
+			EV_IMPACT:
+				out.append({
+					"kind": kind, "x": raw[o + 1], "y": raw[o + 2],
+					"damage": raw[o + 3], "damage_type": int(raw[o + 4]),
+					"splash_radius": raw[o + 5],
+				})
+			EV_PROJECTILE_SPAWNED:
+				out.append({
+					"kind": kind, "weapon_kind": int(raw[o + 1]),
+					"x": raw[o + 2], "y": raw[o + 3],
+					"target_x": raw[o + 4], "target_y": raw[o + 5],
+				})
+			EV_TANK_HIT:
+				out.append({"kind": kind, "damage": raw[o + 1]})
+			EV_ROUND_START:
+				out.append({"kind": kind, "round": int(raw[o + 1])})
+			EV_HAZARD_PLACED:
+				out.append({
+					"kind": kind, "x": raw[o + 1], "y": raw[o + 2],
+					"radius": raw[o + 3], "ticks": int(raw[o + 4]),
+					"damage_type": int(raw[o + 5]),
+				})
+			EV_GOLD_BOUNTY:
+				out.append({"kind": kind, "amount": raw[o + 1]})
+			EV_SHIELD_BROKE:
+				out.append({"kind": kind})
+			_:
+				# EnemyDespawned / BossSpawned / HazardExpired / FreezeProc all
+				# carry a single entity id in slot a.
+				out.append({"kind": kind, "id": raw[o + 1]})
+	return out
 
 # --- match progress ----------------------------------------------------------
 func tick() -> int:
@@ -124,6 +201,12 @@ func enemies_hp_permille() -> PackedInt32Array:
 func enemies_boss() -> PackedByteArray:
 	return _sim.enemies_boss() if _sim != null else PackedByteArray()
 
+# P3 HOOK (decode-only, no consumer yet): per-enemy status flag byte, parallel
+# to enemies_pos() — bit0 frost · bit1 poison · bit2 fire · bit3 vuln ·
+# bit4 stun · bit5 freeze. P3 uses it for status tints / looping status FX.
+func enemies_status() -> PackedByteArray:
+	return _sim.enemies_status() if _sim != null else PackedByteArray()
+
 # Is any boss on screen this tick?
 func has_boss() -> bool:
 	for b in enemies_boss():
@@ -134,11 +217,49 @@ func has_boss() -> bool:
 func projectiles_pos() -> PackedVector2Array:
 	return _sim.projectiles_pos() if _sim != null else PackedVector2Array()
 
+# Per-projectile stable id, parallel to projectiles_pos() (drives cross-tick
+# render interpolation).
+func projectiles_id() -> PackedInt64Array:
+	return _sim.projectiles_id() if _sim != null else PackedInt64Array()
+
+# Per-projectile weapon catalog index, parallel to projectiles_pos() (selects
+# the projectile sprite / MultiMesh bucket).
+func projectiles_kind() -> PackedInt64Array:
+	return _sim.projectiles_kind() if _sim != null else PackedInt64Array()
+
+# Per-projectile last known target position, parallel to projectiles_pos()
+# (orients the sprite along its flight path).
+func projectiles_target() -> PackedVector2Array:
+	return _sim.projectiles_target() if _sim != null else PackedVector2Array()
+
+# P3 HOOK (decode-only, no consumer yet): active hazards decoded from the flat
+# 5-int records to [{x, y, radius, ticks_left, damage_type}, …]. P3 draws mine
+# fields / burning-oil ground decals from these.
+func hazards() -> Array:
+	var out: Array = []
+	if _sim == null:
+		return out
+	var raw: PackedInt64Array = _sim.hazards()
+	@warning_ignore("integer_division")
+	var n := raw.size() / 5
+	for i in n:
+		var o := i * 5
+		out.append({
+			"x": raw[o], "y": raw[o + 1], "radius": raw[o + 2],
+			"ticks_left": int(raw[o + 3]), "damage_type": int(raw[o + 4]),
+		})
+	return out
+
 func minions_pos() -> PackedVector2Array:
 	return _sim.minions_pos() if _sim != null else _match.minions_pos(_pi)
 
 func minions_kind() -> PackedByteArray:
 	return _sim.minions_kind() if _sim != null else _match.minions_kind(_pi)
+
+# Per-minion stable id, parallel to minions_pos() (drives cross-tick render
+# interpolation). Single-arena only, like the other id arrays.
+func minions_id() -> PackedInt64Array:
+	return _sim.minions_id() if _sim != null else PackedInt64Array()
 
 # --- shop (single-arena) --------------------------------------------------------
 # One dictionary per offer, decoding shop_meta's flat [cost, flags, rarity, …]

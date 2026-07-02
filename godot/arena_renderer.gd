@@ -1,8 +1,16 @@
 # ArenaRenderer — the single-arena WORLD layer (Main.tscn child). Draws the
-# ground/ring/entities/trails/poofs in immediate mode, owns the render-only
-# lighting + post rig (WorldEnvironment glow, CanvasModulate, PointLight2Ds,
-# vignette grade), and runs the per-tick JUICE diff (hit flash, death poofs,
-# muzzle, sparks, combat text + their placeholder SFX).
+# ground/ring/poofs in immediate mode, renders enemies + projectiles through
+# per-texture MultiMeshes (P1.6), interpolates every entity between sim ticks
+# (P1.5), owns the render-only lighting + post rig (WorldEnvironment glow,
+# CanvasModulate, PointLight2Ds, vignette grade), and turns the drained sim
+# event stream into juice (death poofs, kill bursts, impact sparks, real
+# damage numbers, oriented muzzle flash).
+#
+# Event flow: main.gd drains view.take_events() exactly ONCE per sim tick and
+# hands the decoded Array to tick_juice(events); nothing here re-queries the
+# stream. Sim reads happen ONCE per tick into the snapshot arrays below; the
+# per-frame fill/draw paths consume only those snapshots (near-zero per-frame
+# allocation).
 #
 # Lives in the default (world) canvas under Main's Camera2D, so screen shake is
 # the camera's offset — no manual `+ shake` on any blit. Everything here is
@@ -14,18 +22,65 @@ extends Node2D
 # compensates with the same modulate to keep its colors identical.
 const AMBIENT_DIM := Color(0.62, 0.64, 0.7)
 
+const FLASH_TICKS := 6            # hit-flash duration (sim ticks)
+const MUZZLE_TICKS := 5           # muzzle flash duration (sim ticks)
+const POOF_CAP := 64              # death poofs alive at once (pooled)
+
 var view: SimView = null      # read-only sim view (wired by main.gd)
 var fx: Fx = null             # shared juice bus (owned by main.gd)
-var t := 0                    # frame counter (drives idle bob)
+var t := 0                    # sim-tick counter (drives idle bob)
 var clear_fx := 0             # Clear shockwave countdown (armed by main.gd)
 
-# juice trackers (diffed once per sim tick in tick_juice())
-var _prev := {}               # enemy id -> {pos:Vector2(world), hp:int}
-var _flash := {}              # enemy id -> frames of hit-flash left
-var _poofs := []              # [{wpos:Vector2, ttl:int, life:int}]
-var _muzzle := 0
-var _prev_proj := 0
-var _proj_history := []       # recent frames of projectiles_pos() (motion trail)
+# --- per-tick sim snapshots (P1.5 interpolation) -----------------------------
+# Read ONCE per sim tick in _advance_snapshot(); the 60+ Hz fill/draw paths
+# lerp prev→curr with Engine.get_physics_interpolation_fraction(). The *_idx
+# Dictionaries map stable id -> array index (prev side only needs it: a new id
+# with no prev entry draws at curr — never lerp-from-origin).
+var _e_ids := PackedInt64Array()
+var _e_pos := PackedVector2Array()
+var _e_kind := PackedByteArray()
+var _e_boss := PackedByteArray()
+var _e_idx := {}
+var _e_prev_pos := PackedVector2Array()
+var _e_prev_idx := {}
+var _p_ids := PackedInt64Array()
+var _p_pos := PackedVector2Array()
+var _p_kind := PackedInt64Array()
+var _p_target := PackedVector2Array()
+var _p_idx := {}
+var _p_prev_pos := PackedVector2Array()
+var _p_prev_idx := {}
+var _m_ids := PackedInt64Array()
+var _m_pos := PackedVector2Array()
+var _m_kind := PackedByteArray()
+var _m_idx := {}
+var _m_prev_pos := PackedVector2Array()
+var _m_prev_idx := {}
+
+# --- event-driven juice state -------------------------------------------------
+var _flash := {}              # enemy id -> tick the hit-flash expires
+var _muzzle := 0              # muzzle flash ticks left
+var _muzzle_dir := Vector2.UP # screen-space fire direction (from ProjectileSpawned)
+# Death-poof pool (dense parallel arrays, swap-remove; alloc-free after _ready).
+var _poof_pos := PackedVector2Array()   # world position
+var _poof_ttl := PackedInt32Array()
+var _poof_life := PackedInt32Array()
+var _poof_scale := PackedFloat32Array() # 1.0 normal · bigger for bosses
+var _poof_n := 0
+
+# --- MultiMesh entity rendering (P1.6) -----------------------------------------
+# One MultiMesh per texture: enemies get one per ENEMY_MANIFEST kind (per-kind
+# draw size baked into the instance transform, so the boss needs no special
+# path); projectiles share ONE MultiMesh because PROJECTILE_MANIFEST defines a
+# single texture today — when it grows per-weapon entries, bucket by
+# projectiles_kind() exactly like the enemy kinds. Buffers grow only;
+# visible_instance_count trims the draw.
+var _enemy_mmi: Array = []    # MultiMeshInstance2D per enemy kind
+var _proj_mmi: MultiMeshInstance2D = null
+var _fg: Node2D = null        # foreground canvas: minions + tank + muzzle
+var _quad: ArrayMesh = null   # shared unit quad (scaled per instance)
+var _kind_count := PackedInt32Array()   # per-frame per-kind tallies (reused)
+var _kind_cursor := PackedInt32Array()
 
 # textures (manifest-driven; reloaded on theme cycle)
 var tex := {}
@@ -42,11 +97,16 @@ var _muzzle_light: PointLight2D
 var _menace_light: PointLight2D  # red boss/fire-breather menace glow
 
 func _ready() -> void:
+	_poof_pos.resize(POOF_CAP)
+	_poof_ttl.resize(POOF_CAP)
+	_poof_life.resize(POOF_CAP)
+	_poof_scale.resize(POOF_CAP)
 	reload_theme()
 	_setup_environment()
+	_setup_entity_layers()
 
 # (Re)load every world texture from the ArtTheme sprite manifest. Called at
-# startup and again on theme cycle.
+# startup and again on theme cycle; retargets the MultiMesh textures in place.
 func reload_theme() -> void:
 	tex = {
 		"ground": ArtTheme.tex(ArtTheme.ENV_MANIFEST["ground"]),
@@ -60,19 +120,46 @@ func reload_theme() -> void:
 	enemy_tex = ArtTheme.enemy_textures()
 	minion_tex = ArtTheme.minion_textures()
 	_spark_tex = ArtTheme.tex("fx/hit_spark.svg")
+	for k in _enemy_mmi.size():
+		_enemy_mmi[k].texture = enemy_tex[k]
+	if _proj_mmi:
+		_proj_mmi.texture = tex["proj"]
 
-# Reset every juice tracker for a fresh run (redeploy). `new_view`/`new_fx`
-# replace the wrapped sim + FX bus so nothing leaks across runs.
+# Reset every juice tracker + snapshot for a fresh run (redeploy).
+# `new_view`/`new_fx` replace the wrapped sim + FX bus so nothing leaks across
+# runs.
 func reset(new_view: SimView, new_fx: Fx) -> void:
 	view = new_view
 	fx = new_fx
-	_prev = {}
+	_e_ids = PackedInt64Array()
+	_e_pos = PackedVector2Array()
+	_e_kind = PackedByteArray()
+	_e_boss = PackedByteArray()
+	_e_idx = {}
+	_e_prev_pos = PackedVector2Array()
+	_e_prev_idx = {}
+	_p_ids = PackedInt64Array()
+	_p_pos = PackedVector2Array()
+	_p_kind = PackedInt64Array()
+	_p_target = PackedVector2Array()
+	_p_idx = {}
+	_p_prev_pos = PackedVector2Array()
+	_p_prev_idx = {}
+	_m_ids = PackedInt64Array()
+	_m_pos = PackedVector2Array()
+	_m_kind = PackedByteArray()
+	_m_idx = {}
+	_m_prev_pos = PackedVector2Array()
+	_m_prev_idx = {}
 	_flash = {}
-	_poofs = []
 	_muzzle = 0
-	_prev_proj = 0
-	_proj_history = []
+	_muzzle_dir = Vector2.UP
+	_poof_n = 0
 	clear_fx = 0
+	for mmi in _enemy_mmi:
+		mmi.multimesh.visible_instance_count = 0
+	if _proj_mmi:
+		_proj_mmi.multimesh.visible_instance_count = 0
 	queue_redraw()
 
 # Arm the Clear shockwave (called by main.gd the tick a Clear intent stepped).
@@ -158,6 +245,65 @@ func _setup_environment() -> void:
 	cl.add_child(_vignette)
 	add_child(cl)
 
+# Build the MultiMesh entity layers + the foreground canvas. CHILD ORDER IS
+# DRAW ORDER on top of this node's own _draw (ground/ring/clear/poofs):
+# projectiles under enemies under the foreground (minions/tank/muzzle) —
+# the same stacking the old single _draw produced.
+func _setup_entity_layers() -> void:
+	_quad = _unit_quad_mesh()
+	_proj_mmi = _make_mmi(tex["proj"])
+	_enemy_mmi = []
+	for k in enemy_tex.size():
+		_enemy_mmi.append(_make_mmi(enemy_tex[k]))
+	_kind_count.resize(enemy_tex.size())
+	_kind_cursor.resize(enemy_tex.size())
+	# Foreground canvas: a plain Node2D whose `draw` signal we feed, so
+	# minions/tank/muzzle stack ABOVE the MultiMeshes without a second script.
+	_fg = Node2D.new()
+	_fg.draw.connect(_draw_foreground)
+	add_child(_fg)
+
+# A unit quad (centered, canvas-space UVs) shared by every MultiMesh; the
+# per-instance Transform2D carries draw size + rotation.
+func _unit_quad_mesh() -> ArrayMesh:
+	var verts := PackedVector2Array([
+		Vector2(-0.5, -0.5), Vector2(0.5, -0.5),
+		Vector2(0.5, 0.5), Vector2(-0.5, 0.5),
+	])
+	var uvs := PackedVector2Array([
+		Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1),
+	])
+	var indices := PackedInt32Array([0, 1, 2, 0, 2, 3])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+# One MultiMeshInstance2D per texture; 2D transforms + per-instance colors
+# (hit flash; colors are float so >1 channels still bloom under glow).
+func _make_mmi(texture: Texture2D) -> MultiMeshInstance2D:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_2D
+	mm.use_colors = true
+	mm.mesh = _quad
+	mm.instance_count = 0
+	mm.visible_instance_count = 0
+	var mmi := MultiMeshInstance2D.new()
+	mmi.multimesh = mm
+	mmi.texture = texture
+	add_child(mmi)
+	return mmi
+
+# Grow-only instance buffer: instance_count only ever rises (with headroom so
+# growth is rare); visible_instance_count trims the actual draw each frame.
+func _ensure_capacity(mm: MultiMesh, needed: int) -> void:
+	if mm.instance_count < needed:
+		mm.instance_count = maxi(needed + (needed >> 1), 16)
+
 # A soft radial gradient texture for PointLight2D (bright center -> transparent).
 func _radial_light_tex(size: int) -> Texture2D:
 	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
@@ -181,9 +327,23 @@ func to_screen(wx: float, wy: float) -> Vector2:
 func _blit(tx: Texture2D, center: Vector2, size: float, mod := Color.WHITE) -> void:
 	draw_texture_rect(tx, Rect2(center - Vector2(size, size) * 0.5, Vector2(size, size)), false, mod)
 
+# Interpolation weight for this render frame (0 = previous tick, 1 = current).
+func _lerp_alpha() -> float:
+	return clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
+
+# Interpolated world position for entity `id` at current index `i`. A new id
+# (no prev entry) draws at curr — never lerp-from-origin.
+func _lerp_pos(prev_idx: Dictionary, prev_pos: PackedVector2Array,
+		cur_pos: PackedVector2Array, id: int, i: int, alpha: float) -> Vector2:
+	var pidx: int = prev_idx.get(id, -1)
+	if pidx < 0 or pidx >= prev_pos.size():
+		return cur_pos[i]
+	return prev_pos[pidx].lerp(cur_pos[i], alpha)
+
 # Frame-rate cosmetic update: animate lights, drive the danger color-grade,
-# and keep particles smooth above the 30 Hz sim tick. Shake is NOT applied
-# here — the camera offset carries it for the whole world canvas.
+# refill the MultiMesh instance buffers at the interpolated positions, and
+# repaint. Shake is NOT applied here — the camera offset carries it for the
+# whole world canvas.
 func _process(_delta: float) -> void:
 	if view == null:
 		return
@@ -196,10 +356,11 @@ func _process(_delta: float) -> void:
 		_tank_light.position = origin + Vector2(0, tbob)
 		_tank_light.energy = 1.0 + sin(t * 0.14) * 0.18
 
-	# Muzzle light: brief punch driven by the _muzzle timer.
+	# Muzzle light: brief punch driven by the _muzzle timer, parked at the
+	# muzzle position along the actual firing direction.
 	if _muzzle_light:
 		var origin2 := to_screen(0, 0)
-		_muzzle_light.position = origin2 + Vector2(0, -44)
+		_muzzle_light.position = origin2 + _muzzle_dir * 44.0
 		_muzzle_light.energy = lerpf(_muzzle_light.energy,
 			2.4 if _muzzle > 0 else 0.0, 0.5)
 
@@ -212,20 +373,25 @@ func _process(_delta: float) -> void:
 		var danger := clampf(float(view.round_num()) / 18.0, 0.0, 1.0)
 		_vig_mat.set_shader_parameter("danger", danger)
 
-	queue_redraw()
+	# P1.5/P1.6: refill the instanced entity layers at interpolated positions.
+	var alpha := _lerp_alpha()
+	_fill_enemy_instances(alpha)
+	_fill_projectile_instances(alpha)
 
-# Pick the scariest on-screen enemy and park a red light on it.
+	queue_redraw()
+	if _fg:
+		_fg.queue_redraw()
+
+# Pick the scariest on-screen enemy (from this tick's snapshot) and park a red
+# light on it.
 func _update_menace_light() -> void:
 	if _menace_light == null:
 		return
-	var ep: PackedVector2Array = view.enemies_pos()
-	var ek: PackedByteArray = view.enemies_kind()
-	var boss: PackedByteArray = view.enemies_boss()
 	var best := -1
 	var best_score := 0
-	for i in ep.size():
-		var k: int = ek[i] if i < ek.size() else 0
-		var is_boss: bool = i < boss.size() and boss[i] != 0
+	for i in _e_pos.size():
+		var k: int = _e_kind[i] if i < _e_kind.size() else 0
+		var is_boss: bool = i < _e_boss.size() and _e_boss[i] != 0
 		var score := 0
 		if is_boss or k == 2:
 			score = 3
@@ -237,87 +403,269 @@ func _update_menace_light() -> void:
 			best_score = score
 			best = i
 	if best >= 0:
-		var sp := to_screen(ep[best].x, ep[best].y)
+		var sp := to_screen(_e_pos[best].x, _e_pos[best].y)
 		_menace_light.position = sp
 		_menace_light.energy = lerpf(_menace_light.energy,
 			0.7 + sin(t * 0.25) * 0.25, 0.2)
 	else:
 		_menace_light.energy = lerpf(_menace_light.energy, 0.0, 0.2)
 
-# Once per sim tick (called by main.gd right after sim.step): diff this tick's
-# enemies vs last to spawn hit-flashes / death-poofs / muzzle, AND fire the
-# cosmetic juice bus (sparks, kill bursts, shake, hit-stop, combat text). All
-# render-only — driven by sim reads, never feeding the sim back. The Audio
-# calls in here are the "fast" one-way SFX hooks, moved intact from main.gd
-# (they will be replaced by drained events in a later pass).
-func tick_juice() -> void:
-	t += 1
-	var ids: PackedInt64Array = view.enemies_id()
-	var pos: PackedVector2Array = view.enemies_pos()
-	var hp: PackedInt32Array = view.enemies_hp_permille()
-	var cur := {}
-	for i in ids.size():
-		var id := ids[i]
-		var wp: Vector2 = pos[i] if i < pos.size() else Vector2.ZERO
-		var h: int = hp[i] if i < hp.size() else 0
-		cur[id] = {"pos": wp, "hp": h}
-		if _prev.has(id) and h < _prev[id]["hp"]:
-			_flash[id] = 6
-			# AUDIO (render-only): an hp drop on a still-living enemy = an impact.
-			Audio.play(&"hit")
-			# impact spark pop + damage number at the hit location
-			var sp := to_screen(wp.x, wp.y)
-			fx.burst_sparks(sp, Color(2.2, 1.3, 0.6), 6, 200.0, 0.26)
-			var dmg: int = int(_prev[id]["hp"]) - h   # permille drop (proxy)
-			if dmg > 30:
-				fx.combat_text(sp + Vector2(0, -28),
-					str(maxi(1, dmg / 10)), Color(1.0, 0.86, 0.4), 16, 38.0)
-	for id in _prev:
-		if not cur.has(id):
-			var wp2: Vector2 = _prev[id]["pos"]
-			_poofs.append({"wpos": wp2, "ttl": 12, "life": 12})
-			# AUDIO (render-only): an id that was here last tick and is gone now
-			# = a death (the same signal that drives the death poof).
-			Audio.play(&"enemy_death")
-			# kill burst + shake + a "death" combat pop
-			var sp2 := to_screen(wp2.x, wp2.y)
-			fx.kill_burst(sp2, Color(2.4, 1.6, 0.7))
-	_prev = cur
+# ============================ per-sim-tick path ==============================
 
-	# Projectile motion trail: keep a short history of position frames to blit
-	# fading ghosts behind each orb.
-	var ppos: PackedVector2Array = view.projectiles_pos()
-	_proj_history.push_front(ppos)
-	if _proj_history.size() > 5:
-		_proj_history.resize(5)
-	var pc: int = ppos.size()
-	if pc > _prev_proj:
-		_muzzle = 5
-		# AUDIO (render-only): more projectiles on screen than last tick = a shot
-		# was fired (the same delta that triggers the muzzle flash).
-		Audio.play(&"fire")
-		fx.add_shake(0.025)   # tiny recoil kick on fire
-	_prev_proj = pc
-	for id in _flash.keys():
-		_flash[id] -= 1
-		if _flash[id] <= 0:
-			_flash.erase(id)
-	for p in _poofs:
-		p["ttl"] -= 1
-	_poofs = _poofs.filter(func(p): return p["ttl"] > 0)
+# Once per sim tick (called by main.gd right after sim.step + take_events):
+# advance the interpolation snapshots, then turn this tick's drained events
+# into juice (poofs, bursts, sparks, damage numbers, muzzle). All render-only.
+# All SFX for these events live in main.gd's _update_audio, fed the SAME
+# drained array — nothing here touches the Audio bus.
+func tick_juice(events: Array) -> void:
+	t += 1
+	_advance_snapshot()
+
+	for ev in events:
+		match ev.kind:
+			SimView.EV_ENEMY_KILLED:
+				_on_enemy_killed(ev)
+			SimView.EV_IMPACT:
+				_on_impact(ev)
+			SimView.EV_PROJECTILE_SPAWNED:
+				_on_projectile_spawned(ev)
+			SimView.EV_ENEMY_DESPAWNED:
+				# Deliberately NOTHING: a contact self-destruct is not a kill —
+				# no poof, no kill burst (this fixes the old fake-death juice
+				# from snapshot diffing).
+				pass
+			SimView.EV_GOLD_BOUNTY:
+				# P3 hook: gold-pickup counter / coin pop uses ev.amount.
+				pass
+			SimView.EV_HAZARD_PLACED, SimView.EV_HAZARD_EXPIRED:
+				# P3 hook: hazard ground decals (see view.hazards()).
+				pass
+			SimView.EV_FREEZE_PROC, SimView.EV_SHIELD_BROKE, SimView.EV_TANK_HIT:
+				# P3 hooks: freeze shatter FX, shield-break flash, tank damage
+				# feedback. TankHit SFX already fires from main.gd.
+				pass
+			_:
+				pass   # RoundStart/BossSpawned are audio-only for now (main.gd)
+
+	# hit-flash expiry (entries are absolute expiry ticks)
+	if not _flash.is_empty():
+		for id in _flash.keys():
+			if _flash[id] <= t:
+				_flash.erase(id)
+
+	# death-poof decay (dense pool, swap-remove)
+	var i := 0
+	while i < _poof_n:
+		_poof_ttl[i] -= 1
+		if _poof_ttl[i] <= 0:
+			_poof_n -= 1
+			_poof_pos[i] = _poof_pos[_poof_n]
+			_poof_ttl[i] = _poof_ttl[_poof_n]
+			_poof_life[i] = _poof_life[_poof_n]
+			_poof_scale[i] = _poof_scale[_poof_n]
+			continue
+		i += 1
+
 	if _muzzle > 0:
 		_muzzle -= 1
 
-	# Clear (Space) is a big event: shockwave already drawn; add shake + flash.
+	# Clear (Space) is a big event: shockwave already drawn; add shake + flash
+	# (the SFX plays from main.gd where the Clear intent is consumed).
 	if clear_fx == 18:
-		# AUDIO (render-only): clear_fx was just armed by the Clear input this tick.
-		Audio.play(&"clear")
 		fx.add_shake(0.35)
 		fx.add_flash(Color(0.7, 0.85, 1.0, 0.35), 0.22)
 		fx.add_hitstop(0.05)
 	if clear_fx > 0:
 		clear_fx -= 1
 
+# Rotate the snapshots: this tick's arrays become prev, then read the sim ONCE
+# for the new curr. PackedArrays are copy-on-write, so the prev hand-off is a
+# cheap reference move; the id->index Dictionary is built once per tick.
+func _advance_snapshot() -> void:
+	_e_prev_pos = _e_pos
+	_e_prev_idx = _e_idx
+	_e_ids = view.enemies_id()
+	_e_pos = view.enemies_pos()
+	_e_kind = view.enemies_kind()
+	_e_boss = view.enemies_boss()
+	var eidx := {}
+	for i in _e_ids.size():
+		eidx[_e_ids[i]] = i
+	_e_idx = eidx
+
+	_p_prev_pos = _p_pos
+	_p_prev_idx = _p_idx
+	_p_ids = view.projectiles_id()
+	_p_pos = view.projectiles_pos()
+	_p_kind = view.projectiles_kind()
+	_p_target = view.projectiles_target()
+	var pidx := {}
+	for i in _p_ids.size():
+		pidx[_p_ids[i]] = i
+	_p_idx = pidx
+
+	_m_prev_pos = _m_pos
+	_m_prev_idx = _m_idx
+	_m_ids = view.minions_id()
+	_m_pos = view.minions_pos()
+	_m_kind = view.minions_kind()
+	var midx := {}
+	for i in _m_ids.size():
+		midx[_m_ids[i]] = i
+	_m_idx = midx
+
+# --- event handlers -----------------------------------------------------------
+
+# EnemyKilled {x, y, enemy_kind, boss, bounty, fire_radius}: death poof at the
+# reported spot + kill burst; bosses get a bigger burst for now (the full boss
+# death sequence is P3). ev.fire_radius (Fire death explosion) and ev.bounty
+# (kill popup) are P3 hooks.
+func _on_enemy_killed(ev: Dictionary) -> void:
+	var wp := Vector2(float(ev.x), float(ev.y))
+	var sp := to_screen(wp.x, wp.y)
+	if _poof_n < POOF_CAP:
+		_poof_pos[_poof_n] = wp
+		_poof_ttl[_poof_n] = 12
+		_poof_life[_poof_n] = 12
+		_poof_scale[_poof_n] = 2.2 if ev.boss else 1.0
+		_poof_n += 1
+	if ev.boss:
+		fx.burst_sparks(sp, Color(2.6, 1.8, 0.8), 30, 420.0, 0.6)
+		fx.shockwave(sp, Color(2.4, 1.6, 0.7, 0.9), 160.0, 0.5)
+		fx.add_shake(0.4)
+		fx.add_hitstop(0.06)
+	else:
+		fx.kill_burst(sp, Color(2.4, 1.6, 0.7))
+
+# Impact {x, y, damage, damage_type, splash_radius}: sparks + the REAL damage
+# number (replaces the old hp-permille proxy), and arm the hit-flash on the
+# struck enemies (all inside the splash radius, else the nearest one).
+func _on_impact(ev: Dictionary) -> void:
+	var wp := Vector2(float(ev.x), float(ev.y))
+	var sp := to_screen(wp.x, wp.y)
+	fx.burst_sparks(sp, Color(2.2, 1.3, 0.6), 6, 200.0, 0.26)
+	if ev.damage > 0:
+		fx.combat_text(sp + Vector2(0, -28),
+			str(ev.damage), Color(1.0, 0.86, 0.4), 16, 38.0)
+	_mark_impact_flash(wp, float(ev.splash_radius))
+
+# Arm the hit-flash for the enemies an Impact actually touched. The event
+# carries a point + splash radius (world units), not victim ids, so map it to
+# ids via this tick's snapshot: splash flashes everything inside the radius
+# (+ a small pad for the one tick of post-hit movement), single-target flashes
+# the nearest enemy within a small window.
+func _mark_impact_flash(wp: Vector2, splash_r: float) -> void:
+	var expiry := t + FLASH_TICKS
+	if splash_r > 0.0:
+		var r := splash_r + 40.0
+		var r2 := r * r
+		for i in _e_pos.size():
+			if _e_pos[i].distance_squared_to(wp) <= r2:
+				_flash[_e_ids[i]] = expiry
+	else:
+		var best := -1
+		var best_d2 := 120.0 * 120.0
+		for i in _e_pos.size():
+			var d2 := _e_pos[i].distance_squared_to(wp)
+			if d2 < best_d2:
+				best_d2 = d2
+				best = i
+		if best >= 0:
+			_flash[_e_ids[best]] = expiry
+
+# ProjectileSpawned {weapon_kind, x, y, target_x, target_y}: muzzle flash
+# oriented from the tank toward the target + a tiny recoil kick. The fire SFX
+# plays from main.gd off the same event.
+func _on_projectile_spawned(ev: Dictionary) -> void:
+	_muzzle = MUZZLE_TICKS
+	# World-space aim → screen-space direction (y flips across the mapping).
+	var d := Vector2(float(ev.target_x - ev.x), -float(ev.target_y - ev.y))
+	if d.length_squared() > 0.0001:
+		_muzzle_dir = d.normalized()
+	fx.add_shake(0.025)   # tiny recoil kick on fire
+
+# ============================ per-frame fill/draw ============================
+
+# Refill the per-kind enemy MultiMeshes: interpolated position + idle bob in
+# the instance transform (per-kind draw size baked into its scale — the boss
+# kind's 230 px comes straight from the manifest, no special path), hit-flash
+# in the instance color. Two passes over the snapshot with reused tally
+# arrays; zero heap allocation.
+func _fill_enemy_instances(alpha: float) -> void:
+	var nk := _enemy_mmi.size()
+	if nk == 0:
+		return
+	for k in nk:
+		_kind_count[k] = 0
+	var n := _e_ids.size()
+	for i in n:
+		var k: int = _e_kind[i] if i < _e_kind.size() else 0
+		if k >= nk:
+			k = 0
+		_kind_count[k] += 1
+	for k in nk:
+		var mm: MultiMesh = _enemy_mmi[k].multimesh
+		_ensure_capacity(mm, _kind_count[k])
+		_kind_cursor[k] = 0
+	# Cache the world→screen mapping once for the pass.
+	var vp := get_viewport_rect().size
+	var s := _scale()
+	var center := vp * 0.5
+	for i in n:
+		var k2: int = _e_kind[i] if i < _e_kind.size() else 0
+		if k2 >= nk:
+			k2 = 0
+		var id: int = _e_ids[i]
+		var wpos := _lerp_pos(_e_prev_idx, _e_prev_pos, _e_pos, id, i, alpha)
+		var bob := sin(t * 0.18 + float(id % 997) * 0.7) * 3.0
+		var spos := Vector2(center.x + wpos.x * s, center.y - wpos.y * s + bob)
+		var size := ArtTheme.enemy_draw_size(k2)
+		var mm2: MultiMesh = _enemy_mmi[k2].multimesh
+		var cur := _kind_cursor[k2]
+		mm2.set_instance_transform_2d(cur,
+			Transform2D(0.0, Vector2(size, size), 0.0, spos))
+		# Per-instance color: hit-flash (>1 blooms). P3 hook: status tints from
+		# view.enemies_status() (frost blue / poison green / fire orange) fold
+		# into this same color once the palette lands.
+		mm2.set_instance_color(cur,
+			Color(2.4, 2.4, 2.4) if _flash.has(id) else Color.WHITE)
+		_kind_cursor[k2] = cur + 1
+	for k in nk:
+		_enemy_mmi[k].multimesh.visible_instance_count = _kind_count[k]
+
+# Refill the projectile MultiMesh: interpolated position, rotation along the
+# travel direction, and the bright-orb instance color (>1 blooms — this keeps
+# the old live-orb look; the ghost-trail draws are gone, real trails are P3.7).
+func _fill_projectile_instances(alpha: float) -> void:
+	if _proj_mmi == null:
+		return
+	var mm := _proj_mmi.multimesh
+	var n := _p_ids.size()
+	_ensure_capacity(mm, n)
+	var vp := get_viewport_rect().size
+	var s := _scale()
+	var center := vp * 0.5
+	var size := ArtTheme.projectile_draw_size()
+	for i in n:
+		var id: int = _p_ids[i]
+		var wpos := _lerp_pos(_p_prev_idx, _p_prev_pos, _p_pos, id, i, alpha)
+		var spos := Vector2(center.x + wpos.x * s, center.y - wpos.y * s)
+		# Face the travel direction: prev→curr when we have a prev sample,
+		# else toward the sim-reported target (fresh spawns).
+		var dir := Vector2.ZERO
+		var pidx: int = _p_prev_idx.get(id, -1)
+		if pidx >= 0 and pidx < _p_prev_pos.size():
+			dir = _p_pos[i] - _p_prev_pos[pidx]
+		if dir.length_squared() < 0.0001 and i < _p_target.size():
+			dir = _p_target[i] - _p_pos[i]
+		var rot := Vector2(dir.x, -dir.y).angle() if dir.length_squared() > 0.0001 else 0.0
+		mm.set_instance_transform_2d(i,
+			Transform2D(rot, Vector2(size, size), 0.0, spos))
+		mm.set_instance_color(i, Color(1.5, 1.5, 1.9))
+	mm.visible_instance_count = n
+
+# Background pass (this node's own canvas, UNDER the MultiMeshes): ground,
+# spawn ring, Clear shockwave, death poofs.
 func _draw() -> void:
 	if view == null:
 		return
@@ -348,56 +696,52 @@ func _draw() -> void:
 			_blit(tex["clear"], origin, 200.0 + (prog - 0.15) * (ring_d - 200.0),
 				Color(1.2, 1.5, 2.0, ca * 0.5))
 
-	# Projectile motion trail (fading ghosts) under the live orbs.
-	var proj_size := ArtTheme.projectile_draw_size()
-	for hidx in range(_proj_history.size() - 1, 0, -1):
-		var frame: PackedVector2Array = _proj_history[hidx]
-		var ta := (1.0 - float(hidx) / float(_proj_history.size())) * 0.45
-		for p in frame:
-			_blit(tex["proj"], to_screen(p.x, p.y), proj_size * (1.0 - 0.08 * hidx),
-				Color(1.0, 1.0, 1.2, ta))
-	for p in view.projectiles_pos():
-		_blit(tex["proj"], to_screen(p.x, p.y), proj_size, Color(1.5, 1.5, 1.9))
+	# death poofs (under the enemy MultiMeshes)
+	for i in _poof_n:
+		var pr := 1.0 - float(_poof_ttl[i]) / float(_poof_life[i])
+		var wp := _poof_pos[i]
+		_blit(tex["poof"], to_screen(wp.x, wp.y),
+			(38.0 + pr * 42.0) * _poof_scale[i], Color(1, 1, 1, 1.0 - pr))
 
-	# death poofs (under enemies)
-	for poof in _poofs:
-		var pr := 1.0 - float(poof["ttl"]) / float(poof["life"])
-		var wp: Vector2 = poof["wpos"]
-		_blit(tex["poof"], to_screen(wp.x, wp.y), 38.0 + pr * 42.0, Color(1, 1, 1, 1.0 - pr))
+# Foreground pass (drawn on _fg, ABOVE the MultiMeshes): minions, tank, and
+# the oriented muzzle flash.
+func _draw_foreground() -> void:
+	if view == null or _fg == null:
+		return
+	var alpha := _lerp_alpha()
+	var origin := to_screen(0, 0)
 
-	# enemies with idle bob + hit flash (sizes from the sprite manifest)
-	var ep: PackedVector2Array = view.enemies_pos()
-	var ek: PackedByteArray = view.enemies_kind()
-	var eid: PackedInt64Array = view.enemies_id()
-	for i in ep.size():
-		var kind: int = ek[i] if i < ek.size() else 0
-		var id: int = eid[i] if i < eid.size() else 0
-		var bob := sin(t * 0.18 + float(id % 997) * 0.7) * 3.0
-		var tx: Texture2D = enemy_tex[kind] if kind < enemy_tex.size() else enemy_tex[0]
-		if tx == null:
-			continue
-		var size := ArtTheme.enemy_draw_size(kind)
-		var mod := Color(2.4, 2.4, 2.4) if _flash.has(id) else Color.WHITE
-		_blit(tx, to_screen(ep[i].x, ep[i].y) + Vector2(0, bob), size, mod)
-
-	# summoned allies (Larvae / Spores) — drawn beneath the tank
-	var mp: PackedVector2Array = view.minions_pos()
-	var mk: PackedByteArray = view.minions_kind()
-	for i in mp.size():
-		var k: int = mk[i] if i < mk.size() else 0
+	# summoned allies (Larvae / Spores) — interpolated, beneath the tank
+	for i in _m_ids.size():
+		var k: int = _m_kind[i] if i < _m_kind.size() else 0
 		var mtx: Texture2D = minion_tex[k] if k < minion_tex.size() else null
-		if mtx:
-			var mbob := sin(t * 0.2 + float(i) * 1.3) * 3.0
-			_blit(mtx, to_screen(mp[i].x, mp[i].y) + Vector2(0, mbob),
-				ArtTheme.minion_draw_size(k))
+		if mtx == null:
+			continue
+		var wp := _lerp_pos(_m_prev_idx, _m_prev_pos, _m_pos, _m_ids[i], i, alpha)
+		var mbob := sin(t * 0.2 + float(i) * 1.3) * 3.0
+		var msize := ArtTheme.minion_draw_size(k)
+		_fg.draw_texture_rect(mtx,
+			Rect2(to_screen(wp.x, wp.y) + Vector2(0, mbob) - Vector2(msize, msize) * 0.5,
+				Vector2(msize, msize)), false)
 
-	# tank with gentle bob + muzzle flash
+	# tank with gentle bob (immobile — interpolation is a fixed point)
 	var tbob := sin(t * 0.14) * 2.0
-	_blit(tex["tank"], origin + Vector2(0, tbob), ArtTheme.tank_draw_size())
+	var tsize := ArtTheme.tank_draw_size()
+	_fg.draw_texture_rect(tex["tank"],
+		Rect2(origin + Vector2(0, tbob) - Vector2(tsize, tsize) * 0.5,
+			Vector2(tsize, tsize)), false)
+
+	# muzzle flash, oriented along the actual firing direction (event-driven)
 	if _muzzle > 0:
+		var mpos := origin + Vector2(0, tbob) + _muzzle_dir * 44.0
+		# The flash texture is authored pointing up; rotate up onto _muzzle_dir.
+		var rot := _muzzle_dir.angle() + PI / 2.0
+		var ka := float(_muzzle) / float(MUZZLE_TICKS)
+		_fg.draw_set_transform(mpos, rot, Vector2.ONE)
 		# emissive muzzle flash blooms; spark texture adds bite
-		_blit(tex["muzzle"], origin + Vector2(0, -44 + tbob), 64.0,
-			Color(1.8, 2.0, 2.6, float(_muzzle) / 5.0))
+		_fg.draw_texture_rect(tex["muzzle"], Rect2(Vector2(-32, -32), Vector2(64, 64)),
+			false, Color(1.8, 2.0, 2.6, ka))
 		if _spark_tex:
-			_blit(_spark_tex, origin + Vector2(0, -44 + tbob), 40.0,
-				Color(2.2, 1.6, 0.9, float(_muzzle) / 5.0))
+			_fg.draw_texture_rect(_spark_tex, Rect2(Vector2(-20, -20), Vector2(40, 40)),
+				false, Color(2.2, 1.6, 0.9, ka))
+		_fg.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
