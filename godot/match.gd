@@ -139,10 +139,9 @@ func _unhandled_key_input(e: InputEvent) -> void:
 			# Cycling YOUR theme re-assigns your cell (player 0) and refreshes the
 			# peer spread + tank cache so the grid stays consistent.
 			ArtTheme.cycle(); _assign_cosmetics(); _cache_theme_textures()
-		elif e.keycode == KEY_S:
+		elif e.keycode == KEY_S or e.keycode == KEY_ESCAPE:
+			# Both S and Esc back out to the skin-select menu (no in-match quit).
 			get_tree().change_scene_to_file("res://SkinSelect.tscn")
-		elif e.keycode == KEY_ESCAPE:
-			get_tree().quit()
 
 func _physics_process(_delta: float) -> void:
 	if m == null:
@@ -191,7 +190,10 @@ func _draw() -> void:
 			if c.code == Profile.active_challenge_code:
 				you = tr("CHALLENGE: %s  ·  %s") % [tr(c.name), you]
 				break
-	draw_string(font, Vector2(vp.x - mini(int(vp.x) - 20, 16 + you.length() * 7), 26),
+	# Right-align by measuring the rendered width (length()*px breaks with CJK),
+	# clamped so an over-long line still starts on screen.
+	var you_w: float = font.get_string_size(you, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+	draw_string(font, Vector2(maxf(vp.x - 16.0 - you_w, 20.0), 26),
 		you, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.72, 0.66, 0.5))
 	if not _toast.is_empty():
 		# Each toast entry is an achievement name (in the translation table).
@@ -329,7 +331,7 @@ func _draw_cell(font, i: int, r: Rect2, is_big: bool = false) -> void:
 	draw_string(font, Vector2(meta_x + rw + gw, top_y), " · %dw" % m.weapon_count(i),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * us), c_dim)
 	# per-player damage score (log-compressed so it never runs into the thousands)
-	var score_txt := "SCORE %d" % _score(i)
+	var score_txt := tr("SCORE %d") % _score(i)
 	var sw: float = font.get_string_size(score_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * us)).x
 	draw_string(font, Vector2(r.position.x + r.size.x - sw - 8.0, top_y), score_txt,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * us), c_accent)

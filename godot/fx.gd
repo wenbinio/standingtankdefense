@@ -8,8 +8,8 @@
 # Public seam (used by main.gd; safe to reuse from match.gd):
 #   var fx := Fx.new()                     # construct one per arena view
 #   fx.update(dt)                          # advance every frame (pass real delta)
-#   fx.draw(canvas, to_screen, font)       # draw all FX (call inside _draw)
-#       to_screen: Callable(Vector2 world) -> Vector2 screen
+#   fx.draw(canvas, font)                  # draw all FX (call inside _draw);
+#       emitter positions are screen-space already, so no world->screen mapper
 #   fx.shake_offset() -> Vector2           # add to your camera/world origin
 #   fx.hitstop_active() -> bool            # true while a freeze frame holds
 #   # emitters (screen-space positions):

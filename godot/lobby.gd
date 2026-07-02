@@ -376,7 +376,7 @@ func _draw_footer(vp: Vector2, phase: int, n: int, ready_n: int,
 	# hint suffix; the ready state itself is in the translation table.
 	var youready := _my_ready()
 	draw_string(font, Vector2(316, fy + 29),
-		(tr("YOU: ✓ ready") if youready else tr("YOU: ✗ not ready")) + "   [Space] toggle",
+		(tr("YOU: ✓ ready") if youready else tr("YOU: ✗ not ready")) + "   " + tr("[Space] toggle"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 		Color(0.42, 0.85, 0.55) if youready else my_text)
 

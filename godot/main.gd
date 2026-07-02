@@ -1,11 +1,19 @@
 # Standing Tank Defense — single-arena view. Drives the Rust `StSim` (one
-# deterministic tick per 30 Hz physics frame) and renders the "Gaslamp Bulwark"
-# chibi set with juice: idle bob, hit flash, death poofs, muzzle flash, Clear FX.
+# deterministic tick per 30 Hz physics frame) and renders the active ArtTheme
+# set with juice: idle bob, hit flash, death poofs, muzzle flash, Clear FX.
 # Controls: click a shop card or press 1-8 to buy · R reroll · Space clear ·
 # Esc back to skin select · M multi-arena net demo.
 extends Node2D
 
 var sim
+# Input-intent FIFO: [code, slot] pairs (1 buy · 2 reroll · 3 clear) queued by
+# the input handlers and drained ONE per 30 Hz physics tick in arrival order,
+# so two inputs landing within the same tick no longer overwrite each other.
+# Capped small so stale input can't buffer up.
+const MAX_QUEUED_INTENTS := 4
+var _intents: Array = []
+# The intent consumed THIS tick (exactly what sim.step() received); kept for the
+# shop's pressed-state draw feedback. 0 = none.
 var pending_code := 0
 var pending_slot := 0
 var clear_fx := 0
@@ -29,8 +37,7 @@ var _au_was_dead := false      # death edge -> tank_destroyed + defeat
 var _au_prev_gold := -1        # gold last tick (confirms a buy/reroll actually spent)
 
 # UI fonts (loaded in _ready). _font is the body/HUD face; _font_head a heavier
-# weight for headers. Falls back to ThemeDB if the theme resource is missing.
-var _ui_theme: Theme = null
+# weight for headers. Falls back to ThemeDB if the font resource is missing.
 var _font: Font = null
 var _font_head: Font = null
 
@@ -162,10 +169,9 @@ func _radial_light_tex(size: int) -> Texture2D:
 			img.set_pixel(x, y, Color(1, 1, 1, a))
 	return ImageTexture.create_from_image(img)
 
-# [UI stream] Load the Barlow Semi Condensed UI theme (real font, not the engine
+# [UI stream] Load the Barlow Semi Condensed UI faces (real font, not the engine
 # fallback). Kept in its own helper so it doesn't entangle with _load_textures().
 func _load_fonts() -> void:
-	_ui_theme = load("res://art/ui_theme.tres") as Theme
 	# Body + header faces, each with a Noto Sans SC fallback chained in so the
 	# custom-drawn HUD/shop renders CJK glyphs under zh-CN. Centralized on the
 	# ArtTheme autoload (ui_font) so every draw site shares one CJK-capable face.
@@ -231,12 +237,11 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		return
 	# Number row 1..8 buys the matching shop slot.
 	if e.keycode >= KEY_1 and e.keycode <= KEY_8:
-		pending_code = 1
-		pending_slot = e.keycode - KEY_1
+		_queue_intent(1, e.keycode - KEY_1)
 		return
 	match e.keycode:
-		KEY_R: pending_code = 2
-		KEY_SPACE: pending_code = 3
+		KEY_R: _queue_intent(2)
+		KEY_SPACE: _queue_intent(3)
 		KEY_T: ArtTheme.cycle(); _load_textures()
 		KEY_M: get_tree().change_scene_to_file("res://Match.tscn")   # multi-arena net demo
 		KEY_ESCAPE: get_tree().change_scene_to_file("res://SkinSelect.tscn")
@@ -252,11 +257,17 @@ func _unhandled_input(e: InputEvent) -> void:
 		return
 	for i in shop_rects.size():
 		if shop_rects[i].has_point(e.position):
-			pending_code = 1; pending_slot = i; return
+			_queue_intent(1, i); return
 	if reroll_rect.has_point(e.position):
-		pending_code = 2; return
+		_queue_intent(2); return
 	if clear_rect.has_point(e.position):
-		pending_code = 3
+		_queue_intent(3)
+
+# Enqueue an input intent for the sim, preserving arrival order. Intents beyond
+# the small cap are dropped (better than buffering seconds of stale clicks).
+func _queue_intent(code: int, slot: int = 0) -> void:
+	if _intents.size() < MAX_QUEUED_INTENTS:
+		_intents.append([code, slot])
 
 # Results-panel "Redeploy" hit-target, recomputed by _draw_results each frame
 # while dead and consulted by the click handler above.
@@ -278,6 +289,7 @@ func _redeploy() -> void:
 	_shake = Vector2.ZERO
 	clear_fx = 0
 	_recorded = false
+	_intents.clear()
 	pending_code = 0
 	pending_slot = 0
 	# AUDIO trackers re-seeded from the fresh sim (no cross-run false triggers).
@@ -294,6 +306,16 @@ func _physics_process(_delta: float) -> void:
 	if sim == null:
 		return
 	t += 1
+	# Drain exactly ONE queued intent this tick (FIFO — earlier of two same-tick
+	# inputs is no longer lost; the later one simply runs next tick). What the
+	# sim receives per tick is unchanged: a single (code, slot) pair.
+	if _intents.is_empty():
+		pending_code = 0
+		pending_slot = 0
+	else:
+		var intent: Array = _intents.pop_front()
+		pending_code = intent[0]
+		pending_slot = intent[1]
 	# Capture the input intent + pre-step gold so the audio hook can tell a
 	# successful buy (gold actually dropped) from a no-op click. Read-only.
 	var au_intent := pending_code
@@ -321,8 +343,6 @@ func _physics_process(_delta: float) -> void:
 	_update_audio(au_intent, au_gold_before)
 	if clear_fx > 0:
 		clear_fx -= 1
-	pending_code = 0
-	pending_slot = 0
 	queue_redraw()
 
 # Frame-rate cosmetic update: advance the FX bus, animate lights, drive the
@@ -865,7 +885,7 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 	reroll_rect = Rect2(bx, top, btn_w, ch * 0.5 - 4.0)
 	clear_rect = Rect2(bx, top + ch * 0.5 + 4.0, btn_w, ch * 0.5 - 4.0)
 	var rr_ok := free_rr > 0 or gold >= rr_cost
-	var rr_label := tr("REROLL  free x%d") % free_rr if free_rr > 0 else tr("REROLL  %dg") % rr_cost
+	var rr_label := tr("[R] REROLL  free x%d") % free_rr if free_rr > 0 else tr("[R] REROLL  %dg") % rr_cost
 	var rr_on := ArtTheme.ui("header").darkened(0.7)
 	var rr_bg := _btn_bg(rr_on, ArtTheme.ui("panel_border").darkened(0.45), rr_ok, reroll_rect.has_point(mpos), pending_code == 2)
 	draw_rect(reroll_rect, rr_bg)
@@ -873,7 +893,7 @@ func _draw_shop(font: Font, vp: Vector2) -> void:
 		var rr_outline := ArtTheme.ui("header")
 		rr_outline.a = 0.5
 		draw_rect(reroll_rect, rr_outline, false, 1.0)
-	draw_string(head, reroll_rect.position + Vector2(12, reroll_rect.size.y * 0.5 + 5), "[R] " + rr_label,
+	draw_string(head, reroll_rect.position + Vector2(12, reroll_rect.size.y * 0.5 + 5), rr_label,
 		HORIZONTAL_ALIGNMENT_LEFT, btn_w - 18, 14, ArtTheme.ui("header") if rr_ok else ArtTheme.ui("text_dim"))
 	var cl_on := ArtTheme.ui("danger").darkened(0.7)
 	var cl_bg := _btn_bg(cl_on, cl_on, true, clear_rect.has_point(mpos), pending_code == 3)

@@ -85,7 +85,7 @@ func ui_font(bold: bool) -> Font:
 		_ui_font_cache[bold] = fb
 		return fb
 	# load() returns a shared cached resource; duplicate so setting fallbacks
-	# here doesn't mutate the same instance referenced by ui_theme.tres et al.
+	# here doesn't mutate the same cached instance other load() callers see.
 	f = f.duplicate() as FontFile
 	var noto := _cjk()
 	if noto:

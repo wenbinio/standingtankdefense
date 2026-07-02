@@ -192,6 +192,8 @@ ECONOMY · PASSIVES · SPIKES,ECONOMY · PASSIVES · SPIKES,经济 · 被动 · 
 [R] REROLL  free x%d,[R] REROLL  free x%d,[R] 重投  免费 x%d
 [R] REROLL  %dg,[R] REROLL  %dg,[R] 重投  %dg
 [Space] CLEAR,[Space] CLEAR,[Space] 清场
+[N] sound: on,[N] sound: on,[N] 声音：开
+[N] sound: off,[N] sound: off,[N] 声音：关
 WEAPON,WEAPON,武器
 ECONOMY,ECONOMY,经济
 SPIKE,SPIKE,尖刺

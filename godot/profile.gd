@@ -177,7 +177,11 @@ func _load() -> void:
 		selected = "ol_reliable"
 
 func _save() -> void:
+	# user://profile.cfg is shared with audio.gd (its [audio] section). Reload the
+	# file before writing so we only overwrite [profile] and preserve the rest —
+	# the same reload-before-save pattern audio.gd uses for its section.
 	var cf := ConfigFile.new()
+	cf.load(SAVE_PATH)   # ignore failure: a missing file just starts empty
 	cf.set_value("profile", "selected", selected)
 	cf.set_value("profile", "locale", _locale)
 	cf.set_value("profile", "earned", earned.keys())
