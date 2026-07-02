@@ -13,7 +13,30 @@ var active := 0
 # single-arena (Main) blit size in px; `net_size` is the multi-arena net-view
 # (Match) cell blit size. Art agents extend/retarget THESE tables — no other
 # file may hardcode an entity sprite path or size.
-# (Reserved for the art rebuild: entries may grow {frames, fps} for flipbooks.)
+#
+# --- Flipbook schema + authoring contract (art batch A) -----------------------
+# Every manifest entry may also carry OPTIONAL flipbook keys (defaults shown):
+#   "frames": 1                     frame count in the image (1 = static, today)
+#   "fps": 0.0                      playback rate, frames per SECOND (0 = hold
+#                                   frame 0 — declare frames without animating)
+#   "frame_layout": "horizontal_strip"   the only supported layout
+# Authoring rules for a strip (this comment IS the art batch A contract):
+#   * ONE image per (kind, theme): N frames side by side, left -> right in
+#     playback order, frame 0 leftmost. No padding or gutters between frames.
+#   * All frames equal width: total image width MUST divide exactly by
+#     `frames` (validated on load via validated_frames(); a mismatch warns
+#     and that kind falls back to frames=1, drawing the whole image as today).
+#     Frame height = full image height.
+#   * Author frames SQUARE (e.g. 8 frames of 128x128 -> a 1024x128 strip) so
+#     the square draw sizes (`size` / `net_size`) keep working unchanged.
+#   * The manifest is shared by all themes, so every theme must ship the same
+#     frame count for a kind; a theme whose image doesn't divide cleanly
+#     degrades to static for that theme only (warning, no crash).
+#   * Playback is RENDER-ONLY and deterministic — never feeds the sim:
+#     frame = floor((tick + interp_fraction) * fps / 30 + id % frames) % frames
+#     (30 Hz sim tick; stable entity id gives each entity a phase offset so a
+#     wave doesn't march in lockstep). Batch A ships LOOPING cycles (walk);
+#     one-shot death/fire cycles need per-entity anim state — a later pass.
 const ENEMY_MANIFEST: Array[Dictionary] = [
 	{"path": "enemies/squeakzilla_rat.svg", "size": 74.0, "net_size": 20.0},   # 0 Squeakzilla
 	{"path": "enemies/fanged_death.svg", "size": 74.0, "net_size": 20.0},     # 1 Fanged Death
@@ -341,6 +364,53 @@ func minion_draw_size(kind: int, net := false) -> float:
 
 func tank_draw_size(net := false) -> float:
 	return TANK_MANIFEST["net_size"] if net else TANK_MANIFEST["size"]
+
+# --- Flipbook frame metadata ---------------------------------------------------
+# Declared (manifest) frame count / fps for an entry; schema defaults 1 / 0.0.
+# These report what the manifest PROMISES — renderers must gate actual strip
+# drawing on validated_frames() against the texture they really loaded.
+func _entry_frames(e: Dictionary) -> int:
+	return int(e.get("frames", 1))
+
+func _entry_fps(e: Dictionary) -> float:
+	return float(e.get("fps", 0.0))
+
+func enemy_frames(kind: int) -> int:
+	var e: Dictionary = ENEMY_MANIFEST[kind] if kind >= 0 and kind < ENEMY_MANIFEST.size() else ENEMY_MANIFEST[0]
+	return _entry_frames(e)
+
+func enemy_fps(kind: int) -> float:
+	var e: Dictionary = ENEMY_MANIFEST[kind] if kind >= 0 and kind < ENEMY_MANIFEST.size() else ENEMY_MANIFEST[0]
+	return _entry_fps(e)
+
+func minion_frames(kind: int) -> int:
+	var m: Dictionary = MINION_MANIFEST[kind] if kind >= 0 and kind < MINION_MANIFEST.size() else MINION_MANIFEST[0]
+	return _entry_frames(m)
+
+func minion_fps(kind: int) -> float:
+	var m: Dictionary = MINION_MANIFEST[kind] if kind >= 0 and kind < MINION_MANIFEST.size() else MINION_MANIFEST[0]
+	return _entry_fps(m)
+
+func tank_frames() -> int:
+	return _entry_frames(TANK_MANIFEST)
+
+func tank_fps() -> float:
+	return _entry_fps(TANK_MANIFEST)
+
+# The validate pass: reconcile a DECLARED frame count against the texture that
+# was actually loaded. Strips are hand-authored, so guard against contract
+# drift: if the image width doesn't divide cleanly by `frames` (wrong strip,
+# single-frame art in one theme, a skin over a multi-frame tank manifest, the
+# magenta placeholder), warn once at load and fall back to frames=1 — the kind
+# renders static exactly like today instead of showing garbage slices.
+func validated_frames(tx: Texture2D, frames: int, label: String) -> int:
+	if frames <= 1:
+		return 1
+	var w: int = tx.get_width() if tx != null else 0
+	if w <= 0 or w % frames != 0:
+		push_warning("ArtTheme: '%s' width %d doesn't divide by frames=%d — falling back to frames=1" % [label, w, frames])
+		return 1
+	return frames
 
 # Projectile textures for a theme, in PROJ_* art-id order (one MultiMesh
 # bucket per entry; missing files come back as the guarded placeholder).

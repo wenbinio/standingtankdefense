@@ -137,6 +137,52 @@ var _hz_n := 0
 # lifetime instead.
 var _hz_total := {}
 
+# --- Flipbook (horizontal-strip frame animation) --------------------------------
+# The MultiMesh quad's UVs can't vary per instance through transforms alone, so
+# strip kinds (manifest frames > 1) carry the CURRENT FRAME INDEX in MultiMesh
+# custom data (INSTANCE_CUSTOM.x) and get this minimal canvas_item material,
+# whose vertex pass squeezes the quad's 0..1 UV.x into the frame's slice:
+#   UV.x' = (UV.x + frame) / frame_count.
+# There is NO custom fragment function — Godot's default canvas_item fragment
+# (COLOR = vertex_color * texture(TEXTURE, UV)) still runs, so the per-instance
+# tint stack (hit-flash / status colors via set_instance_color, incl. >1 HDR
+# channels that bloom) and item modulate compose EXACTLY as with no material.
+# frames=1 kinds never get this material, never enable custom data, and never
+# compile this shader (it's built lazily on first frames>1 kind): with today's
+# all-single-frame manifests every code path below is byte-identical to
+# pre-flipbook rendering.
+const FLIPBOOK_SHADER_SRC := """
+shader_type canvas_item;
+// Frame count of this kind's strip; a per-MATERIAL uniform (one material per
+// enemy kind, whose MultiMesh holds a single texture), re-set on theme cycle
+// to the VALIDATED count — an invalid strip runs with frame_count=1.0 and
+// custom.x=0, leaving UV.x untouched.
+uniform float frame_count = 1.0;
+void vertex() {
+	// INSTANCE_CUSTOM.x = whole frame index in 0..frame_count-1 (small ints:
+	// exact in float). y/z/w reserved (one-shot anims come in a later pass).
+	UV.x = (UV.x + INSTANCE_CUSTOM.x) / frame_count;
+}
+"""
+var _flipbook_shader: Shader = null   # lazily compiled; nil while all frames=1
+
+# Per-kind VALIDATED flipbook metadata for the ACTIVE theme (refreshed in
+# reload_theme): manifest frames reconciled against the loaded texture width
+# via ArtTheme.validated_frames(), so a theme with bad/legacy art degrades to
+# static per kind instead of drawing garbage slices.
+var _enemy_frames := PackedInt32Array()
+var _enemy_fps := PackedFloat32Array()
+# 1 = this kind's MMI was BUILT strip-capable (manifest frames > 1: custom
+# data enabled + flipbook material). Distinct from _enemy_frames: a strip kind
+# whose ACTIVE theme failed validation still has the custom-data buffer, and
+# must keep writing frame 0 so no stale index from a previous theme offsets
+# UVs (see _fill_enemy_instances).
+var _enemy_strip := PackedByteArray()
+var _minion_frames := PackedInt32Array()
+var _minion_fps := PackedFloat32Array()
+var _tank_frames := 1
+var _tank_fps := 0.0
+
 # --- MultiMesh entity rendering (P1.6) -----------------------------------------
 # One MultiMesh per texture: enemies get one per ENEMY_MANIFEST kind (per-kind
 # draw size baked into the instance transform, so the boss needs no special
@@ -196,10 +242,43 @@ func reload_theme() -> void:
 	minion_tex = ArtTheme.minion_textures()
 	proj_tex = ArtTheme.projectile_textures()
 	_spark_tex = ArtTheme.tex("fx/hit_spark.svg")
+	_refresh_frame_meta()
 	for k in _enemy_mmi.size():
 		_enemy_mmi[k].texture = enemy_tex[k]
+		_apply_frame_uniform(_enemy_mmi[k], _enemy_frames[k])
 	for a in _proj_mmi.size():
 		_proj_mmi[a].texture = proj_tex[a]
+
+# Re-validate each kind's declared frame count against the textures the ACTIVE
+# theme actually loaded (theme cycle can swap a valid strip for legacy
+# single-frame art — that kind must degrade to static for this theme only).
+# The tank validates against the resolved SKIN texture, so a single-frame skin
+# over a multi-frame default manifest safely renders static.
+func _refresh_frame_meta() -> void:
+	_enemy_frames.resize(enemy_tex.size())
+	_enemy_fps.resize(enemy_tex.size())
+	_enemy_strip.resize(enemy_tex.size())
+	for k in enemy_tex.size():
+		_enemy_frames[k] = ArtTheme.validated_frames(enemy_tex[k],
+			ArtTheme.enemy_frames(k), ArtTheme.ENEMY_MANIFEST[k]["path"])
+		_enemy_fps[k] = ArtTheme.enemy_fps(k)
+		_enemy_strip[k] = 1 if ArtTheme.enemy_frames(k) > 1 else 0
+	_minion_frames.resize(minion_tex.size())
+	_minion_fps.resize(minion_tex.size())
+	for k in minion_tex.size():
+		_minion_frames[k] = ArtTheme.validated_frames(minion_tex[k],
+			ArtTheme.minion_frames(k), ArtTheme.MINION_MANIFEST[k]["path"])
+		_minion_fps[k] = ArtTheme.minion_fps(k)
+	_tank_frames = ArtTheme.validated_frames(tex["tank"],
+		ArtTheme.tank_frames(), ArtTheme.TANK_MANIFEST["path"])
+	_tank_fps = ArtTheme.tank_fps()
+
+# Point a strip kind's material at its VALIDATED frame count. No-op for
+# frames=1 kinds — they carry no material at all (the pre-flipbook fast path).
+func _apply_frame_uniform(mmi: MultiMeshInstance2D, frames: int) -> void:
+	var mat := mmi.material as ShaderMaterial
+	if mat:
+		mat.set_shader_parameter(&"frame_count", float(maxi(frames, 1)))
 
 # Reset every juice tracker + snapshot for a fresh run (redeploy).
 # `new_view`/`new_fx` replace the wrapped sim + FX bus so nothing leaks across
@@ -354,7 +433,12 @@ func _setup_entity_layers() -> void:
 	_proj_cursor.resize(proj_tex.size())
 	_enemy_mmi = []
 	for k in enemy_tex.size():
-		_enemy_mmi.append(_make_mmi(enemy_tex[k]))
+		# Strip capability follows the DECLARED (manifest) frame count — the
+		# custom-data buffer layout and material are theme-independent; the
+		# uniform tracks the VALIDATED count and is re-set on theme cycle.
+		var mmi := _make_mmi(enemy_tex[k], ArtTheme.enemy_frames(k))
+		_apply_frame_uniform(mmi, _enemy_frames[k])
+		_enemy_mmi.append(mmi)
 	_kind_count.resize(enemy_tex.size())
 	_kind_cursor.resize(enemy_tex.size())
 	# Foreground canvas: a plain Node2D whose `draw` signal we feed, so
@@ -385,16 +469,29 @@ func _unit_quad_mesh() -> ArrayMesh:
 
 # One MultiMeshInstance2D per texture; 2D transforms + per-instance colors
 # (hit flash; colors are float so >1 channels still bloom under glow).
-func _make_mmi(texture: Texture2D) -> MultiMeshInstance2D:
+# `declared_frames` > 1 (a manifest flipbook strip) additionally enables
+# per-instance custom data (the frame index; set BEFORE instance_count so the
+# buffer is laid out once) and attaches the flipbook material. The default of
+# 1 builds EXACTLY the pre-flipbook MMI: no custom data, no material.
+func _make_mmi(texture: Texture2D, declared_frames := 1) -> MultiMeshInstance2D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_2D
 	mm.use_colors = true
+	if declared_frames > 1:
+		mm.use_custom_data = true
 	mm.mesh = _quad
 	mm.instance_count = 0
 	mm.visible_instance_count = 0
 	var mmi := MultiMeshInstance2D.new()
 	mmi.multimesh = mm
 	mmi.texture = texture
+	if declared_frames > 1:
+		if _flipbook_shader == null:
+			_flipbook_shader = Shader.new()
+			_flipbook_shader.code = FLIPBOOK_SHADER_SRC
+		var mat := ShaderMaterial.new()
+		mat.shader = _flipbook_shader
+		mmi.material = mat
 	add_child(mmi)
 	return mmi
 
@@ -424,8 +521,31 @@ func _scale() -> float:
 func to_screen(wx: float, wy: float) -> Vector2:
 	return get_viewport_rect().size * 0.5 + Vector2(wx * _scale(), -wy * _scale())
 
+# Square whole-texture blit on this node's canvas (ground ring / clear /
+# poofs). Routed through _blit_frame with frames=1, which is the identical
+# draw_texture_rect call — and the poof/fx blits light up automatically if fx
+# art ever grows strip metadata.
 func _blit(tx: Texture2D, center: Vector2, size: float, mod := Color.WHITE) -> void:
-	draw_texture_rect(tx, Rect2(center - Vector2(size, size) * 0.5, Vector2(size, size)), false, mod)
+	_blit_frame(self, tx, center, Vector2(size, size), 1, 0, mod)
+
+# THE non-MultiMesh flipbook draw: blit frame `frame` of an N-frame horizontal
+# strip onto canvas item `ci` (self = background pass, _fg = foreground pass),
+# centered at `center`, `size` px on screen. frames <= 1 takes EXACTLY the old
+# whole-texture draw_texture_rect path (byte-identical to pre-flipbook
+# rendering); frames > 1 carves the frame's slice out of the strip with
+# draw_texture_rect_region. Same manifest fields as the MultiMesh path; no
+# allocation (Rect2/Vector2/Color are value types).
+func _blit_frame(ci: CanvasItem, tx: Texture2D, center: Vector2, size: Vector2,
+		frames: int, frame: int, mod := Color.WHITE) -> void:
+	if tx == null:
+		return
+	var rect := Rect2(center - size * 0.5, size)
+	if frames <= 1:
+		ci.draw_texture_rect(tx, rect, false, mod)
+		return
+	var fw := float(tx.get_width()) / float(frames)
+	ci.draw_texture_rect_region(tx, rect,
+		Rect2(fw * float(posmod(frame, frames)), 0.0, fw, float(tx.get_height())), mod)
 
 # Interpolation weight for this render frame (0 = previous tick, 1 = current).
 # P3.10 hit-stop: while fx.hitstop_active(), the alpha is CLAMPED to its value
@@ -925,6 +1045,21 @@ func _fill_enemy_instances(alpha: float) -> void:
 					cb *= 1.18
 				col = Color(cr, cg, cb)
 		mm2.set_instance_color(cur, col)
+		# Flipbook walk cycle. Only strip-CAPABLE kinds (MMI built with custom
+		# data) ever touch custom data — frames=1 kinds skip entirely, the
+		# pre-flipbook path at zero cost. Frame clock = sim ticks + interp
+		# fraction scaled by manifest fps (30 Hz tick), phase-offset by the
+		# stable entity id so a wave doesn't march in lockstep. Render-only:
+		# no wall-clock, no RNG. A strip kind whose ACTIVE theme failed
+		# validation (fcnt 1) still writes frame 0, so stale indices from a
+		# previous theme can never offset UVs.
+		if k2 < _enemy_strip.size() and _enemy_strip[k2] != 0:
+			var fcnt: int = _enemy_frames[k2]
+			var frame := 0
+			if fcnt > 1:
+				frame = int((float(t) + alpha) * (_enemy_fps[k2] / 30.0)
+					+ float(id % fcnt)) % fcnt
+			mm2.set_instance_custom_data(cur, Color(float(frame), 0.0, 0.0, 0.0))
 		_kind_cursor[k2] = cur + 1
 	for k in nk:
 		_enemy_mmi[k].multimesh.visible_instance_count = _kind_count[k]
@@ -1055,7 +1190,10 @@ func _draw_foreground() -> void:
 	var alpha := _lerp_alpha()
 	var origin := to_screen(0, 0)
 
-	# summoned allies (Larvae / Spores) — interpolated, beneath the tank
+	# summoned allies (Larvae / Spores) — interpolated, beneath the tank.
+	# Strip minions animate with the same deterministic frame clock as the
+	# MultiMesh enemies (tick + interp fraction, id-phase); frames=1 (today)
+	# renders through _blit_frame's whole-texture path, byte-identical.
 	for i in _m_ids.size():
 		var k: int = _m_kind[i] if i < _m_kind.size() else 0
 		var mtx: Texture2D = minion_tex[k] if k < minion_tex.size() else null
@@ -1064,16 +1202,23 @@ func _draw_foreground() -> void:
 		var wp := _lerp_pos(_m_prev_idx, _m_prev_pos, _m_pos, _m_ids[i], i, alpha)
 		var mbob := sin(t * 0.2 + float(i) * 1.3) * 3.0
 		var msize := ArtTheme.minion_draw_size(k)
-		_fg.draw_texture_rect(mtx,
-			Rect2(to_screen(wp.x, wp.y) + Vector2(0, mbob) - Vector2(msize, msize) * 0.5,
-				Vector2(msize, msize)), false)
+		var mf: int = _minion_frames[k] if k < _minion_frames.size() else 1
+		var mframe := 0
+		if mf > 1:
+			mframe = int((float(t) + alpha) * (_minion_fps[k] / 30.0)
+				+ float(_m_ids[i] % mf)) % mf
+		_blit_frame(_fg, mtx, to_screen(wp.x, wp.y) + Vector2(0, mbob),
+			Vector2(msize, msize), mf, mframe)
 
-	# tank with gentle bob (immobile — interpolation is a fixed point)
+	# tank with gentle bob (immobile — interpolation is a fixed point); no
+	# id-phase needed (there is one tank), frame clock only.
 	var tbob := sin(t * 0.14) * 2.0
 	var tsize := ArtTheme.tank_draw_size()
-	_fg.draw_texture_rect(tex["tank"],
-		Rect2(origin + Vector2(0, tbob) - Vector2(tsize, tsize) * 0.5,
-			Vector2(tsize, tsize)), false)
+	var tframe := 0
+	if _tank_frames > 1:
+		tframe = int((float(t) + alpha) * (_tank_fps / 30.0)) % _tank_frames
+	_blit_frame(_fg, tex["tank"], origin + Vector2(0, tbob),
+		Vector2(tsize, tsize), _tank_frames, tframe)
 
 	# muzzle flash, oriented along the actual firing direction (event-driven)
 	if _muzzle > 0:
