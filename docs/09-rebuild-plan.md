@@ -1,6 +1,8 @@
 # [09] Full Rebuild Plan — Presentation Overhaul & Fix Program
 
-**Status:** approved plan, not yet started. Produced from six parallel audits (art, VFX/game-feel, UI/UX/frontend, Rust sim/net core, audio, docs-vs-implementation) run against commit `e656163`, with the full test suite executed live (**254 tests pass, M0 determinism gate PASS, golden checksum `0x436067271f1956d8`**).
+**Status:** P0 complete; P1 next. Produced from six parallel audits (art, VFX/game-feel, UI/UX/frontend, Rust sim/net core, audio, docs-vs-implementation) run against commit `e656163`, with the full test suite executed live (at audit time: 254 tests pass, M0 gate PASS, golden checksum `0x436067271f1956d8`).
+
+> **P0 executed (2026-07):** all §9.1 defects fixed; docs truth pass landed with mechanical doc-sync tests; checksum coverage expanded beyond B4 (ten snapshot-carried fields total — the parity test found nine more of the same class), which deliberately re-baselined the golden checksum to `0x58d77dad0cc11999` per the documented runbook. Suite now **269 tests**, fmt/clippy/CI hygiene gates active. Pending: one Godot editor import pass to regenerate two stale `.translation` rows.
 
 ---
 
