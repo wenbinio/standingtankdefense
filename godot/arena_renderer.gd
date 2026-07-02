@@ -45,6 +45,23 @@ const HAZARD_COLORS: Array[Color] = [
 	Color(1.45, 0.45, 1.0),   # Chaos    — fel magenta
 ]
 
+# PROJ_* art id -> per-instance modulate. The orb keeps its historical >1 HDR
+# treatment (blooms under glow); the physical families (arrow/axe/boulder)
+# stay <=1.0 so the base art reads clean WITHOUT bloom — arrow pale gold,
+# axe cool steel, boulder dusty warm.
+const PROJ_COLORS: Array[Color] = [
+	Color(1.5, 1.5, 1.9),     # PROJ_ORB     — bright HDR orb (blooms)
+	Color(1.0, 0.97, 0.88),   # PROJ_ARROW   — pale gold, non-bloom
+	Color(0.93, 0.96, 1.0),   # PROJ_AXE     — cool steel, non-bloom
+	Color(1.0, 0.92, 0.82),   # PROJ_BOULDER — dusty warm, non-bloom
+]
+# Render-only axe spin, in radians per sim tick on top of the travel heading
+# (0.5 rad/tick @ 30 Hz ~ 2.4 rev/s). Driven by the tick counter + interp
+# fraction — deterministic-looking, no wall-clock, no render RNG.
+const AXE_SPIN := 0.5
+# Base muzzle-light color; multiplied by the per-family tint on each shot.
+const MUZZLE_LIGHT_BASE := Color(0.5, 0.74, 1.0)
+
 # Boss-death gold fountain: 5 fanned combat texts (deterministic offsets — no
 # render RNG needed, and the fan reads as a fountain).
 const FOUNTAIN_OFF: Array[Vector2] = [
@@ -88,6 +105,7 @@ var _m_prev_idx := {}
 var _flash := {}              # enemy id -> tick the hit-flash expires
 var _muzzle := 0              # muzzle flash ticks left
 var _muzzle_dir := Vector2.UP # screen-space fire direction (from ProjectileSpawned)
+var _muzzle_tint := Color.WHITE  # per-family flash/light tint (from ProjectileSpawned)
 # Death-poof pool (dense parallel arrays, swap-remove; alloc-free after _ready).
 var _poof_pos := PackedVector2Array()   # world position
 var _poof_ttl := PackedInt32Array()
@@ -122,21 +140,23 @@ var _hz_total := {}
 # --- MultiMesh entity rendering (P1.6) -----------------------------------------
 # One MultiMesh per texture: enemies get one per ENEMY_MANIFEST kind (per-kind
 # draw size baked into the instance transform, so the boss needs no special
-# path); projectiles share ONE MultiMesh because PROJECTILE_MANIFEST defines a
-# single texture today — when it grows per-weapon entries, bucket by
-# projectiles_kind() exactly like the enemy kinds. Buffers grow only;
-# visible_instance_count trims the draw.
+# path); projectiles get one per PROJECTILE_MANIFEST art family, bucketed by
+# projectiles_kind() -> ArtTheme.projectile_art_for() exactly like the enemy
+# kinds. Buffers grow only; visible_instance_count trims the draw.
 var _enemy_mmi: Array = []    # MultiMeshInstance2D per enemy kind
-var _proj_mmi: MultiMeshInstance2D = null
+var _proj_mmi: Array = []     # MultiMeshInstance2D per projectile art family
 var _fg: Node2D = null        # foreground canvas: minions + tank + muzzle
 var _quad: ArrayMesh = null   # shared unit quad (scaled per instance)
 var _kind_count := PackedInt32Array()   # per-frame per-kind tallies (reused)
 var _kind_cursor := PackedInt32Array()
+var _proj_count := PackedInt32Array()   # per-frame per-art tallies (reused)
+var _proj_cursor := PackedInt32Array()
 
 # textures (manifest-driven; reloaded on theme cycle)
 var tex := {}
 var enemy_tex := []           # by kind, from ArtTheme.ENEMY_MANIFEST
 var minion_tex := []          # by kind, from ArtTheme.MINION_MANIFEST
+var proj_tex := []            # by art family, from ArtTheme.PROJECTILE_MANIFEST
 var _spark_tex: Texture2D     # hit_spark.svg, used for impact pops
 
 # lighting / post rig (render-only)
@@ -168,18 +188,18 @@ func reload_theme() -> void:
 		"ground": ArtTheme.tex(ArtTheme.ENV_MANIFEST["ground"]),
 		"ring":   ArtTheme.tex(ArtTheme.ENV_MANIFEST["ring"]),
 		"tank":   ArtTheme.tank_tex(),
-		"proj":   ArtTheme.tex(ArtTheme.PROJECTILE_MANIFEST["path"]),
 		"clear":  ArtTheme.tex("fx/clear_shockwave.svg"),
 		"muzzle": ArtTheme.tex("fx/muzzle_flash.svg"),
 		"poof":   ArtTheme.tex("fx/death_poof.svg"),
 	}
 	enemy_tex = ArtTheme.enemy_textures()
 	minion_tex = ArtTheme.minion_textures()
+	proj_tex = ArtTheme.projectile_textures()
 	_spark_tex = ArtTheme.tex("fx/hit_spark.svg")
 	for k in _enemy_mmi.size():
 		_enemy_mmi[k].texture = enemy_tex[k]
-	if _proj_mmi:
-		_proj_mmi.texture = tex["proj"]
+	for a in _proj_mmi.size():
+		_proj_mmi[a].texture = proj_tex[a]
 
 # Reset every juice tracker + snapshot for a fresh run (redeploy).
 # `new_view`/`new_fx` replace the wrapped sim + FX bus so nothing leaks across
@@ -211,6 +231,7 @@ func reset(new_view: SimView, new_fx: Fx) -> void:
 	_flash = {}
 	_muzzle = 0
 	_muzzle_dir = Vector2.UP
+	_muzzle_tint = Color.WHITE
 	_poof_n = 0
 	clear_fx = 0
 	_hurt = 0.0
@@ -227,8 +248,8 @@ func reset(new_view: SimView, new_fx: Fx) -> void:
 	_hz_total = {}
 	for mmi in _enemy_mmi:
 		mmi.multimesh.visible_instance_count = 0
-	if _proj_mmi:
-		_proj_mmi.multimesh.visible_instance_count = 0
+	for mmi in _proj_mmi:
+		mmi.multimesh.visible_instance_count = 0
 	queue_redraw()
 
 # Arm the Clear shockwave (called by main.gd the tick a Clear intent stepped).
@@ -279,10 +300,11 @@ func _setup_environment() -> void:
 	_tank_light.blend_mode = Light2D.BLEND_MODE_ADD
 	add_child(_tank_light)
 
-	# Muzzle flash light — brief punch reusing the _muzzle timer.
+	# Muzzle flash light — brief punch reusing the _muzzle timer. The color is
+	# re-tinted per projectile family on each ProjectileSpawned.
 	_muzzle_light = PointLight2D.new()
 	_muzzle_light.texture = _radial_light_tex(128)
-	_muzzle_light.color = Color(0.5, 0.74, 1.0)
+	_muzzle_light.color = MUZZLE_LIGHT_BASE
 	_muzzle_light.energy = 0.0
 	_muzzle_light.texture_scale = 2.0
 	_muzzle_light.blend_mode = Light2D.BLEND_MODE_ADD
@@ -325,7 +347,11 @@ func _setup_environment() -> void:
 # the same stacking the old single _draw produced.
 func _setup_entity_layers() -> void:
 	_quad = _unit_quad_mesh()
-	_proj_mmi = _make_mmi(tex["proj"])
+	_proj_mmi = []
+	for a in proj_tex.size():
+		_proj_mmi.append(_make_mmi(proj_tex[a]))
+	_proj_count.resize(proj_tex.size())
+	_proj_cursor.resize(proj_tex.size())
 	_enemy_mmi = []
 	for k in enemy_tex.size():
 		_enemy_mmi.append(_make_mmi(enemy_tex[k]))
@@ -810,6 +836,13 @@ func _mark_impact_flash(wp: Vector2, splash_r: float) -> void:
 # plays from main.gd off the same event.
 func _on_projectile_spawned(ev: Dictionary) -> void:
 	_muzzle = MUZZLE_TICKS
+	# Per-family muzzle tint (same table that picks the projectile art):
+	# MULTIPLIES into the base flash/light colors — arrow pale gold, axe steel,
+	# boulder dusty orange, orb arcane blue-violet. Texture stays the same.
+	_muzzle_tint = ArtTheme.muzzle_tint_for(
+		ArtTheme.projectile_art_for(int(ev.weapon_kind)))
+	if _muzzle_light:
+		_muzzle_light.color = MUZZLE_LIGHT_BASE * _muzzle_tint
 	# World-space aim → screen-space direction (y flips across the mapping).
 	var d := Vector2(float(ev.target_x - ev.x), -float(ev.target_y - ev.y))
 	if d.length_squared() > 0.0001:
@@ -896,20 +929,32 @@ func _fill_enemy_instances(alpha: float) -> void:
 	for k in nk:
 		_enemy_mmi[k].multimesh.visible_instance_count = _kind_count[k]
 
-# Refill the projectile MultiMesh: interpolated position, rotation along the
-# travel direction, and the bright-orb instance color (>1 blooms — this keeps
-# the old live-orb look; the ghost-trail draws are gone, real trails are P3.7).
+# Refill the per-art-family projectile MultiMeshes (weapon_kind bucketed via
+# ArtTheme.projectile_art_for, mirroring the enemy per-kind pattern):
+# interpolated position, rotation along the travel direction (art is authored
+# pointing UP, so travel needs the +PI/2 up-correction the muzzle flash already
+# uses), a continuous render-only spin for the axe, and per-family instance
+# color from PROJ_COLORS (orb HDR-blooms, the rest tint subtly). Two passes
+# over the snapshot with reused tally arrays; zero heap allocation.
 func _fill_projectile_instances(alpha: float) -> void:
-	if _proj_mmi == null:
+	var na := _proj_mmi.size()
+	if na == 0:
 		return
-	var mm := _proj_mmi.multimesh
+	for a in na:
+		_proj_count[a] = 0
 	var n := _p_ids.size()
-	_ensure_capacity(mm, n)
+	for i in n:
+		_proj_count[ArtTheme.projectile_art_for(_p_kind[i])] += 1
+	for a in na:
+		var mm: MultiMesh = _proj_mmi[a].multimesh
+		_ensure_capacity(mm, _proj_count[a])
+		_proj_cursor[a] = 0
+	# Cache the world→screen mapping once for the pass.
 	var vp := get_viewport_rect().size
 	var s := _scale()
 	var center := vp * 0.5
-	var size := ArtTheme.projectile_draw_size()
 	for i in n:
+		var art: int = ArtTheme.projectile_art_for(_p_kind[i])
 		var id: int = _p_ids[i]
 		var wpos := _lerp_pos(_p_prev_idx, _p_prev_pos, _p_pos, id, i, alpha)
 		var spos := Vector2(center.x + wpos.x * s, center.y - wpos.y * s)
@@ -921,11 +966,22 @@ func _fill_projectile_instances(alpha: float) -> void:
 			dir = _p_pos[i] - _p_prev_pos[pidx]
 		if dir.length_squared() < 0.0001 and i < _p_target.size():
 			dir = _p_target[i] - _p_pos[i]
-		var rot := Vector2(dir.x, -dir.y).angle() if dir.length_squared() > 0.0001 else 0.0
-		mm.set_instance_transform_2d(i,
-			Transform2D(rot, Vector2(size, size), 0.0, spos))
-		mm.set_instance_color(i, Color(1.5, 1.5, 1.9))
-	mm.visible_instance_count = n
+		var rot := (Vector2(dir.x, -dir.y).angle() + PI / 2.0) \
+			if dir.length_squared() > 0.0001 else 0.0
+		if art == ArtTheme.PROJ_AXE:
+			# Continuous spin on top of the heading: tick counter + interp
+			# fraction (smooth at any frame rate), a per-id phase so a volley
+			# doesn't spin in lockstep. Render-only; no wall-clock, no RNG.
+			rot += (float(t) + alpha) * AXE_SPIN + float(id % 7)
+		var mm2: MultiMesh = _proj_mmi[art].multimesh
+		var cur := _proj_cursor[art]
+		# Per-family (width, length) — local x across travel, y along it.
+		mm2.set_instance_transform_2d(cur,
+			Transform2D(rot, ArtTheme.projectile_draw_size(art), 0.0, spos))
+		mm2.set_instance_color(cur, PROJ_COLORS[art])
+		_proj_cursor[art] = cur + 1
+	for a in na:
+		_proj_mmi[a].multimesh.visible_instance_count = _proj_count[a]
 
 # Background pass (this node's own canvas, UNDER the MultiMeshes): ground,
 # spawn ring, Clear shockwave, death poofs.
@@ -1026,9 +1082,10 @@ func _draw_foreground() -> void:
 		var rot := _muzzle_dir.angle() + PI / 2.0
 		var ka := float(_muzzle) / float(MUZZLE_TICKS)
 		_fg.draw_set_transform(mpos, rot, Vector2.ONE)
-		# emissive muzzle flash blooms; spark texture adds bite
+		# emissive muzzle flash blooms; the per-family tint multiplies into the
+		# base color (subtle hue shift, alpha untouched); spark texture adds bite
 		_fg.draw_texture_rect(tex["muzzle"], Rect2(Vector2(-32, -32), Vector2(64, 64)),
-			false, Color(1.8, 2.0, 2.6, ka))
+			false, Color(1.8, 2.0, 2.6, ka) * _muzzle_tint)
 		if _spark_tex:
 			_fg.draw_texture_rect(_spark_tex, Rect2(Vector2(-20, -20), Vector2(40, 40)),
 				false, Color(2.2, 1.6, 0.9, ka))

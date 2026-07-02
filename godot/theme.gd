@@ -33,7 +33,135 @@ const MINION_MANIFEST: Array[Dictionary] = [
 	{"path": "minions/spores.svg", "size": 64.0, "net_size": 18.0},           # 1 Spores
 ]
 const TANK_MANIFEST: Dictionary = {"path": "tank/player_tank.svg", "size": 124.0, "net_size": 40.0}
-const PROJECTILE_MANIFEST: Dictionary = {"path": "projectiles/magic_orb.svg", "size": 26.0}
+# Projectile art families, indexed by the PROJ_* ids below (render buckets one
+# MultiMesh per entry). All four SVGs are authored 48px, pointing UP (travel =
+# up, no baked rotation) in BOTH themes. `size` is (width, length) in the
+# sprite's local frame — x across the travel axis, y along it — so the arrow
+# can be slim/long while the boulder is chunky. Sized against the orb's
+# historical 26 px square.
+const PROJ_ORB := 0      # arcane / elemental (also the unknown-kind fallback)
+const PROJ_ARROW := 1    # bolts, arrows, darts, bullets
+const PROJ_AXE := 2      # spinning thrown blades (axes, glaives, spikewheels)
+const PROJ_BOULDER := 3  # lobbed siege mass (rocks, bombs, kegs, meat)
+const PROJECTILE_MANIFEST: Array[Dictionary] = [
+	{"path": "projectiles/magic_orb.svg", "size": Vector2(26.0, 26.0)},
+	{"path": "projectiles/arrow.svg", "size": Vector2(16.0, 36.0)},   # slim + long
+	{"path": "projectiles/axe.svg", "size": Vector2(27.0, 27.0)},     # square spinner
+	{"path": "projectiles/boulder.svg", "size": Vector2(32.0, 32.0)}, # chunky
+]
+
+# weapon_kind (index into content.rs WEAPONS — stable by contract) -> PROJ_* art
+# id. Derived from each weapon's damage_type + attack class, with name-evident
+# family overrides; precedence:
+#   1. name-evident family (bow/bolt/axe/glaive/boulder/bomb/catapult/…)
+#   2. Attack::Bounce (thrown, chains)      -> PROJ_AXE
+#   3. DMG_SIEGE, or DMG_NORMAL + Splash    -> PROJ_BOULDER
+#   4. DMG_PIERCING or plain DMG_NORMAL     -> PROJ_ARROW
+#   5. DMG_MAGIC / DMG_CHAOS / elemental    -> PROJ_ORB
+# Instant attacks (proj_speed 0: Area/Wave/instant Bounce) never spawn a
+# projectile entity, but ProjectileSpawned still tints the muzzle, so they get
+# a family too. Kinds beyond this table (future weapons) fall back to PROJ_ORB
+# via projectile_art_for().
+const WEAPON_PROJECTILE: Array[int] = [
+	PROJ_ARROW,    #  0 Bow
+	PROJ_BOULDER,  #  1 Mortar Launcher
+	PROJ_ARROW,    #  2 Frost Bow (a bow: frosted arrow, orb would read as a spell)
+	PROJ_ARROW,    #  3 Poison Bow
+	PROJ_ORB,      #  4 Flamecaster
+	PROJ_AXE,      #  5 Storm Hammer (thrown hammer: the spinner silhouette)
+	PROJ_ARROW,    #  6 Ballista (siege TYPE but fires giant bolts)
+	PROJ_ORB,      #  7 Immolation
+	PROJ_AXE,      #  8 Shockwave Axe
+	PROJ_AXE,      #  9 Moon Glaive
+	PROJ_ORB,      # 10 Death Engine
+	PROJ_ORB,      # 11 Magic Missile (typed Normal, name-evident arcane)
+	PROJ_BOULDER,  # 12 Boulder
+	PROJ_ORB,      # 13 Magic Bolt
+	PROJ_ORB,      # 14 Chaos Orb
+	PROJ_AXE,      # 15 Throwing Axes
+	PROJ_ORB,      # 16 Chaos Skulls
+	PROJ_ORB,      # 17 Suckula
+	PROJ_ARROW,    # 18 Missile Barrage
+	PROJ_AXE,      # 19 Seeker Axe
+	PROJ_BOULDER,  # 20 Steam Cannon
+	PROJ_ORB,      # 21 Demon Eye
+	PROJ_ARROW,    # 22 Impaler
+	PROJ_ORB,      # 23 Chaos Swarm
+	PROJ_BOULDER,  # 24 Catapult
+	PROJ_ARROW,    # 25 Slap
+	PROJ_ARROW,    # 26 Crippler
+	PROJ_ORB,      # 27 Lifeleecher (soul-drain reads arcane, not ballistic)
+	PROJ_AXE,      # 28 Spell Glaive (glaive name over DMG_MAGIC)
+	PROJ_AXE,      # 29 Glaive Thrower
+	PROJ_AXE,      # 30 Spikewheel Launcher (spinning wheel)
+	PROJ_BOULDER,  # 31 Meatapult (lobbed mass)
+	PROJ_ORB,      # 32 Arcane Blaster
+	PROJ_ARROW,    # 33 Quills
+	PROJ_ORB,      # 34 Living Spittle
+	PROJ_BOULDER,  # 35 Poison Bomb
+	PROJ_ARROW,    # 36 Serpent
+	PROJ_BOULDER,  # 37 Overloaded Catapult
+	PROJ_ORB,      # 38 Chaos Claw
+	PROJ_ARROW,    # 39 Net Thrower
+	PROJ_ARROW,    # 40 Thornburst
+	PROJ_ORB,      # 41 Chaotic Spirit
+	PROJ_ORB,      # 42 Energy Pulse
+	PROJ_ARROW,    # 43 Cluster Rockets (elongated physical rockets)
+	PROJ_BOULDER,  # 44 Frost Bomb (bomb name over DMG_PIERCING)
+	PROJ_BOULDER,  # 45 Bouncy Cannonball (round shot over the Bounce rule)
+	PROJ_ORB,      # 46 Soulstealer
+	PROJ_BOULDER,  # 47 Splasher (Normal + Splash: lobbed)
+	PROJ_ARROW,    # 48 Fire Bow
+	PROJ_ORB,      # 49 Chaos Web
+	PROJ_ORB,      # 50 Magic Claw
+	PROJ_BOULDER,  # 51 Liquid Fire Hurler (hurled siege glob)
+	PROJ_BOULDER,  # 52 Boulder Toss
+	PROJ_ARROW,    # 53 Bloody Spikes
+	PROJ_ORB,      # 54 Shroom Doom
+	PROJ_ORB,      # 55 Flame Generator
+	PROJ_ORB,      # 56 Firebreather (elemental breath, not a bolt)
+	PROJ_BOULDER,  # 57 Lavaspitter (siege glob)
+	PROJ_ARROW,    # 58 Frostbolt
+	PROJ_ORB,      # 59 Living Ice
+	PROJ_ORB,      # 60 Ice Generator
+	PROJ_ARROW,    # 61 Ice Spears
+	PROJ_ARROW,    # 62 Knives
+	PROJ_BOULDER,  # 63 Blaster (siege single shell)
+	PROJ_ARROW,    # 64 Bandit Sniper (bullet)
+	PROJ_BOULDER,  # 65 Bombs
+	PROJ_ARROW,    # 66 Sting (physical stinger dart over DMG_CHAOS)
+	PROJ_ORB,      # 67 Chaos Skull Bomb (skull reads arcane over the bomb name)
+	PROJ_ORB,      # 68 Icebreather (elemental breath)
+	PROJ_ORB,      # 69 Frostwave
+	PROJ_ORB,      # 70 Flamewave
+	PROJ_ORB,      # 71 Chaotic Spirit Bolt
+	PROJ_ORB,      # 72 Manabolt
+	PROJ_ORB,      # 73 Squirm
+	PROJ_ORB,      # 74 Immolation Aura
+	PROJ_BOULDER,  # 75 Boom Bloom
+	PROJ_ARROW,    # 76 Quill Burst
+	PROJ_ORB,      # 77 Arcane Burst
+	PROJ_BOULDER,  # 78 Meteor Barrage (falling rocks)
+	PROJ_BOULDER,  # 79 Ale Launcher (lobbed keg)
+	PROJ_ORB,      # 80 Chaos Bolt
+	PROJ_ORB,      # 81 Rotating Orb of Lightning
+	PROJ_ORB,      # 82 Lightning Generator
+	PROJ_ORB,      # 83 Flame Nova
+	PROJ_ORB,      # 84 Shocker
+	PROJ_ARROW,    # 85 Tangle
+]
+
+# PROJ_* art id -> muzzle-flash tint MULTIPLIER. Composes with (multiplies
+# into) the renderer's existing cool HDR flash + light colors — it never
+# replaces the texture or the base color, just nudges the hue per family:
+# arrow pale gold, axe neutral steel, boulder dusty orange, orb arcane
+# blue-violet. Alpha stays 1 so the flash's own fade is untouched.
+const PROJECTILE_MUZZLE_TINT: Array[Color] = [
+	Color(0.95, 0.85, 1.25),  # PROJ_ORB     — arcane blue-violet
+	Color(1.25, 1.10, 0.80),  # PROJ_ARROW   — pale gold
+	Color(1.00, 1.05, 1.10),  # PROJ_AXE     — cold steel
+	Color(1.30, 1.00, 0.70),  # PROJ_BOULDER — dusty orange
+]
 # Environment art shared by Main and Match (was duplicated as literals in both).
 const ENV_MANIFEST: Dictionary = {"ground": "env/arena_ground.svg", "ring": "env/spawn_ring.svg"}
 
@@ -214,8 +342,33 @@ func minion_draw_size(kind: int, net := false) -> float:
 func tank_draw_size(net := false) -> float:
 	return TANK_MANIFEST["net_size"] if net else TANK_MANIFEST["size"]
 
-func projectile_draw_size() -> float:
-	return PROJECTILE_MANIFEST["size"]
+# Projectile textures for a theme, in PROJ_* art-id order (one MultiMesh
+# bucket per entry; missing files come back as the guarded placeholder).
+func projectile_textures_of(theme_idx: int) -> Array:
+	var out: Array = []
+	for p in PROJECTILE_MANIFEST:
+		out.append(tex_of(theme_idx, p["path"]))
+	return out
+
+func projectile_textures() -> Array:
+	return projectile_textures_of(active)
+
+# (width, length) draw size for a PROJ_* art id — x across travel, y along it.
+func projectile_draw_size(art: int) -> Vector2:
+	var p: Dictionary = PROJECTILE_MANIFEST[art] if art >= 0 and art < PROJECTILE_MANIFEST.size() else PROJECTILE_MANIFEST[PROJ_ORB]
+	return p["size"]
+
+# PROJ_* art id for a weapon catalog index; unknown/future kinds -> PROJ_ORB.
+func projectile_art_for(weapon_kind: int) -> int:
+	if weapon_kind >= 0 and weapon_kind < WEAPON_PROJECTILE.size():
+		return WEAPON_PROJECTILE[weapon_kind]
+	return PROJ_ORB
+
+# Muzzle tint multiplier for a PROJ_* art id (see PROJECTILE_MUZZLE_TINT).
+func muzzle_tint_for(art: int) -> Color:
+	if art >= 0 and art < PROJECTILE_MUZZLE_TINT.size():
+		return PROJECTILE_MUZZLE_TINT[art]
+	return PROJECTILE_MUZZLE_TINT[PROJ_ORB]
 
 # The player tank, honoring the profile's selected skin. Skins live at
 # tank/skins/<id>.svg per theme; "" (and any skin missing from the current
