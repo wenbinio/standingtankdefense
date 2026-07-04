@@ -61,6 +61,11 @@ impl Modifiers {
             dmg_per_maxhp_rate: Fixed::ZERO,
             dmg_per_bounty_rate: Fixed::ZERO,
             shield_active_dmg: Fixed::ZERO,
+            frost_strength_mult: Fixed::ONE,
+            fire_dmg_mult: Fixed::ONE,
+            fire_explosion_mult: Fixed::ONE,
+            bounce_barrage_pct: Fixed::ZERO,
+            healthy_dmg: Fixed::ZERO,
         }
     }
 
@@ -91,6 +96,16 @@ impl Modifiers {
         }
         if self.shield_active_dmg != Fixed::ZERO && tank.mana_shield > 0 {
             add += self.shield_active_dmg;
+        }
+        // Heal-conditional damage (the source's "+35% Damage … when at 95%
+        // health or above"): active iff hp ≥ 95% of max_hp. Pure integer
+        // compare (hp × 20 ≥ max_hp × 19 ⇔ hp/max ≥ 0.95); both stats are
+        // clamped ≤ STAT_CEIL (1e12) so the ×20 cannot overflow i64.
+        if self.healthy_dmg != Fixed::ZERO
+            && tank.max_hp > 0
+            && tank.hp.saturating_mul(20) >= tank.max_hp.saturating_mul(19)
+        {
+            add += self.healthy_dmg;
         }
         add
     }
@@ -306,6 +321,38 @@ impl Modifiers {
                 tank.aura_poison_dps = tank.aura_poison_dps.max(2);
                 tank.aura_poison_ticks = tank.aura_poison_ticks.max(90);
             }
+            // EXPANSION E3 — fidelity-mechanics pass.
+            // Deep Freeze opt-in: arm the tank flag (status::apply_on_hit gates
+            // the 25-stack freeze payoff on it).
+            ModEffect::GrantDeepFreeze => tank.deep_freeze = true,
+            // Frost/Fire strength scalers (additive accumulation, like the
+            // poison/stun flavor scalers above).
+            ModEffect::FrostDamagePct(n, d) => self.frost_strength_mult += Fixed::from_ratio(n, d),
+            ModEffect::FireDamagePct(n, d) => self.fire_dmg_mult += Fixed::from_ratio(n, d),
+            ModEffect::CombustionPct(n, d) => self.fire_explosion_mult += Fixed::from_ratio(n, d),
+            // "+% Enemies hit by Bounce and Barrage" (resolved per fire).
+            ModEffect::BounceBarragePct(n, d) => self.bounce_barrage_pct += Fixed::from_ratio(n, d),
+            // Free rerolls: the same counter the shop's Reroll input consumes.
+            ModEffect::GrantFreeRerolls(n) => {
+                economy.rerolls_remaining =
+                    economy.rerolls_remaining.saturating_add(n.max(0) as u32)
+            }
+            // Status-on-damaged armor riders (Frost / Flaming Armor): applied by
+            // the Spikes retaliation pass (which fires even at 0 Spikes damage).
+            ModEffect::FrostArmor(n) => {
+                tank.retaliate_frost = tank.retaliate_frost.saturating_add(n.max(0) as u8)
+            }
+            ModEffect::FireArmor(n) => {
+                tank.retaliate_fire = tank.retaliate_fire.saturating_add(n.max(0) as u16)
+            }
+            // Spikes extensions.
+            ModEffect::SpikesFirstHit(n) => tank.spikes_first_hit += n,
+            ModEffect::SpikesAsDrPct(n, d) => tank.spikes_dr_rate += Fixed::from_ratio(n, d),
+            ModEffect::DamageTakenToSpikesPct(n, d) => {
+                tank.dmg_taken_to_spikes += Fixed::from_ratio(n, d)
+            }
+            // Heal-conditional global damage (resolved live in dynamic_global_add).
+            ModEffect::DamageWhileHealthyPct(n, d) => self.healthy_dmg += Fixed::from_ratio(n, d),
             // Registered as per-arena trigger / purchase-flow state in
             // `buy_modifier`; they have no aggregate contribution here. The
             // HP/regen→gold trades need the full ArenaState (gold scoreboard) and
@@ -642,6 +689,116 @@ mod tests {
         assert_eq!(s.modifiers, snap.0);
         assert_eq!(s.economy, snap.1);
         assert_eq!(s.tank, snap.2);
+    }
+
+    // ---- EXPANSION E3: fidelity mechanics ------------------------------------
+
+    #[test]
+    fn grant_free_rerolls_tops_up_the_shop_counter() {
+        let (mut m, mut e, mut t) = parts();
+        let before = e.rerolls_remaining;
+        m.apply_effect(ModEffect::GrantFreeRerolls(3), &mut e, &mut t);
+        assert_eq!(e.rerolls_remaining, before + 3, "free rerolls granted");
+    }
+
+    #[test]
+    fn deep_freeze_catalog_entry_arms_the_tank_flag() {
+        let mut s = ArenaState::new(1, 0);
+        assert!(!s.tank.deep_freeze, "baseline: no Deep Freeze");
+        let idx = modifier_idx(|e| matches!(e, ModEffect::GrantDeepFreeze));
+        assert_eq!(content::MODIFIERS[idx as usize].name, "Deep Freeze");
+        s.buy_modifier(idx);
+        assert!(s.tank.deep_freeze, "purchase arms the freeze payoff");
+    }
+
+    #[test]
+    fn frost_fire_and_combustion_effects_accumulate() {
+        let (mut m, mut e, mut t) = parts();
+        m.apply_effect(ModEffect::FrostDamagePct(1, 4), &mut e, &mut t);
+        m.apply_effect(ModEffect::FrostDamagePct(1, 4), &mut e, &mut t);
+        assert_eq!(m.frost_strength_mult.scale_i64(1000), 1500, "+25% +25%");
+        m.apply_effect(ModEffect::FireDamagePct(1, 2), &mut e, &mut t);
+        assert_eq!(m.fire_dmg_mult.scale_i64(1000), 1500);
+        m.apply_effect(ModEffect::CombustionPct(1, 1), &mut e, &mut t);
+        assert_eq!(
+            m.fire_explosion_mult.scale_i64(1000),
+            2000,
+            "Combustion alone"
+        );
+        m.apply_effect(ModEffect::BounceBarragePct(1, 4), &mut e, &mut t);
+        assert_eq!(m.bounce_barrage_pct.scale_i64(1000), 250);
+    }
+
+    #[test]
+    fn healthy_damage_applies_only_at_95_percent_hp_or_above() {
+        let mut s = ArenaState::new(1, 0);
+        s.modifiers.apply_effect(
+            ModEffect::DamageWhileHealthyPct(35, 100),
+            &mut s.economy,
+            &mut s.tank,
+        );
+        s.tank.max_hp = 10_000;
+        s.tank.hp = 10_000; // full
+        let full = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        assert!(
+            (349..=350).contains(&full.scale_i64(1000)),
+            "≈+35% while at/above 95%"
+        );
+        s.tank.hp = 9_500; // exactly 95%
+        assert_eq!(
+            s.modifiers.dynamic_global_add(&s.tank, &s.economy),
+            full,
+            "boundary (95%) still counts"
+        );
+        s.tank.hp = 9_499; // below the threshold
+        assert_eq!(
+            s.modifiers.dynamic_global_add(&s.tank, &s.economy),
+            Fixed::ZERO,
+            "bonus gone below 95%"
+        );
+    }
+
+    #[test]
+    fn status_armor_and_spikes_rider_effects_wire_their_tank_fields() {
+        let (mut m, mut e, mut t) = parts();
+        m.apply_effect(ModEffect::FrostArmor(2), &mut e, &mut t);
+        m.apply_effect(ModEffect::FrostArmor(2), &mut e, &mut t);
+        assert_eq!(t.retaliate_frost, 4, "frost armor stacks accumulate");
+        m.apply_effect(ModEffect::FireArmor(20), &mut e, &mut t);
+        assert_eq!(t.retaliate_fire, 20);
+        m.apply_effect(ModEffect::SpikesFirstHit(240), &mut e, &mut t);
+        assert_eq!(t.spikes_first_hit, 240);
+        m.apply_effect(ModEffect::SpikesAsDrPct(1, 20), &mut e, &mut t);
+        assert_eq!(t.spikes_dr_rate, Fixed::from_ratio(1, 20));
+        m.apply_effect(ModEffect::DamageTakenToSpikesPct(3, 10), &mut e, &mut t);
+        assert_eq!(t.dmg_taken_to_spikes, Fixed::from_ratio(3, 10));
+    }
+
+    #[test]
+    fn per_weapon_count_scaler_supports_plus_100_percent_per_copy() {
+        // The Chaos Orb / Magic Missile / Throwing Axes pattern ("+100% X per
+        // copy of Y") rides the existing DamagePerWeapon mechanism: per = 100.
+        let mut s = ArenaState::new(1, 0);
+        s.weapons.clear();
+        let missile = content::WEAPONS
+            .iter()
+            .position(|w| w.name == "Magic Missile")
+            .unwrap() as u16;
+        s.modifiers.apply_effect(
+            ModEffect::DamagePerWeapon(missile as i64, content::DMG_MAGIC as i64, 100),
+            &mut s.economy,
+            &mut s.tank,
+        );
+        for _ in 0..2 {
+            let id = s.alloc_entity_id();
+            s.weapons.push(crate::state::WeaponInstance {
+                instance_id: id,
+                def: missile,
+                next_fire_tick: 0,
+            });
+        }
+        let add = s.modifiers.self_scaling_add(content::DMG_MAGIC, &s.weapons);
+        assert_eq!(add, Fixed::from_int(2), "+100% per copy × 2 copies = +200%");
     }
 
     // ---- EXPANSION E2: catalog wiring ---------------------------------------

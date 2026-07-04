@@ -35,6 +35,8 @@ pub struct RenderView {
     pub hazards: Vec<RenderHazard>,
     /// Summoned allies (Larvae / Spores) to draw.
     pub minions: Vec<RenderMinion>,
+    /// Active rotating-wave sweeps to draw (the sector arc around the tank).
+    pub sweeps: Vec<RenderSweep>,
     pub economy: RenderEconomy,
     pub shop: Vec<RenderOffer>,
     /// Owned weapons collapsed to `(name, count)`, sorted by name.
@@ -103,6 +105,21 @@ pub struct RenderMinion {
     pub x: i64,
     pub y: i64,
     pub kind: u8,
+}
+
+/// An active rotating-wave sweep (`Attack::WaveRotating`) to draw: an arc
+/// sector of `radius` around the tank, currently at `angle_bam` and advancing
+/// `step_bam` binary-angle units per tick (65536 = full turn), clockwise or
+/// counterclockwise. `weapon_kind` selects the visual; `ticks_left` fades it.
+#[derive(Clone, Copy, Debug)]
+pub struct RenderSweep {
+    pub id: u32,
+    pub weapon_kind: u16,
+    pub radius: i64,
+    pub angle_bam: u16,
+    pub step_bam: u16,
+    pub clockwise: bool,
+    pub ticks_left: u32,
 }
 
 /// Per-enemy status-flag bits for [`RenderEnemy::status_flags`] (tints/FX).
@@ -249,6 +266,20 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         })
         .collect();
 
+    let sweeps = s
+        .sweeps
+        .iter()
+        .map(|sw| RenderSweep {
+            id: sw.id.0,
+            weapon_kind: sw.weapon_kind,
+            radius: sw.radius.floor_to_int(),
+            angle_bam: sw.angle_bam,
+            step_bam: sw.step_bam,
+            clockwise: sw.clockwise,
+            ticks_left: sw.ticks_left,
+        })
+        .collect();
+
     let economy = RenderEconomy {
         gold: s.economy.gold,
         income_per_tick: crate::economy::income_award(&s.economy),
@@ -307,6 +338,7 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         projectiles,
         hazards,
         minions,
+        sweeps,
         economy,
         shop,
         arsenal,

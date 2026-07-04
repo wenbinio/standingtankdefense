@@ -10,15 +10,17 @@ use determinism::Fixed;
 const SPIKES_RANGE: i64 = 400;
 
 /// Apply `raw` incoming damage to the tank through the defensive layers.
-pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) {
+/// Returns whether the hit LANDED (`false` = dodged) so callers can run
+/// landed-hit triggers (the first-hit bonus Spikes).
+pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) -> bool {
     if raw <= 0 {
-        return;
+        return false;
     }
     // Dodge: chance to avoid the hit entirely (consumes a proc roll).
     if s.tank.dodge_den > 0 {
         let roll = s.rng_proc.below(s.tank.dodge_den);
         if roll < s.tank.dodge_num {
-            return;
+            return false;
         }
     }
     // The hit landed (even if fully absorbed by the shield) → Spikes will fire.
@@ -29,8 +31,21 @@ pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) {
     if s.tank.heal_on_damaged > 0 {
         s.tank.heal(s.tank.heal_on_damaged);
     }
+    // Deflection (source: "+5% of Spikes Damage as Flat Damage Reduction, but
+    // cannot reduce more than 50% of an attack"): flat DR equal to
+    // `rate × current (multiplied) Spikes damage`, capped at half this hit.
+    let mut effective = raw;
+    if s.tank.spikes_dr_rate > Fixed::ZERO {
+        let spikes_total = s.tank.spikes_mult.scale_i64(s.tank.spikes_damage);
+        let dr = s
+            .tank
+            .spikes_dr_rate
+            .scale_i64(spikes_total)
+            .clamp(0, raw / 2);
+        effective = raw - dr;
+    }
     // Armor: flat reduction, but at least 1 damage always lands.
-    let mut remaining = (raw - s.tank.armor).max(1);
+    let mut remaining = (effective - s.tank.armor).max(1);
     // Mana Shield absorbs before HP.
     if s.tank.mana_shield > 0 {
         // Energy Shield: while the shield is active (pool > 0 at hit time), ALL
@@ -62,10 +77,15 @@ pub(crate) fn hit_tank(s: &mut ArenaState, raw: i64) {
         s.emit(SimEvent::TankHit {
             damage: absorbed + remaining,
         });
+        // Damage taken this tick (shield + HP) — feeds the damage→Spikes
+        // conversion, consumed by `spikes` the same tick.
+        s.damage_taken_this_tick += absorbed + remaining;
     } else {
         s.emit(SimEvent::TankHit { damage: remaining });
+        s.damage_taken_this_tick += remaining;
     }
     s.tank.hp -= remaining;
+    true
 }
 
 /// Shield-break stun pulse (source: Energy Pulse). If the Mana Shield transitioned
@@ -105,6 +125,10 @@ pub(crate) fn shield_break_stun(s: &mut ArenaState) {
 pub(crate) fn spikes(s: &mut ArenaState) {
     let hit = s.tank_hit_this_tick;
     s.tank_hit_this_tick = false;
+    // Consume the per-tick transients unconditionally so they are always 0 at
+    // the tick boundary (they are only ever non-zero when `hit` is too).
+    let first_bonus = std::mem::take(&mut s.spikes_first_bonus_this_tick);
+    let dmg_taken = std::mem::take(&mut s.damage_taken_this_tick);
     if !hit {
         return;
     }
@@ -123,36 +147,52 @@ pub(crate) fn spikes(s: &mut ArenaState) {
             .spikes_stack_per
             .saturating_mul(s.tank.spikes_stacks as i64);
     }
-    // Spikes damage = (flat + stacking bonus) × multiplier.
-    let base = s.tank.spikes_damage.saturating_add(stack_bonus);
+    // Spikes damage = (flat + stacking bonus + first-hit bonus + damage-taken
+    // conversion) × multiplier. The first-hit bonus (source: "+240 Spikes on
+    // the first attack") and the conversion (source: "+30% of Damage Taken
+    // Spikes Damage") are flat riders on THIS retaliation, so they scale with
+    // "+% Spikes" like every other flat spikes source.
+    let converted = s.tank.dmg_taken_to_spikes.scale_i64(dmg_taken);
+    let base = s
+        .tank
+        .spikes_damage
+        .saturating_add(stack_bonus)
+        .saturating_add(first_bonus)
+        .saturating_add(converted);
     let dmg = s.tank.spikes_mult.scale_i64(base);
-    if dmg <= 0 {
+    // Retaliation STATUS (independent of spikes damage): Poison Armor's DoT
+    // plus the Frost/Flaming Armor stacks — a tank with only a status armor
+    // (zero Spikes damage) still retaliates with the status.
+    let status = content::StatusOnHit {
+        poison_dps: s.tank.spikes_poison_dps,
+        poison_ticks: s.tank.spikes_poison_ticks,
+        frost_stacks: s.tank.retaliate_frost,
+        fire_stacks: s.tank.retaliate_fire,
+        stun_ticks: 0,
+    };
+    let has_status = (status.poison_dps > 0 && status.poison_ticks > 0)
+        || status.frost_stacks > 0
+        || status.fire_stacks > 0;
+    if dmg <= 0 && !has_status {
         return;
     }
+    let deep_freeze = s.tank.deep_freeze;
     let range = Fixed::from_int(SPIKES_RANGE);
     let r2 = range.mul(range);
     let tank_pos = s.tank.pos;
-    // Spikes-applied Poison DoT (source: Poison Armor) — applied to every enemy the
-    // retaliation lands on, reusing the existing poison status (stronger-DoT rule).
-    let poison = if s.tank.spikes_poison_dps > 0 && s.tank.spikes_poison_ticks > 0 {
-        Some(content::StatusOnHit {
-            poison_dps: s.tank.spikes_poison_dps,
-            poison_ticks: s.tank.spikes_poison_ticks,
-            ..content::StatusOnHit::NONE
-        })
-    } else {
-        None
-    };
     let mut survivors = Vec::with_capacity(s.enemies.len());
     let mut spikes_dealt: i64 = 0;
     // `s.enemies` is id-ordered, so this retaliation pass is stable across runs.
     for mut e in std::mem::take(&mut s.enemies) {
         let boss = content::ENEMIES[e.def as usize].boss;
         if !boss && tank_pos.dist_sq(e.pos) <= r2 {
-            e.hp -= dmg;
-            spikes_dealt += dmg;
-            if let Some(p) = &poison {
-                crate::status::apply_on_hit(&mut e, p);
+            if dmg > 0 {
+                e.hp -= dmg;
+                spikes_dealt += dmg;
+            }
+            if has_status && crate::status::apply_on_hit(&mut e, &status, deep_freeze) {
+                // Frost Armor drove the enemy to the Deep-Freeze payoff.
+                s.emit(SimEvent::FreezeProc { id: e.id.0 });
             }
         }
         if e.hp <= 0 {
@@ -184,6 +224,16 @@ const TICKS_PER_SECOND: u32 = 30;
 /// plus the once-per-second Missing-HP heal. HP healing routes through
 /// `Tank::heal` so the "+% Healing" multiplier and the cap apply uniformly.
 pub(crate) fn regen(s: &mut ArenaState) {
+    // Healthstone permanent regen: a fixed-point per-tick bonus paid out
+    // through an integer carry so no fraction is lost (deterministic floors).
+    if s.tank.regen_bonus_per_tick > Fixed::ZERO {
+        s.tank.regen_carry += s.tank.regen_bonus_per_tick;
+        let whole = s.tank.regen_carry.floor_to_int();
+        if whole > 0 {
+            s.tank.regen_carry -= Fixed::from_int(whole);
+            s.tank.heal(whole);
+        }
+    }
     if s.tank.mana_regen_per_tick > 0 && s.tank.mana_shield < s.tank.mana_shield_max {
         s.tank.mana_shield =
             (s.tank.mana_shield + s.tank.mana_regen_per_tick).min(s.tank.mana_shield_max);
@@ -593,6 +643,167 @@ mod tests {
         // Far enemy untouched (out of spikes range).
         assert_eq!(s.enemies[1].hp, 1000);
         assert_eq!(s.enemies[1].status.poison_dps, 0, "far enemy not poisoned");
+    }
+
+    // ---- EXPANSION E3: fidelity mechanics ------------------------------------
+
+    #[test]
+    fn frost_and_flaming_armor_stack_status_on_retaliation_even_with_zero_spikes() {
+        // Frost Armor (+2 frost) + Flaming Armor (+20 fire) with NO spikes
+        // damage: a landed hit still applies both statuses to enemies in range.
+        let mut s = fresh();
+        s.tank.spikes_damage = 0;
+        s.tank.retaliate_frost = 2;
+        s.tank.retaliate_fire = 20;
+        s.enemies = vec![enemy_at(1, 1000, 100), enemy_at(2, 1000, 1000)]; // near, far
+        hit_tank(&mut s, 100);
+        spikes(&mut s);
+        assert_eq!(s.enemies[0].hp, 1000, "no spikes damage dealt");
+        assert_eq!(s.enemies[0].status.frost_stacks, 2, "frost armor applied");
+        assert_eq!(s.enemies[0].status.fire_stacks, 20, "flaming armor applied");
+        assert_eq!(s.enemies[1].status.frost_stacks, 0, "far enemy untouched");
+
+        // Repeated hits stack the statuses (frost capped at the max).
+        hit_tank(&mut s, 100);
+        spikes(&mut s);
+        assert_eq!(s.enemies[0].status.frost_stacks, 4);
+        assert_eq!(s.enemies[0].status.fire_stacks, 40);
+    }
+
+    #[test]
+    fn frost_armor_freeze_payoff_requires_deep_freeze() {
+        // 13 retaliations × 2 stacks crosses 25: with deep_freeze the enemy
+        // freezes; without, it caps at 25 stacks.
+        for deep in [false, true] {
+            let mut s = fresh();
+            s.tank.retaliate_frost = 2;
+            s.tank.deep_freeze = deep;
+            s.enemies = vec![enemy_at(1, 1_000_000, 100)];
+            for _ in 0..13 {
+                hit_tank(&mut s, 10);
+                spikes(&mut s);
+            }
+            let st = &s.enemies[0].status;
+            if deep {
+                assert!(st.freeze_ticks > 0, "deep freeze: enemy froze");
+                assert_eq!(st.frost_stacks, 0, "stacks reset on freeze");
+            } else {
+                assert_eq!(st.freeze_ticks, 0, "no freeze without the upgrade");
+                assert_eq!(st.frost_stacks, 25, "stacks capped");
+            }
+        }
+    }
+
+    #[test]
+    fn first_hit_bonus_spikes_fire_once_per_enemy() {
+        // +240 Spikes on an enemy's FIRST landed hit: a persistent (ranged-
+        // style) attacker triggers it once; its later hits don't.
+        let mut s = fresh();
+        s.tank.spikes_damage = 100;
+        s.tank.spikes_first_hit = 240;
+        s.enemies = vec![enemy_at(1, 1_000_000, 100)];
+
+        // First landed hit: simulate the combat-side caller contract.
+        let landed = hit_tank(&mut s, 50);
+        assert!(landed);
+        if landed && !s.enemies[0].status.hit_tank {
+            s.enemies[0].status.hit_tank = true;
+            s.spikes_first_bonus_this_tick += s.tank.spikes_first_hit;
+        }
+        let hp0 = s.enemies[0].hp;
+        spikes(&mut s);
+        assert_eq!(hp0 - s.enemies[0].hp, 340, "100 flat + 240 first-hit bonus");
+
+        // Second hit from the SAME enemy: no bonus.
+        let landed = hit_tank(&mut s, 50);
+        if landed && !s.enemies[0].status.hit_tank {
+            s.spikes_first_bonus_this_tick += s.tank.spikes_first_hit;
+        }
+        let hp1 = s.enemies[0].hp;
+        spikes(&mut s);
+        assert_eq!(
+            hp1 - s.enemies[0].hp,
+            100,
+            "no first-hit bonus on later hits"
+        );
+    }
+
+    #[test]
+    fn deflection_converts_spikes_into_flat_dr_capped_at_half_the_hit() {
+        // 25% of 800 spikes = 200 flat DR (1/4 is exactly representable).
+        let mut s = fresh();
+        s.tank.spikes_damage = 800;
+        s.tank.spikes_dr_rate = Fixed::from_ratio(1, 4);
+        let hp0 = s.tank.hp;
+        hit_tank(&mut s, 500);
+        assert_eq!(s.tank.hp, hp0 - 300, "500 − 200 spikes-DR");
+
+        // Cap: DR can never exceed 50% of the attack (tiny 60-damage hit:
+        // 200 → capped to 30).
+        let mut s2 = fresh();
+        s2.tank.spikes_damage = 800;
+        s2.tank.spikes_dr_rate = Fixed::from_ratio(1, 4);
+        let hp0 = s2.tank.hp;
+        hit_tank(&mut s2, 60);
+        assert_eq!(s2.tank.hp, hp0 - 30, "DR capped at half the hit");
+
+        // "+% Spikes" raises the DR too (it keys off multiplied spikes).
+        let mut s3 = fresh();
+        s3.tank.spikes_damage = 800;
+        s3.tank.spikes_mult = Fixed::from_int(2); // 1600 effective spikes
+        s3.tank.spikes_dr_rate = Fixed::from_ratio(1, 4); // 400 DR
+        let hp0 = s3.tank.hp;
+        hit_tank(&mut s3, 1000);
+        assert_eq!(s3.tank.hp, hp0 - 600, "1000 − 400 multiplied-spikes DR");
+    }
+
+    #[test]
+    fn damage_taken_converts_into_bonus_spikes() {
+        // +25% of damage taken as spikes: a 1000 hit adds 250 to this tick's
+        // retaliation (on top of the flat 100).
+        let mut s = fresh();
+        s.tank.spikes_damage = 100;
+        s.tank.dmg_taken_to_spikes = Fixed::from_ratio(1, 4); // exactly representable
+        s.enemies = vec![enemy_at(1, 1_000_000, 100)];
+        hit_tank(&mut s, 1000);
+        assert_eq!(
+            s.damage_taken_this_tick, 1000,
+            "post-mitigation damage recorded"
+        );
+        let hp0 = s.enemies[0].hp;
+        spikes(&mut s);
+        assert_eq!(hp0 - s.enemies[0].hp, 350, "100 flat + 25% of 1000 taken");
+        assert_eq!(s.damage_taken_this_tick, 0, "transient consumed");
+
+        // Next tick without a hit: back to the flat value only.
+        hit_tank(&mut s, 0); // no-op (raw ≤ 0)
+        spikes(&mut s);
+        assert_eq!(hp0 - s.enemies[0].hp, 350, "no retaliation without a hit");
+    }
+
+    #[test]
+    fn healthstone_permanent_regen_pays_out_through_the_carry() {
+        // +0.5 HP/tick fixed-point bonus: after 2 ticks exactly 1 HP has been
+        // paid (no fraction lost to flooring).
+        let mut s = fresh();
+        s.tank.max_hp = 1_000_000;
+        s.tank.hp = 1000;
+        s.tank.regen_bonus_per_tick = Fixed::from_ratio(1, 2);
+        regen(&mut s);
+        assert_eq!(s.tank.hp, 1000, "0.5 carried, nothing paid yet");
+        assert_eq!(s.tank.regen_carry, Fixed::from_ratio(1, 2));
+        regen(&mut s);
+        assert_eq!(s.tank.hp, 1001, "carry crossed 1 ⇒ 1 HP paid");
+        assert_eq!(
+            s.tank.regen_carry,
+            Fixed::ZERO,
+            "remainder retained exactly"
+        );
+        // 60 more ticks at 0.5/tick ⇒ +30 HP, deterministic.
+        for _ in 0..60 {
+            regen(&mut s);
+        }
+        assert_eq!(s.tank.hp, 1031);
     }
 
     #[test]

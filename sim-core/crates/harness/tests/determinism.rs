@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0xa1938d079a0f035b, // re-baselined (ECONOMY-FIDELITY PASS): (1) the shop draws every slot independently — category, then weighted rarity (`shop::RARITY_WEIGHTS`), then uniform-in-bucket — changing the RNG draw pattern and the offered items; (2) %-income multipliers now scale only BONUS income above the 20/tick base (source rule, `docs/02 §2.4`); (3) Magic Treasure is a held +2/s pool banked at the shop roll instead of instant gold + an income ramp; (4) new authoritative fields `Economy::treasure_pool` and `PendingPerk::scope` feed the checksum (snapshot v21). (Previous baseline 0x09058789ad2df90a was the §9.3 event-stream pass.)
+        0x5767f463a5dfe375, // re-baselined (COMBINED fidelity passes): the ECONOMY pass (weighted independent shop draws, bonus-only income scaling, held Magic Treasure pool, `Economy::treasure_pool`/`PendingPerk::scope` in the digest) and the E3 MECHANICS pass (opt-in Deep Freeze trajectory change, 6 mechanic-anchor weapons + Deep Freeze modifier growing the shop pool, new tank/enemy-status/modifier fields + rotating-wave `sweeps` in the digest, snapshot v21) merged; the combined trajectory differs from either pass alone, so this value was captured fresh from `cargo run -p harness` on the merged tree. (Previous baseline 0x09058789ad2df90a was the §9.3 event-stream pass.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

@@ -26,10 +26,12 @@ const FIRE_STACKS_PER_DAMAGE: u16 = 5;
 
 /// Apply a weapon's on-hit status to an enemy. Poison refreshes to the stronger
 /// DoT; frost/fire add stacks (frost capped); stun takes the longer remaining.
+/// `deep_freeze` gates the freeze payoff (source: the Deep Freeze UPGRADE —
+/// without it, 25 frost stacks merely cap at max slow).
 /// Returns `true` iff this application triggered the Deep-Freeze payoff (the
 /// enemy reached `FROST_MAX_STACKS` and froze) — callers turn that edge into a
 /// `SimEvent::FreezeProc` render event.
-pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) -> bool {
+pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit, deep_freeze: bool) -> bool {
     let mut froze = false;
     let st = &mut enemy.status;
     if on_hit.poison_dps > 0 && on_hit.poison_ticks > 0 {
@@ -44,10 +46,12 @@ pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) -> bool {
     if on_hit.frost_stacks > 0 {
         st.frost_stacks = st.frost_stacks.saturating_add(on_hit.frost_stacks);
         st.frost_ticks = FROST_DURATION;
-        // Freeze payoff: reaching the cap immobilizes the enemy for a short
-        // window and resets the stacks (`docs/appendix-A §A.2`). While frozen it
-        // takes +50% damage (see `vulnerability_mult`).
-        if st.frost_stacks >= FROST_MAX_STACKS {
+        // Freeze payoff — OPT-IN (the source's Deep Freeze upgrade): reaching
+        // the cap immobilizes the enemy for a short window and resets the
+        // stacks (`docs/appendix-A §A.2`). While frozen it takes +50% damage
+        // (see `vulnerability_mult`). WITHOUT the upgrade the stacks simply cap
+        // at `FROST_MAX_STACKS` (max slow, no freeze).
+        if deep_freeze && st.frost_stacks >= FROST_MAX_STACKS {
             st.frost_stacks = 0;
             st.frost_ticks = 0;
             st.freeze_ticks = st.freeze_ticks.max(FREEZE_DURATION);
@@ -65,13 +69,19 @@ pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) -> bool {
     froze
 }
 
-/// Damage-taken multiplier from status: Fire (+0.5% per stack), generic
-/// Vulnerability stacks (+1% per stack, from Vulnerability-Pulse auras), and the
+/// Damage-taken multiplier from status: Fire (+0.5% per stack, scaled by the
+/// player's "+% Fire damage" `fire_mult`), generic Vulnerability stacks (+1%
+/// per stack, from Vulnerability-Pulse auras / VulnOnHit), TYPED vulnerability
+/// stacks (+1% per stack, only for hits of the matching `damage_type` — Thorn
+/// / Liquid-Fire drench; composes additively with the generic stacks), and the
 /// Freeze payoff (+50% while frozen, `docs/appendix-A §A.2`).
-pub(crate) fn vulnerability_mult(enemy: &Enemy) -> Fixed {
+pub(crate) fn vulnerability_mult(enemy: &Enemy, damage_type: u8, fire_mult: Fixed) -> Fixed {
+    let fire = Fixed::from_ratio(enemy.status.fire_stacks as i64 * 5, 1000).mul(fire_mult);
+    let typed = enemy.status.vuln_by_type[damage_type as usize % 5];
     let mut m = Fixed::ONE
-        + Fixed::from_ratio(enemy.status.fire_stacks as i64 * 5, 1000)
-        + Fixed::from_ratio(enemy.status.vuln_stacks as i64, 100);
+        + fire
+        + Fixed::from_ratio(enemy.status.vuln_stacks as i64, 100)
+        + Fixed::from_ratio(typed as i64, 100);
     if enemy.status.freeze_ticks > 0 {
         m += Fixed::from_ratio(1, 2); // +50% damage taken while frozen
     }
@@ -102,9 +112,10 @@ pub(crate) fn pulse(s: &mut ArenaState) {
     s.vuln_pulses = pulses;
 }
 
-/// Movement-speed multiplier from status (Frost slow: -2% per stack, floored).
-pub(crate) fn move_speed_mult(enemy: &Enemy) -> Fixed {
-    let slow = Fixed::from_ratio(enemy.status.frost_stacks as i64 * 2, 100);
+/// Movement-speed multiplier from status (Frost slow: -2% per stack, scaled by
+/// the player's "+% Frost … slow strength" `frost_mult`, floored).
+pub(crate) fn move_speed_mult(enemy: &Enemy, frost_mult: Fixed) -> Fixed {
+    let slow = Fixed::from_ratio(enemy.status.frost_stacks as i64 * 2, 100).mul(frost_mult);
     let m = Fixed::ONE - slow;
     // Floor at 10% so a fully-frosted enemy still crawls.
     let floor = Fixed::from_ratio(1, 10);
@@ -132,6 +143,12 @@ pub(crate) fn is_immobile(enemy: &Enemy) -> bool {
 pub(crate) fn reap_dead(s: &mut ArenaState) {
     let radius = Fixed::from_int(FIRE_EXPLOSION_RADIUS);
     let radius_sq = radius.mul(radius);
+    // Fire-explosion damage scaler: "+% Fire damage" × "+% explosion damage
+    // alone" (Combustion) — two distinct multiplicative sources.
+    let explosion_mult = s
+        .modifiers
+        .fire_dmg_mult
+        .mul(s.modifiers.fire_explosion_mult);
     loop {
         // Collect dead enemies (id-sorted) so explosions resolve deterministically.
         let mut dead: Vec<usize> = (0..s.enemies.len())
@@ -154,7 +171,7 @@ pub(crate) fn reap_dead(s: &mut ArenaState) {
             // Mark reaped so it is not collected again next round.
             s.enemies[di].hp = i64::MIN;
             let edef = &content::ENEMIES[def as usize];
-            let dmg = (fire_stacks / FIRE_STACKS_PER_DAMAGE) as i64;
+            let dmg = explosion_mult.scale_i64((fire_stacks / FIRE_STACKS_PER_DAMAGE) as i64);
             let explodes = !edef.boss && dmg > 0;
             // Render event: a real KILL (bounty follows via `GoldBounty`), with
             // the Fire death-explosion radius when this death detonates one.
@@ -224,6 +241,13 @@ pub(crate) fn tick(s: &mut ArenaState) {
         if e.status.freeze_ticks > 0 {
             e.status.freeze_ticks -= 1;
         }
+        // Obscured (miss-chance) duration; magnitude clears on expiry.
+        if e.status.obscure_ticks > 0 {
+            e.status.obscure_ticks -= 1;
+            if e.status.obscure_ticks == 0 {
+                e.status.obscure_pct = 0;
+            }
+        }
 
         survivors.push(e);
     }
@@ -263,6 +287,7 @@ mod tests {
                 poison_ticks: 90,
                 ..StatusOnHit::NONE
             },
+            true,
         );
         assert_eq!(e.status.poison_dps, 20);
         // Weaker incoming poison does not replace.
@@ -273,6 +298,7 @@ mod tests {
                 poison_ticks: 10,
                 ..StatusOnHit::NONE
             },
+            true,
         );
         assert_eq!(e.status.poison_dps, 20);
         assert_eq!(e.status.poison_ticks, 90);
@@ -320,6 +346,7 @@ mod tests {
                 frost_stacks: 24,
                 ..StatusOnHit::NONE
             },
+            true,
         );
         assert_eq!(
             e.status.frost_stacks, 24,
@@ -327,7 +354,7 @@ mod tests {
         );
         assert_eq!(e.status.freeze_ticks, 0, "no freeze below cap");
         // 24 stacks × 2% = 48% slow → ×0.52.
-        assert_eq!(move_speed_mult(&e).scale_i64(1000), 520);
+        assert_eq!(move_speed_mult(&e, Fixed::ONE).scale_i64(1000), 520);
 
         let mut s = arena_with(vec![e]);
         s.enemies[0].status.frost_ticks = 1;
@@ -348,6 +375,7 @@ mod tests {
                 frost_stacks: FROST_MAX_STACKS,
                 ..StatusOnHit::NONE
             },
+            true,
         );
         assert_eq!(e.status.frost_stacks, 0, "stacks reset on freeze");
         assert_eq!(e.status.frost_ticks, 0, "frost slow cleared on freeze");
@@ -358,7 +386,7 @@ mod tests {
         assert!(is_immobile(&e), "frozen enemy is immobile");
         // Frozen enemy takes +50% damage.
         assert_eq!(
-            vulnerability_mult(&e).scale_i64(1000),
+            vulnerability_mult(&e, 0, Fixed::ONE).scale_i64(1000),
             1500,
             "+50% while frozen"
         );
@@ -371,6 +399,7 @@ mod tests {
                 frost_stacks: 30,
                 ..StatusOnHit::NONE
             },
+            true,
         );
         assert_eq!(e2.status.frost_stacks, 0);
         assert_eq!(e2.status.freeze_ticks, FREEZE_DURATION);
@@ -382,7 +411,7 @@ mod tests {
         }
         assert_eq!(s.enemies[0].status.freeze_ticks, 0, "freeze wears off");
         assert!(!is_immobile(&s.enemies[0]));
-        assert_eq!(vulnerability_mult(&s.enemies[0]), Fixed::ONE);
+        assert_eq!(vulnerability_mult(&s.enemies[0], 0, Fixed::ONE), Fixed::ONE);
     }
 
     #[test]
@@ -492,12 +521,16 @@ mod tests {
                 fire_stacks: 10,
                 ..StatusOnHit::NONE
             },
+            true,
         );
         // 10 × 0.5% = +5% ⇒ ≈×1.05 (fixed-point floors deterministically).
-        let v = vulnerability_mult(&e).scale_i64(1_000_000);
+        let v = vulnerability_mult(&e, 0, Fixed::ONE).scale_i64(1_000_000);
         assert!((1_049_000..=1_050_000).contains(&v), "got {v}");
         // No fire ⇒ exactly identity.
-        assert_eq!(vulnerability_mult(&enemy(0, 1000)), Fixed::ONE);
+        assert_eq!(
+            vulnerability_mult(&enemy(0, 1000), 0, Fixed::ONE),
+            Fixed::ONE
+        );
     }
 
     #[test]
@@ -509,6 +542,7 @@ mod tests {
                 stun_ticks: 2,
                 ..StatusOnHit::NONE
             },
+            true,
         );
         assert!(is_immobile(&e));
         let mut s = arena_with(vec![e]);
@@ -547,14 +581,14 @@ mod tests {
                 Vec2::new(Fixed::from_int(5000), Fixed::ZERO),
             ),
         ];
-        assert_eq!(vulnerability_mult(&s.enemies[0]), Fixed::ONE);
+        assert_eq!(vulnerability_mult(&s.enemies[0], 0, Fixed::ONE), Fixed::ONE);
 
         // First pulse at tick 30 adds 5 stacks to the near enemy only.
         s.tick = 30;
         pulse(&mut s);
         assert_eq!(s.enemies[0].status.vuln_stacks, 5);
         assert_eq!(s.enemies[1].status.vuln_stacks, 0, "far enemy unaffected");
-        let v = vulnerability_mult(&s.enemies[0]).scale_i64(1000);
+        let v = vulnerability_mult(&s.enemies[0], 0, Fixed::ONE).scale_i64(1000);
         assert!((1049..=1050).contains(&v), "≈+5% damage taken, got {v}");
 
         // Second pulse stacks further.
@@ -614,6 +648,135 @@ mod tests {
         // 2 enemies × 30 dps = 60 poison damage this tick.
         assert_eq!(s.total_damage_dealt, 60);
         assert_eq!(s.economy.gold, gold0 + 15, "60 × 1/4 = 15 gold");
+    }
+
+    // ---- EXPANSION E3: fidelity mechanics ------------------------------------
+
+    #[test]
+    fn deep_freeze_is_opt_in_stacks_cap_without_it() {
+        // WITHOUT the Deep Freeze upgrade, reaching 25 stacks does NOT freeze:
+        // stacks cap at FROST_MAX_STACKS (max slow), the enemy keeps moving.
+        let mut e = enemy(0, 1000);
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                frost_stacks: 30,
+                ..StatusOnHit::NONE
+            },
+            false, // no Deep Freeze
+        );
+        assert_eq!(
+            e.status.frost_stacks, FROST_MAX_STACKS,
+            "stacks cap, no reset"
+        );
+        assert_eq!(e.status.freeze_ticks, 0, "no freeze without the upgrade");
+        assert!(
+            !is_immobile(&e),
+            "capped enemy still crawls (max slow only)"
+        );
+        // Max slow: 25 × 2% = 50% ⇒ ×0.5.
+        assert_eq!(move_speed_mult(&e, Fixed::ONE).scale_i64(1000), 500);
+
+        // WITH the upgrade the same application freezes (existing payoff).
+        let mut e2 = enemy(0, 1000);
+        apply_on_hit(
+            &mut e2,
+            &StatusOnHit {
+                frost_stacks: 30,
+                ..StatusOnHit::NONE
+            },
+            true,
+        );
+        assert_eq!(e2.status.frost_stacks, 0, "stacks reset on freeze");
+        assert_eq!(e2.status.freeze_ticks, FREEZE_DURATION);
+        assert!(is_immobile(&e2));
+    }
+
+    #[test]
+    fn frost_strength_modifier_scales_the_slow() {
+        // +50% Frost slow strength: 10 stacks × 2% = 20% base slow → 30%.
+        let mut e = enemy(0, 1000);
+        e.status.frost_stacks = 10;
+        assert_eq!(move_speed_mult(&e, Fixed::ONE).scale_i64(1000), 800);
+        let boosted = Fixed::ONE + Fixed::from_ratio(1, 2);
+        assert_eq!(
+            move_speed_mult(&e, boosted).scale_i64(1000),
+            700,
+            "+50% strength turns a 20% slow into 30%"
+        );
+        // The 10% crawl floor still holds under extreme strength.
+        e.status.frost_stacks = 25;
+        assert_eq!(
+            move_speed_mult(&e, Fixed::from_int(10)),
+            Fixed::from_ratio(1, 10),
+            "slow floored at 10% speed"
+        );
+    }
+
+    #[test]
+    fn fire_strength_modifier_scales_vulnerability_and_explosion() {
+        // +100% Fire strength: 10 stacks = +5% base vulnerability → +10%.
+        let mut e = enemy(0, 1000);
+        e.status.fire_stacks = 10;
+        let base = vulnerability_mult(&e, 0, Fixed::ONE).scale_i64(10_000);
+        assert!((10_499..=10_500).contains(&base), "base +5%, got {base}");
+        let doubled = vulnerability_mult(&e, 0, Fixed::from_int(2)).scale_i64(10_000);
+        assert!(
+            (10_999..=11_000).contains(&doubled),
+            "+100% fire strength doubles the per-stack vuln, got {doubled}"
+        );
+
+        // Explosion damage scales by fire_dmg_mult × fire_explosion_mult
+        // (Combustion). 100 stacks ⇒ base 20 explosion damage.
+        let build = |fire: Fixed, comb: Fixed| {
+            let mut s = arena_with(vec![
+                {
+                    let mut e = Enemy::new(EntityId(1), 0, -1, Vec2::ZERO); // dead
+                    e.status.fire_stacks = 100;
+                    e
+                },
+                Enemy::new(
+                    EntityId(2),
+                    0,
+                    1_000_000,
+                    Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+                ),
+            ]);
+            s.modifiers.fire_dmg_mult = fire;
+            s.modifiers.fire_explosion_mult = comb;
+            reap_dead(&mut s);
+            1_000_000 - s.enemies[0].hp
+        };
+        assert_eq!(build(Fixed::ONE, Fixed::ONE), 20, "base explosion 100/5");
+        assert_eq!(
+            build(Fixed::from_int(2), Fixed::ONE),
+            40,
+            "+100% Fire doubles the explosion"
+        );
+        assert_eq!(
+            build(Fixed::from_int(2), Fixed::from_int(3)),
+            120,
+            "Combustion multiplies on top (2 × 3 × 20)"
+        );
+    }
+
+    #[test]
+    fn obscure_status_decays_and_clears_its_magnitude() {
+        let mut s = arena_with(vec![{
+            let mut e = enemy(0, 1000);
+            e.status.obscure_pct = 25;
+            e.status.obscure_ticks = 2;
+            e
+        }]);
+        tick(&mut s);
+        assert_eq!(s.enemies[0].status.obscure_ticks, 1);
+        assert_eq!(s.enemies[0].status.obscure_pct, 25, "still active");
+        tick(&mut s);
+        assert_eq!(s.enemies[0].status.obscure_ticks, 0);
+        assert_eq!(
+            s.enemies[0].status.obscure_pct, 0,
+            "magnitude clears on expiry"
+        );
     }
 
     #[test]

@@ -14,13 +14,20 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-/// v21 (ECONOMY-FIDELITY PASS): `Economy::treasure_pool` (Magic Treasure's
-/// held, growing gold pool) and `PendingPerk::scope` (the source's per-item
-/// perk scoping) are new authoritative fields — both checksummed per the
-/// parity rule.
+/// v21 (FIDELITY PASSES, one combined bump): the economy pass added
+/// `Economy::treasure_pool` (Magic Treasure's held, growing gold pool) and
+/// `PendingPerk::scope` (the source's per-item perk scoping); the E3
+/// mechanics pass added new Tank fields (permanent-regen bonus + carry,
+/// Deep-Freeze flag, Frost/Flaming-Armor retaliation stacks, first-hit /
+/// Deflection / damage-taken→Spikes riders), new EnemyStatus fields
+/// (obscured miss-chance, typed vulnerability stacks, hit-the-tank flag),
+/// new Modifiers fields (frost/fire/explosion strength, bounce-barrage
+/// targets, heal-conditional damage), and the rotating-wave `sweeps`
+/// collection. All checksummed per the parity rule.
 /// v20: `Projectile::weapon_kind` (render bookkeeping; snapshot-carried so
-/// reconnect redraws correctly, checksummed per the parity rule). The transient
-/// `ArenaState::events` buffer is deliberately NOT serialized (`docs/09 §9.3`).
+/// reconnect redraws correctly, checksummed per the parity rule). The
+/// transient `ArenaState::events` buffer and per-tick flags/accumulators are
+/// deliberately NOT serialized (`docs/09 §9.3`).
 pub const SNAPSHOT_VERSION: u32 = 21;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -206,6 +213,15 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.i64(s.tank.aura_poison_dps);
     w.u32(s.tank.aura_poison_ticks);
     w.u32(s.tank.aura_tick);
+    // EXPANSION E3 fidelity-mechanics tank state (mirrors the checksum order).
+    w.fixed(s.tank.regen_bonus_per_tick);
+    w.fixed(s.tank.regen_carry);
+    w.bool(s.tank.deep_freeze);
+    w.u8(s.tank.retaliate_frost);
+    w.u16(s.tank.retaliate_fire);
+    w.i64(s.tank.spikes_first_hit);
+    w.fixed(s.tank.spikes_dr_rate);
+    w.fixed(s.tank.dmg_taken_to_spikes);
 
     // weapons
     w.len(s.weapons.len());
@@ -230,6 +246,12 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u16(e.status.vuln_stacks);
         w.u32(e.status.stun_ticks);
         w.u32(e.status.freeze_ticks);
+        w.u16(e.status.obscure_pct);
+        w.u32(e.status.obscure_ticks);
+        for v in &e.status.vuln_by_type {
+            w.u16(*v);
+        }
+        w.bool(e.status.hit_tank);
     }
 
     // projectiles (+ on-hit status)
@@ -280,6 +302,30 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u32(m.expire_tick);
     }
 
+    // rotating-wave sweeps
+    w.len(s.sweeps.len());
+    for sw in &s.sweeps {
+        w.id(sw.id);
+        w.u16(sw.weapon_kind);
+        w.i64(sw.damage);
+        w.u8(sw.damage_type);
+        w.fixed(sw.radius);
+        w.u16(sw.angle_bam);
+        w.u16(sw.step_bam);
+        w.u32(sw.ticks_left);
+        w.bool(sw.clockwise);
+        w.i64(sw.on_hit.poison_dps);
+        w.u32(sw.on_hit.poison_ticks);
+        w.u8(sw.on_hit.frost_stacks);
+        w.u16(sw.on_hit.fire_stacks);
+        w.u32(sw.on_hit.stun_ticks);
+        let (atag, a, b, c) = sw.ability.words();
+        w.u8(atag);
+        w.i64(a);
+        w.i64(b);
+        w.i64(c);
+    }
+
     // economy
     w.i64(s.economy.gold);
     w.i64(s.economy.income_per_tick);
@@ -317,6 +363,11 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.fixed(s.modifiers.dmg_per_maxhp_rate);
     w.fixed(s.modifiers.dmg_per_bounty_rate);
     w.fixed(s.modifiers.shield_active_dmg);
+    w.fixed(s.modifiers.frost_strength_mult);
+    w.fixed(s.modifiers.fire_dmg_mult);
+    w.fixed(s.modifiers.fire_explosion_mult);
+    w.fixed(s.modifiers.bounce_barrage_pct);
+    w.fixed(s.modifiers.healthy_dmg);
 
     // active ramps
     w.len(s.ramps.len());
@@ -438,6 +489,14 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         aura_poison_dps: r.i64()?,
         aura_poison_ticks: r.u32()?,
         aura_tick: r.u32()?,
+        regen_bonus_per_tick: r.fixed()?,
+        regen_carry: r.fixed()?,
+        deep_freeze: r.bool()?,
+        retaliate_frost: r.u8()?,
+        retaliate_fire: r.u16()?,
+        spikes_first_hit: r.i64()?,
+        spikes_dr_rate: r.fixed()?,
+        dmg_taken_to_spikes: r.fixed()?,
     };
 
     let mut weapons = Vec::new();
@@ -465,6 +524,10 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
                 vuln_stacks: r.u16()?,
                 stun_ticks: r.u32()?,
                 freeze_ticks: r.u32()?,
+                obscure_pct: r.u16()?,
+                obscure_ticks: r.u32()?,
+                vuln_by_type: [r.u16()?, r.u16()?, r.u16()?, r.u16()?, r.u16()?],
+                hit_tank: r.bool()?,
             },
         });
     }
@@ -524,6 +587,35 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         });
     }
 
+    let mut sweeps = Vec::new();
+    for _ in 0..r.len()? {
+        sweeps.push(WaveSweep {
+            id: r.id()?,
+            weapon_kind: r.u16()?,
+            damage: r.i64()?,
+            damage_type: r.u8()?,
+            radius: r.fixed()?,
+            angle_bam: r.u16()?,
+            step_bam: r.u16()?,
+            ticks_left: r.u32()?,
+            clockwise: r.bool()?,
+            on_hit: StatusOnHit {
+                poison_dps: r.i64()?,
+                poison_ticks: r.u32()?,
+                frost_stacks: r.u8()?,
+                fire_stacks: r.u16()?,
+                stun_ticks: r.u32()?,
+            },
+            ability: {
+                let tag = r.u8()?;
+                let a = r.i64()?;
+                let b = r.i64()?;
+                let c = r.i64()?;
+                WeaponAbility::from_words(tag, a, b, c).ok_or(SnapshotError::BadTag(tag))?
+            },
+        });
+    }
+
     let economy = Economy {
         gold: r.i64()?,
         income_per_tick: r.i64()?,
@@ -569,6 +661,11 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         dmg_per_maxhp_rate: r.fixed()?,
         dmg_per_bounty_rate: r.fixed()?,
         shield_active_dmg: r.fixed()?,
+        frost_strength_mult: r.fixed()?,
+        fire_dmg_mult: r.fixed()?,
+        fire_explosion_mult: r.fixed()?,
+        bounce_barrage_pct: r.fixed()?,
+        healthy_dmg: r.fixed()?,
     };
 
     let mut ramps = Vec::new();
@@ -659,6 +756,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         projectiles,
         hazards,
         minions,
+        sweeps,
         economy,
         shop,
         modifiers,
@@ -667,6 +765,8 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         pending_perk,
         tank_hit_this_tick: false,
         shield_broke_this_tick: false,
+        damage_taken_this_tick: 0,
+        spikes_first_bonus_this_tick: 0,
         events: Events::default(),
         next_entity_id,
         dead,

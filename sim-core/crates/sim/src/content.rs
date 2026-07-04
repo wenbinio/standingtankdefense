@@ -28,6 +28,24 @@ pub enum Attack {
     Wave(i64),
     /// Instant chain: the random target plus the `N-1` nearest other enemies.
     Bounce(u8),
+    // ---- COMBINED / EXOTIC ATTACK SHAPES (fidelity pass) ---------------------
+    // The source pairs a secondary Splash with Bounce/Barrage ("Bounce (4
+    // Targets) & Splash (150)"). Modeled as NEW variants (least invasive: no
+    // field added to every existing weapon literal); they share the primary
+    // shape's damage scope (`attack_scope_id`).
+    /// Instant chain like [`Bounce`], where every chained hit ALSO splashes the
+    /// given radius at the struck enemy's position. Each enemy is damaged at
+    /// most once per attack (chain targets excluded from splashes).
+    BounceSplash(u8, i64),
+    /// `N` traveling projectiles like [`Barrage`], each splashing the given
+    /// radius at impact.
+    BarrageSplash(u8, i64),
+    /// Sweeping wave like [`Wave`], but ROTATING: firing starts a sweep that
+    /// rotates one angular sector per tick around the tank over
+    /// `WAVE_SWEEP_TICKS`, hitting each enemy as the sector passes it
+    /// (`combat::tick_sweeps`; integer binary-angle math). `bool` = clockwise
+    /// (`false` = counterclockwise, the source's "rotating counterclockwise").
+    WaveRotating(i64, bool),
 }
 
 /// A weapon's signature ability (`docs/05 §5.2`), executed at each hit/fire
@@ -67,6 +85,31 @@ pub enum WeaponAbility {
     /// cap. `kind` selects the sprite (0 larvae, 1 spores); `hp` and `damage`
     /// seed the minion. An Area weapon that wipes a pack raises several at once.
     Summon { kind: u8, hp: i64, damage: i64 },
+    /// PER-ATTACK permanent-regen grant (the source's Healthstone: "Attacks
+    /// grant +0.2 permanent HP Regen and 60 Instant HP Regen"). Executed once
+    /// per FIRE (not per enemy hit), at the fire site: adds
+    /// `regen_milli_per_s / 1000` HP-regen PER SECOND permanently to the tank
+    /// (accumulated fixed-point in `Tank::regen_bonus_per_tick`, paid out with
+    /// a fractional carry in `defense::regen`), plus an `instant` heal.
+    RegenOnAttack {
+        regen_milli_per_s: i64,
+        instant: i64,
+    },
+    /// PER-ATTACK self-heal (the source's Holy Bolt: "Heal 80 health") — heals
+    /// the tank `amount` once per FIRE, regardless of how many enemies the
+    /// attack hits. Distinct from `LifeDrain` (which is per enemy damaged).
+    HealOnAttack { amount: i64 },
+    /// Miss-chance debuff (the source Ale Launcher's real mechanic: "Attacks
+    /// reduce enemy chance to hit by 25% for 3 seconds"). Each damaged enemy
+    /// gains the "obscured" status: for `ticks`, its attacks on the tank miss
+    /// with `pct`% probability (rolled on `rng_proc`). Strongest pct wins;
+    /// duration takes the longer remaining.
+    Obscure { pct: i64, ticks: u32 },
+    /// TYPED on-hit vulnerability (Thorn "+5% Normal damage taken, stacking";
+    /// Liquid Fire's drench): adds `stacks` vulnerability stacks (each +1%
+    /// damage taken) that apply ONLY to hits of `dmg_type`, alongside (and
+    /// composing additively with) the generic `VulnOnHit` stacks.
+    VulnTypeOnHit { dmg_type: u8, stacks: u16 },
 }
 
 impl WeaponAbility {
@@ -82,6 +125,15 @@ impl WeaponAbility {
             WeaponAbility::VulnOnHit { stacks } => (5, stacks as i64, 0, 0),
             WeaponAbility::Hazard { dmg, radius, ticks } => (6, dmg, radius, ticks as i64),
             WeaponAbility::Summon { kind, hp, damage } => (7, kind as i64, hp, damage),
+            WeaponAbility::RegenOnAttack {
+                regen_milli_per_s,
+                instant,
+            } => (8, regen_milli_per_s, instant, 0),
+            WeaponAbility::HealOnAttack { amount } => (9, amount, 0, 0),
+            WeaponAbility::Obscure { pct, ticks } => (10, pct, ticks as i64, 0),
+            WeaponAbility::VulnTypeOnHit { dmg_type, stacks } => {
+                (11, dmg_type as i64, stacks as i64, 0)
+            }
         }
     }
     /// Inverse of [`words`](Self::words).
@@ -102,6 +154,19 @@ impl WeaponAbility {
                 kind: a as u8,
                 hp: b,
                 damage: c,
+            },
+            8 => WeaponAbility::RegenOnAttack {
+                regen_milli_per_s: a,
+                instant: b,
+            },
+            9 => WeaponAbility::HealOnAttack { amount: a },
+            10 => WeaponAbility::Obscure {
+                pct: a,
+                ticks: b as u32,
+            },
+            11 => WeaponAbility::VulnTypeOnHit {
+                dmg_type: a as u8,
+                stacks: b as u16,
             },
             _ => return None,
         })
@@ -144,6 +209,15 @@ pub struct WeaponDef {
     pub proj_speed: i64, // units per tick
     /// Status applied to whatever this weapon hits.
     pub on_hit: StatusOnHit,
+    /// The source's "Attack Cooldown: N/A" class (Frost/Fire waves): the weapon
+    /// fires on its fixed internal period and is UNAFFECTED by "+% Attack
+    /// Speed" (`docs/01 §1.3` — must-preserve). `false` for normal weapons.
+    pub fixed_rate: bool,
+    /// Once-per-round activation window (the source's Monsoon): `0` = a normal
+    /// always-armed weapon; `N > 0` = the weapon is active only for the first
+    /// `N` ticks of each round (firing on its own `cooldown_ticks` inside the
+    /// window), then sleeps until the next round starts.
+    pub round_burst_ticks: u32,
     /// Signature ability executed at each hit/fire site (`WeaponAbility::None`
     /// for the many pure-damage weapons).
     pub ability: WeaponAbility,
@@ -377,21 +451,80 @@ pub enum ModEffect {
     /// drives the cadence in `combat::tick_aura`. The poison rider is set alongside
     /// this effect in `buy_modifier` (the `aura_poison_*` fields).
     DamageAura(i64, i64, i64),
+    // ---- EXPANSION E3 (source-fidelity mechanics pass) -----------------------
+    /// DEEP FREEZE OPT-IN (source: "+1.5 seconds of Freeze when an enemy reaches
+    /// 25 stacks of Frost, resetting stacks to 0"). Sets `tank.deep_freeze`;
+    /// WITHOUT it, 25 frost stacks now merely cap (max slow, no freeze) — the
+    /// freeze payoff is no longer baseline (`status::apply_on_hit`).
+    GrantDeepFreeze,
+    /// +% Frost strength `(num, den)` (source: "+% Frost damage and slow
+    /// strength"): scales the per-stack Frost slow (and nothing else; frost
+    /// carries no direct damage in this model). Accumulates additively into
+    /// `Modifiers::frost_strength_mult`.
+    FrostDamagePct(i64, i64),
+    /// +% Fire strength `(num, den)` (source: "+% Fire damage and damage
+    /// vulnerability"): scales BOTH the per-stack Fire vulnerability and the
+    /// Fire death-explosion damage. Accumulates into `Modifiers::fire_dmg_mult`.
+    FireDamagePct(i64, i64),
+    /// +% Fire-EXPLOSION damage alone `(num, den)` (source: Combustion "+%
+    /// bonus explosion damage"). Accumulates into
+    /// `Modifiers::fire_explosion_mult`; multiplies with `FireDamagePct` on the
+    /// explosion (distinct multiplicative sources).
+    CombustionPct(i64, i64),
+    /// +% enemies hit by Bounce and Barrage `(num, den)` (source: "+25% Enemies
+    /// hit by Bounce and Barrage"). Accumulates into
+    /// `Modifiers::bounce_barrage_pct`; resolved per FIRE as an integer bonus:
+    /// `targets += floor(base_targets × pct)`.
+    BounceBarragePct(i64, i64),
+    /// META-ish economy grant: +N free shop rerolls (the source's Free Reroll
+    /// items). Mutates `economy.rerolls_remaining` — the same counter the shop
+    /// consumes.
+    GrantFreeRerolls(i64),
+    /// FROST ARMOR (source: "+2 stacks of Frost to an enemy when damaged"):
+    /// tank-side retaliation status — when the tank is hit, apply this many
+    /// Frost stacks to enemies in Spikes range (`defense::spikes`, which fires
+    /// even with zero Spikes damage). Accumulates into `tank.retaliate_frost`.
+    FrostArmor(i64),
+    /// FLAMING ARMOR (source: "+20 stacks of Fire to an enemy when damaged"):
+    /// the Fire twin of [`FrostArmor`]. Accumulates into `tank.retaliate_fire`.
+    FireArmor(i64),
+    /// FIRST-HIT SPIKES (source: "+240 Spikes Damage on the first attack"):
+    /// flat bonus Spikes damage added to the retaliation for an enemy's FIRST
+    /// landed hit on the tank (per enemy; tracked in `EnemyStatus::hit_tank`).
+    /// Accumulates into `tank.spikes_first_hit`.
+    SpikesFirstHit(i64),
+    /// DEFLECTION `(num, den)` (source: "+5% of Spikes Damage as Flat Damage
+    /// Reduction, but cannot reduce more than 50% of an attack"): flat DR equal
+    /// to `rate × current Spikes damage`, capped at half the incoming hit.
+    /// Accumulates into `tank.spikes_dr_rate`.
+    SpikesAsDrPct(i64, i64),
+    /// DAMAGE-TAKEN→SPIKES `(num, den)` (source: "+30% of Damage Taken Spikes
+    /// Damage"): the Spikes retaliation for a hit gains `rate × damage the tank
+    /// took this tick` as flat bonus damage. Accumulates into
+    /// `tank.dmg_taken_to_spikes`.
+    DamageTakenToSpikesPct(i64, i64),
+    /// HEAL-CONDITIONAL DAMAGE `(num, den)` (source: "+35% Damage … when at 95%
+    /// health or above"): a GLOBAL additive damage bonus active only while
+    /// `tank.hp ≥ 95% of max_hp`, resolved LIVE at fire time via
+    /// `dynamic_global_add`. Accumulates into `Modifiers::healthy_dmg`.
+    DamageWhileHealthyPct(i64, i64),
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
 /// (6 short / 7 long), 4 rarities (8-11).
 pub const NUM_SCOPES: usize = 12;
 
-/// Scope id for a weapon's attack class.
+/// Scope id for a weapon's attack class. Combined shapes classify by their
+/// PRIMARY shape (Bounce&Splash → Bounce, Barrage&Splash → Barrage, rotating
+/// waves → Wave) so per-class "+% Damage" upgrades keep applying to them.
 pub fn attack_scope_id(a: Attack) -> u8 {
     match a {
         Attack::SingleTarget => 0,
         Attack::Splash(_) => 1,
-        Attack::Barrage(_) => 2,
+        Attack::Barrage(_) | Attack::BarrageSplash(..) => 2,
         Attack::Area(_) => 3,
-        Attack::Wave(_) => 4,
-        Attack::Bounce(_) => 5,
+        Attack::Wave(_) | Attack::WaveRotating(..) => 4,
+        Attack::Bounce(_) | Attack::BounceSplash(..) => 5,
     }
 }
 /// Scope id for a weapon's range bucket: 6 = short (≤600), 7 = long (≥900).
@@ -459,6 +592,18 @@ impl ModEffect {
             ModEffect::SpikesPoison(dps, t) => (45, dps, t, 0),
             ModEffect::StackingSpikes(per, max) => (46, per, max, 0),
             ModEffect::DamageAura(r, c, d) => (47, r, c, d),
+            ModEffect::GrantDeepFreeze => (48, 0, 0, 0),
+            ModEffect::FrostDamagePct(n, d) => (49, n, d, 0),
+            ModEffect::FireDamagePct(n, d) => (50, n, d, 0),
+            ModEffect::CombustionPct(n, d) => (51, n, d, 0),
+            ModEffect::BounceBarragePct(n, d) => (52, n, d, 0),
+            ModEffect::GrantFreeRerolls(n) => (53, n, 0, 0),
+            ModEffect::FrostArmor(n) => (54, n, 0, 0),
+            ModEffect::FireArmor(n) => (55, n, 0, 0),
+            ModEffect::SpikesFirstHit(n) => (56, n, 0, 0),
+            ModEffect::SpikesAsDrPct(n, d) => (57, n, d, 0),
+            ModEffect::DamageTakenToSpikesPct(n, d) => (58, n, d, 0),
+            ModEffect::DamageWhileHealthyPct(n, d) => (59, n, d, 0),
         }
     }
 
@@ -533,6 +678,18 @@ impl ModEffect {
             45 => ModEffect::SpikesPoison(a, b),
             46 => ModEffect::StackingSpikes(a, b),
             47 => ModEffect::DamageAura(a, b, c),
+            48 => ModEffect::GrantDeepFreeze,
+            49 => ModEffect::FrostDamagePct(a, b),
+            50 => ModEffect::FireDamagePct(a, b),
+            51 => ModEffect::CombustionPct(a, b),
+            52 => ModEffect::BounceBarragePct(a, b),
+            53 => ModEffect::GrantFreeRerolls(a),
+            54 => ModEffect::FrostArmor(a),
+            55 => ModEffect::FireArmor(a),
+            56 => ModEffect::SpikesFirstHit(a),
+            57 => ModEffect::SpikesAsDrPct(a, b),
+            58 => ModEffect::DamageTakenToSpikesPct(a, b),
+            59 => ModEffect::DamageWhileHealthyPct(a, b),
             _ => return None,
         })
     }
@@ -1485,6 +1642,20 @@ pub static MODIFIERS: &[ModifierDef] = &[
         effects: &[ModEffect::HpRegen(200), ModEffect::DamageAura(600, 30, 200)],
         ramp: None,
     },
+    // EXPANSION E3 (fidelity-mechanics pass) — Deep Freeze becomes an OPT-IN
+    // upgrade, as in the source: "+1.5 seconds of Freeze when an enemy reaches
+    // 25 stacks of Frost, resetting stacks to 0. Freeze increases Frost damage
+    // taken by 50% and freezes the enemy in place." WITHOUT this modifier, 25
+    // frost stacks now merely cap at max slow (baseline behavior change —
+    // deliberate; the freeze payoff used to be always-on). Cost/rarity are a
+    // judgement call (the source prices upgrades out-of-catalog).
+    ModifierDef {
+        name: "Deep Freeze",
+        rarity: 2,
+        cost: 3000,
+        effects: &[ModEffect::GrantDeepFreeze],
+        ramp: None,
+    },
 ];
 
 /// The weapon the tank starts with (index into [`WEAPONS`]).
@@ -1509,6 +1680,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 1 — Mortar Launcher: siege splash.
@@ -1523,6 +1696,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 30,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 2 — Frost Bow: applies Frost stacks (slow).
@@ -1544,6 +1719,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             frost_stacks: 7,
             ..StatusOnHit::NONE
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 3 — Poison Bow: light hit + a strong damage-over-time.
@@ -1565,6 +1742,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             poison_ticks: 90,
             ..StatusOnHit::NONE
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 4 — Flamecaster: applies Fire stacks (vulnerability + explode on death).
@@ -1586,6 +1765,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 6,
             ..StatusOnHit::NONE
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 5 — Storm Hammer: hard single hit that Stuns.
@@ -1607,6 +1788,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             stun_ticks: 45,
             ..StatusOnHit::NONE
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 6 — Ballista: a Barrage hitting several targets at once.
@@ -1622,6 +1805,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         proj_speed: 50,
         // STEADY ANCHOR: reliable long-range multi-target floor; modest ceiling.
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 7 — Immolation: an instant Area pulse around the tank that burns.
@@ -1639,6 +1824,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 2,
             ..StatusOnHit::NONE
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 8 — Shockwave Axe: an instant sweeping Wave.
@@ -1656,6 +1843,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         // but on a long cooldown and only at point-blank — between sweeps the tank
         // eats the wave, so the floor is risky; the ceiling clears packs outright.
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 9 — Moon Glaive: an instant Bounce chaining to nearby enemies.
@@ -1671,6 +1860,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         proj_speed: 0,
         // STEADY-MID ANCHOR: dependable instant chain to 4 nearby foes.
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // 10 — Death Engine: a self-scaling damage GENERATOR. Pairs with the
@@ -1694,6 +1885,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         // the build is quadratic in copies. Commit hard and it runs away with the
         // game; buy one or two and it is a deliberate trap (the high-risk path).
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // GEN-WEAPONS-BEGIN (hand-rebalanced for SPIKY, high-ceiling/high-risk variety;
@@ -1716,6 +1909,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1729,6 +1924,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1742,6 +1939,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1755,6 +1954,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1768,6 +1969,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 300,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1781,6 +1984,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     // --- HIGH-CEILING RARES/EPICS: big payoff, real risk (slow / point-blank / setup) ---
@@ -1795,6 +2000,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 300,
         proj_speed: 0,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::LifeDrain { per_hit: 40 },
     }, // exotic: Heal (base only); point-blank board-wipe, slow
     WeaponDef {
@@ -1814,6 +2021,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 90,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // HIGH-CEILING: 8×1400 stun-volley, swingy on small boards
     WeaponDef {
@@ -1827,6 +2036,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1846,6 +2057,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 15,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1859,6 +2072,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 10 },
     }, // exotic: reduce enemy (base only); high single-target ceiling
     WeaponDef {
@@ -1878,6 +2093,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 22,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1891,6 +2108,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1904,6 +2123,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1917,6 +2138,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::Knockback { dist: 300 },
     }, // exotic: Knockback (base only); GLASS-CANNON nuke, single-target only
     WeaponDef {
@@ -1930,6 +2153,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 8 },
     }, // exotic: permanent (base only)
     WeaponDef {
@@ -1943,6 +2168,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::LifeDrain { per_hit: 40 },
     }, // exotic: Heal (base only)
     WeaponDef {
@@ -1956,6 +2183,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1969,6 +2198,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -1982,6 +2213,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2001,6 +2234,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 60,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2020,6 +2255,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 45,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2039,6 +2276,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2058,6 +2297,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2077,6 +2318,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2096,6 +2339,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // poison-stacking ceiling
     WeaponDef {
@@ -2109,6 +2354,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2128,6 +2375,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 45,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2147,6 +2396,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 22,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2160,6 +2411,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 400,
         proj_speed: 0,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2173,6 +2426,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // HIGH-CEILING: 8× chain, slow
     WeaponDef {
@@ -2192,6 +2447,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 60,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2205,6 +2462,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // HIGH-CEILING: 12-projectile saturation, swingy on thin boards
     WeaponDef {
@@ -2224,6 +2483,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2243,6 +2504,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 90,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2256,6 +2519,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::LifeDrain { per_hit: 200 },
     }, // exotic: Heal (base only); APEX EPIC, high ceiling
     WeaponDef {
@@ -2269,6 +2534,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2288,6 +2555,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 4,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // fire enabler, ramps with explode payoff
     WeaponDef {
@@ -2307,6 +2576,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2320,6 +2591,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 300,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::ManaDrain { per_hit: 20 },
     }, // exotic: Mana (base only)
     WeaponDef {
@@ -2339,6 +2612,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 4,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 3 },
     }, // exotic: damage taken (base only); fast fire stacker
     WeaponDef {
@@ -2352,6 +2627,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 300,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 5 },
     }, // exotic: reduce enemy (base only)
     WeaponDef {
@@ -2371,6 +2648,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 30,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // HIGH-CEILING wave nuke, point-blank
     WeaponDef {
@@ -2390,6 +2669,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 60,
             stun_ticks: 60,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::Summon {
             kind: 1,
             hp: 1500,
@@ -2413,6 +2694,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 200,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 4 },
     }, // exotic: damage taken (base only); FIRE PAYOFF ENGINE: drenches packs in 200 fire each pulse → explode-chain ceiling is enormous
     WeaponDef {
@@ -2432,6 +2715,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 5,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 5 },
     }, // exotic: damage taken (base only); rapid fire stacker
     WeaponDef {
@@ -2451,6 +2736,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 150,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 5 },
     }, // exotic: damage taken (base only); long-range fire payoff
     WeaponDef {
@@ -2470,6 +2757,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // frost enabler toward freeze-at-25
     WeaponDef {
@@ -2489,6 +2778,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2508,6 +2799,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // FROST PAYOFF ENGINE: AoE 5-stacks → mass-freeze ceiling
     WeaponDef {
@@ -2527,6 +2820,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2540,6 +2835,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2553,6 +2850,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 5 },
     }, // exotic: damage taken (base only)
     WeaponDef {
@@ -2566,6 +2865,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 5 },
     }, // exotic: damage taken (base only)
     WeaponDef {
@@ -2585,6 +2886,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 15,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2598,6 +2901,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 10 },
     }, // exotic: damage taken (base only)
     WeaponDef {
@@ -2617,6 +2922,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 45,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2636,6 +2943,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 4 },
     }, // exotic: explode (base only)
     WeaponDef {
@@ -2655,6 +2964,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2674,6 +2985,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 20,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 6 },
     }, // exotic: damage taken (base only)
     WeaponDef {
@@ -2687,6 +3000,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::LifeDrain { per_hit: 40 },
     }, // exotic: Heal (base only); fast cheap floor
     WeaponDef {
@@ -2700,6 +3015,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::ManaDrain { per_hit: 80 },
     }, // exotic: drain (base only); fast long-range
     WeaponDef {
@@ -2713,6 +3030,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::Summon {
             kind: 0,
             hp: 500,
@@ -2736,6 +3055,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 2,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 3 },
     }, // exotic: damage taken (base only); cheap point-blank pulse
     WeaponDef {
@@ -2755,6 +3076,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 90,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::Hazard {
             dmg: 1000,
             radius: 200,
@@ -2772,6 +3095,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 10 },
     }, // exotic: damage taken (base only)
     WeaponDef {
@@ -2785,6 +3110,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 10 },
     }, // exotic: damage taken (base only)
     WeaponDef {
@@ -2798,6 +3125,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // BOOM-OR-BUST: 8×3400 meteor volley on a very long cooldown — feast (whole-screen wipe) or famine (caught reloading)
     WeaponDef {
@@ -2811,6 +3140,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::LifeDrain { per_hit: 4 },
     }, // exotic: Heal (base only)
     WeaponDef {
@@ -2824,6 +3155,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     },
     WeaponDef {
@@ -2837,6 +3170,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 600,
         proj_speed: 0,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // wide always-on aura, steady rare anchor
     WeaponDef {
@@ -2850,6 +3185,8 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 1200,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::ManaDrain { per_hit: 20 },
     }, // exotic: Mana (base only)
     WeaponDef {
@@ -2869,6 +3206,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 20,
             stun_ticks: 0,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::VulnOnHit { stacks: 6 },
     }, // exotic: damage taken (base only); fire-payoff AoE
     WeaponDef {
@@ -2888,6 +3227,8 @@ pub static WEAPONS: &[WeaponDef] = &[
             fire_stacks: 0,
             stun_ticks: 60,
         },
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::None,
     }, // fast perma-stun aura
     WeaponDef {
@@ -2901,9 +3242,132 @@ pub static WEAPONS: &[WeaponDef] = &[
         range: 900,
         proj_speed: 45,
         on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
         ability: WeaponAbility::Root { ticks: 30 },
     }, // exotic: Root (base only); fast steady epic anchor
-       // GEN-WEAPONS-END
+    // GEN-WEAPONS-END
+    // ---- MECHANIC ANCHORS (E3 fidelity-mechanics pass) -----------------------
+    // Appended entries exercising the NEW engine mechanics (combined attack
+    // shapes, fixed-rate cooldowns, once-per-round bursts, rotating waves,
+    // per-attack abilities). Stats track the source extraction where one
+    // exists; costs/rarities are placeholders for the follow-up CATALOG pass,
+    // which will rename/retune these and wire the rest of the roster onto the
+    // same mechanisms. Unit tests reference these by the 86..=91 indices.
+    // 86 — source "Bounce (4 Targets) & Splash (150), dmg 150, cd 1.0, r 900".
+    WeaponDef {
+        name: "Splitting Glaive",
+        rarity: 1,
+        cost: 1500,
+        damage: 150,
+        damage_type: DMG_PIERCING,
+        attack: Attack::BounceSplash(4, 150),
+        cooldown_ticks: 30,
+        range: 900,
+        proj_speed: 0,
+        on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
+        ability: WeaponAbility::None,
+    },
+    // 87 — source "Barrage (8 Targets) & Splash (300)" (dmg retuned from the
+    // source's 5000/cd 10 s into this catalog's Meteor-Barrage band).
+    WeaponDef {
+        name: "Siege Volley",
+        rarity: 2,
+        cost: 3000,
+        damage: 900,
+        damage_type: DMG_SIEGE,
+        attack: Attack::BarrageSplash(8, 300),
+        cooldown_ticks: 75,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
+        ability: WeaponAbility::None,
+    },
+    // 88 — Monsoon (source: "Area (900), cd 1.0 (While Active); activates once
+    // per round to damage all enemies in range every 1 s for 10 s"). Fires on
+    // its internal 1 s period for the first 300 ticks of each round, then
+    // sleeps; `fixed_rate` because its period is not an attack-speed cooldown.
+    WeaponDef {
+        name: "Monsoon",
+        rarity: 2,
+        cost: 3000,
+        damage: 600,
+        damage_type: DMG_MAGIC,
+        attack: Attack::Area(900),
+        cooldown_ticks: 30,
+        range: 900,
+        proj_speed: 0,
+        on_hit: StatusOnHit::NONE,
+        fixed_rate: true,
+        round_burst_ticks: 300,
+        ability: WeaponAbility::None,
+    },
+    // 89 — Healthstone (source: "Attacks grant +0.2 permanent HP Regen and 60
+    // Instant HP Regen"; dmg 1000, cd 1.0, r 600). +0.2/s = 200 milli/s.
+    WeaponDef {
+        name: "Healthstone",
+        rarity: 2,
+        cost: 3000,
+        damage: 1000,
+        damage_type: DMG_PIERCING,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 30,
+        range: 600,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
+        ability: WeaponAbility::RegenOnAttack {
+            regen_milli_per_s: 200,
+            instant: 60,
+        },
+    },
+    // 90 — Holy Bolt (source: "dmg 500, cd 2.0, r 1200; Heal 80 health" — per
+    // ATTACK, not per enemy hit; distinct from LifeDrain).
+    WeaponDef {
+        name: "Holy Bolt",
+        rarity: 1,
+        cost: 1500,
+        damage: 500,
+        damage_type: DMG_NORMAL,
+        attack: Attack::SingleTarget,
+        cooldown_ticks: 60,
+        range: 1200,
+        proj_speed: 45,
+        on_hit: StatusOnHit::NONE,
+        fixed_rate: false,
+        round_burst_ticks: 0,
+        ability: WeaponAbility::HealOnAttack { amount: 80 },
+    },
+    // 91 — rotating frost wave (source: "Magic & Frost, Wave (+150),
+    // counterclockwise rotating pattern, Frost (3 stacks)"; the N/A-cooldown
+    // wave class ⇒ `fixed_rate`). The sweep mechanics live in
+    // `combat::tick_sweeps`.
+    WeaponDef {
+        name: "Maelstrom",
+        rarity: 2,
+        cost: 3000,
+        damage: 300,
+        damage_type: DMG_MAGIC,
+        attack: Attack::WaveRotating(150, false),
+        cooldown_ticks: 60,
+        range: 300,
+        proj_speed: 0,
+        on_hit: StatusOnHit {
+            poison_dps: 0,
+            poison_ticks: 0,
+            frost_stacks: 3,
+            fire_stacks: 0,
+            stun_ticks: 0,
+        },
+        fixed_rate: true,
+        round_burst_ticks: 0,
+        ability: WeaponAbility::None,
+    },
 ];
 
 /// Enemy catalog. Indices 0/1/2 are STABLE (render maps sprites by index, the

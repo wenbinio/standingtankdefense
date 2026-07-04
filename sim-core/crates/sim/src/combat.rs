@@ -94,12 +94,18 @@ impl AbilityAccum {
     }
 }
 
-/// Player's target-conditional damage bonuses, captured once per tick (they don't
-/// change mid-tick) and applied at impact against each enemy's live status.
+/// Player's target-conditional damage bonuses plus the per-tick status-scaling
+/// context (fire-vulnerability multiplier, Deep-Freeze opt-in), captured once
+/// per tick (they don't change mid-tick) and applied at impact against each
+/// enemy's live status.
 #[derive(Clone, Copy)]
 struct CondDamage {
     vs_stunned: Fixed,
     vs_poisoned: Fixed,
+    /// "+% Fire damage" — scales the per-stack Fire vulnerability at impact.
+    fire_mult: Fixed,
+    /// Deep-Freeze opt-in flag (gates the 25-frost-stack freeze payoff).
+    deep_freeze: bool,
 }
 
 impl CondDamage {
@@ -107,6 +113,8 @@ impl CondDamage {
         CondDamage {
             vs_stunned: s.modifiers.vs_stunned,
             vs_poisoned: s.modifiers.vs_poisoned,
+            fire_mult: s.modifiers.fire_dmg_mult,
+            deep_freeze: s.tank.deep_freeze,
         }
     }
     /// Multiplier for this enemy: `1 + Σ matching conditional bonuses`.
@@ -148,14 +156,14 @@ fn apply_weapon_hit(
         return 0;
     }
     let armor = content::damage_multiplier(damage_type, edef.armor_class);
-    let vuln = crate::status::vulnerability_mult(e);
+    let vuln = crate::status::vulnerability_mult(e, damage_type, cond.fire_mult);
     let dmg = armor
         .mul(mod_mult)
         .mul(vuln)
         .mul(cond.mult(e))
         .scale_i64(base);
     e.hp -= dmg;
-    if crate::status::apply_on_hit(e, on_hit) {
+    if crate::status::apply_on_hit(e, on_hit, cond.deep_freeze) {
         accum.freeze_procs.push(e.id.0);
     }
     apply_ability_on_hit(e, ability, tank_pos, accum);
@@ -217,6 +225,21 @@ fn apply_ability_on_hit(
                 accum.hazard_at = Some(e.pos);
             }
         }
+        WeaponAbility::Obscure { pct, ticks } => {
+            // Miss-chance debuff (Ale Launcher): strongest magnitude wins,
+            // duration takes the longer remaining.
+            e.status.obscure_pct = e.status.obscure_pct.max(pct.max(0) as u16);
+            e.status.obscure_ticks = e.status.obscure_ticks.max(ticks);
+        }
+        WeaponAbility::VulnTypeOnHit { dmg_type, stacks } => {
+            // Typed vulnerability (Thorn / Liquid-Fire drench): stacks apply
+            // only to hits of the matching damage type.
+            let slot = &mut e.status.vuln_by_type[dmg_type as usize % 5];
+            *slot = slot.saturating_add(stacks);
+        }
+        // PER-ATTACK abilities (Healthstone / Holy Bolt) resolve once per FIRE
+        // at the fire site in `fire_weapons`, never per enemy hit.
+        WeaponAbility::RegenOnAttack { .. } | WeaponAbility::HealOnAttack { .. } => {}
     }
 }
 
@@ -237,6 +260,13 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
     let mut instant_damage: i64 = 0;
     // Target-conditional bonuses are constant across this tick's fires.
     let cond = CondDamage::of(s);
+    // "+% Enemies hit by Bounce and Barrage" — resolved per fire as an integer
+    // target bonus: `n + floor(n × pct)`.
+    let bb_pct = s.modifiers.bounce_barrage_pct;
+    let eff_targets = move |n: u8| -> usize {
+        let base = n as i64;
+        (base + bb_pct.scale_i64(base)).max(0) as usize
+    };
 
     for wi in 0..s.weapons.len() {
         let def = s.weapons[wi].def;
@@ -244,6 +274,12 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
             continue;
         }
         let wdef = content::WEAPONS[def as usize];
+        // Once-per-round weapons (Monsoon class): active only for the first
+        // `round_burst_ticks` of each round, asleep otherwise (no fire, no
+        // cooldown advance). Pure integer gate on the round-relative tick.
+        if wdef.round_burst_ticks > 0 && s.tick % crate::ROUND_TICKS >= wdef.round_burst_ticks {
+            continue;
+        }
         let range = Fixed::from_int(wdef.range);
         let range_sq = range.mul(range);
 
@@ -313,13 +349,26 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 new_proj(s, pick, Fixed::from_int(r));
             }
             Attack::Barrage(n) => {
-                // N distinct random in-range targets (partial Fisher–Yates).
+                // N distinct random in-range targets (partial Fisher–Yates);
+                // "+% Enemies hit" adds integer targets per fire.
                 let mut pool = candidates.clone();
-                let shots = (n as usize).min(pool.len());
+                let shots = eff_targets(n).min(pool.len());
                 for k in 0..shots {
                     let j = k + s.rng_targeting.below((pool.len() - k) as u32) as usize;
                     pool.swap(k, j);
                     new_proj(s, pool[k], Fixed::ZERO);
+                }
+            }
+            Attack::BarrageSplash(n, r) => {
+                // The source's "Barrage (N) & Splash (R)": a Barrage whose
+                // projectiles each splash `r` at impact (splash resolution is
+                // the ordinary projectile-impact path).
+                let mut pool = candidates.clone();
+                let shots = eff_targets(n).min(pool.len());
+                for k in 0..shots {
+                    let j = k + s.rng_targeting.below((pool.len() - k) as u32) as usize;
+                    pool.swap(k, j);
+                    new_proj(s, pool[k], Fixed::from_int(r));
                 }
             }
             Attack::Area(r) => {
@@ -363,16 +412,21 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 }
                 any_instant_damage = true;
             }
-            Attack::Bounce(n) => {
-                // Random first target, then the N-1 nearest OTHER enemies to it.
+            Attack::Bounce(n) | Attack::BounceSplash(n, _) => {
+                // Random first target, then the N-1 nearest OTHER enemies to it
+                // ("+% Enemies hit" adds integer targets per fire).
                 let first = candidates[s.rng_targeting.below(candidates.len() as u32) as usize];
                 let origin = s.enemies[first].pos;
                 let mut order: Vec<usize> = (0..s.enemies.len()).filter(|&i| i != first).collect();
                 // Sort by (distance to origin, id) for a deterministic chain.
                 order.sort_by_key(|&i| (s.enemies[i].pos.dist_sq(origin).raw(), s.enemies[i].id.0));
                 let mut targets = vec![first];
-                targets.extend(order.into_iter().take((n as usize).saturating_sub(1)));
-                for ti in targets {
+                targets.extend(order.into_iter().take(eff_targets(n).saturating_sub(1)));
+                // Track who this attack already damaged so the secondary splash
+                // (BounceSplash) hits each enemy at most once per attack.
+                let mut struck = vec![false; s.enemies.len()];
+                for &ti in &targets {
+                    struck[ti] = true;
                     instant_damage += apply_weapon_hit(
                         &mut s.enemies[ti],
                         wdef.damage,
@@ -385,8 +439,80 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                         &mut accum,
                     );
                 }
+                // Secondary splash (the source's "Bounce (N) & Splash (R)"):
+                // each chained hit also splashes `r` at the struck enemy's
+                // position, damaging every OTHER enemy in that radius (chain
+                // targets and already-splashed enemies excluded — one hit per
+                // enemy per attack). Deterministic: chain order, then id order.
+                if let Attack::BounceSplash(_, r) = wdef.attack {
+                    let centers: Vec<Vec2> = targets.iter().map(|&ti| s.enemies[ti].pos).collect();
+                    let radius = Fixed::from_int(r);
+                    let r2 = radius.mul(radius);
+                    for center in centers {
+                        for (e, hit) in s.enemies.iter_mut().zip(struck.iter_mut()) {
+                            if *hit || center.dist_sq(e.pos) > r2 {
+                                continue;
+                            }
+                            *hit = true;
+                            instant_damage += apply_weapon_hit(
+                                e,
+                                wdef.damage,
+                                wdef.damage_type,
+                                wmult,
+                                cond,
+                                &on_hit,
+                                ability,
+                                tank_pos,
+                                &mut accum,
+                            );
+                        }
+                    }
+                }
                 any_instant_damage = true;
             }
+            Attack::WaveRotating(extra, clockwise) => {
+                // ROTATING wave: firing deals no instant damage — it starts a
+                // sweep that rotates one sector per tick over the full circle
+                // (`tick_sweeps`), hitting enemies as the sector passes them.
+                let id = s.alloc_entity_id();
+                s.sweeps.push(WaveSweep {
+                    id,
+                    weapon_kind: def,
+                    damage: baked,
+                    damage_type: wdef.damage_type,
+                    radius: range + Fixed::from_int(extra),
+                    angle_bam: 0,
+                    step_bam: WAVE_SWEEP_STEP,
+                    ticks_left: WAVE_SWEEP_TICKS,
+                    clockwise,
+                    on_hit,
+                    ability,
+                });
+            }
+        }
+
+        // PER-ATTACK abilities (Healthstone / Holy Bolt): executed once per
+        // FIRE — an enemy was in range, so the weapon really attacked —
+        // independent of how many enemies the attack ends up hitting.
+        match ability {
+            WeaponAbility::HealOnAttack { amount } => {
+                if !s.dead {
+                    s.tank.heal(amount);
+                }
+            }
+            WeaponAbility::RegenOnAttack {
+                regen_milli_per_s,
+                instant,
+            } => {
+                // +m/1000 HP-regen per SECOND, permanent: converted to the
+                // per-tick fixed-point bonus (paid out via `regen_carry`).
+                s.tank.regen_bonus_per_tick +=
+                    Fixed::from_ratio(regen_milli_per_s, 1000 * crate::TICK_HZ as i64);
+                if !s.dead {
+                    s.tank.heal(instant);
+                }
+            }
+            _ => {}
         }
 
         // Apply this weapon's deferred ability effects (life/mana drain heal,
@@ -394,12 +520,19 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // resolve at impact) and for ability-less weapons.
         accum.flush(s, ability, wdef.damage_type);
 
-        // Effective cooldown is reduced by the attack-speed modifier.
-        let asm = s.modifiers.attack_speed_mult();
-        let cd = Fixed::from_int(wdef.cooldown_ticks as i64)
-            .div(asm)
-            .floor_to_int()
-            .max(1) as u32;
+        // Effective cooldown is reduced by the attack-speed modifier — EXCEPT
+        // for `fixed_rate` weapons (the source's "Attack Cooldown: N/A" class:
+        // Frost/Fire waves fire on a fixed internal period that +% Attack
+        // Speed must not touch, `docs/01 §1.3`).
+        let cd = if wdef.fixed_rate {
+            wdef.cooldown_ticks.max(1)
+        } else {
+            let asm = s.modifiers.attack_speed_mult();
+            Fixed::from_int(wdef.cooldown_ticks as i64)
+                .div(asm)
+                .floor_to_int()
+                .max(1) as u32
+        };
         s.weapons[wi].next_fire_tick = s.tick + cd;
     }
 
@@ -417,6 +550,87 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
     if any_instant_damage {
         crate::status::reap_dead(s);
     }
+}
+
+/// Rotating-wave sweep tuning: one full revolution over `WAVE_SWEEP_TICKS`
+/// ticks (~1 s @ 30 Hz). The per-tick sector divides the 65536-unit binary
+/// circle exactly, so consecutive sectors tile it — a full sweep hits each
+/// stationary enemy exactly once.
+pub(crate) const WAVE_SWEEP_TICKS: u32 = 32;
+pub(crate) const WAVE_SWEEP_STEP: u16 = (65536 / WAVE_SWEEP_TICKS) as u16; // 2048
+
+/// Phase 5b: advance rotating-wave sweeps (`Attack::WaveRotating`). Each active
+/// sweep covers ONE angular sector this tick — `[angle, angle+step)`
+/// counterclockwise or `[angle-step, angle)` clockwise, in binary-angle units —
+/// and hits every enemy within its radius whose bearing from the tank falls in
+/// the sector (`Vec2::bam_angle`). Damage/on-hit were baked at fire time (like
+/// projectiles); hits route through `apply_weapon_hit` (armor matrix,
+/// vulnerability, conditionals, ability) and the shared death path, so bounty
+/// and Fire explosions still fire. Deterministic: integer angle math, stable
+/// id order, no RNG.
+pub(crate) fn tick_sweeps(s: &mut ArenaState) {
+    if s.sweeps.is_empty() {
+        return;
+    }
+    let cond = CondDamage::of(s);
+    let tank_pos = s.tank.pos;
+    let mut total: i64 = 0;
+    let mut any = false;
+    let mut sweeps = std::mem::take(&mut s.sweeps);
+    for sw in sweeps.iter_mut() {
+        if sw.ticks_left == 0 {
+            continue;
+        }
+        // This tick's sector start; clockwise sweeps rotate to decreasing
+        // angles (u16 wrapping arithmetic handles the 0/65536 seam).
+        let (sector_lo, next_angle) = if sw.clockwise {
+            let lo = sw.angle_bam.wrapping_sub(sw.step_bam);
+            (lo, lo)
+        } else {
+            (sw.angle_bam, sw.angle_bam.wrapping_add(sw.step_bam))
+        };
+        let r2 = sw.radius.mul(sw.radius);
+        let mut accum = AbilityAccum::default();
+        // `s.enemies` is id-ordered ⇒ this pass is run-to-run stable.
+        for e in s.enemies.iter_mut() {
+            if tank_pos.dist_sq(e.pos) > r2 {
+                continue;
+            }
+            let bearing = Vec2::new(e.pos.x - tank_pos.x, e.pos.y - tank_pos.y).bam_angle();
+            if bearing.wrapping_sub(sector_lo) < sw.step_bam {
+                total += apply_weapon_hit(
+                    e,
+                    sw.damage,
+                    sw.damage_type,
+                    Fixed::ONE, // weapon multiplier was baked at fire time
+                    cond,
+                    &sw.on_hit,
+                    sw.ability,
+                    tank_pos,
+                    &mut accum,
+                );
+                any = true;
+            }
+        }
+        accum.flush(s, sw.ability, sw.damage_type);
+        sw.angle_bam = next_angle;
+        sw.ticks_left -= 1;
+    }
+    sweeps.retain(|sw| sw.ticks_left > 0);
+    s.sweeps = sweeps;
+    s.record_player_damage(total);
+    if any {
+        crate::status::reap_dead(s);
+    }
+}
+
+/// Roll the "obscured" miss chance for an enemy attack on the tank (the Ale
+/// Launcher debuff): with `obscure_pct`% probability the attack misses
+/// outright. Draws from `rng_proc` ONLY when the status is present, so the
+/// baseline RNG cursor is untouched for un-obscured enemies (the same
+/// state-dependent-draw discipline as the bounty proc).
+fn attack_misses(s: &mut ArenaState, st: &EnemyStatus) -> bool {
+    st.obscure_pct > 0 && (s.rng_proc.below(100) as i64) < st.obscure_pct as i64
 }
 
 /// Phase 5: move each projectile toward its target by `speed`
@@ -564,6 +778,8 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
     // (`content::enemy_hp_mult`): late game gets deadlier, not just tankier
     // (`docs/05`; mirrors the spawn-time HP scaling in `waves::spawn`).
     let dmg_mult = content::enemy_hp_mult(s.tick);
+    // "+% Frost … slow strength" scales the per-stack Frost slow.
+    let frost_mult = s.modifiers.frost_strength_mult;
 
     for mut e in std::mem::take(&mut s.enemies) {
         // Stunned / frozen enemies can't move this tick.
@@ -573,7 +789,8 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
         }
         let edef = &content::ENEMIES[e.def as usize];
         // Movement is slowed by Frost stacks.
-        let speed = Fixed::from_int(edef.move_speed).mul(crate::status::move_speed_mult(&e));
+        let speed =
+            Fixed::from_int(edef.move_speed).mul(crate::status::move_speed_mult(&e, frost_mult));
         let contact = dmg_mult.scale_i64(edef.contact_damage);
         let moved = e.pos.step_toward(tank_pos, speed);
         if moved == tank_pos {
@@ -589,15 +806,31 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
                 // function of `s.tick` (no wall-clock, no new RNG); dodge/armor/shield
                 // are still honored per hit inside `hit_tank`.
                 e.pos = moved; // pin at the tank
-                if s.tick.is_multiple_of(content::BOSS_CONTACT_CADENCE) {
-                    crate::defense::hit_tank(s, contact);
+                if s.tick.is_multiple_of(content::BOSS_CONTACT_CADENCE)
+                    && !attack_misses(s, &e.status)
+                {
+                    let landed = crate::defense::hit_tank(s, contact);
+                    if landed && !e.status.hit_tank {
+                        // First landed hit on the tank: arm the first-hit
+                        // bonus Spikes for this tick's retaliation.
+                        e.status.hit_tank = true;
+                        s.spikes_first_bonus_this_tick += s.tank.spikes_first_hit;
+                    }
                 }
                 survivors.push(e);
             } else {
                 // Normal enemy: self-destruct on contact (no bounty), one hit, gone.
                 // Render event: a DESPAWN, not a kill (`docs/09 §9.3`) — no death FX.
+                // The "obscured" debuff (Ale Launcher) can make the contact hit
+                // MISS (the enemy still despawns).
                 s.emit(SimEvent::EnemyDespawned { id: e.id.0 });
-                crate::defense::hit_tank(s, contact);
+                if !attack_misses(s, &e.status) {
+                    let landed = crate::defense::hit_tank(s, contact);
+                    if landed && !e.status.hit_tank {
+                        // A contact attacker's first (and only) landed hit.
+                        s.spikes_first_bonus_this_tick += s.tank.spikes_first_hit;
+                    }
+                }
             }
         } else {
             e.pos = moved;
@@ -822,8 +1055,8 @@ pub(crate) fn enemy_ranged_attacks(s: &mut ArenaState) {
 
     // Resolve which enemies fire (and for how much) without holding an enemy
     // borrow across the `defense::hit_tank` mutation. Stable id order.
-    let mut hits: Vec<i64> = Vec::new();
-    for e in s.enemies.iter() {
+    let mut hits: Vec<(usize, i64)> = Vec::new();
+    for (ei, e) in s.enemies.iter().enumerate() {
         // Stunned / frozen enemies can't attack this tick.
         if crate::status::is_immobile(e) {
             continue;
@@ -851,12 +1084,23 @@ pub(crate) fn enemy_ranged_attacks(s: &mut ArenaState) {
             // are applied inside `defense::hit_tank`. `damage_type` is reserved
             // for future tank armor-class matrixing and render telemetry.
             let raw = dmg_mult.scale_i64(damage);
-            hits.push(raw);
+            hits.push((ei, raw));
         }
     }
 
-    for raw in hits {
-        crate::defense::hit_tank(s, raw);
+    for (ei, raw) in hits {
+        // The "obscured" debuff (Ale Launcher) can make this attack miss.
+        let st = s.enemies[ei].status;
+        if attack_misses(s, &st) {
+            continue;
+        }
+        let landed = crate::defense::hit_tank(s, raw);
+        if landed && !s.enemies[ei].status.hit_tank {
+            // First landed hit on the tank by this enemy: mark it and arm the
+            // first-hit bonus Spikes for this tick's retaliation.
+            s.enemies[ei].status.hit_tank = true;
+            s.spikes_first_bonus_this_tick += s.tank.spikes_first_hit;
+        }
     }
 }
 
@@ -2062,7 +2306,7 @@ mod tests {
         let e = &s.enemies[0];
         assert_eq!(e.status.vuln_stacks, 10, "10 vulnerability stacks applied");
         // +10% damage taken (10 stacks × 1%); fixed-point floors ≈1099/1000.
-        let v = crate::status::vulnerability_mult(e).scale_i64(1000);
+        let v = crate::status::vulnerability_mult(e, 0, Fixed::ONE).scale_i64(1000);
         assert!(
             (1099..=1100).contains(&v),
             "vuln stacks raise damage taken ≈+10%, got {v}"
@@ -2361,6 +2605,483 @@ mod tests {
             "minion movement/attacks are deterministic"
         );
         assert_eq!(a.enemies, b.enemies);
+        assert_eq!(crate::checksum(&a), crate::checksum(&b));
+    }
+
+    // ---- EXPANSION E3: fidelity mechanics ------------------------------------
+
+    #[test]
+    fn bounce_splash_hits_chain_then_splashes_neighbors_once_each() {
+        // Splitting Glaive (86): BounceSplash(4, 150). Chain targets take one
+        // hit; bystanders within 150 of a chained enemy take exactly one hit
+        // too (no double-dipping across overlapping splashes).
+        let mut s = blank_state();
+        only_weapon(&mut s, "Splitting Glaive");
+        let wd = &content::WEAPONS[weapon_idx("Splitting Glaive") as usize];
+        assert!(matches!(wd.attack, Attack::BounceSplash(4, 150)));
+        // Four chain candidates clustered on +x, plus a bystander 100 from two
+        // of them (inside BOTH splashes), plus one far outside everything.
+        for i in 0..4 {
+            mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(200 + i * 40), Fixed::ZERO),
+            );
+        }
+        let bystander = mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(240), Fixed::from_int(100)),
+        );
+        let far = mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(2000), Fixed::ZERO),
+        );
+        fire_weapons(&mut s);
+        // Piercing 150 vs armor 0 → 300 per hit. Chain = 4 targets… but the
+        // bystander may itself be chained; assert damage bookkeeping instead:
+        // every damaged enemy took EXACTLY one hit (300), and the far one none.
+        let mut damaged = 0;
+        for e in &s.enemies {
+            let lost = 1_000_000 - e.hp;
+            if e.id == far {
+                assert_eq!(lost, 0, "out-of-range enemy untouched");
+            } else {
+                assert_eq!(lost, 300, "each enemy hit at most once per attack");
+                damaged += 1;
+            }
+        }
+        assert_eq!(damaged, 5, "4 chained + 1 splashed bystander");
+        let _ = bystander;
+    }
+
+    #[test]
+    fn barrage_splash_projectiles_carry_the_secondary_splash() {
+        // Siege Volley (87): BarrageSplash(8, 300) — a Barrage whose
+        // projectiles each splash 300 at impact.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Siege Volley");
+        for i in 0..3 {
+            mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(300 + i * 50), Fixed::ZERO),
+            );
+        }
+        fire_weapons(&mut s);
+        assert_eq!(s.projectiles.len(), 3, "capped at available targets");
+        for p in &s.projectiles {
+            assert_eq!(
+                p.splash_radius,
+                Fixed::from_int(300),
+                "each barrage projectile carries the splash"
+            );
+        }
+    }
+
+    #[test]
+    fn bounce_barrage_pct_adds_integer_targets_per_fire() {
+        // +50% Enemies hit: Ballista Barrage(4) → 6 shots; Moon Glaive
+        // Bounce(4) → 6 chained targets.
+        let mut s = blank_state();
+        s.modifiers.bounce_barrage_pct = Fixed::from_ratio(1, 2);
+        s.weapons.clear();
+        give_weapon(&mut s, 6); // Ballista Barrage(4)
+        for i in 0..10 {
+            mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(200 + i * 30), Fixed::ZERO),
+            );
+        }
+        fire_weapons(&mut s);
+        assert_eq!(s.projectiles.len(), 6, "4 + floor(4×50%) = 6 shots");
+
+        let mut s2 = blank_state();
+        s2.modifiers.bounce_barrage_pct = Fixed::from_ratio(1, 2);
+        s2.weapons.clear();
+        give_weapon(&mut s2, 9); // Moon Glaive Bounce(4)
+        for i in 0..10 {
+            mk_enemy(
+                &mut s2,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(200 + i * 30), Fixed::ZERO),
+            );
+        }
+        fire_weapons(&mut s2);
+        let hit = s2.enemies.iter().filter(|e| e.hp < 1_000_000).count();
+        assert_eq!(hit, 6, "bounce chain extended to 6 targets");
+
+        // Splash / single-target weapons are unaffected by the modifier.
+        let mut s3 = blank_state();
+        s3.modifiers.bounce_barrage_pct = Fixed::from_ratio(1, 2);
+        s3.weapons.clear();
+        give_weapon(&mut s3, 0); // Bow
+        mk_enemy(
+            &mut s3,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(200), Fixed::ZERO),
+        );
+        fire_weapons(&mut s3);
+        assert_eq!(s3.projectiles.len(), 1, "single-target unaffected");
+    }
+
+    #[test]
+    fn fixed_rate_weapon_ignores_attack_speed() {
+        // Maelstrom (91) is fixed_rate (the source's "Attack Cooldown: N/A"
+        // class): +100% attack speed must NOT shorten its cooldown, while a
+        // normal weapon's cooldown halves.
+        let mut s = blank_state();
+        s.modifiers.attack_speed = Fixed::from_ratio(1, 1); // +100% ⇒ ×2
+        only_weapon(&mut s, "Maelstrom");
+        let cd = content::WEAPONS[weapon_idx("Maelstrom") as usize].cooldown_ticks;
+        mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
+        fire_weapons(&mut s);
+        assert_eq!(
+            s.weapons[0].next_fire_tick, cd,
+            "fixed-rate cooldown unaffected by +% Attack Speed"
+        );
+        // Control: the Bow (cd 30) IS halved by the same modifier.
+        let mut s2 = blank_state();
+        s2.modifiers.attack_speed = Fixed::from_ratio(1, 1);
+        only_weapon(&mut s2, "Bow");
+        mk_enemy(
+            &mut s2,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
+        fire_weapons(&mut s2);
+        assert_eq!(s2.weapons[0].next_fire_tick, 15, "normal weapon halved");
+    }
+
+    #[test]
+    fn round_burst_weapon_fires_only_in_its_round_start_window() {
+        // Monsoon (88): active for the first 300 ticks of each round (firing on
+        // its 30-tick period), asleep for the rest of the round.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Monsoon");
+        let wd = &content::WEAPONS[weapon_idx("Monsoon") as usize];
+        assert_eq!(wd.round_burst_ticks, 300);
+        mk_enemy(
+            &mut s,
+            0,
+            100_000_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
+
+        // Inside the window (tick 0): fires (instant Area damage).
+        s.tick = 0;
+        fire_weapons(&mut s);
+        let hp_after_first = s.enemies[0].hp;
+        assert!(hp_after_first < 100_000_000, "fired at the round start");
+        assert_eq!(s.weapons[0].next_fire_tick, 30, "own cooldown armed");
+
+        // Outside the window (round-relative tick ≥ 300): sleeps — no fire,
+        // no cooldown advance.
+        s.tick = 400;
+        s.weapons[0].next_fire_tick = 0;
+        fire_weapons(&mut s);
+        assert_eq!(s.enemies[0].hp, hp_after_first, "asleep mid-round");
+        assert_eq!(
+            s.weapons[0].next_fire_tick, 0,
+            "cooldown untouched while asleep"
+        );
+
+        // Next round's window (round-relative tick < 300): fires again.
+        s.tick = crate::ROUND_TICKS + 30;
+        fire_weapons(&mut s);
+        assert!(
+            s.enemies[0].hp < hp_after_first,
+            "woke at the next round start"
+        );
+    }
+
+    #[test]
+    fn healthstone_grants_permanent_regen_per_attack() {
+        // Healthstone (89): each FIRE adds +0.2/s permanent regen (fixed-point)
+        // and heals 60 instantly — once per attack, not per enemy hit.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Healthstone");
+        s.tank.max_hp = 1_000_000;
+        s.tank.hp = 1000;
+        mk_enemy(
+            &mut s,
+            0,
+            100_000_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
+        assert_eq!(s.tank.regen_bonus_per_tick, Fixed::ZERO);
+        fire_weapons(&mut s);
+        let per_tick = Fixed::from_ratio(200, 30_000); // 0.2/s at 30 Hz
+        assert_eq!(
+            s.tank.regen_bonus_per_tick, per_tick,
+            "one attack ⇒ one grant"
+        );
+        assert_eq!(s.tank.hp, 1060, "instant 60 heal per attack");
+        // Second fire stacks the permanent bonus.
+        s.tick = 30;
+        fire_weapons(&mut s);
+        assert_eq!(s.tank.regen_bonus_per_tick, per_tick + per_tick);
+    }
+
+    #[test]
+    fn holy_bolt_heals_once_per_attack_not_per_enemy() {
+        // Holy Bolt (90): SingleTarget HealOnAttack(80) — the heal lands at
+        // fire time, once, regardless of the (single) projectile's fate.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Holy Bolt");
+        s.tank.max_hp = 1_000_000;
+        s.tank.hp = 1000;
+        for i in 0..3 {
+            mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(200 + i * 40), Fixed::ZERO),
+            );
+        }
+        fire_weapons(&mut s);
+        assert_eq!(
+            s.tank.hp, 1080,
+            "healed 80 once per attack (3 enemies in range)"
+        );
+    }
+
+    #[test]
+    fn obscure_ability_applies_miss_chance_status_and_it_can_miss() {
+        // The Ale Launcher mechanic: Obscure { pct, ticks } on a damaged enemy;
+        // a 100%-obscured ranged attacker then always misses the tank.
+        let mut s = blank_state();
+        s.weapons.clear();
+        let fb = enemy_def_idx("Spicy");
+        let edef = &content::ENEMIES[fb as usize];
+        let (range, cd) = match edef.ability {
+            content::EnemyAbility::RangedAttack {
+                range,
+                cooldown_ticks,
+                ..
+            } => (range, cooldown_ticks),
+            _ => unreachable!(),
+        };
+        let pos = Vec2::new(Fixed::from_int(range - 50), Fixed::ZERO);
+        let id = mk_enemy(&mut s, fb, 100_000_000, pos);
+        // Apply the obscure debuff directly through the hit pipeline.
+        let cond = CondDamage::of(&s);
+        let mut accum = AbilityAccum::default();
+        apply_weapon_hit(
+            &mut s.enemies[0],
+            0,
+            content::DMG_SIEGE,
+            Fixed::ONE,
+            cond,
+            &content::StatusOnHit::NONE,
+            WeaponAbility::Obscure {
+                pct: 100,
+                ticks: 90,
+            },
+            Vec2::ZERO,
+            &mut accum,
+        );
+        assert_eq!(s.enemies[0].status.obscure_pct, 100);
+        assert_eq!(s.enemies[0].status.obscure_ticks, 90);
+        // On its firing phase, the 100%-obscured attack always misses.
+        s.tick = (cd - (id.0 % cd)) % cd;
+        let hp0 = s.tank.hp;
+        enemy_ranged_attacks(&mut s);
+        assert_eq!(s.tank.hp, hp0, "100% obscured ⇒ the attack missed");
+        assert!(
+            !s.enemies[0].status.hit_tank,
+            "missed attack is not a landed hit"
+        );
+
+        // Control: with the debuff expired, the same attack lands.
+        s.enemies[0].status.obscure_pct = 0;
+        s.enemies[0].status.obscure_ticks = 0;
+        enemy_ranged_attacks(&mut s);
+        assert!(s.tank.hp < hp0, "un-obscured attack lands");
+        assert!(s.enemies[0].status.hit_tank, "landed hit recorded");
+    }
+
+    #[test]
+    fn typed_vulnerability_stacks_apply_only_to_matching_damage_type() {
+        // Thorn-style "+5% Normal damage taken, stacking": 5 Normal-typed
+        // stacks raise Normal hits by ~5% and leave Siege hits untouched;
+        // generic vuln stacks compose additively on top.
+        let mut e = Enemy::new(EntityId(1), 0, 1_000_000, Vec2::ZERO);
+        let cond = CondDamage::of(&blank_state());
+        let mut accum = AbilityAccum::default();
+        apply_weapon_hit(
+            &mut e,
+            0,
+            content::DMG_NORMAL,
+            Fixed::ONE,
+            cond,
+            &content::StatusOnHit::NONE,
+            WeaponAbility::VulnTypeOnHit {
+                dmg_type: content::DMG_NORMAL,
+                stacks: 5,
+            },
+            Vec2::ZERO,
+            &mut accum,
+        );
+        assert_eq!(e.status.vuln_by_type[content::DMG_NORMAL as usize], 5);
+        let normal = crate::status::vulnerability_mult(&e, content::DMG_NORMAL, Fixed::ONE)
+            .scale_i64(10_000);
+        assert!(
+            (10_499..=10_500).contains(&normal),
+            "+5% vs Normal, got {normal}"
+        );
+        let siege = crate::status::vulnerability_mult(&e, content::DMG_SIEGE, Fixed::ONE);
+        assert_eq!(siege, Fixed::ONE, "other damage types unaffected");
+        // Generic vuln composes additively with the typed stacks.
+        e.status.vuln_stacks = 10;
+        let both = crate::status::vulnerability_mult(&e, content::DMG_NORMAL, Fixed::ONE)
+            .scale_i64(10_000);
+        assert!(
+            (11_499..=11_500).contains(&both),
+            "5% typed + 10% generic, got {both}"
+        );
+    }
+
+    #[test]
+    fn rotating_wave_starts_a_sweep_and_hits_each_enemy_once_per_revolution() {
+        // Maelstrom (91): WaveRotating(150, ccw). Firing spawns a sweep (no
+        // instant damage); over a full revolution every in-range enemy is hit
+        // exactly once, wherever it stands on the circle.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Maelstrom");
+        // Enemies at four bearings, all within radius 450 (range 300 + 150).
+        let positions = [(200i64, 0i64), (0, 200), (-200, 0), (150, -150)];
+        for (x, y) in positions {
+            mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(x), Fixed::from_int(y)),
+            );
+        }
+        let far = mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(1000), Fixed::ZERO),
+        );
+        fire_weapons(&mut s);
+        assert_eq!(s.sweeps.len(), 1, "firing spawned one sweep");
+        assert!(
+            s.enemies.iter().all(|e| e.hp == 1_000_000),
+            "no instant damage on fire"
+        );
+        for _ in 0..WAVE_SWEEP_TICKS {
+            tick_sweeps(&mut s);
+        }
+        assert!(s.sweeps.is_empty(), "sweep expired after a full revolution");
+        // Magic 300 vs armor 0 = 300 per hit; each in-range enemy hit ONCE.
+        for e in &s.enemies {
+            if e.id == far {
+                assert_eq!(e.hp, 1_000_000, "outside the radius: untouched");
+            } else {
+                assert_eq!(1_000_000 - e.hp, 300, "hit exactly once per revolution");
+                assert_eq!(e.status.frost_stacks, 3, "sweep applied its on-hit frost");
+            }
+        }
+    }
+
+    #[test]
+    fn rotating_wave_direction_orders_the_hits() {
+        // A ccw sweep starting at angle 0 reaches +y (bam 16384) BEFORE -y
+        // (bam 49152); a cw sweep does the reverse. Directions are honored
+        // deterministically.
+        let run = |clockwise: bool| -> (u32, u32) {
+            let mut s = blank_state();
+            s.weapons.clear();
+            let id = s.alloc_entity_id();
+            s.sweeps.push(WaveSweep {
+                id,
+                weapon_kind: 0,
+                damage: 100,
+                damage_type: content::DMG_MAGIC,
+                radius: Fixed::from_int(450),
+                angle_bam: 0,
+                step_bam: WAVE_SWEEP_STEP,
+                ticks_left: WAVE_SWEEP_TICKS,
+                clockwise,
+                on_hit: content::StatusOnHit::NONE,
+                ability: WeaponAbility::None,
+            });
+            let up = mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::ZERO, Fixed::from_int(200)),
+            );
+            let down = mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::ZERO, Fixed::from_int(-200)),
+            );
+            let mut up_tick = 0u32;
+            let mut down_tick = 0u32;
+            for t in 1..=WAVE_SWEEP_TICKS {
+                tick_sweeps(&mut s);
+                let hp = |eid| s.enemies.iter().find(|e| e.id == eid).unwrap().hp;
+                if up_tick == 0 && hp(up) < 1_000_000 {
+                    up_tick = t;
+                }
+                if down_tick == 0 && hp(down) < 1_000_000 {
+                    down_tick = t;
+                }
+            }
+            assert!(
+                up_tick > 0 && down_tick > 0,
+                "both enemies hit over a revolution"
+            );
+            (up_tick, down_tick)
+        };
+        let (ccw_up, ccw_down) = run(false);
+        assert!(ccw_up < ccw_down, "ccw reaches +y before -y");
+        let (cw_up, cw_down) = run(true);
+        assert!(cw_down < cw_up, "cw reaches -y before +y");
+    }
+
+    #[test]
+    fn sweeps_are_deterministic_across_runs() {
+        let build = || {
+            let mut s = blank_state();
+            only_weapon(&mut s, "Maelstrom");
+            for i in 0..6 {
+                mk_enemy(
+                    &mut s,
+                    0,
+                    500,
+                    Vec2::new(Fixed::from_int(100 + i * 40), Fixed::from_int(i * 25)),
+                );
+            }
+            fire_weapons(&mut s);
+            for _ in 0..40 {
+                tick_sweeps(&mut s);
+            }
+            s
+        };
+        let a = build();
+        let b = build();
+        assert_eq!(a.enemies, b.enemies);
+        assert_eq!(a.sweeps, b.sweeps);
         assert_eq!(crate::checksum(&a), crate::checksum(&b));
     }
 

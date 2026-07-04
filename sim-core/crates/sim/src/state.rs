@@ -46,6 +46,36 @@ impl Vec2 {
         }
     }
 
+    /// Binary-angle (BAM) heading of this vector: 0..=65535 units per full
+    /// turn, 0 along +x, counterclockwise-positive (+y = 16384). Deterministic
+    /// pure-integer octant approximation (piecewise-linear `atan`, monotonic
+    /// within each octant — exact at the octant boundaries, ≤ ~4° off between
+    /// them, which is plenty for sweep-sector membership). The zero vector maps
+    /// to 0. Intermediate math is widened to i128 so extreme fixed-point
+    /// magnitudes cannot overflow.
+    pub fn bam_angle(self) -> u16 {
+        let x = self.x.raw();
+        let y = self.y.raw();
+        if x == 0 && y == 0 {
+            return 0;
+        }
+        let ax = (x as i128).abs();
+        let ay = (y as i128).abs();
+        // Quarter-turn angle q in [0, 16384]: linear blend of the two octants.
+        let q: i128 = if ax >= ay {
+            (ay << 13) / ax // 0..=8192 (|y| <= |x|)
+        } else {
+            16384 - ((ax << 13) / ay) // 8192..=16384
+        };
+        let ang: i128 = match (x >= 0, y >= 0) {
+            (true, true) => q,
+            (false, true) => 32768 - q,
+            (false, false) => 32768 + q,
+            (true, false) => 65536 - q,
+        };
+        (ang & 0xFFFF) as u16
+    }
+
     /// Move `self` directly AWAY from `from` by `step` units (Knockback). If
     /// `self == from` (degenerate, e.g. enemy exactly on the tank) the point is
     /// unchanged. Fully deterministic (integer sqrt).
@@ -146,6 +176,34 @@ pub struct Tank {
     pub aura_poison_dps: i64,
     pub aura_poison_ticks: u32,
     pub aura_tick: u32,
+
+    // ---- EXPANSION E3 (fidelity-mechanics pass) -------------------------------
+    /// Permanent HP-regen accumulated per Healthstone-class ATTACK (the source's
+    /// "+0.2 permanent HP Regen" — sub-integer, so fixed-point). Added on top of
+    /// `hp_regen_per_tick` each tick, paid out through `regen_carry`. Starts ZERO.
+    pub regen_bonus_per_tick: Fixed,
+    /// Fractional carry for `regen_bonus_per_tick` (the sub-1-HP remainder kept
+    /// between ticks so no regen is lost to integer flooring). Authoritative —
+    /// persists across ticks, feeds the checksum/snapshot. Starts ZERO.
+    pub regen_carry: Fixed,
+    /// Deep Freeze opt-in (source upgrade): only while `true` does reaching
+    /// `FROST_MAX_STACKS` freeze an enemy; otherwise stacks cap at max slow.
+    /// Granted by `ModEffect::GrantDeepFreeze`. Starts `false`.
+    pub deep_freeze: bool,
+    /// Frost Armor: frost stacks applied to enemies in Spikes range when the
+    /// tank is hit (`defense::spikes`; fires even with 0 Spikes damage). 0 = off.
+    pub retaliate_frost: u8,
+    /// Flaming Armor: fire stacks applied on the same retaliation. 0 = off.
+    pub retaliate_fire: u16,
+    /// Flat bonus Spikes damage added to the retaliation for an enemy's FIRST
+    /// landed hit on the tank (per enemy; see `EnemyStatus::hit_tank`). 0 = off.
+    pub spikes_first_hit: i64,
+    /// Deflection: fraction of current Spikes damage granted as flat damage
+    /// reduction per incoming hit, capped at 50% of the hit. Starts ZERO.
+    pub spikes_dr_rate: Fixed,
+    /// Damage-taken→Spikes conversion: fraction of the damage the tank took
+    /// this tick added as flat Spikes damage to the retaliation. Starts ZERO.
+    pub dmg_taken_to_spikes: Fixed,
 }
 
 impl Tank {
@@ -201,6 +259,20 @@ pub struct EnemyStatus {
     /// payoff). While `> 0` the enemy is immobile AND takes +50% damage; decays
     /// once per tick and clears with no residual effect.
     pub freeze_ticks: u32,
+    /// Obscured (Ale Launcher): while `obscure_ticks > 0`, this enemy's attacks
+    /// on the tank miss with `obscure_pct`% probability (rolled on `rng_proc`).
+    /// Strongest pct wins; duration takes the longer remaining; pct clears on
+    /// expiry.
+    pub obscure_pct: u16,
+    pub obscure_ticks: u32,
+    /// TYPED vulnerability stacks (each +1% damage taken, applying only to hits
+    /// of the matching damage type 0..=4) — from `VulnTypeOnHit` weapons (Thorn
+    /// / Liquid Fire drench). Composes additively with the generic
+    /// `vuln_stacks`.
+    pub vuln_by_type: [u16; 5],
+    /// Whether this enemy has ever LANDED a hit on the tank (drives the
+    /// first-hit bonus Spikes, `Tank::spikes_first_hit`).
+    pub hit_tank: bool,
 }
 
 /// A periodic aura the tank emits: every `interval_ticks` it adds `magnitude`
@@ -253,6 +325,38 @@ pub struct Hazard {
     pub radius: i64,
     /// Remaining ticks before the hazard expires.
     pub ticks_left: u32,
+}
+
+/// An active ROTATING-WAVE sweep (from `Attack::WaveRotating`): fired once,
+/// then each tick it advances one angular sector (`step_bam` binary-angle
+/// units, 65536 = full turn) around the tank and hits every enemy inside
+/// `radius` whose angle falls in the sector — so the wave visibly "rotates"
+/// across the board over `ticks_left` ticks, hitting each enemy as it passes.
+/// Fully deterministic: integer binary-angle math (`Vec2::bam_angle`), stable
+/// id order, no RNG. Damage/on-hit are baked at fire time (like projectiles).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct WaveSweep {
+    pub id: EntityId,
+    /// Catalog index of the firing weapon (render sprite selection).
+    pub weapon_kind: u16,
+    /// Baked damage (weapon multiplier resolved at fire time).
+    pub damage: i64,
+    pub damage_type: u8,
+    /// Sweep reach from the tank (`range + extra`).
+    pub radius: Fixed,
+    /// Current sector start, in binary-angle units (0..=65535 = full turn).
+    pub angle_bam: u16,
+    /// Sector swept per tick (binary-angle units; divides 65536 so the sectors
+    /// tile the circle exactly — each enemy is hit once per revolution).
+    pub step_bam: u16,
+    /// Remaining sweep ticks; the sweep expires at 0.
+    pub ticks_left: u32,
+    /// Rotation direction (`true` = clockwise / decreasing angle).
+    pub clockwise: bool,
+    /// Baked on-hit status (poison/frost/fire/stun, pre-scaled at fire time).
+    pub on_hit: content::StatusOnHit,
+    /// Signature ability executed per enemy the sweep hits.
+    pub ability: content::WeaponAbility,
 }
 
 /// A temporary ALLY summoned by a weapon (a raised Larva /
@@ -490,6 +594,27 @@ pub struct Modifiers {
     /// at fire time it is added to the global additive iff `tank.mana_shield > 0`
     /// (the offensive mirror of `tank.shield_active_dr`). Starts `ZERO`.
     pub shield_active_dmg: Fixed,
+    // ---- EXPANSION E3 (fidelity-mechanics pass) -------------------------------
+    /// Multiplier on Frost slow strength (the source's "+% Frost damage and slow
+    /// strength"). Scales the per-stack slow in `status::move_speed_mult`.
+    /// Starts `ONE`; accumulates additively.
+    pub frost_strength_mult: Fixed,
+    /// Multiplier on Fire strength (the source's "+% Fire damage and damage
+    /// vulnerability"): scales the per-stack Fire vulnerability AND the Fire
+    /// death-explosion damage. Starts `ONE`; accumulates additively.
+    pub fire_dmg_mult: Fixed,
+    /// Multiplier on the Fire death-explosion damage ALONE (the source's
+    /// Combustion). Multiplies with `fire_dmg_mult` on the explosion (distinct
+    /// multiplicative sources). Starts `ONE`; accumulates additively.
+    pub fire_explosion_mult: Fixed,
+    /// "+% Enemies hit by Bounce and Barrage": per FIRE, those attacks gain
+    /// `floor(base_targets × pct)` extra targets (integer, per fire). Starts
+    /// `ZERO`; accumulates additively.
+    pub bounce_barrage_pct: Fixed,
+    /// GLOBAL additive damage bonus active only while `tank.hp ≥ 95% max_hp`
+    /// (the source's "+35% Damage when at 95% health or above"), resolved LIVE
+    /// at fire time via `dynamic_global_add`. Starts `ZERO`.
+    pub healthy_dmg: Fixed,
 }
 
 /// One self-scaling damage rule (see [`Modifiers::weapon_count_scaling`]).
@@ -630,6 +755,9 @@ pub struct ArenaState {
     /// Summoned allies (Larvae / Spores). Stored in id order; ticked in
     /// `combat::tick_minions`.
     pub minions: Vec<Minion>,
+    /// Active rotating-wave sweeps (`Attack::WaveRotating`). Stored in id
+    /// order; ticked in `combat::tick_sweeps`.
+    pub sweeps: Vec<WaveSweep>,
     pub economy: Economy,
     pub shop: ShopState,
     /// Aggregated damage/attack-speed modifiers consulted during combat.
@@ -649,6 +777,16 @@ pub struct ArenaState {
     /// cleared within the same tick (in `defense::shield_break_stun`), so it is
     /// always `false` at a tick boundary and excluded from the checksum/snapshot.
     pub shield_broke_this_tick: bool,
+    /// Total post-mitigation damage the tank took this tick (drives the
+    /// damage-taken→Spikes conversion). Transient like `tank_hit_this_tick`:
+    /// accumulated in `defense::hit_tank`, consumed and zeroed in
+    /// `defense::spikes` the same tick, so it is always 0 at a tick boundary
+    /// and excluded from the checksum/snapshot.
+    pub damage_taken_this_tick: i64,
+    /// Flat bonus Spikes damage earned this tick from enemies landing their
+    /// FIRST hit on the tank (`Tank::spikes_first_hit`). Transient — same
+    /// life-cycle as `damage_taken_this_tick`.
+    pub spikes_first_bonus_this_tick: i64,
     /// Transient sim→render event stream for THIS tick (`docs/09 §9.3`).
     /// Cleared at the top of every `step()`, appended during step phases,
     /// excluded from `checksum()`/snapshot (and from `ArenaState` equality —
@@ -737,12 +875,21 @@ impl ArenaState {
                 aura_poison_dps: 0,
                 aura_poison_ticks: 0,
                 aura_tick: 0,
+                regen_bonus_per_tick: Fixed::ZERO,
+                regen_carry: Fixed::ZERO,
+                deep_freeze: false,
+                retaliate_frost: 0,
+                retaliate_fire: 0,
+                spikes_first_hit: 0,
+                spikes_dr_rate: Fixed::ZERO,
+                dmg_taken_to_spikes: Fixed::ZERO,
             },
             weapons: Vec::new(),
             enemies: Vec::new(),
             projectiles: Vec::new(),
             hazards: Vec::new(),
             minions: Vec::new(),
+            sweeps: Vec::new(),
             economy: Economy {
                 gold: 500,
                 // 600 gold/s baseline (tuning); the UN-multiplied base — see
@@ -766,6 +913,8 @@ impl ArenaState {
             pending_perk: None,
             tank_hit_this_tick: false,
             shield_broke_this_tick: false,
+            damage_taken_this_tick: 0,
+            spikes_first_bonus_this_tick: 0,
             events: Events::default(),
             next_entity_id: 1,
             dead: false,

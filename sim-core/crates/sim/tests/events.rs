@@ -339,6 +339,9 @@ fn shield_break_emits_shield_broke_even_without_the_stun_perk() {
 #[test]
 fn deep_freeze_payoff_emits_freeze_proc() {
     let mut s = quiet_arena();
+    // E3 fidelity pass: the freeze payoff is OPT-IN (the source's Deep Freeze
+    // upgrade) — arm it, as a player who bought the modifier would be.
+    s.tank.deep_freeze = true;
     let eid = enemy_at(&mut s, 0, 1_000_000, 1000);
     s.enemies[0].status.frost_stacks = content::FROST_MAX_STACKS - 1;
     s.enemies[0].status.frost_ticks = 150;

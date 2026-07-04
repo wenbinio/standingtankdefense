@@ -76,6 +76,9 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     combat::fire_weapons(s);
     // 5. Projectiles move; on arrival apply (splash) damage; kills → pending_kills.
     combat::advance_projectiles(s);
+    // 5b. Rotating-wave sweeps advance one angular sector and hit enemies the
+    // sector passes (`Attack::WaveRotating`).
+    combat::tick_sweeps(s);
     // 6. Enemies advance toward the tank; contact damage on arrival.
     combat::move_enemies(s);
     // 6c. Ranged enemies (breathers/spitters/casters) attack the tank at standoff.
@@ -155,6 +158,17 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_i64(s.tank.aura_poison_dps);
     c.write_u32(s.tank.aura_poison_ticks);
     c.write_u32(s.tank.aura_tick);
+    // EXPANSION E3 fidelity-mechanics tank state (`regen_carry` is a dynamic
+    // per-tick counter and MUST be checksummed; the config fields ride along
+    // for the snapshot↔checksum mirror).
+    c.write_fixed(s.tank.regen_bonus_per_tick);
+    c.write_fixed(s.tank.regen_carry);
+    c.write_u32(s.tank.deep_freeze as u32);
+    c.write_u32(s.tank.retaliate_frost as u32);
+    c.write_u32(s.tank.retaliate_fire as u32);
+    c.write_i64(s.tank.spikes_first_hit);
+    c.write_fixed(s.tank.spikes_dr_rate);
+    c.write_fixed(s.tank.dmg_taken_to_spikes);
 
     c.write_i64(s.economy.gold);
     c.write_i64(s.economy.income_per_tick);
@@ -221,6 +235,11 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_fixed(s.modifiers.dmg_per_maxhp_rate);
     c.write_fixed(s.modifiers.dmg_per_bounty_rate);
     c.write_fixed(s.modifiers.shield_active_dmg);
+    c.write_fixed(s.modifiers.frost_strength_mult);
+    c.write_fixed(s.modifiers.fire_dmg_mult);
+    c.write_fixed(s.modifiers.fire_explosion_mult);
+    c.write_fixed(s.modifiers.bounce_barrage_pct);
+    c.write_fixed(s.modifiers.healthy_dmg);
 
     // Active time-scaling ramps (append-only order).
     c.write_u32(s.ramps.len() as u32);
@@ -285,6 +304,12 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.status.vuln_stacks as u32);
         c.write_u32(x.status.stun_ticks);
         c.write_u32(x.status.freeze_ticks);
+        c.write_u32(x.status.obscure_pct as u32);
+        c.write_u32(x.status.obscure_ticks);
+        for v in &x.status.vuln_by_type {
+            c.write_u32(*v as u32);
+        }
+        c.write_u32(x.status.hit_tank as u32);
     }
 
     // Projectiles in id order.
@@ -343,6 +368,32 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.damage_type as u32);
         c.write_u32(x.next_attack_tick);
         c.write_u32(x.expire_tick);
+    }
+
+    // Rotating-wave sweeps in id order.
+    let mut sw: Vec<&WaveSweep> = s.sweeps.iter().collect();
+    sw.sort_by_key(|x| x.id);
+    c.write_u32(sw.len() as u32);
+    for x in sw {
+        c.write_u32(x.id.0);
+        c.write_u32(x.weapon_kind as u32);
+        c.write_i64(x.damage);
+        c.write_u32(x.damage_type as u32);
+        c.write_fixed(x.radius);
+        c.write_u32(x.angle_bam as u32);
+        c.write_u32(x.step_bam as u32);
+        c.write_u32(x.ticks_left);
+        c.write_u32(x.clockwise as u32);
+        c.write_i64(x.on_hit.poison_dps);
+        c.write_u32(x.on_hit.poison_ticks);
+        c.write_u32(x.on_hit.frost_stacks as u32);
+        c.write_u32(x.on_hit.fire_stacks as u32);
+        c.write_u32(x.on_hit.stun_ticks);
+        let (atag, a, b, d) = x.ability.words();
+        c.write_u32(atag as u32);
+        c.write_i64(a);
+        c.write_i64(b);
+        c.write_i64(d);
     }
 
     c.finish()

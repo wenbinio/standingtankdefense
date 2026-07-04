@@ -12,7 +12,7 @@ pub fn modifier_text(i: u16) -> (&'static str, &'static str) {
     MODIFIER_TEXT.get(i as usize).copied().unwrap_or(("", ""))
 }
 
-const WEAPON_TEXT: [(&str, &str); 86] = [
+const WEAPON_TEXT: [(&str, &str); 92] = [
     ("Warden issue, third pattern; the stock is notched once for every gunner the Pale Wardens lost holding this same dirt.", "Single-target piercing. The first thing they hand you, and often the last."),  // 0
     ("Ninth Foundry overrun, its sights still ground for a wall that no longer stands at Ashmark.", "Lobbed siege splash. Wide blast, slow to reseat."),  // 1
     ("The cold it throws is the same cold that took Ashmark in one night; the Hexwrights only learned to aim it afterward.", "Fast single-target magic. Stacks frost toward the freeze."),  // 2
@@ -99,9 +99,15 @@ const WEAPON_TEXT: [(&str, &str); 86] = [
     ("Foundry-fire let off in a bloom, the way the front rank goes when the line finally breaks.", "Chaos pulse. Erupts fire around the tank."),  // 83
     ("A Ninth Foundry coil that taps fast enough to leave no gap between the taps.", "Rapid long siege pulse. Near-constant stun-lock."),  // 84
     ("Tangle throws out a snarl of sticky vine that pins a thing right where it stands and politely refuses to let go.", "Fast epic normal single-target. Roots the target in place."),  // 85
+    ("A Warden glaive that splits on every ricochet, each strike bursting into a spray of edges for whoever crowds close.", "Piercing chain of four; every hit also splashes the pack around it."),  // 86
+    ("Eight Foundry tubes cut for saturation work: every shell that lands opens a crater of its own.", "Long siege barrage of eight, each shot splashing wide on impact."),  // 87
+    ("The Hexwrights bound a season into a jar; once a round it remembers how to rain.", "Wakes at each round's start: pulses the whole field for ten seconds, then sleeps."),  // 88
+    ("A Conclave stone that pays the gunner back a little of every shot, and keeps paying long after.", "Single-target piercing; every attack grants permanent regen plus an instant mend."),  // 89
+    ("A Warden chaplain's last blessing, loosed downrange; the light that lands also settles on the tank.", "Long single-target bolt; each attack heals the tank a flat amount."),  // 90
+    ("Ashmark's drowned winter set spinning; the cold walks the circle and touches everything once.", "Rotating frost wave: sweeps the full circle over a second, frosting all it passes."),  // 91
 ];
 
-const MODIFIER_TEXT: [(&str, &str); 91] = [
+const MODIFIER_TEXT: [(&str, &str); 92] = [
     ("Foundry stamps this kit \"general issue,\" the catch-all crate the Wardens hand out when nothing specialized survived the haul from Ashmark.", "+10% to all weapon damage."),  // 0
     ("Hexwrights ground these heads to a finer point than the Foundry would risk, and the Wardens never asked how.", "Improved Piercing Attacks: +10% piercing damage."),  // 1
     ("Recovered from the Ashmark siege-works, calibrated for walls that fell the night the line broke.", "Improved Siege Attacks: +10% siege damage."),  // 2
@@ -193,6 +199,7 @@ const MODIFIER_TEXT: [(&str, &str); 91] = [
     ("Greycoat sickness ground into the welds, so the swing that draws the tank's blood draws its own rot back.", "Poison Armor: +10 armor, +40 spikes; retaliation also poisons."),  // 88
     ("Each blow against the hull breaks off another barb into it; the longer the line presses, the crueler the welcome grows, until the round resets the count.", "Bloody Spikes: +80 spikes; retaliation stacks more damage each hit (resets each round)."),  // 89
     ("A Hexwright rot-totem bolted to the tank, breathing a slow green ruin into the ground around it that the close-pressed never leave clean.", "Blight Aura: +200 regen; pulse 200 poison damage in 600 every second."),  // 90
+    ("The Hexwrights finally wrote down what the Ashmark winter taught them: enough cold, held long enough, stops a thing outright.", "Deep Freeze: enemies reaching 25 Frost stacks freeze solid for 1.5 s (+50% damage taken)."),  // 91
 ];
 
 #[cfg(test)]

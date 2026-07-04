@@ -69,6 +69,19 @@ fn base() -> ArenaState {
         next_attack_tick: 12,
         expire_tick: 200,
     });
+    s.sweeps.push(WaveSweep {
+        id: EntityId(105),
+        weapon_kind: 91,
+        damage: 300,
+        damage_type: 2,
+        radius: f(450),
+        angle_bam: 0,
+        step_bam: 2048,
+        ticks_left: 16,
+        clockwise: false,
+        on_hit: StatusOnHit::NONE,
+        ability: WeaponAbility::None,
+    });
     s.ramps.push(ActiveRamp {
         effect: ModEffect::IncomeFlat(3),
         interval_ticks: 900,
@@ -196,6 +209,23 @@ fn tank_fields_feed_checksum() {
     parity("tank.aura_poison_dps", |s| s.tank.aura_poison_dps = 2);
     parity("tank.aura_poison_ticks", |s| s.tank.aura_poison_ticks = 90);
     parity("tank.aura_tick", |s| s.tank.aura_tick = 17);
+    // EXPANSION E3 fidelity-mechanics tank state.
+    parity("tank.regen_bonus_per_tick", |s| {
+        s.tank.regen_bonus_per_tick = Fixed::from_ratio(1, 150)
+    });
+    parity("tank.regen_carry", |s| {
+        s.tank.regen_carry = Fixed::from_ratio(1, 2)
+    });
+    parity("tank.deep_freeze", |s| s.tank.deep_freeze = true);
+    parity("tank.retaliate_frost", |s| s.tank.retaliate_frost = 2);
+    parity("tank.retaliate_fire", |s| s.tank.retaliate_fire = 20);
+    parity("tank.spikes_first_hit", |s| s.tank.spikes_first_hit = 240);
+    parity("tank.spikes_dr_rate", |s| {
+        s.tank.spikes_dr_rate = Fixed::from_ratio(1, 20)
+    });
+    parity("tank.dmg_taken_to_spikes", |s| {
+        s.tank.dmg_taken_to_spikes = Fixed::from_ratio(3, 10)
+    });
 }
 
 #[test]
@@ -282,6 +312,22 @@ fn modifier_fields_feed_checksum() {
     parity("modifiers.shield_active_dmg", move |s| {
         s.modifiers.shield_active_dmg = pct(1, 10)
     });
+    // EXPANSION E3 fidelity-mechanics aggregates.
+    parity("modifiers.frost_strength_mult", move |s| {
+        s.modifiers.frost_strength_mult = f(2)
+    });
+    parity("modifiers.fire_dmg_mult", move |s| {
+        s.modifiers.fire_dmg_mult = f(2)
+    });
+    parity("modifiers.fire_explosion_mult", move |s| {
+        s.modifiers.fire_explosion_mult = f(2)
+    });
+    parity("modifiers.bounce_barrage_pct", move |s| {
+        s.modifiers.bounce_barrage_pct = pct(1, 4)
+    });
+    parity("modifiers.healthy_dmg", move |s| {
+        s.modifiers.healthy_dmg = pct(7, 20)
+    });
 }
 
 #[test]
@@ -331,6 +377,20 @@ fn entity_fields_feed_checksum() {
     });
     parity("enemies[0].status.freeze_ticks", |s| {
         s.enemies[0].status.freeze_ticks = 10
+    });
+    parity("enemies[0].status.obscure_pct", |s| {
+        s.enemies[0].status.obscure_pct = 25
+    });
+    parity("enemies[0].status.obscure_ticks", |s| {
+        s.enemies[0].status.obscure_ticks = 90
+    });
+    for i in 0..5 {
+        parity(&format!("enemies[0].status.vuln_by_type[{i}]"), move |s| {
+            s.enemies[0].status.vuln_by_type[i] = 5
+        });
+    }
+    parity("enemies[0].status.hit_tank", |s| {
+        s.enemies[0].status.hit_tank = true
     });
     // Projectiles (incl. the original B4 field).
     parity("projectiles[0].id", |s| s.projectiles[0].id = EntityId(220));
@@ -400,6 +460,29 @@ fn entity_fields_feed_checksum() {
         s.minions[0].next_attack_tick += 1
     });
     parity("minions[0].expire_tick", |s| s.minions[0].expire_tick += 1);
+    // Rotating-wave sweeps.
+    parity("sweeps[0].id", |s| s.sweeps[0].id = EntityId(250));
+    parity("sweeps[0].weapon_kind", |s| s.sweeps[0].weapon_kind = 1);
+    parity("sweeps[0].damage", |s| s.sweeps[0].damage += 1);
+    parity("sweeps[0].damage_type", |s| s.sweeps[0].damage_type = 4);
+    parity("sweeps[0].radius", move |s| s.sweeps[0].radius = f(300));
+    parity("sweeps[0].angle_bam", |s| s.sweeps[0].angle_bam = 2048);
+    parity("sweeps[0].step_bam", |s| s.sweeps[0].step_bam = 4096);
+    parity("sweeps[0].ticks_left", |s| s.sweeps[0].ticks_left += 1);
+    parity("sweeps[0].clockwise", |s| s.sweeps[0].clockwise = true);
+    parity("sweeps[0].on_hit.frost_stacks", |s| {
+        s.sweeps[0].on_hit.frost_stacks = 3
+    });
+    parity("sweeps[0].ability", |s| {
+        s.sweeps[0].ability = WeaponAbility::HealOnAttack { amount: 80 }
+    });
+    parity("sweeps.len", |s| {
+        let sw = s.sweeps[0];
+        s.sweeps.push(WaveSweep {
+            id: EntityId(251),
+            ..sw
+        })
+    });
 }
 
 #[test]
