@@ -1743,7 +1743,7 @@ mod tests {
 
     #[test]
     fn instant_attack_damage_accumulates_and_pays_bloodmoney() {
-        // Immolation (def 7) = Area(300), 80 chaos. Two in-range enemies.
+        // Immolation (def 7) = Area(300), 100 chaos. Two in-range enemies.
         let mut s = blank_state();
         s.weapons.clear();
         s.economy.gold_per_damage = Fixed::from_ratio(1, 4); // exactly representable
@@ -1762,9 +1762,9 @@ mod tests {
         );
         let gold0 = s.economy.gold;
         fire_weapons(&mut s);
-        // Chaos vs armor 0 = 1×; 80 each × 2 enemies = 160 total.
-        assert_eq!(s.total_damage_dealt, 160);
-        assert_eq!(s.economy.gold, gold0 + 40, "160 × 1/4 = 40 gold");
+        // Chaos vs armor 0 = 1×; 100 each × 2 enemies = 200 total.
+        assert_eq!(s.total_damage_dealt, 200);
+        assert_eq!(s.economy.gold, gold0 + 50, "200 × 1/4 = 50 gold");
     }
 
     #[test]
@@ -1954,10 +1954,10 @@ mod tests {
 
     #[test]
     fn barrage_fires_one_projectile_per_target_capped() {
-        // Ballista (def 6) = Barrage(4), range 1200.
+        // Fire Bow = Barrage(4), range 600.
         let mut s = blank_state();
         s.weapons.clear();
-        give_weapon(&mut s, 6);
+        give_weapon(&mut s, weapon_idx("Fire Bow"));
         for i in 0..6 {
             mk_enemy(
                 &mut s,
@@ -1975,7 +1975,7 @@ mod tests {
         // With fewer enemies than N, barrage caps at the available count.
         let mut s2 = blank_state();
         s2.weapons.clear();
-        give_weapon(&mut s2, 6);
+        give_weapon(&mut s2, weapon_idx("Fire Bow"));
         mk_enemy(
             &mut s2,
             0,
@@ -1994,7 +1994,7 @@ mod tests {
 
     #[test]
     fn area_hits_all_in_radius_instantly() {
-        // Immolation (def 7) = Area(300), range 300, 80 chaos, +2 fire.
+        // Immolation (def 7) = Area(300), range 300, 100 chaos, +10 fire.
         let mut s = blank_state();
         s.weapons.clear();
         give_weapon(&mut s, 7);
@@ -2008,9 +2008,9 @@ mod tests {
         ); // out
         fire_weapons(&mut s);
         assert!(s.projectiles.is_empty(), "area is instant — no projectiles");
-        assert_eq!(s.enemies.len(), 3, "200 hp survives 80 dmg");
-        assert_eq!(s.enemies[0].hp, 120, "near enemy took 80");
-        assert_eq!(s.enemies[0].status.fire_stacks, 2, "area applied fire");
+        assert_eq!(s.enemies.len(), 3, "200 hp survives 100 dmg");
+        assert_eq!(s.enemies[0].hp, 100, "near enemy took 100");
+        assert_eq!(s.enemies[0].status.fire_stacks, 10, "area applied fire");
         assert_eq!(s.enemies[2].hp, 200, "far enemy untouched");
     }
 
@@ -2096,11 +2096,11 @@ mod tests {
 
     #[test]
     fn life_drain_heals_tank_per_enemy_damaged() {
-        // Soulstealer: Bounce(4) Heal 200/hit. Four enemies in range → 4×200 heal.
+        // Mendweaver: Bounce(4) Heal 200/hit. Four enemies in range → 4×200 heal.
         let mut s = blank_state();
-        only_weapon(&mut s, "Soulstealer");
+        only_weapon(&mut s, "Mendweaver");
         assert!(matches!(
-            content::WEAPONS[weapon_idx("Soulstealer") as usize].ability,
+            content::WEAPONS[weapon_idx("Mendweaver") as usize].ability,
             content::WeaponAbility::LifeDrain { per_hit: 200 }
         ));
         s.tank.max_hp = 1_000_000;
@@ -2282,13 +2282,13 @@ mod tests {
 
     #[test]
     fn vuln_on_hit_raises_damage_taken() {
-        // Demon Eye: SingleTarget VulnOnHit(10). Adds 10 vuln stacks (+10% taken).
+        // Bandit Sniper: SingleTarget VulnOnHit(5). Adds 5 vuln stacks (+5% taken).
         let mut s = blank_state();
-        only_weapon(&mut s, "Demon Eye");
+        only_weapon(&mut s, "Bandit Sniper");
         let pos = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
         let eid = mk_enemy(&mut s, 0, 100_000_000, pos);
         let pid = s.alloc_entity_id();
-        let wd = &content::WEAPONS[weapon_idx("Demon Eye") as usize];
+        let wd = &content::WEAPONS[weapon_idx("Bandit Sniper") as usize];
         s.projectiles.push(Projectile {
             id: pid,
             weapon_kind: 0,
@@ -2304,12 +2304,12 @@ mod tests {
         });
         advance_projectiles(&mut s);
         let e = &s.enemies[0];
-        assert_eq!(e.status.vuln_stacks, 10, "10 vulnerability stacks applied");
-        // +10% damage taken (10 stacks × 1%); fixed-point floors ≈1099/1000.
+        assert_eq!(e.status.vuln_stacks, 5, "5 vulnerability stacks applied");
+        // +5% damage taken (5 stacks × 1%); fixed-point floors ≈1049/1000.
         let v = crate::status::vulnerability_mult(e, 0, Fixed::ONE).scale_i64(1000);
         assert!(
-            (1099..=1100).contains(&v),
-            "vuln stacks raise damage taken ≈+10%, got {v}"
+            (1049..=1050).contains(&v),
+            "vuln stacks raise damage taken ≈+5%, got {v}"
         );
     }
 
@@ -2661,10 +2661,10 @@ mod tests {
 
     #[test]
     fn barrage_splash_projectiles_carry_the_secondary_splash() {
-        // Siege Volley (87): BarrageSplash(8, 300) — a Barrage whose
+        // Meteor Barrage: BarrageSplash(8, 300) — a Barrage whose
         // projectiles each splash 300 at impact.
         let mut s = blank_state();
-        only_weapon(&mut s, "Siege Volley");
+        only_weapon(&mut s, "Meteor Barrage");
         for i in 0..3 {
             mk_enemy(
                 &mut s,
@@ -2686,12 +2686,12 @@ mod tests {
 
     #[test]
     fn bounce_barrage_pct_adds_integer_targets_per_fire() {
-        // +50% Enemies hit: Ballista Barrage(4) → 6 shots; Moon Glaive
+        // +50% Enemies hit: Fire Bow Barrage(4) → 6 shots; Moon Glaive
         // Bounce(4) → 6 chained targets.
         let mut s = blank_state();
         s.modifiers.bounce_barrage_pct = Fixed::from_ratio(1, 2);
         s.weapons.clear();
-        give_weapon(&mut s, 6); // Ballista Barrage(4)
+        give_weapon(&mut s, weapon_idx("Fire Bow")); // Barrage(4)
         for i in 0..10 {
             mk_enemy(
                 &mut s,

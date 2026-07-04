@@ -146,8 +146,9 @@ mod tests {
     fn hp_curve_is_a_3min_stepped_ramp() {
         // BALANCE PASS: the curve is a STEPPED "RAMP" on a strict 3-min cadence —
         // every 5400-tick interval is `gentle climb → warning → step`, with steps at
-        // k*5400 for k=1..=10. The old ×413863 hack is gone; the curve now escalates
-        // SMOOTHLY to a sane ≈ ×5.56 boss endpoint. This test pins the new shape.
+        // k*5400 for k=1..=10. The old ×413863 hack is gone; the curve escalates
+        // SMOOTHLY to the dialed boss endpoint (≈ ×120 after the catalog-fidelity
+        // pass re-dialed `RAMP_JUMP` for the stronger catalog). Pins the shape.
         use determinism::Fixed;
         let m = content::enemy_hp_mult;
         let interval = content::RAMP_INTERVAL; // 5400
@@ -166,21 +167,23 @@ mod tests {
         }
 
         // (2) Exact post-step multipliers at each 3-min boundary (×10000),
-        //     compounding ×1.1872 per interval up to ≈ ×5.56 at the boss. These are
-        //     the exact `Fixed` values of the balance-pass curve (`G·W·J` with
-        //     J = 1.14); the boss clamp returns `base(10)`.
+        //     compounding ×1.6141 per interval up to ≈ ×120 at the boss. These are
+        //     the exact `Fixed` values of the catalog-fidelity-pass curve (`G·W·J`
+        //     with J = 1.55 — re-dialed UP for the far stronger re-anchored
+        //     catalog, capped by boss reachability); the boss clamp returns
+        //     `base(10)`.
         let post: [(u32, i64); 11] = [
             (0, 10000),
-            (5400, 11871),
-            (10800, 14093),
-            (16200, 16731),
-            (21600, 19862),
-            (27000, 23580),
-            (32400, 27993),
-            (37800, 33232),
-            (43200, 39452),
-            (48600, 46837),
-            (54000, 55604), // the 30-min boss tier — the ≈ ×5.56 endpoint.
+            (5400, 16141),
+            (10800, 26053),
+            (16200, 42053),
+            (21600, 67879),
+            (27000, 109566),
+            (32400, 176855),
+            (37800, 285467),
+            (43200, 460783),
+            (48600, 743765),
+            (54000, 1200536), // the 30-min boss tier — the ≈ ×120 endpoint.
         ];
         for (tick, mult10k) in post {
             assert_eq!(
@@ -189,9 +192,9 @@ mod tests {
                 "post-step mult at {tick}"
             );
         }
-        // The boss phase HOLDS the endpoint `base(10)` (≈ ×5.56).
+        // The boss phase HOLDS the endpoint `base(10)` (≈ ×120).
         let boss = m(content::BOSS_SPAWN_TICK);
-        assert_eq!(boss.scale_i64(10000), 55604);
+        assert_eq!(boss.scale_i64(10000), 1200536);
         assert_eq!(
             m(content::BOSS_SPAWN_TICK + 5000),
             boss,
@@ -216,9 +219,9 @@ mod tests {
         );
 
         // (4) The boundary STEP: the jump from the pre-step (warning peak) value to
-        //     the next interval's post-step value is a real instantaneous +14% step,
-        //     larger than any single warning-region tick step (a felt-but-modest
-        //     cliff, no longer the dramatic ×3.5 wall of the old hack).
+        //     the next interval's post-step value is a real instantaneous +55% step
+        //     (J, re-dialed for the re-anchored catalog), larger than any single
+        //     warning-region tick step.
         let pre_step = m(lo + interval - 1); // tick 10799, warning peak
         let post_step = m(lo + interval); //   tick 10800, post-step
         let step = post_step.scale_i64(1_000_000) - pre_step.scale_i64(1_000_000);
@@ -226,10 +229,10 @@ mod tests {
             step > warn_slope * 50,
             "boundary step must dwarf a single warning tick"
         );
-        // +14% (J): post ≈ pre × 1.14 (within rounding, ×1000).
+        // +55% (J): post ≈ pre × 1.55 (within rounding, ×1000).
         assert_eq!(
             post_step.scale_i64(1000),
-            pre_step.mul(Fixed::from_ratio(57, 50)).scale_i64(1000)
+            pre_step.mul(Fixed::from_ratio(31, 20)).scale_i64(1000)
         );
     }
 
@@ -248,13 +251,14 @@ mod tests {
             s.enemies[0].def, 0,
             "first spawn this tick is the grunt (entry 0)"
         );
-        // hp should be scaled up (BALANCE PASS: the curve is ~×2.06 here — k4 warning
-        // region, just before the 15-min step — a smooth escalation, not the old hack).
+        // hp should be scaled up (the curve is ~×7.1 here — k4 warning region,
+        // just before the 15-min step — after the catalog-fidelity `RAMP_JUMP`
+        // re-dial; a smooth escalation, not the old hack).
         assert!(
-            s.enemies[0].hp > grunt_base * 2,
+            s.enemies[0].hp > grunt_base * 5,
             "late enemy HP must be scaled up"
         );
-        assert!(s.enemies[0].hp <= grunt_base * 3);
+        assert!(s.enemies[0].hp <= grunt_base * 10);
     }
 
     #[test]

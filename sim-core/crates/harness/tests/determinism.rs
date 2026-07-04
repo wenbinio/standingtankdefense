@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x5767f463a5dfe375, // re-baselined (COMBINED fidelity passes): the ECONOMY pass (weighted independent shop draws, bonus-only income scaling, held Magic Treasure pool, `Economy::treasure_pool`/`PendingPerk::scope` in the digest) and the E3 MECHANICS pass (opt-in Deep Freeze trajectory change, 6 mechanic-anchor weapons + Deep Freeze modifier growing the shop pool, new tank/enemy-status/modifier fields + rotating-wave `sweeps` in the digest, snapshot v21) merged; the combined trajectory differs from either pass alone, so this value was captured fresh from `cargo run -p harness` on the merged tree. (Previous baseline 0x09058789ad2df90a was the §9.3 event-stream pass.)
+        0x20e2dabc7009c960, // re-baselined (CATALOG-FIDELITY pass): the weapon/upgrade catalog re-anchored to the source extraction — same-name mechanical mismatches fixed (Ballista/Storm Hammer/Moon Glaive/Magic Missile/Throwing Axes/Immolation/Quills/Soulstealer/Ale Launcher/Demon Eye/Frostwave/Flamewave), the GEN block moved onto the source cooldown/range tiers DPS-neutrally, 4 weapons + 18 upgrades restored (96 weapons / 110 modifiers grow the shop pool), duplicate modifier names deduped, and Entangled Gold Mine moved to rarity 1. Content feeds the trajectory, so the checksum legitimately shifts; captured fresh from `cargo run -p harness`. (Previous baseline 0x5767f463a5dfe375 was the combined economy+E3-mechanics pass.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }
