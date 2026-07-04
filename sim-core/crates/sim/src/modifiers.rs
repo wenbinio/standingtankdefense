@@ -24,8 +24,13 @@ const STAT_CEIL: i64 = 1_000_000_000_000;
 /// Phase: apply each active time-scaling ramp whose interval has elapsed
 /// (`docs/06`). Deterministic — fixed ticks, fixed order (ramps are append-only,
 /// never reordered).
+///
+/// SOURCE RULE (docs/01, changelog): per-round "+N per round" ramps "no longer
+/// stack after 15 minutes" — accrual FREEZES at the boss tick
+/// (`content::BOSS_SPAWN_TICK`). The already-accrued value keeps working; only
+/// the growth stops. One guard here covers every ramping modifier.
 pub(crate) fn apply_ramps(s: &mut ArenaState) {
-    if s.ramps.is_empty() {
+    if s.tick >= content::BOSS_SPAWN_TICK || s.ramps.is_empty() {
         return;
     }
     let mut ramps = std::mem::take(&mut s.ramps);
@@ -503,6 +508,37 @@ mod tests {
 
         // The ramp's next_apply advanced past the last interval (no double-apply).
         assert_eq!(s.ramps[0].next_apply, interval * 4);
+    }
+
+    #[test]
+    fn ramps_stop_accruing_at_the_boss_tick() {
+        // SOURCE RULE: "+N per round" ramps "no longer stack after 15 minutes"
+        // (docs/01 changelog). From `BOSS_SPAWN_TICK` on, `apply_ramps` freezes —
+        // the accrued value keeps working, the growth stops.
+        let idx = content::MODIFIERS
+            .iter()
+            .position(|md| md.ramp.is_some())
+            .expect("a ramping modifier exists") as u16;
+        let mut s = ArenaState::new(1, 0);
+        s.buy_modifier(idx);
+        // Accrue normally up to just before the boss tick.
+        s.tick = content::BOSS_SPAWN_TICK - 1;
+        apply_ramps(&mut s);
+        let frozen_next = s.ramps[0].next_apply;
+        let frozen_mods = s.modifiers.clone();
+        // At and past the boss tick: no further accrual, ever.
+        for dt in [0u32, 1, 900, 5400] {
+            s.tick = content::BOSS_SPAWN_TICK + dt;
+            apply_ramps(&mut s);
+            assert_eq!(
+                s.ramps[0].next_apply, frozen_next,
+                "ramp accrued past the boss tick (dt={dt})"
+            );
+            assert_eq!(
+                s.modifiers, frozen_mods,
+                "modifier aggregate changed past the boss tick (dt={dt})"
+            );
+        }
     }
 
     fn modifier_idx(pred: impl Fn(ModEffect) -> bool) -> u16 {

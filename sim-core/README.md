@@ -10,7 +10,7 @@ The **deterministic simulation core** for Standing Tank Defense — engine-indep
 - **M1** — in-process shadow-sim + byte snapshots. `sim::snapshot` round-trips `ArenaState` to portable bytes; `harness::shadow::ShadowRunner` detects client/shadow divergence at digest boundaries and corrects from a snapshot; `replay_from_snapshot` is the reconnect path. Injected divergence is detected and corrected within one interval and reconverges.
 - **M2** — authoritative match director + transport (`crates/net`). Transport-abstracted (deterministic `Hub` now; Steam `ISteamNetworkingSockets` adapter drops in behind the same interface). `Director` owns the clock, per-player shadow-sims, input ordering/acks, digest→snapshot correction, and death/placement; thin non-predictive `Client`; `wire` codec + shared `Schedule`. **Exit test proves the thesis**: one client's stall can't perturb another client's arena.
 - **M3** — 8 players, reconnect, host migration. A mid-match `Client::reconnecting` adopts an authoritative snapshot and tracks the arena tick; **`eight_players_reconnect`**: one of 8 drops and rejoins on the canonical trajectory, the other 7 unaffected. **`host_migration`**: a hot-standby director (fed identical inbound, bit-identical at the handoff) takes over on host loss with clients continuing in sync.
-- **M4** — content depth (systems **and** catalog complete). All gameplay systems are in and deterministic: the **modifier/stacking engine** (`sim::modifiers`, incl. defensive), **status effects** (`sim::status` — Poison/Frost/Fire/Stun), **all attack types** (Single/Splash/Barrage/Area/Wave/Bounce), the **defensive layer** (`sim::defense` — dodge→armor→mana-shield→HP + regen), **wave scaling** on a stepped 3-min ramp + **The Hippocrate** boss at the 30-min tick (`BOSS_SPAWN_TICK` = 54000; Clear-only), and **Steam** results/adapter scaffolding (`net::results`, `net::steam`). A `full_arc` test drives the whole 11-phase pipeline to the boss byte-deterministically. The shipped catalog is **86 weapons / 91 modifiers / a 12-entry enemy roster** (`sim/src/content.rs`), gated against the docs by `sim/tests/doc_sync.rs`.
+- **M4** — content depth (systems **and** catalog complete). All gameplay systems are in and deterministic: the **modifier/stacking engine** (`sim::modifiers`, incl. defensive), **status effects** (`sim::status` — Poison/Frost/Fire/Stun), **all attack types** (Single/Splash/Barrage/Area/Wave/Bounce), the **defensive layer** (`sim::defense` — dodge→armor→mana-shield→HP + regen), **wave scaling** on the restored source arc — a smooth per-minute ramp, a +20% step at 10:00, and **The Hippocrate** boss at the 15-min tick (`BOSS_SPAWN_TICK` = 27000; Clear-only) with a post-15:00 "swift end" escalation, shop close, and ramp stop — and **Steam** results/adapter scaffolding (`net::results`, `net::steam`). A `full_arc` test drives the whole 11-phase pipeline to the boss byte-deterministically. The shipped catalog is **96 weapons / 110 modifiers / a 12-entry enemy roster** (`sim/src/content.rs`), gated against the docs by `sim/tests/doc_sync.rs`.
 - **M5** — hardening (partial). Chaos/loss/reorder/latency injection (`net/tests/chaos.rs`), 8-player full-match soak (`net/tests/soak.rs`), and clock sync (`net/tests/clock_sync.rs`) are done and CI-gated. **Open:** everything needing a live Steam environment (real SDR transport + lobby, stats, release) — see `docs/06` + `docs/07a` and the adapter at `../adapters/steam-transport/`.
 
 ## Layout
@@ -23,7 +23,7 @@ sim-core/
 │   │   ├── lib.rs      step() order-of-operations + checksum()  [central seam]
 │   │   ├── ids.rs      ids, Purpose, Input                       [central seam]
 │   │   ├── state.rs    ArenaState data model + Vec2 math         [central seam]
-│   │   ├── content.rs  full catalog: 86 weapons / 91 modifiers,  [central seam]
+│   │   ├── content.rs  full catalog: 96 weapons / 110 modifiers, [central seam]
 │   │   │               12 enemies incl. the boss, ramp/arc constants
 │   │   ├── combat.rs   weapons / projectiles / enemy movement
 │   │   ├── waves.rs    spawning
@@ -48,7 +48,7 @@ cargo run -p harness --example liveness   # sanity: shows the sim actually simul
 # sim, rendered as text (the same read-only state a Godot front-end will draw):
 cargo run -p preview              # headless: a few spaced frames + a summary line
 cargo run -p preview -- --watch   # live at ~30 Hz (clears the screen each frame)
-cargo run -p preview -- --watch --speed 8   # fast-forward to the 30-min boss
+cargo run -p preview -- --watch --speed 8   # fast-forward to the 15-min boss
 ```
 
 The `preview` crate is the first **integration seam**: it constructs a real

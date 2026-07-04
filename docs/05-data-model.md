@@ -143,13 +143,15 @@ WaveTable {
 }
 
 ScalingCurve {
-  step: u8                         // ramp interval k = 0..=10; steps land at k*RAMP_INTERVAL
-                                   //   (3-min intervals: 3, 6, …, 30 min — sim::content::enemy_hp_mult)
+  minute: u8                       // whole-minute compound point k (piecewise-linear between)
+                                   //   the SOURCE arc: ×RAMP_BASE/min after a 2-min grace,
+                                   //   +20% step at 10:00 (SCALE_STEP_TICK), ×SWIFT_END/min
+                                   //   "swift end" from 15:00 — sim::content::enemy_hp_mult
   hp_mult: Fixed
   damage_mult: Fixed
 }
 ```
-Spawn *positions/timing jitter* come from the per-player `spawn` RNG stream (5.6); composition is shared. The boss (**The Hippocrate**, spawned at `BOSS_SPAWN_TICK` = 54000 — 30 min) ignores `ScalingCurve` (`scales=false`).
+Spawn *positions/timing jitter* come from the per-player `spawn` RNG stream (5.6); composition is shared. The boss (**The Hippocrate**, spawned at `BOSS_SPAWN_TICK` = 27000 — 15 min, the source match length) ignores `ScalingCurve` (`scales=false` — fixed HP *and* fixed contact damage). From the same tick the shop closes (offers clear; buy/reroll are deterministic no-ops) and per-round ramp modifiers stop accruing (`modifiers::apply_ramps`) — all pure functions of the tick, so nothing new crosses the wire.
 
 ## 5.5 Shop / offer state machine (stateful — must replay exactly)
 

@@ -56,7 +56,18 @@ pub fn step(s: &mut ArenaState, inp: Input) {
     if new_round != s.round {
         s.round = new_round;
         s.emit(SimEvent::RoundStart { round: new_round });
-        shop::generate_offers(s);
+        if s.tick >= content::BOSS_SPAWN_TICK {
+            // SHOP CLOSE (source flavor: the shop "flees in fear of the boss's
+            // impending arrival"): from the boss tick — which IS a round boundary
+            // — no new offers are rolled and the stalls CLEAR, so nothing remains
+            // purchasable once the boss walks in. Buying/rerolling from here on
+            // are deterministic no-ops (`input::apply`). No `rng_shop` draws are
+            // made, which is fine: determinism needs identical draws across
+            // machines, not a fixed number of them.
+            s.shop.offers.clear();
+        } else {
+            shop::generate_offers(s);
+        }
         economy::on_round_start(s);
         // Stacking spikes (source: Bloody Spikes) reset to 0 at the round boundary
         // ("resets when a new shop is made available"). Deterministic: keyed purely

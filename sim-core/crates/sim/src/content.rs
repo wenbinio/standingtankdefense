@@ -3818,22 +3818,23 @@ pub static ENEMIES: &[EnemyDef] = &[
         boss: false,
     },
     // 2 — The Hippocrate: a doctor-hippo who swore to "first, do no harm" — he lied.
-    //     The 30-min END-GAME boss. Fixed huge HP,
-    // immune to weapon fire; only `Clear` hurts it (CLEAR_DAMAGE = 3M/use ⇒ ~11
-    // Clears to kill its 33M HP). It does NOT self-destruct: when it reaches the
-    // tank it PLANTS and grinds with a CADENCED contact hit (every
-    // `BOSS_CONTACT_CADENCE` ticks, ×11 tier ⇒ ~0.33M/hit, dodge/armor/shield
-    // honored) — see `combat::move_enemies`. That makes the climax a sustained
-    // multi-Clear RACE: the player must out-Clear the boss's DPS (while the dense
-    // escort piles on) before being ground down, instead of the old single
-    // dodge-coin-flip on one 1.1M burst. After 30 min of player scaling this is the
-    // real climax wall MOST runs end at, not a pushover. (Const id stays BOSS;
-    // sprite key unchanged.)
+    //     The 15-min END-GAME boss (the restored source arc, docs/01 §1.2). FIXED
+    // stats — like the source's boss it "always has the same health and damage and
+    // doesn't scale" (changelog): its HP never rides `enemy_hp_mult` and its contact
+    // damage is pinned at the boss-tick tier (`combat::move_enemies`). Immune to
+    // weapon fire; only `Clear` hurts it (CLEAR_DAMAGE = 3M/use ⇒ 10 Clears for its
+    // 30M HP ⇒ ≥90 s at the 10 s Clear cooldown). It does NOT self-destruct: when it
+    // reaches the tank it PLANTS and grinds with a CADENCED contact hit (every
+    // `BOSS_CONTACT_CADENCE` ticks, dodge/armor/shield honored) — see
+    // `combat::move_enemies`. The climax is a sustained multi-Clear RACE under the
+    // post-15:00 "swift end" escalation: normal waves keep spawning and scale hard,
+    // so the player must out-Clear the boss's DPS before the swelling tide ends the
+    // run. (Const id stays BOSS; sprite key unchanged.)
     EnemyDef {
         name: "The Hippocrate",
-        base_hp: 33_000_000,
+        base_hp: 30_000_000,
         move_speed: 3,
-        contact_damage: 45_000,
+        contact_damage: 16_000,
         bounty: 0,
         armor_class: ARMOR_LIGHT,
         archetype: Archetype::Boss,
@@ -3974,179 +3975,135 @@ pub static ENEMIES: &[EnemyDef] = &[
 /// Index of the boss enemy def.
 pub const BOSS: u16 = 2;
 
-// Match timeline (ticks @ 30 Hz). The HP/damage curve (`enemy_hp_mult`) is a
-// STEPPED "RAMP" on a strict 3-MINUTE cadence: every interval is gentle climb →
-// warning → step, with steps at 3,6,…,30 min (see `RAMP_INTERVAL`). BALANCE PASS
-// (+ catalog-fidelity re-dial): the step is +55% (the old ×413863 cliff hack is
-// gone); the curve escalates smoothly to a ≈ ×120 boss endpoint — re-dialed up
-// from +14%/×5.56 because the re-anchored catalog made player trajectories far
-// stronger (the 80-seed sweep had drifted to 86% wins). These named tick constants pin the
-// ROSTER schedule below (the wave/surge gates) and a couple of tests; the HP curve
-// itself no longer keys off them.
-pub const SCALE_STEP_1_TICK: u32 = 10 * 60 * 30; // 18000 — 10 min (roster reference)
-pub const SCALE_STEP_2_TICK: u32 = 15 * 60 * 30; // 27000 — 15 min (roster reference)
-pub const CLIFF_20_TICK: u32 = 20 * 60 * 30; // 36000 — 20 min (roster surge gate)
-pub const CLIFF_25_TICK: u32 = 25 * 60 * 30; // 45000 — 25 min (roster surge gate)
-/// The end-game boss ("The Hippocrate") spawns here; normal waves
-/// stop. Moved from 15 min to 30 min — it is the climax most runs end at.
-pub const BOSS_SPAWN_TICK: u32 = 30 * 60 * 30; // 54000 — 30 min
+// Match timeline (ticks @ 30 Hz) — the RESTORED SOURCE ARC (docs/01 §1.2, this
+// pass). The source runs ~15 minutes to its boss with two confirmed scaling
+// breakpoints (changelog STRING 6871): "extra scaling after 10 minutes increased
+// by 20%, extra scaling after 15 minutes further increased to bring the game to
+// a swift end". The shipped curve (`enemy_hp_mult`) mirrors that structure:
+//   • a smooth per-minute base ramp (`RAMP_BASE` — THE difficulty dial),
+//   • a +20% STEP at 10:00 (`SCALE_STEP_TICK`, `STEP_10MIN`),
+//   • from 15:00 (boss arrival) a steep "SWIFT END" escalation (`SWIFT_END`) —
+//     waves KEEP spawning and compound hard so a stalled match ends.
+// (History: an earlier chapter stretched the arc to 30 min of ten metronomic
+// 3-min ramps; this pass returns to the source arc as the spec.)
+pub const SCALE_STEP_TICK: u32 = 10 * 60 * 30; // 18000 — 10 min: the +20% step
+/// The end-game boss ("The Hippocrate") spawns here — 15:00, the source match
+/// length. The same tick is the SWIFT-END knee (`enemy_hp_mult`), the shop close
+/// (`step()` — the shop "flees"), and the per-round ramp stop
+/// (`modifiers::apply_ramps`).
+pub const BOSS_SPAWN_TICK: u32 = 15 * 60 * 30; // 27000 — 15 min
+/// Late pre-boss roster surge gate (12.5 min): the last wave-table escalation
+/// before the boss, mapped from the old arc's 25/30 position onto 15 minutes.
+pub const SURGE_LATE_TICK: u32 = 12 * MIN + MIN / 2; // 22500 — 12.5 min
 
 /// While the boss is planted on the tank it lands a contact hit every this many
-/// ticks (a PERSISTENT attrition attack, not a one-shot self-destruct). 20 ticks
-/// @30 Hz ⇒ 1.5 hits/s; with the ×11 boss-phase multiplier each hit is ~0.33M
-/// (dodge/armor/shield apply). Tuned so the boss is a multi-Clear RACE the player
-/// must win, deadly to an unprepared snowball but survivable by a strong build.
-/// Pure function of `s.tick` — deterministic, no new RNG/state. (`combat::move_enemies`.)
+/// ticks (a PERSISTENT attrition attack, not a one-shot self-destruct). 16 ticks
+/// @30 Hz ⇒ ~1.9 hits/s; the hit is `contact_damage` × the FIXED boss-tick tier
+/// (the boss does not scale — source changelog; dodge/armor/shield apply). Tuned
+/// so the boss is a multi-Clear RACE the player must win, deadly to an unprepared
+/// snowball but survivable by a strong build. Pure function of `s.tick` —
+/// deterministic, no new RNG/state. (`combat::move_enemies`.)
 pub const BOSS_CONTACT_CADENCE: u32 = 16;
 
-/// One difficulty interval = 3 minutes @ 30 Hz. Cliffs land at `k*RAMP_INTERVAL`
-/// for k = 1..=10; the boss tick (54000) is the k=10 boundary.
-pub const RAMP_INTERVAL: u32 = 3 * 60 * 30; // 5400 — 3 min
-/// Within each interval, the gentle climb spans this many ticks; the remaining
-/// `RAMP_INTERVAL - GENTLE_TICKS` ticks are the steeper "warning" sub-ramp that
-/// signals the cliff is coming.
-pub const GENTLE_TICKS: u32 = 4500; // first ~2.5 min: the gentle climb
-/// The "warning" window — the final ~30 s of each interval. Over it the curve
-/// rises perceptibly STEEPER than the gentle climb (the telegraph), then the
-/// dramatic step lands AT the next 3-min boundary.
-pub const WARN_TICKS: u32 = RAMP_INTERVAL - GENTLE_TICKS; // 900 — final 30 s
-
-/// The three per-interval multiplicative factors of the stepped "RAMP". An
-/// interval that starts (post-cliff) at value `b` runs:
-///   1. GENTLE climb  `b → b·G`           over the first `GENTLE_TICKS`,
-///   2. WARNING ramp  `b·G → b·G·W`       over the final `WARN_TICKS` (steeper),
-///   3. STEP UP       `b·G·W → b·G·W·J`   instantaneously AT the 3-min boundary.
+/// The three factors of the source-shaped difficulty curve, as pure `(num, den)`
+/// Fixed ratios — no floats, integer-parametrized, feeds `state_checksum`.
 ///
-/// So each interval multiplies difficulty by `G·W·J`, and over 10 intervals that
-/// compounds to the boss endpoint `base(10)` (the boss tick rides the same value).
-///
-/// BALANCE PASS (`docs/06`): this REPLACES the interim ×413863 late-game hack. The
-/// old hack set `J = 3.5` (+250%), compounding to an absurd ≈ ×413863 at the boss —
-/// a meaningless number that piled ALL difficulty into one boss wall. The principled
-/// curve keeps the same gentle→warning→step SHAPE and the strict 3-min cadence, but
-/// the per-interval factors are tuned so the WHOLE 30-min run escalates smoothly:
-///   • `G = +2.5%` gentle climb, `W = +1.6%` warning ramp (UNCHANGED), and
-///   • `J = +55%` step — the CATALOG-FIDELITY re-dial (was +14%/×5.56): the
-///     re-anchored catalog (source cooldown tiers, typed vulnerabilities,
-///     restored upgrades) made player power compound so much faster that the
-///     +14% curve drifted to 86% sweep wins. `J` alone cannot reach the 17-23%
-///     band: at J ≥ 1.6 no bot build reaches the 30-min boss any more
-///     (`net/tests/soak.rs` requires a real build to REACH the boss), so J is
-///     parked at the highest arc-preserving tier (+55%; factor ≈ 1.6141 per
-///     interval, `base(10) ≈ 120`), the 80-seed sweep sits at 65% wins, and
-///     closing the remaining gap is the NEXT WAVE's full retune (catalog power
-///     vs curve — a J-only fix cannot decouple 20-min difficulty from boss
-///     reachability).
-/// `J` is the OVERALL-SCALE / win-rate dial. Both enemy HP *and* contact damage
-/// scale on this curve, so the late game is genuinely harder (denser, tankier,
-/// deadlier) without any one-number absurdity.
-/// `G·W·J = 1.025·1.016·1.55` (Fixed product ≈ 1.6141). Pure `(num,den)` Fixed
-/// ratios — no floats, integer-parametrized, feeds `state_checksum`.
-const RAMP_GENTLE: (i64, i64) = (41, 40); //  G = +2.5% gentle climb (1.025)
-const RAMP_WARN: (i64, i64) = (127, 125); //  W = +1.6% over the short warning window (1.016)
-const RAMP_JUMP: (i64, i64) = (31, 20); //    J = +55% per-interval step (1.55) — the overall-scale dial
+/// • `RAMP_BASE` — the per-minute base compounding factor, THE PRIMARY DIFFICULTY
+///   DIAL for calibration (the win-rate knob; docs/06 M4 balance). The curve is
+///   piecewise-linear between whole-minute compound points, so it is continuous
+///   and monotonic. RETUNE LOG: dialed over the 80-seed boss-inclusive sweep
+///   (`preview/src/bin/sweep.rs`) to land the 17–23% win band on the restored
+///   15-min arc — see docs/06 for the numbers.
+/// • `STEP_10MIN` — the +20% instantaneous step AT 10:00 (source changelog:
+///   "extra scaling after 10 minutes increased by 20%").
+/// • `SWIFT_END` — the per-minute compounding factor from 15:00 on (source:
+///   "after 15 minutes further increased to bring the game to a swift end").
+///   It multiplies ON TOP of the frozen 15:00 base value, so even a stalled
+///   snowball is overrun within a few minutes.
+const RAMP_BASE: (i64, i64) = (5, 4); // +25%/min — the overall-scale dial
+const STEP_10MIN: (i64, i64) = (6, 5); //  +20% step at 10:00 (source)
+const SWIFT_END: (i64, i64) = (3, 2); //   ×1.5/min after 15:00 — the swift end
+/// The base ramp holds ×1 for this many opening minutes before compounding
+/// starts. Preserves the shipped "brutal opening" design window (docs/06,
+/// `balance_guards.rs`): the ≤2-min eco-rush punish is carried by WAVE VOLUME
+/// (the `EARLY_*_CADENCE` streams), not by HP scaling — a modest opener must
+/// still be able to establish board control against ×1 enemies.
+const RAMP_GRACE_MIN: u32 = 2;
+/// Overflow guard: the swift-end exponent stops compounding after this many
+/// minutes past the boss (×2^15 ≈ ×32768 on top of the boss tier — far beyond
+/// anything survivable, but bounded so `Fixed` can never overflow no matter how
+/// long an arena is stepped).
+const SWIFT_END_CAP_MIN: u32 = 15;
 
 /// Enemy HP scaling at `tick` (also scales contact/ranged damage — see
-/// `combat::move_enemies` / `enemy_ranged_attacks`). The shape is a STEPPED "RAMP"
-/// on a strict 3-MINUTE cadence. Each 3-min interval is `gentle climb → warning →
-/// step`:
-///   • a CALM smooth rise for the first ~2.5 min (`RAMP_GENTLE`, +2.5% total),
-///   • a perceptibly steeper sub-ramp over the final ~30 s (`RAMP_WARN`, +1.6%) —
-///     the telegraph that a step is coming,
-///   • an instantaneous +55% step up AT the 3-min boundary (`RAMP_JUMP`).
-/// Steps land at 3,6,…,30 min. The function is monotonic non-decreasing, CONTINUOUS
-/// within each interval (the only instantaneous jumps are the steps at the
-/// boundaries), and lands at ≈ ×120 at the 30-min boss (tick 54000) — the endpoint
-/// (`base(10)`) after the catalog-fidelity `RAMP_JUMP` re-dial (which replaced the
-/// balance pass's +14%/×5.56, itself a replacement of the interim ×413863 hack).
-/// `RAMP_JUMP` is the overall-scale / win-rate dial. Integer/fixed-point only.
+/// `combat::move_enemies` / `enemy_ranged_attacks`; the BOSS is exempt — fixed
+/// stats). The shape is the SOURCE ARC (docs/01 §1.2):
+///   • 0:00–15:00 — a smooth base ramp compounding `RAMP_BASE` per minute
+///     (piecewise-linear between whole-minute points) after a short opening
+///     grace at ×1 (`RAMP_GRACE_MIN`),
+///   • AT 10:00 — an instantaneous +20% step (`STEP_10MIN`),
+///   • from 15:00 (boss arrival) — the "swift end": the 15:00 value keeps
+///     compounding `SWIFT_END` per minute (piecewise-linear, capped at
+///     `SWIFT_END_CAP_MIN` minutes), so waves that keep spawning through the
+///     boss fight scale hard enough to end any stalled match.
+/// Monotonic non-decreasing; the only instantaneous jump is the 10:00 step.
+/// `RAMP_BASE` is the overall-scale / win-rate dial. Integer/fixed-point only.
 pub fn enemy_hp_mult(tick: u32) -> Fixed {
-    let g = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_GENTLE.0, RAMP_GENTLE.1));
-    let w = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_WARN.0, RAMP_WARN.1));
-    let j = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_JUMP.0, RAMP_JUMP.1));
-
-    // `base(k)` = the post-cliff value at the start of interval `k`, built by
-    // compounding the per-interval factor `k` times from ×1. Deterministic and
-    // cheap (k ≤ 10). The boss endpoint is `base(10)` (the k=10 boundary), so the
-    // boss-phase clamp is DERIVED from the same compounding — no magic constant to
-    // drift when `RAMP_JUMP` is re-tuned.
-    let base = |k: u32| -> Fixed {
+    // f^k by repeated multiplication — deterministic, cheap (k ≤ 15).
+    let pow = |f: Fixed, k: u32| -> Fixed {
         let mut b = Fixed::ONE;
         for _ in 0..k {
-            b = j(w(g(b)));
+            b = b.mul(f);
         }
         b
     };
-
-    // 30 min+: boss phase. Hold the peak endpoint tier (`base(10)`) — the boss AND
-    // its escort swarm (see `BOSS_ESCORT`) ride this multiplier. Continuous with the
-    // k=9→k=10 cliff because it IS that cliff's post value.
-    if tick >= BOSS_SPAWN_TICK {
-        return base(10);
-    }
-
-    // Linear interpolation `from → to` (Fixed) over `[lo, hi)`.
-    let lerp_f = |lo: u32, hi: u32, from: Fixed, to: Fixed| -> Fixed {
-        let span = (hi - lo) as i64;
-        from + (to - from).mul(Fixed::from_ratio((tick - lo) as i64, span))
+    // Piecewise-linear per-minute compounding of `f`, evaluated at `t` (with the
+    // whole-minute exponent capped at `cap`): value = f^k → f^(k+1) lerped across
+    // minute k, holding flat once k reaches the cap.
+    let ramp_at = |f: Fixed, t: u32, cap: u32| -> Fixed {
+        let k = (t / MIN).min(cap);
+        let lo = pow(f, k);
+        if k == cap {
+            return lo;
+        }
+        let hi = lo.mul(f);
+        let frac = Fixed::from_ratio((t - k * MIN) as i64, MIN as i64);
+        lo + (hi - lo).mul(frac)
     };
 
-    let k = tick / RAMP_INTERVAL; // interval index 0..=9
-    let lo = k * RAMP_INTERVAL;
-    let warn_start = lo + GENTLE_TICKS;
-    let hi = lo + RAMP_INTERVAL;
-
-    let bk = base(k);
-    let gentle_end = g(bk); // value at the end of the gentle climb
-    let warn_end = w(gentle_end); // pre-cliff peak (just before the step)
-
-    if tick < warn_start {
-        // Gentle climb: bk → bk·G across the first GENTLE_TICKS.
-        lerp_f(lo, warn_start, bk, gentle_end)
-    } else {
-        // Warning sub-ramp: bk·G → bk·G·W across the final WARN_TICKS (steeper).
-        // The dramatic step (warn_end → base(k+1)) lands AT `hi`, i.e. the next
-        // interval's post-cliff value.
-        lerp_f(warn_start, hi, gentle_end, warn_end)
+    let base_rate = Fixed::from_ratio(RAMP_BASE.0, RAMP_BASE.1);
+    // Base ramp: ×1 through the opening grace (`RAMP_GRACE_MIN`), then per-minute
+    // compounding; frozen at its 15:00 value once the boss arrives (the swift end
+    // takes over as the growth engine from there).
+    let base_t = tick
+        .min(BOSS_SPAWN_TICK)
+        .saturating_sub(RAMP_GRACE_MIN * MIN);
+    let mut v = ramp_at(base_rate, base_t, BOSS_SPAWN_TICK / MIN - RAMP_GRACE_MIN);
+    // The +20% step at 10:00 (instantaneous — a felt breakpoint, like the source).
+    if tick >= SCALE_STEP_TICK {
+        v = v.mul(Fixed::from_ratio(STEP_10MIN.0, STEP_10MIN.1));
     }
+    // 15:00+ — the swift end: compound SWIFT_END per minute past the boss tick,
+    // continuous at the knee (the factor starts at ×1) and capped for overflow
+    // safety.
+    if tick > BOSS_SPAWN_TICK {
+        let sw = Fixed::from_ratio(SWIFT_END.0, SWIFT_END.1);
+        v = v.mul(ramp_at(sw, tick - BOSS_SPAWN_TICK, SWIFT_END_CAP_MIN));
+    }
+    v
 }
 
 /// Ticks per in-game minute at 30 Hz (gate-time helper for the schedule).
 const MIN: u32 = 60 * 30;
 
-/// Boss-phase ESCORT swarm (30 min+): spawned alongside The Hippocrate
-/// by `waves::spawn` at the peak ×11 HP tier. A relentless swarm/rusher/
-/// bruiser flood whose job is contact-damage VOLUME and keeping the player's Clear
-/// cycling (every Clear also chips the Clear-only boss). Tuned so the boss phase is
-/// the wall MOST runs end at — survivable only by a genuinely prepared snowball.
-pub static BOSS_ESCORT: &[WaveSpawn] = &[
-    WaveSpawn {
-        enemy: 0,
-        cadence_ticks: 4,
-        start_tick: BOSS_SPAWN_TICK,
-    }, // Squeakzilla — dense floor (was 5)
-    WaveSpawn {
-        enemy: 4,
-        cadence_ticks: 12,
-        start_tick: BOSS_SPAWN_TICK,
-    }, // Bacon — fast pressure (was 18)
-    WaveSpawn {
-        enemy: 5,
-        cadence_ticks: 15,
-        start_tick: BOSS_SPAWN_TICK,
-    }, // Honk — very fast (was 22)
-    WaveSpawn {
-        enemy: 1,
-        cadence_ticks: 45,
-        start_tick: BOSS_SPAWN_TICK,
-    }, // Fanged Death — periodic bruiser (was 60)
-];
-
 /// Match wave schedule: an ESCALATING mix. Early ticks are the original Grunt +
 /// Fanged-Death baseline (entries 0/1, ungated); progressively richer/deadlier
 /// roster entries gate in over the match via `start_tick`. Entries are processed
 /// in catalog order every tick (stable `rng_spawn` draw sequence). The boss tick
-/// stops all of this (handled in `waves::spawn`). HP scales via `enemy_hp_mult`.
+/// does NOT stop this schedule (source arc): waves keep spawning through the boss
+/// fight and ride the post-15:00 swift-end escalation — that continuing,
+/// hard-scaling tide IS the boss-phase pressure (it replaced the old bespoke
+/// escort swarm). HP scales via `enemy_hp_mult`.
 /// EARLY-THROUGHPUT cadences (the eco-rush lever). The opening waves are tuned so
 /// that an UNARMED tank (no weapons) leaks enough contact damage past its free
 /// Clear to die by tick ≤3600 (the eco-rush punish, target 1) — while a MODEST
@@ -4223,59 +4180,61 @@ pub static WAVE_M0: &[WaveSpawn] = &[
         cadence_ticks: 120,
         start_tick: 3 * MIN / 2,
     }, // Croak (ranged, early standoff)
-    // --- ≈4 min: casters + heavier ranged breath ---
+    // --- ≈2 min: casters + heavier ranged breath (15-min arc: gates from the
+    //     old 30-min arc are ROUGHLY HALVED; the enemy-kind introduction ORDER
+    //     and the ≤90 s eco-rush-punish cadences above are unchanged) ---
     WaveSpawn {
         enemy: 7,
         cadence_ticks: 180,
-        start_tick: 4 * MIN,
+        start_tick: 2 * MIN,
     }, // Nope Rope (caster)
     WaveSpawn {
         enemy: 9,
         cadence_ticks: 200,
-        start_tick: 4 * MIN,
+        start_tick: 2 * MIN,
     }, // Spicy (ranged)
-    // --- ≈6 min: fortified bruisers + slow ice breath, the late-game wall ---
+    // --- ≈3 min: fortified bruisers + slow ice breath, the mid-game wall ---
     WaveSpawn {
         enemy: 6,
         cadence_ticks: 300,
-        start_tick: 6 * MIN,
+        start_tick: 3 * MIN,
     }, // Bonk (Fortified)
     WaveSpawn {
         enemy: 10,
         cadence_ticks: 240,
-        start_tick: 6 * MIN,
+        start_tick: 3 * MIN,
     }, // Popsicle (ranged)
-    // --- POST-15 CLIFF SURGES: discrete roster jumps coinciding with the HP cliffs
-    //     so each step is felt as MORE enemies AND tougher enemies, not just an HP
-    //     bump. Telegraphed by the HP ramp in `enemy_hp_mult` landing at the same
-    //     tick. These keep a snowballing player pressured between/at the cliffs.
-    // Cliff #2 @20 min: a heavy fortified surge + extra fast rushers.
+    // --- LATE SURGES: discrete roster jumps at the source breakpoints so each
+    //     is felt as MORE enemies AND tougher enemies, not just an HP bump.
+    // Surge @10 min — coincides with the +20% scaling step (`SCALE_STEP_TICK`):
+    // a heavy fortified surge + extra fast rushers.
     WaveSpawn {
         enemy: 6,
         cadence_ticks: 150,
-        start_tick: CLIFF_20_TICK,
+        start_tick: SCALE_STEP_TICK,
     }, // Bonk (surge, was 300)
     WaveSpawn {
         enemy: 5,
         cadence_ticks: 60,
-        start_tick: CLIFF_20_TICK,
+        start_tick: SCALE_STEP_TICK,
     }, // Honk (fast surge)
-    // Cliff #3 @25 min: relentless breathers + a swarm flood into the boss.
+    // Surge @12.5 min — relentless breathers + a swarm flood into the boss; this
+    // stream then carries THROUGH the boss fight on the swift-end curve.
     WaveSpawn {
         enemy: 9,
         cadence_ticks: 90,
-        start_tick: CLIFF_25_TICK,
+        start_tick: SURGE_LATE_TICK,
     }, // Spicy (surge)
     WaveSpawn {
         enemy: 10,
         cadence_ticks: 100,
-        start_tick: CLIFF_25_TICK,
+        start_tick: SURGE_LATE_TICK,
     }, // Popsicle (surge)
     WaveSpawn {
         enemy: 0,
         cadence_ticks: 8,
-        start_tick: CLIFF_25_TICK,
-    }, // Squeakzilla (pre-boss flood)
+        start_tick: SURGE_LATE_TICK,
+    }, // Squeakzilla (pre-boss flood → boss-phase tide)
 ];
 
 /// Enemies spawn on this ring and march toward the tank. The eight angular

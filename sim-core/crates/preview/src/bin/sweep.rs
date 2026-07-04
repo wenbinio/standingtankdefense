@@ -1,26 +1,30 @@
 //! Survival-curve seed sweep over the real `sim::step` + `sim::bot::Bot`.
 //!
-//! Runs seeds 0..N (default 80), each to the tank's death or a hard tick cap,
-//! recording the death tick / survival seconds and whether the run "won" (i.e.
-//! survived to the cap — this is an endless survival sim with no explicit
-//! victory state, so reaching the cap alive is the closest analogue).
+//! Runs seeds 0..N (default 80), each to the tank's death, the BOSS KILL, or a
+//! hard tick cap. A run "wins" when it KILLS the boss while alive — the match's
+//! resolution condition on the restored source arc (docs/02 §2.7: the match
+//! ends when ≤1 tank remains **or the boss is resolved**). Reaching the cap
+//! alive with the boss still up also counts (a stalled-but-surviving run), but
+//! under the post-15:00 swift-end escalation that is essentially unreachable —
+//! the boss kill is the real win path.
 //!
 //! Prints per-seed rows plus an aggregate table: survival buckets, mean/median/
-//! min/max survival, win rate, the <30s death rate, and the global min death.
+//! min/max survival, win rate, boss reach/kill counts, and the global min death.
 //! Pure observation of the public arena state — it never bends the sim, so it is
 //! a faithful proxy for the survival curve. Compare BEFORE vs AFTER a bot change
 //! by running this binary on each version (identical methodology, only the bot
 //! decision logic differs).
 //!
-//!   sweep                 # seeds 0..80, cap = 20 min
-//!   sweep --seeds 80 --cap 36000 --rows   # explicit knobs; --rows prints each seed
+//!   sweep                 # seeds 0..80, cap = 18 min (boss-inclusive)
+//!   sweep --seeds 80 --cap 32400 --rows   # explicit knobs; --rows prints each seed
 
 use sim::bot::{Archetype, Bot, Challenge};
-use sim::{step, ArenaState, TICK_HZ};
+use sim::{content, step, ArenaState, TICK_HZ};
 
-/// Survival cap: 20 minutes @ 30 Hz. Past the 15-min boss and the second scale
-/// step, so anything reaching it has cleared the designed difficulty ramp.
-const DEFAULT_CAP_TICKS: u32 = 20 * 60 * TICK_HZ;
+/// Hard cap: 18 minutes @ 30 Hz — three swift-end minutes past the 15-min boss
+/// spawn, comfortably beyond the ~10-Clear (~100 s) boss-kill window, so every
+/// winnable run resolves inside the cap.
+const DEFAULT_CAP_TICKS: u32 = 18 * 60 * TICK_HZ;
 const DEFAULT_SEEDS: u64 = 80;
 
 struct Run {
@@ -28,6 +32,8 @@ struct Run {
     death_tick: u32,
     survived_secs: u32,
     won: bool,
+    reached_boss: bool,
+    boss_killed: bool,
     archetype: Archetype,
     weapons: usize,
     max_hp: i64,
@@ -37,18 +43,35 @@ struct Run {
 fn run_seed(seed: u64, cap: u32, challenge: Challenge) -> Run {
     let mut s = ArenaState::new(seed, 0);
     let mut bot = Bot::with_challenge(challenge);
+    let mut boss_killed = false;
     while s.tick < cap && !s.dead {
         // Apply the challenge's authoritative buy-filter too, so a slot purchase
         // can never violate the playstyle even if the shop shifted — keeps the
         // measured run a faithful pure-eco / constrained run.
         let action = challenge.filter(bot.decide(&s), &s);
         step(&mut s, action);
+        // Boss resolved (spawned at BOSS_SPAWN_TICK, no longer on the board,
+        // tank alive) → the match ends in victory; stop the run here.
+        if !s.dead
+            && s.tick > content::BOSS_SPAWN_TICK
+            && !s
+                .enemies
+                .iter()
+                .any(|e| content::ENEMIES[e.def as usize].boss)
+        {
+            boss_killed = true;
+            break;
+        }
     }
     Run {
         seed,
         death_tick: s.tick,
         survived_secs: s.tick / TICK_HZ,
-        won: !s.dead, // reached the cap alive
+        // Win = the match resolved in the player's favor: boss killed, or
+        // (vestigially) alive at the hard cap.
+        won: boss_killed || !s.dead,
+        reached_boss: s.tick > content::BOSS_SPAWN_TICK,
+        boss_killed,
         // The default bot's per-match archetype is a pure function of the seed.
         archetype: Archetype::for_seed(seed),
         weapons: s.weapons.len(),
@@ -101,7 +124,15 @@ fn main() {
                 r.survived_secs,
                 r.weapons,
                 arch_name(r.archetype),
-                if r.won { "WON (cap)" } else { "DEAD" }
+                if r.boss_killed {
+                    "WON (boss killed)"
+                } else if r.won {
+                    "WON (cap)"
+                } else if r.reached_boss {
+                    "DEAD (boss phase)"
+                } else {
+                    "DEAD"
+                }
             );
         }
         println!();
@@ -170,7 +201,23 @@ fn main() {
         "survival (s): mean {:.1}  median {:.1}  min {}  max {}",
         mean, median, min, max
     );
-    println!("win rate (reached cap): {}/{} ({:.1}%)", wins, n, pct(wins));
+    let reached = runs.iter().filter(|r| r.reached_boss).count();
+    let killed = runs.iter().filter(|r| r.boss_killed).count();
+    println!(
+        "win rate (boss resolved): {}/{} ({:.1}%)",
+        wins,
+        n,
+        pct(wins)
+    );
+    println!(
+        "boss: reached by {}/{} ({:.1}%), killed by {}/{} ({:.1}%)",
+        reached,
+        n,
+        pct(reached),
+        killed,
+        n,
+        pct(killed)
+    );
     println!("<30s death rate: {}/{} ({:.1}%)", lt30, n, pct(lt30));
     match min_death_tick {
         Some(t) => println!("min death: tick {} = {:.2}s", t, t as f64 / TICK_HZ as f64),

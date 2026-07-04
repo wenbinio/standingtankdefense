@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x20e2dabc7009c960, // re-baselined (CATALOG-FIDELITY pass): the weapon/upgrade catalog re-anchored to the source extraction — same-name mechanical mismatches fixed (Ballista/Storm Hammer/Moon Glaive/Magic Missile/Throwing Axes/Immolation/Quills/Soulstealer/Ale Launcher/Demon Eye/Frostwave/Flamewave), the GEN block moved onto the source cooldown/range tiers DPS-neutrally, 4 weapons + 18 upgrades restored (96 weapons / 110 modifiers grow the shop pool), duplicate modifier names deduped, and Entangled Gold Mine moved to rarity 1. Content feeds the trajectory, so the checksum legitimately shifts; captured fresh from `cargo run -p harness`. (Previous baseline 0x5767f463a5dfe375 was the combined economy+E3-mechanics pass.)
+        0x672269466cd58df0, // re-baselined (SOURCE-ARC RESTORATION — the largest legitimate trajectory change of the fidelity program): the match arc returned from the interim 30-minute / 3-min-stepped-ramp shape to the source's 15-minute arc (docs/01 §1.2) — BOSS_SPAWN_TICK 54000→27000, a smooth +25%/min curve with a 2-min opening grace, the +20% step at 10:00, the post-15:00 swift end (waves continue, ×1.5/min), the 15:00 shop close + ramp stop, wave gates compressed onto 15 min, the escort swarm removed, and the boss re-statted (30M HP / 16k fixed contact). Every scripted trajectory shifts; captured fresh from `cargo run -p harness`. (Previous baseline 0x20e2dabc7009c960 was the catalog-fidelity pass.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

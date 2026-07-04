@@ -8,15 +8,15 @@ use crate::state::*;
 /// `s.alloc_entity_id()`; push to `s.enemies` (keep id order). Set hp from
 /// `EnemyDef::base_hp`.
 pub(crate) fn spawn(s: &mut ArenaState) {
-    // Boss phase (30 min+): spawn The Hippocrate exactly once at
-    // the boss tick. The boss uses its fixed HP (no scaling) and is immune to
-    // weapon fire — only `Clear` damages it (handled in combat). UNLIKE the old
-    // design, normal waves do NOT fully stop: a relentless ESCORT swarm keeps
-    // pouring in alongside the boss. The escort serves the climax three ways —
-    //   1) contact-damage VOLUME that pressures even a heavily-defended tank,
-    //   2) it forces the player to keep Clearing, and every Clear also chips the
-    //      boss, so the boss is a real MULTI-CLEAR FIGHT rather than a stalemate,
-    //   3) it makes the boss the wall most runs end at instead of a victory lap.
+    // Boss arrival (15:00, the source arc): spawn The Hippocrate exactly once at
+    // the boss tick. The boss uses its FIXED HP (no scaling — source changelog)
+    // and is immune to weapon fire — only `Clear` damages it (handled in combat).
+    // Normal waves do NOT stop: the regular schedule keeps spawning through the
+    // boss fight and rides the post-15:00 SWIFT-END escalation (`enemy_hp_mult`).
+    // That continuing, hard-scaling tide replaced the old bespoke escort swarm —
+    // it pressures even a heavily-defended tank, forces the player to keep
+    // Clearing (every Clear also chips the Clear-only boss), and guarantees a
+    // stalled match ends ("to bring the game to a swift end", docs/01).
     if s.tick == content::BOSS_SPAWN_TICK {
         let edef = &content::ENEMIES[content::BOSS as usize];
         let id = s.alloc_entity_id();
@@ -27,27 +27,10 @@ pub(crate) fn spawn(s: &mut ArenaState) {
             content::SPAWN_RING[0],
         ));
         s.emit(SimEvent::BossSpawned { id: id.0 });
-        // fall through: the escort swarm below also spawns on this tick.
-    }
-    if s.tick >= content::BOSS_SPAWN_TICK {
-        // Boss escort: a dense grunt/raider flood at the peak HP tier. Cadences
-        // are tight so the board stays full (keeps the player's Clear cycling onto
-        // the boss). Deterministic ring picks via `rng_spawn`, same as normal waves.
-        let hp_mult = content::enemy_hp_mult(s.tick);
-        for ws in content::BOSS_ESCORT {
-            if ws.cadence_ticks != 0 && s.tick.is_multiple_of(ws.cadence_ticks) {
-                let ring_idx = s.rng_spawn.below(content::SPAWN_RING.len() as u32) as usize;
-                let pos = content::SPAWN_RING[ring_idx];
-                let edef = &content::ENEMIES[ws.enemy as usize];
-                let hp = hp_mult.scale_i64(edef.base_hp);
-                let id = s.alloc_entity_id();
-                s.enemies.push(Enemy::new(id, ws.enemy, hp, pos));
-            }
-        }
-        return;
+        // fall through: the normal schedule below also spawns on this tick.
     }
 
-    // Enemy HP scales with match time (identity until 10 min).
+    // Enemy HP scales with match time (`enemy_hp_mult` — the source-shaped curve).
     let hp_mult = content::enemy_hp_mult(s.tick);
     // Process wave entries in their fixed catalog order so the rng_spawn draws
     // happen in a deterministic sequence.
@@ -143,107 +126,82 @@ mod tests {
     }
 
     #[test]
-    fn hp_curve_is_a_3min_stepped_ramp() {
-        // BALANCE PASS: the curve is a STEPPED "RAMP" on a strict 3-min cadence —
-        // every 5400-tick interval is `gentle climb → warning → step`, with steps at
-        // k*5400 for k=1..=10. The old ×413863 hack is gone; the curve escalates
-        // SMOOTHLY to the dialed boss endpoint (≈ ×120 after the catalog-fidelity
-        // pass re-dialed `RAMP_JUMP` for the stronger catalog). Pins the shape.
+    fn hp_curve_is_the_source_arc() {
+        // SOURCE-ARC RESTORATION (docs/01 §1.2): the curve is a smooth per-minute
+        // base ramp, a +20% step AT 10:00 (`SCALE_STEP_TICK`), and from 15:00
+        // (the boss tick) a "swift end" that compounds ×2 per minute on top of
+        // the frozen 15:00 value. Pins the shape and the tuned dial.
         use determinism::Fixed;
         let m = content::enemy_hp_mult;
-        let interval = content::RAMP_INTERVAL; // 5400
-        assert_eq!(interval, 5400);
+        let boss = content::BOSS_SPAWN_TICK; // 27000
+        assert_eq!(boss, 27000);
+        assert_eq!(content::SCALE_STEP_TICK, 18000);
 
         // (1) Starts at exactly ×1 and is monotonic non-decreasing across the
-        //     whole curve (no downward steps anywhere).
+        //     whole curve, through the swift end (no downward steps anywhere).
         assert_eq!(m(0), Fixed::ONE);
         let mut prev = Fixed::ONE;
         let mut t = 0u32;
-        while t <= content::BOSS_SPAWN_TICK + 600 {
+        while t <= boss + 5 * 1800 {
             let cur = m(t);
             assert!(cur >= prev, "curve dipped at tick {t}");
             prev = cur;
             t += 30; // sample once per second — fast and dense enough
         }
 
-        // (2) Exact post-step multipliers at each 3-min boundary (×10000),
-        //     compounding ×1.6141 per interval up to ≈ ×120 at the boss. These are
-        //     the exact `Fixed` values of the catalog-fidelity-pass curve (`G·W·J`
-        //     with J = 1.55 — re-dialed UP for the far stronger re-anchored
-        //     catalog, capped by boss reachability); the boss clamp returns
-        //     `base(10)`.
-        let post: [(u32, i64); 11] = [
-            (0, 10000),
-            (5400, 16141),
-            (10800, 26053),
-            (16200, 42053),
-            (21600, 67879),
-            (27000, 109566),
-            (32400, 176855),
-            (37800, 285467),
-            (43200, 460783),
-            (48600, 743765),
-            (54000, 1200536), // the 30-min boss tier — the ≈ ×120 endpoint.
+        // (2) Exact multipliers at the key arc times (×10000) — the tuned
+        //     `RAMP_BASE` dial (5/4 = +25%/min after the 2-min opening grace),
+        //     the +20% step at 10:00, and the ×1.5/min swift end. Pinned so a
+        //     retune must be deliberate.
+        let pins: [(u32, i64); 9] = [
+            (0, 10000),             //  0:00 — ×1
+            (2 * 1800, 10000),      //  2:00 — still ×1 (the opening grace)
+            (5 * 1800, 19531),      //  5:00 — base ramp (≈ ×1.95)
+            (18000 - 1, 59597),     // 10:00⁻ — just before the step (≈ ×5.96)
+            (18000, 71525),         // 10:00 — the +20% step lands (≈ ×7.15)
+            (14 * 1800, 174622),    // 14:00 — ≈ ×17.5
+            (27000, 218277),        // 15:00 — the boss tick / swift-end knee (≈ ×21.8)
+            (27000 + 1800, 327416), // 16:00 — swift end: ×1.5 past the knee (≈ ×32.7)
+            (27000 + 5400, 736686), // 18:00 — ×1.5³ past the knee (≈ ×73.7)
         ];
-        for (tick, mult10k) in post {
+        for (tick, mult10k) in pins {
+            assert_eq!(m(tick).scale_i64(10000), mult10k, "curve pin at {tick}");
+        }
+
+        // (3) The 10:00 step is exactly +20% (instantaneous).
+        assert_eq!(
+            m(18000).scale_i64(100),
+            m(18000 - 1).mul(Fixed::from_ratio(6, 5)).scale_i64(100)
+        );
+
+        // (4) Swift end: each minute past the boss tick multiplies by ×1.5
+        //     (SWIFT_END = 3/2) — a stalled match ends.
+        for k in 1..=4u32 {
             assert_eq!(
-                m(tick).scale_i64(10000),
-                mult10k,
-                "post-step mult at {tick}"
+                m(boss + k * 1800).scale_i64(100),
+                m(boss + (k - 1) * 1800)
+                    .mul(Fixed::from_ratio(3, 2))
+                    .scale_i64(100),
+                "swift end must compound ×1.5 each minute (minute {k})"
             );
         }
-        // The boss phase HOLDS the endpoint `base(10)` (≈ ×120).
-        let boss = m(content::BOSS_SPAWN_TICK);
-        assert_eq!(boss.scale_i64(10000), 1200536);
-        assert_eq!(
-            m(content::BOSS_SPAWN_TICK + 5000),
-            boss,
-            "boss phase holds the endpoint"
-        );
-
-        // (3) Within an interval: a gentle region, then a STEEPER warning region.
-        //     Verify on the k=1 interval [5400, 10800).
-        let lo = 5400;
-        let warn_start = lo + content::GENTLE_TICKS; // 9900
-                                                     // Average slope over a 100-tick span in the gentle region vs the warning
-                                                     // region (×1e6/tick) — a wide window avoids per-tick quantization noise.
-        let gentle_slope = (m(warn_start - 100).scale_i64(1_000_000)
-            - m(warn_start - 200).scale_i64(1_000_000))
-            / 100;
-        let warn_slope =
-            (m(warn_start + 100).scale_i64(1_000_000) - m(warn_start).scale_i64(1_000_000)) / 100;
-        assert!(gentle_slope > 0, "gentle region must rise");
+        // …and is CONTINUOUS at the knee (no step at 15:00 — the slope explodes,
+        // the value does not jump).
         assert!(
-            warn_slope >= gentle_slope * 3,
-            "warning slope ({warn_slope}) must be perceptibly steeper than gentle ({gentle_slope})"
-        );
-
-        // (4) The boundary STEP: the jump from the pre-step (warning peak) value to
-        //     the next interval's post-step value is a real instantaneous +55% step
-        //     (J, re-dialed for the re-anchored catalog), larger than any single
-        //     warning-region tick step.
-        let pre_step = m(lo + interval - 1); // tick 10799, warning peak
-        let post_step = m(lo + interval); //   tick 10800, post-step
-        let step = post_step.scale_i64(1_000_000) - pre_step.scale_i64(1_000_000);
-        assert!(
-            step > warn_slope * 50,
-            "boundary step must dwarf a single warning tick"
-        );
-        // +55% (J): post ≈ pre × 1.55 (within rounding, ×1000).
-        assert_eq!(
-            post_step.scale_i64(1000),
-            pre_step.mul(Fixed::from_ratio(31, 20)).scale_i64(1000)
+            m(boss).scale_i64(10000) - m(boss - 30).scale_i64(10000)
+                < m(boss).scale_i64(10000) / 20,
+            "no instantaneous jump at the boss tick"
         );
     }
 
     #[test]
     fn late_game_enemies_spawn_with_scaled_hp() {
-        // Use a grunt-cadence (6) tick late in the curve (just before the 15-min
-        // boundary), where the multiplier is well above ×1. Grunt is wave entry 0
-        // (catalog order), so it is `enemies[0]` among this tick's spawns.
+        // Use a grunt-cadence tick late in the curve (just before the boss tick),
+        // where the multiplier is far above ×1. Grunt is wave entry 0 (catalog
+        // order), so it is `enemies[0]` among this tick's spawns.
         let mut s = blank_state();
-        // A grunt-cadence (`EARLY_GRUNT_CADENCE`) tick just before the 15-min step.
-        s.tick = content::SCALE_STEP_2_TICK - content::EARLY_GRUNT_CADENCE; // 26982
+        // A grunt-cadence (`EARLY_GRUNT_CADENCE`) tick just before the boss.
+        s.tick = content::BOSS_SPAWN_TICK - content::EARLY_GRUNT_CADENCE; // 26982
         assert_eq!(s.tick % content::EARLY_GRUNT_CADENCE, 0);
         spawn(&mut s);
         let grunt_base = content::ENEMIES[0].base_hp;
@@ -251,21 +209,20 @@ mod tests {
             s.enemies[0].def, 0,
             "first spawn this tick is the grunt (entry 0)"
         );
-        // hp should be scaled up (the curve is ~×7.1 here — k4 warning region,
-        // just before the 15-min step — after the catalog-fidelity `RAMP_JUMP`
-        // re-dial; a smooth escalation, not the old hack).
+        // hp should be scaled up hard (the curve is ≈ ×24.3 at 15:00⁻ on the
+        // restored source arc — base ramp × the 10:00 step).
         assert!(
-            s.enemies[0].hp > grunt_base * 5,
+            s.enemies[0].hp > grunt_base * 20,
             "late enemy HP must be scaled up"
         );
-        assert!(s.enemies[0].hp <= grunt_base * 10);
+        assert!(s.enemies[0].hp <= grunt_base * 30);
     }
 
     #[test]
-    fn boss_spawns_once_at_boss_tick_with_escort_then_only_escort() {
-        // At the boss tick the boss spawns exactly once; the BOSS_ESCORT swarm may
-        // also spawn this tick (all escort cadences divide the boss tick). Assert
-        // exactly ONE boss is present and that the boss is among the spawns.
+    fn boss_spawns_once_and_normal_waves_continue() {
+        // At the boss tick the boss spawns exactly once; the NORMAL schedule may
+        // also spawn this tick (the boss tick is a multiple of several cadences).
+        // Assert exactly ONE boss is present and that the boss is among the spawns.
         let mut s = blank_state();
         s.tick = content::BOSS_SPAWN_TICK;
         spawn(&mut s);
@@ -276,11 +233,15 @@ mod tests {
             .count();
         assert_eq!(bosses, 1, "exactly one boss spawns at the boss tick");
         assert!(s.enemies.iter().any(|e| e.def == content::BOSS));
+        // The boss's HP is its FIXED base_hp — it never rides the curve.
+        let b = s.enemies.iter().find(|e| e.def == content::BOSS).unwrap();
+        assert_eq!(b.hp, content::ENEMIES[content::BOSS as usize].base_hp);
 
         // The boss spawns ONLY once: at a later boss-phase tick no second boss
-        // appears, but the escort swarm keeps coming (the climax is a real fight).
+        // appears, but the REGULAR waves keep coming (the swift-end tide — the
+        // climax is a real fight, not a duel in an empty arena).
         s.enemies.clear();
-        s.tick = content::BOSS_SPAWN_TICK + 4; // an escort grunt-cadence tick (4)
+        s.tick = content::BOSS_SPAWN_TICK + 8; // a pre-boss-flood cadence tick (8)
         spawn(&mut s);
         assert!(
             s.enemies
@@ -290,7 +251,13 @@ mod tests {
         );
         assert!(
             !s.enemies.is_empty(),
-            "the escort swarm keeps spawning in the boss phase"
+            "normal waves keep spawning through the boss fight"
+        );
+        // …and those boss-phase spawns ride the (swift-end) curve multiplier.
+        let grunt = s.enemies.iter().find(|e| e.def == 0).unwrap();
+        assert!(
+            grunt.hp > content::ENEMIES[0].base_hp * 20,
+            "boss-phase spawns must carry swift-end-scaled HP"
         );
     }
 

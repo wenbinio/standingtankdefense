@@ -35,14 +35,14 @@ Rule of thumb: **anything that changes authoritative truth is CONTROL/reliable; 
         │RESOLUTION│ ◄────────────────────────│  ROUND   │◄────────────►│   SHOP   │
         └──────────┘                          │ (combat) │  round start └──────────┘
                                               └────┬─────┘
-                                                   │ 30:00 reached (BOSS_SPAWN_TICK)
+                                                   │ 15:00 reached (BOSS_SPAWN_TICK)
                                                    ▼
                                               ┌──────────┐
-                                              │   BOSS   │ (The Hippocrate; Clear-only)
-                                              └──────────┘
+                                              │   BOSS   │ (The Hippocrate; Clear-only;
+                                              └──────────┘  shop closed, swift-end waves)
 ```
 
-ROUND and SHOP overlap in practice (the shop opens each round while combat continues); they're shown separate for clarity. `RESOLUTION` is entered the instant the alive-count or boss condition trips.
+ROUND and SHOP overlap in practice (the shop opens each round while combat continues); they're shown separate for clarity. In `BOSS` the shop is **closed** (offers cleared at the 15:00 round boundary — buy/reroll inputs become deterministic no-ops) while waves keep spawning on the swift-end curve. `RESOLUTION` is entered the instant the alive-count or boss condition trips.
 
 ## 4.4 Message catalog
 
@@ -210,7 +210,7 @@ leak authority the director must keep:
 | --- | --- | --- |
 | **`RoundStart`** | **DERIVED from seed+tick — not transmitted** | Round boundaries, wave tables, per-player spawn seeds, and scaling steps are a pure function of `master_seed` + `tick`. Every client computes them identically; sending them would be redundant and a desync surface. |
 | **`ShopOffer`** | **DERIVED from seed+tick — not transmitted** | The shop offer set and reroll cost are produced by the seeded shop RNG stream at the current tick; client and shadow generate the same offers from the same seed. |
-| **`BossSpawn`** | **DERIVED from seed+tick — not transmitted** | The boss spawn tick is fixed by the deterministic schedule (the 30:00 transition, `sim::content::BOSS_SPAWN_TICK` = 54000); no event is needed. |
+| **`BossSpawn`** | **DERIVED from seed+tick — not transmitted** | The boss spawn tick is fixed by the deterministic schedule (the 15:00 transition, `sim::content::BOSS_SPAWN_TICK` = 27000); no event is needed. The same is true of the 15:00 shop close and ramp stop — pure functions of the tick. |
 | **`JoinAccept` / `LobbyState` / `Ready`** | **Off-wire — handled by the in-process `Lobby`** | Pre-match slots, names, ready flags, host id, and ruleset/`content_hash` live in `net::lobby::Lobby` (`sim-core/crates/net/src/lobby.rs`, `docs/07 §7.3`), fed by the Steam matchmaking adapter. They are not `Msg` variants; only the resulting `MatchStart` crosses the wire. |
 | **`LeaderboardDelta`** | **Planned — not yet on the wire** | Standings are derived from `DeathConfirmed`/`MatchResult` today; a periodic delta telemetry message is a future addition (§4.4.4). |
 | **`SnapshotRequest`** | **Planned — not yet on the wire** | The director currently pushes corrective `Snapshot`s; a client-initiated request is a future addition (§4.4.6). |

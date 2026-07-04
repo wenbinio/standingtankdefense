@@ -791,7 +791,15 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
         // Movement is slowed by Frost stacks.
         let speed =
             Fixed::from_int(edef.move_speed).mul(crate::status::move_speed_mult(&e, frost_mult));
-        let contact = dmg_mult.scale_i64(edef.contact_damage);
+        // The BOSS has FIXED stats (source changelog: "always has the same health
+        // and damage and doesn't scale"): its contact hit is its RAW
+        // `contact_damage` — it rides neither the base curve nor the post-15:00
+        // swift-end escalation (its `EnemyDef` value is the direct boss-DPS dial).
+        let contact = if edef.boss {
+            edef.contact_damage
+        } else {
+            dmg_mult.scale_i64(edef.contact_damage)
+        };
         let moved = e.pos.step_toward(tank_pos, speed);
         if moved == tank_pos {
             if edef.boss {
@@ -799,12 +807,12 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
                 // The boss does NOT despawn on contact: it plants at the tank and
                 // grinds it with a CADENCED contact hit (every `BOSS_CONTACT_CADENCE`
                 // ticks) until the player kills it with `Clear` (the only thing that
-                // hurts it) or the tank dies. This is what makes the 30-min climax a
+                // hurts it) or the tank dies. This is what makes the 15:00 climax a
                 // real multi-Clear RACE — survival is no longer a single dodge coin
                 // flip on one burst; the player must out-Clear the boss's sustained
-                // DPS while the escort piles on. Determinism: the cadence is a pure
-                // function of `s.tick` (no wall-clock, no new RNG); dodge/armor/shield
-                // are still honored per hit inside `hit_tank`.
+                // DPS while the swift-end tide piles on. Determinism: the cadence is
+                // a pure function of `s.tick` (no wall-clock, no new RNG);
+                // dodge/armor/shield are still honored per hit inside `hit_tank`.
                 e.pos = moved; // pin at the tank
                 if s.tick.is_multiple_of(content::BOSS_CONTACT_CADENCE)
                     && !attack_misses(s, &e.status)
@@ -1437,10 +1445,10 @@ mod tests {
         move_enemies(&mut early);
         assert_eq!(early.tank.hp, hp0 - base, "tick 0 deals raw contact damage");
 
-        // At the 2nd scaling step (×2 baseline) contact damage doubles.
+        // At the 10-min scaling step, contact damage carries the curve multiplier.
         let mut late = blank_state();
         late.weapons.clear();
-        late.tick = content::SCALE_STEP_2_TICK;
+        late.tick = content::SCALE_STEP_TICK;
         let mult = content::enemy_hp_mult(late.tick);
         let expected = mult.scale_i64(base);
         assert!(expected > base, "scaling must increase contact damage");
@@ -1476,11 +1484,13 @@ mod tests {
     fn boss_persists_on_contact_and_grinds_on_cadence() {
         // The boss does NOT self-destruct: on reaching the tank it stays planted
         // and lands a contact hit only on its cadence ticks. A non-cadence tick
-        // pins it with NO damage; a cadence tick deals one (scaled) contact hit.
-        // Use the boss-phase tick so the ×11 multiplier (and a real cadence) apply.
+        // pins it with NO damage; a cadence tick deals one contact hit at the
+        // FIXED boss-tick tier (the boss has fixed stats — it never rides the
+        // post-15:00 swift-end escalation).
         let cadence = content::BOSS_CONTACT_CADENCE;
         let boss_def = content::BOSS;
         let raw = content::ENEMIES[boss_def as usize].contact_damage;
+        let boss_hp = content::ENEMIES[boss_def as usize].base_hp;
 
         // Off-cadence tick: boss arrives, plants, deals nothing.
         let mut off = blank_state();
@@ -1491,7 +1501,7 @@ mod tests {
         mk_enemy(
             &mut off,
             boss_def,
-            33_000_000,
+            boss_hp,
             Vec2::new(Fixed::from_int(2), Fixed::ZERO),
         );
         move_enemies(&mut off);
@@ -1503,17 +1513,24 @@ mod tests {
         assert_eq!(off.enemies[0].pos, Vec2::ZERO, "boss planted on the tank");
         assert_eq!(off.tank.hp, hp_off, "no damage on an off-cadence tick");
 
-        // On-cadence tick: boss is still planted but now lands one scaled hit.
+        // On-cadence tick: boss is still planted but now lands one FIXED raw hit.
+        // Even DEEP into the swift end (two minutes past the boss tick) the hit
+        // is the raw `contact_damage` — the boss doesn't scale, ever.
         let mut on = blank_state();
         on.weapons.clear();
-        on.tick = content::BOSS_SPAWN_TICK; // a multiple of cadence
+        // First cadence-multiple tick at least two minutes past the boss tick.
+        on.tick = (content::BOSS_SPAWN_TICK + 2 * 1800).div_ceil(cadence) * cadence;
         assert_eq!(on.tick % cadence, 0);
-        let expected = content::enemy_hp_mult(on.tick).scale_i64(raw);
+        let expected = raw;
+        assert!(
+            expected < content::enemy_hp_mult(on.tick).scale_i64(raw),
+            "sanity: the curve would have scaled this hit massively — the boss is exempt"
+        );
         let hp_on = on.tank.hp;
         mk_enemy(
             &mut on,
             boss_def,
-            33_000_000,
+            boss_hp,
             Vec2::new(Fixed::from_int(2), Fixed::ZERO),
         );
         move_enemies(&mut on);
@@ -1525,7 +1542,7 @@ mod tests {
         assert_eq!(
             on.tank.hp,
             hp_on - expected,
-            "cadence tick deals one scaled boss hit"
+            "cadence tick deals one fixed boss-tier hit"
         );
         assert!(on.pending_kills.is_empty(), "boss contact grants no bounty");
     }
@@ -1835,10 +1852,13 @@ mod tests {
         s.tick = (cd - (id.0 % cd)) % cd;
         let hp0 = s.tank.hp;
         enemy_ranged_attacks(&mut s);
-        // Damage applied through the defensive layer (no dodge/armor in blank state).
+        // Damage applied through the defensive layer (no dodge/armor in blank
+        // state), scaled by the match-time curve (≈ ×1 this early — the phase
+        // tick is nonzero, so the smooth per-minute ramp has already begun).
+        let expected = content::enemy_hp_mult(s.tick).scale_i64(dmg);
         assert_eq!(
             s.tank.hp,
-            hp0 - dmg,
+            hp0 - expected,
             "ranged enemy hit the tank at standoff range"
         );
         // The enemy is still alive and has not moved (ranged path doesn't move it).

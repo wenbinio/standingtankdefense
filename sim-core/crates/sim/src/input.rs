@@ -4,8 +4,9 @@ use crate::shop;
 use crate::state::*;
 
 /// Damage dealt to every enemy by a `Clear`. Large but FINITE: it wipes normal
-/// enemies instantly, but the boss (The Hippocrate, ~33M HP) takes
-/// ~11 Clears — and `Clear` is the ONLY thing that can hurt the boss.
+/// enemies instantly, but the boss (The Hippocrate, 30M HP) takes exactly
+/// 10 Clears (≥90 s at the 10 s cooldown) — and `Clear` is the ONLY thing
+/// that can hurt the boss.
 const CLEAR_DAMAGE: i64 = 3_000_000;
 /// Cooldown (in ticks) imposed after a `Clear`. `pub(crate)` so the render
 /// view can report the cooldown fraction (`view::RenderView::clear_cooldown_total`).
@@ -67,6 +68,13 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
         }
 
         Input::Reroll => {
+            // SHOP CLOSED (boss arrived — the shop "flees", see `step()`): a
+            // reroll is a deterministic NO-OP — no gold spent, no free reroll
+            // consumed, no `rng_shop` draw. (A `BuyOffer` is already a natural
+            // no-op: the offer list is empty.)
+            if s.tick >= crate::content::BOSS_SPAWN_TICK {
+                return;
+            }
             if s.economy.rerolls_remaining > 0 {
                 s.economy.rerolls_remaining -= 1;
                 shop::generate_offers(s);
@@ -234,6 +242,26 @@ mod tests {
         assert_eq!(s.economy.gold, 50);
         assert_eq!(s.shop.shop_seq, seq_before, "no regeneration when ignored");
         assert_eq!(s.shop.offers[0].def, 7);
+    }
+
+    #[test]
+    fn reroll_is_a_noop_once_the_shop_closes_at_the_boss() {
+        // From the boss tick the shop is closed (the offers were cleared by
+        // `step()`); a Reroll must change NOTHING — no gold, no free-reroll
+        // consumption, no regeneration (and no rng_shop draw, checked via state).
+        let mut s = fresh();
+        s.tick = content::BOSS_SPAWN_TICK;
+        s.shop.offers.clear();
+        s.economy.rerolls_remaining = 3;
+        s.economy.gold = 10_000;
+        let rng_before = s.rng_shop.state();
+        let seq_before = s.shop.shop_seq;
+        apply(&mut s, Input::Reroll);
+        assert_eq!(s.economy.rerolls_remaining, 3, "no free reroll consumed");
+        assert_eq!(s.economy.gold, 10_000, "no gold spent");
+        assert!(s.shop.offers.is_empty(), "shop stays closed");
+        assert_eq!(s.shop.shop_seq, seq_before, "no regeneration");
+        assert_eq!(s.rng_shop.state(), rng_before, "no rng_shop draw");
     }
 
     // ---- meta / shop items (`docs/06` #5) ----------------------------------

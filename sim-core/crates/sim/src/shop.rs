@@ -17,7 +17,7 @@ use determinism::Rng;
 const OFFER_SLOTS: usize = 8;
 
 /// Per-slot category weights, weapon : modifier. 1:1 — the catalogs are nearly
-/// the same size (86 weapons / 91 modifiers), so an even split approximates
+/// the same size (96 weapons / 110 modifiers), so an even split approximates
 /// "uniform over the combined pool" while staying a named, tunable dial.
 const CATEGORY_WEIGHT_WEAPON: u32 = 1;
 const CATEGORY_WEIGHT_MODIFIER: u32 = 1;

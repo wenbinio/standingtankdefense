@@ -45,11 +45,14 @@ That's it — you'll boot to the **Tank Select** screen.
 3. A **shop bar** sits along the bottom. Press **1–8** (or click a card) to buy.
    **Slots 1–4 are weapons; slots 5–8 are economy / passives / spikes.**
 4. Keep buying as gold comes in. The shop **refreshes every round (~30s)**; press
-   **R** to reroll it sooner.
+   **R** to reroll it sooner. (The shop **closes for good at 15:00** — it flees
+   when the boss arrives — so spend before the bell.)
 5. When the screen gets swamped, press **Space** to **Clear** (a board wipe — and
    the *only* thing that damages the boss).
-6. Survive as long as you can. When your tank dies you get a **run summary** —
-   press **Enter** to redeploy and try again.
+6. Survive the 15-minute ramp (enemies step up **+20% at 10:00**), then kill the
+   **boss** with repeated Clears while the waves keep escalating ("swift end").
+   When your tank dies you get a **run summary** — press **Enter** to redeploy
+   and try again.
 
 ---
 
@@ -158,8 +161,8 @@ in the arena to mute/unmute sound. Both stick between sessions.
 - **Weapons vs. economy:** weapons (slots 1–4) kill things now; economy (slots
   5–8) compounds your gold so you can out-buy the late game. Most runs want some
   of both — pure-greed and pure-aggression are both viable but risky.
-- **Clear (Space)** is your panic button and your **only answer to the boss** —
-  but it's on a cooldown, so spend it wisely.
+- **Clear (Space)** is your panic button and your **only answer to the boss**
+  (~10 Clears to kill it) — but it's on a cooldown, so spend it wisely.
 - **High-risk picks exist on purpose.** Some cheap cards are deliberately
   double-edged (they can even kill you). They're meant as gambles for a high
   ceiling — read the tooltip before you commit.

@@ -8,7 +8,7 @@ Design spec for **Standing Tank Defense**, grounded in the extracted Tower Survi
 2. **Everything stacks, multiplicatively across sources.** The map's rule — *"different damage increases are multiplicative with each other"* — is the power-curve engine. Power comes from layering, not from a tech tree you outgrow.
 3. **Randomized offers, meaningful choices.** Each round opens a new shop of random offers, weighted by rarity; rerolls and targeted shop items let you steer the randomness at a cost.
 4. **You race the lobby, not fight it.** Players never touch each other's arenas. The competition is *relative survival time*. This is a pillar **and** the reason the netcode can be cheap.
-5. **Readable escalation.** Difficulty ramps on a fixed clock with known breakpoints — as shipped, a stepped ramp every **3 minutes** (k = 1..10) across a **30-minute** arc, then the boss. (The WC3 source used a 15-min arc with 10/15-min breakpoints; see `docs/01`.)
+5. **Readable escalation.** Difficulty ramps on a fixed clock with known breakpoints — the source's arc, as shipped: a smooth per-minute ramp across a **15-minute** arc, a **+20% step at 10:00**, then the boss at **15:00** with a post-15:00 **"swift end"** escalation (waves keep spawning and compound hard, so no match stalls). (`docs/01` §1.2; `sim::content::enemy_hp_mult`.)
 
 ## 2.2 The tank (player avatar)
 
@@ -23,12 +23,13 @@ Design spec for **Standing Tank Defense**, grounded in the extracted Tower Survi
 | --- | --- | --- |
 | Lobby | until ready/countdown | Server assigns slots + master seed |
 | Countdown | ~5 s **[design choice]** | Time-sync converges here |
-| Rounds | **~30 s each**, a new **shop every round** | **30 min** of escalating waves |
-| Scaling steps | every **3 min** (`RAMP_INTERVAL` = 5400 ticks; steps at 3, 6, …, 30 min) | enemy HP **and** damage step up ≈ +14% per interval, compounding smoothly to ≈ ×5.56 at the boss (`sim::content::enemy_hp_mult`) |
-| Boss | at **30 min** (`BOSS_SPAWN_TICK` = 54000) | **The Hippocrate** spawns with a dense escort; **fixed** HP/damage (does not scale); immune to weapon fire — only `Clear` damages it (a multi-`Clear` race) |
-| Resolution | — | placement + Last Stand awarded |
+| Rounds | **~30 s each**, a new **shop every round** | **15 min** of escalating waves |
+| Scaling | smooth ramp, **+25%/min** after a 2-min grace | enemy HP **and** damage compound per minute to ≈ ×21.8 at 15:00 (`sim::content::enemy_hp_mult`; `RAMP_BASE` is the difficulty dial) |
+| Scaling step | at **10 min** (`SCALE_STEP_TICK` = 18000) | an instantaneous **+20%** step (source changelog: "extra scaling after 10 minutes increased by 20%") |
+| Boss + swift end | at **15 min** (`BOSS_SPAWN_TICK` = 27000) | **The Hippocrate** spawns; **fixed** HP/damage (does not scale); immune to weapon fire — only `Clear` damages it (a ~10-`Clear` race). Waves do **not** stop: from 15:00 they compound **×1.5/min** ("swift end"), the **shop closes** (it "flees"), and per-round ramp upgrades **stop accruing** |
+| Resolution | — | placement + Last Stand awarded; the match ends when ≤1 tank remains or the boss is resolved |
 
-*(As shipped. The WC3 source ran ~15 min with 10/15-min scaling steps and its "Samwise" boss — `docs/01`; the standalone game stretched the arc to 30 min with an even 3-min ramp.)*
+*(As shipped — the restored source arc: the WC3 source runs ~15 min with 10/15-min scaling breakpoints to its boss, and its changelog rules — the 15-min ramp-stop and the fleeing shop — are implemented fact here (`docs/01` §1.2). An earlier chapter of this project shipped a stretched 30-min arc with a metronomic 3-min stepped ramp; this pass returned the game to the source arc, and that 30-min shape is history.)*
 
 - **Round number and global clock are server-authoritative** and identical for everyone, so "round N" / "minute N" are comparable across the leaderboard.
 - Within a round each arena runs **independently**: your round-N wave is the same *composition* as everyone else's round-N wave (shared wave table) but **per-player seeded**, so spawn timing/positions differ and can't be mirror-copied.
@@ -43,6 +44,8 @@ Three income sources, scoped so multipliers don't trivially compound (matching t
 3. **Round bonus / meta-items** — lump sums and time-growing items (e.g. **Magic Treasure**: +250 gold now, value grows +2/sec).
 
 Gold is spent in the **per-round shop**. **Rerolls** refresh the offers: you start with **5** rerolls, cost escalates per use, and some effects grant **Free Rerolls**.
+
+**The shop closes at the boss** (source flavor: it "flees in fear of the boss's impending arrival"): from the 15:00 boss tick no new offers are rolled and the stalls **clear** — nothing remains purchasable, and buy/reroll inputs are deterministic no-ops. Spend it before the bell.
 
 ## 2.5 Content model
 
@@ -69,7 +72,7 @@ Each weapon = `{base damage types, attack type, damage, DPS, attack cooldown, ra
 ### Modifiers (the stacking engine)
 - **Category/scope modifiers** — by damage type ("+10% Chaos Damage"), by range tier, by attack class ("+25% Splash Weapons", "+25% Single Target Weapons"), by rarity ("+100% Common Weapons"), by enemy state ("+25% to Poisoned/Stunned").
 - **Global modifiers** — +Attack Speed, +Range, +Max HP / +%, +HP Regen / +%, +Armor, +Dodge, Mana Shield grants, +Income, +Bounty.
-- **Time/round modifiers** — "+X% every 30 s (each new shop)"; some sources "no longer stack after 15 minutes."
+- **Time/round modifiers** — "+X% every 30 s (each new shop)"; per the source rule these "no longer stack after 15 minutes" — accrual freezes at the boss tick (`modifiers::apply_ramps`), the already-accrued value keeps working.
 
 ### Rarity ladder (offer weighting & cost)
 **Common (500g) → Uncommon → Rare → Epic**. Rarity sets draw weight, cost, and magnitude. *("Epic" and its ~5000g top cost are inferred — see `docs/01` §1.4; only the 500g Common cost is source-confirmed.)*
@@ -86,8 +89,8 @@ Each weapon = `{base damage types, attack type, damage, DPS, attack cooldown, ra
 
 - Enemy fields: `{HP, move speed, contact damage, bounty, armor class, archetype, abilities}`. The shipped roster is an **original 12-entry funny-animal cast** (`sim::content::ENEMIES` — Squeakzilla, Doomduck, Bacon, Honk, Bonk, Nope Rope, Croak, Spicy, Popsicle, Dodo, Fanged Death, plus the boss) covering the source's archetypes: melee swarmers, fast rushers, armored bruisers, casters, and ranged breathers/spitters. (The WC3 roster — Fel Orc Peons, Warlocks, Fire/Ice/Poison/Lava breathers — is cataloged in `docs/01` / Appendix A; no WC3 names or assets ship.)
 - **Wave table per round** defines composition, counts, and cadence; shared across players for a given round, **per-player seeded** for individual spawn timing/position.
-- **Scaling**: enemy base HP **and** damage step up on the 3-min ramp (steps at 3, 6, …, 30 min — §2.3).
-- **Boss** (30 min): **The Hippocrate**, fixed stats, **immune to weapon fire — only `Clear` damages it** — and it grinds the tank with cadenced contact hits while a dense escort keeps spawning, so the climax is a sustained multi-`Clear` race. *(The source's boss, "Samwise", likewise had fixed/non-scaling stats; the Clear-only rule was a carried-over design assumption there, and is implemented fact here.)*
+- **Scaling**: enemy base HP **and** damage compound on the per-minute ramp, with the +20% step at 10 min and the swift-end escalation from 15 min (§2.3).
+- **Boss** (15 min): **The Hippocrate**, fixed stats, **immune to weapon fire — only `Clear` damages it** — and it grinds the tank with cadenced contact hits while the regular waves keep spawning on the swift-end curve, so the climax is a sustained multi-`Clear` race (~10 Clears) against a swelling tide. *(The source's boss, "Samwise", likewise had fixed/non-scaling stats; the Clear-only rule was a carried-over design assumption there, and is implemented fact here.)*
 
 ## 2.7 Win / lose & placement (last man standing)
 

@@ -434,8 +434,11 @@ impl Bot {
     }
 
     /// Can we reroll to fish for a wanted weapon (free, or affordable paid)?
+    /// Never once the shop has CLOSED at the boss (empty offer list — rerolling
+    /// a closed shop is a sim no-op, so the bot doesn't waste actions on it).
     fn can_reroll(&self, s: &ArenaState) -> bool {
-        s.economy.rerolls_remaining > 0 || s.economy.gold >= s.economy.reroll_cost
+        !s.shop.offers.is_empty()
+            && (s.economy.rerolls_remaining > 0 || s.economy.gold >= s.economy.reroll_cost)
     }
 
     /// Cheapest affordable slot whose offer matches `pred`, if any.
@@ -604,7 +607,9 @@ impl Bot {
         }
 
         // Nothing affordable/allowed — spend a free reroll to fish for options.
-        if s.economy.rerolls_remaining > 0 {
+        // A CLOSED shop (empty offers — the boss arrived) is handled gracefully:
+        // rerolling it is pointless, so the bot just fights (Clear cadence above).
+        if s.economy.rerolls_remaining > 0 && !s.shop.offers.is_empty() {
             self.cooldown = 20;
             return Input::Reroll;
         }
@@ -618,8 +623,8 @@ const ALL_CLASSES: u16 = 0b111111;
 const WEAPON_FLOOR_CAP: usize = 10;
 /// Hard cap on MODIFIER purchases per match for the default bot. A real build is
 /// finite; without a cap the bot would buy a modifier every few ticks for the whole
-/// 30-min match (~thousands), compounding multiplicative damage / economy into a
-/// fixed-point overflow. 120 is far more than any human buys yet bounded enough that
+/// match (~thousands), compounding multiplicative damage / economy into a
+/// fixed-point overflow. 250 is far more than any human buys yet bounded enough that
 /// no stat runs away (with the saturating Fixed ops as a final backstop). Challenge
 /// runs are exempt (they self-limit by playstyle).
 const MODIFIER_BUY_CAP: u32 = 250;

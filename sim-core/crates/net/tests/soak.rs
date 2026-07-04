@@ -1,6 +1,6 @@
-//! M5 soak test (`docs/06` M5): eight players, full content, a LONG match driven
-//! well past the 30-minute boss spawn (`content::BOSS_SPAWN_TICK == 54000`), on a
-//! CLEAN link. Where `chaos.rs` proves the netcode survives adverse links, the
+//! M5 soak test (`docs/06` M5): eight players, full content, a full-arc match
+//! driven well past the 15-minute boss spawn (`content::BOSS_SPAWN_TICK ==
+//! 27000`) and through the boss KILL, on a CLEAN link. Where `chaos.rs` proves the netcode survives adverse links, the
 //! soak proves it stays correct and BOUNDED over a very long, fully-loaded run —
 //! the kind of marathon that surfaces drift, leaks, and slow-growth bugs.
 //!
@@ -30,13 +30,14 @@ use sim::{content, ArenaState, Input};
 
 const N: u32 = 8;
 const HASH: u64 = 0x5DA1_C0FF_EE15_500A; // a representative content version
-/// Seed chosen so the bot builds carry the tanks deep into the boss phase, so the
-/// late-game content (boss + escort flood) is actually exercised under the net
-/// transport rather than every arena dying in the opening minute.
+/// Seed chosen so at least one bot build carries its tank through the whole
+/// boss FIGHT (P1 reaches the boss and kills it), so the late-game content
+/// (boss + the post-15:00 swift-end wave tide) is actually exercised under the
+/// net transport rather than every arena dying in the opening minute.
 const SEED: u64 = 7;
-/// Run past the boss so the boss FIGHT (spawn + escort flood), not just its
-/// arrival, runs through the netcode. ~30.5 minutes of match @ 30 Hz.
-const BUDGET: u32 = content::BOSS_SPAWN_TICK + 800; // 54800
+/// Run two swift-end minutes past the boss spawn — enough to cover the full
+/// ~10-Clear (~100 s) boss kill window plus margin. ~17 minutes of match @ 30 Hz.
+const BUDGET: u32 = content::BOSS_SPAWN_TICK + 3600; // 30600
 
 fn peers() -> Vec<PeerId> {
     (1..=N).map(PeerId).collect()
@@ -90,19 +91,25 @@ fn eight_player_full_match_soak_stays_correct_and_bounded() {
 
     // Iteration to fire the in-soak liveness probe — deep into the match (the
     // director has logged tens of thousands of ticks, so its history has been
-    // trimmed thousands of times) but comfortably before any tank can die (the
-    // boss arrives at 54000), so P1 is certainly alive and its shadow clock is
-    // live. It injects ONE mismatching digest for a RECENT, logged tick from P1
+    // trimmed thousands of times) but comfortably inside P1's survival window
+    // (P1 outlives the boss on this seed), so P1 is certainly alive and its
+    // shadow clock is live. It injects ONE mismatching digest for a RECENT, logged tick from P1
     // and confirms the director still answers with a Snapshot. The snapshot
     // reflects P1's true state, which a healthy P1 already holds, so it is a no-op
     // correction and does NOT perturb the "0 corrections" assertion.
-    let probe_iter = 30_000 + START_LEAD;
+    let probe_iter = 15_000 + START_LEAD;
 
     let total = BUDGET + START_LEAD;
     let mut sampled_checks = 0u32;
     let mut probe_fired = false;
     let mut recent_triggered_snapshot = false;
     let mut boss_seen = false;
+    // Per-pilot: whether this arena has EVER had the boss on its board, and
+    // whether it then killed it (boss gone while the arena is still alive) —
+    // the full-arc reachability constraint: a competent build must reach AND
+    // kill the boss at this fixed seed.
+    let mut pilot_saw_boss = vec![false; ps.len()];
+    let mut boss_killed = false;
 
     // Per-client `arena_tick → checksum` history. Once a player's shadow DIES the
     // director freezes it (stops stepping), so the shadow's tick falls behind the
@@ -146,13 +153,19 @@ fn eight_player_full_match_soak_stays_correct_and_bounded() {
         for (i, c) in clients.iter().enumerate() {
             if c.arena_tick().is_some() {
                 pilots[i].step();
-                if pilots[i]
+                let boss_up = pilots[i]
                     .mirror
                     .enemies
                     .iter()
-                    .any(|e| content::ENEMIES[e.def as usize].boss)
-                {
+                    .any(|e| content::ENEMIES[e.def as usize].boss);
+                if boss_up {
                     boss_seen = true;
+                    pilot_saw_boss[i] = true;
+                } else if pilot_saw_boss[i] && !pilots[i].mirror.dead {
+                    // This arena had the boss and no longer does, while still
+                    // alive: the boss was KILLED (Clear-only) — the match's
+                    // victory resolution ran through the netcode.
+                    boss_killed = true;
                 }
             }
         }
@@ -210,6 +223,13 @@ fn eight_player_full_match_soak_stays_correct_and_bounded() {
     assert!(
         boss_seen,
         "the boss never appeared — the soak did not reach the boss phase"
+    );
+    // …and a competent build carried the fight to the KILL (full-arc
+    // reachability: the retune must never make the boss unreachable/unkillable
+    // at the soak's fixed seed).
+    assert!(
+        boss_killed,
+        "no arena killed the boss — the full arc (boss fight included) was not exercised"
     );
 
     // 2. Correction rate ≈ 0 on a clean link, all the way past the boss.
