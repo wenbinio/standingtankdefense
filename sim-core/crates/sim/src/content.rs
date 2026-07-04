@@ -985,17 +985,23 @@ pub static MODIFIERS: &[ModifierDef] = &[
         effects: &[ModEffect::GrantVoucher(1)],
         ramp: None,
     },
-    // Magic Treasure (A0FP): "+250 Gold | Gold value increases by 2 per second" —
-    // the growing-value is modeled as a per-round income ramp.
+    // Magic Treasure (A0FP): "When used, gain +250 Gold | Gold value increases
+    // by 2 per second | Purchasing a second Magic Treasure uses the first."
+    // APPROXIMATION (honest): the source item is a HELD consumable banked on a
+    // player-chosen "use"; a use-consumable needs an input variant we don't
+    // ship yet. Nearest input-free semantics, implemented via the `GrantGold`
+    // interception in `ArenaState::buy_modifier`: on purchase the 250 goes
+    // into a visible holding pool (`Economy::treasure_pool`) that grows +2/s
+    // (`economy::tick_income`) and AUTO-BANKS when the next shop rolls
+    // (`economy::on_round_start`); buying a second Treasure banks the first
+    // (as in the source). This replaces the earlier instant +250 + permanent
+    // +5-income/round ramp, which had no source basis.
     ModifierDef {
         name: "Magic Treasure",
         rarity: 1,
         cost: 1000,
         effects: &[ModEffect::GrantGold(250)],
-        ramp: Some(RampSpec {
-            effect: ModEffect::IncomeFlat(5),
-            interval_ticks: RAMP_PER_ROUND,
-        }),
+        ramp: None,
     },
     // Self-scaling / healing / revive (`docs/06` #6): bespoke survival & growth.
     // Ankh of Reconstruction (A01T): "Upon fatal damage, fully repair the tower,

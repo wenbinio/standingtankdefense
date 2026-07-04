@@ -143,10 +143,10 @@ const MODIFIER_TEXT: [(&str, &str); 91] = [
     ("The Relief never came, so the Wardens took their mending off the dying and bolted fresh plate while they were at it.", "Mask of Death: +1000 max HP, +15 HP per kill."),  // 38
     ("A deeper draught of the same grim arithmetic, each corpse on the line paying back the Relief's debt.", "+60 HP each time an enemy dies."),  // 39
     ("Conclave rot-spores feed two mouths at once, the dying enemy's and the gunner the Relief abandoned.", "Reanimating Poison: +5 HP every poison tick."),  // 40
-    ("Three flips of a Greycoat token, and the quartermaster's ledger pays out in triplicate before anyone checks the column twice.", "Multiplication Gems: next common yields 3 copies."),  // 41
-    ("The Conclave keeps a second of everything worth having, off the ledger and out of the quartermaster's count.", "Duplicator: next rare bought yields 1 free copy."),  // 42
-    ("A name in the right margin of the ledger, and the Greycoats look the other way once.", "Black Market: next uncommon purchase is free."),  // 43
-    ("Coin the Greycoats buried at Ashmark before the line broke, dug up and still drawing interest.", "Magic Treasure: +250 gold now, +5 income/round."),  // 44
+    ("Three flips of a Greycoat token, and the quartermaster's ledger pays out in triplicate before anyone checks the column twice.", "Multiplication Gems: next common upgrade yields 3 copies."),  // 41
+    ("The Conclave keeps a second of everything worth having, off the ledger and out of the quartermaster's count.", "Duplicator: next rare weapon or spikes upgrade yields 1 free copy."),  // 42
+    ("A name in the right margin of the ledger, and the Greycoats look the other way once.", "Black Market: next uncommon weapon or spikes upgrade is free."),  // 43
+    ("Coin the Greycoats buried at Ashmark before the line broke, dug up and still drawing interest.", "Magic Treasure: holds 250 gold, growing +2/s; pays out at the next shop."),  // 44
     ("The Wardens buried this rite with their last chaplain; it answers once, and resents being asked.", "Ankh of Reconstruction: revive once, +2000 max HP."),  // 45
     ("What field-dressing the Wardens have left, doled out by a surgeon who stopped counting the dead at Ashmark.", "Healing Hand: +25% to all healing received."),  // 46
     ("Hexwright greenwood grown through the hull, more wall and slower mending the closer to death the gunner runs.", "Living Wood: +2000 max HP, 1.5% missing HP/sec."),  // 47

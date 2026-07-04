@@ -167,6 +167,7 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_fixed(s.economy.income_shield_pct);
     c.write_u32(s.economy.rerolls_remaining);
     c.write_i64(s.economy.reroll_cost);
+    c.write_i64(s.economy.treasure_pool);
 
     c.write_u32(s.next_entity_id);
     c.write_u32(s.dead as u32);
@@ -247,6 +248,7 @@ pub fn checksum(s: &ArenaState) -> u64 {
         Some(p) => {
             c.write_u32(1);
             c.write_u32(p.rarity as u32);
+            c.write_u32(p.scope.as_u8() as u32);
             c.write_u32(p.extra_copies);
             c.write_u32(p.free as u32);
         }

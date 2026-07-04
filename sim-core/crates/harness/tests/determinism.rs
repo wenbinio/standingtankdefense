@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x09058789ad2df90a, // re-baselined (§9.3 EVENT-STREAM PASS): `Projectile::weapon_kind` (deterministic render kind, snapshot v20) now rides the wire snapshot, so per the parity rule it also feeds `checksum()`. The SIMULATION TRAJECTORY is unchanged — waves/combat behavior is identical, only the digest domain grew, which shifts the hash. The new `ArenaState::events` buffer is transient render-only state, EXCLUDED from checksum/snapshot by design (`sim/tests/events.rs` proves drained vs undrained runs are checksum-identical). (Previous baseline 0x58d77dad0cc11999 was the B4 checksum-completeness pass.)
+        0xa1938d079a0f035b, // re-baselined (ECONOMY-FIDELITY PASS): (1) the shop draws every slot independently — category, then weighted rarity (`shop::RARITY_WEIGHTS`), then uniform-in-bucket — changing the RNG draw pattern and the offered items; (2) %-income multipliers now scale only BONUS income above the 20/tick base (source rule, `docs/02 §2.4`); (3) Magic Treasure is a held +2/s pool banked at the shop roll instead of instant gold + an income ramp; (4) new authoritative fields `Economy::treasure_pool` and `PendingPerk::scope` feed the checksum (snapshot v21). (Previous baseline 0x09058789ad2df90a was the §9.3 event-stream pass.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

@@ -10,7 +10,13 @@ const CLEAR_DAMAGE: i64 = 3_000_000;
 /// Cooldown (in ticks) imposed after a `Clear`. `pub(crate)` so the render
 /// view can report the cooldown fraction (`view::RenderView::clear_cooldown_total`).
 pub(crate) const CLEAR_COOLDOWN_TICKS: u32 = 300;
-/// Gold increment added to `reroll_cost` after a paid reroll.
+/// Paid-reroll pricing, INVENTED (unextracted): the source escalates reroll
+/// cost per use but the exact curve was never extracted (`docs/01`); this
+/// linear 100g-base / +100g-per-use placeholder stands in until it is. Named
+/// dials so the balance retune (or a future extraction) can replace the curve
+/// in one place. `REROLL_COST_BASE` seeds `Economy::reroll_cost` in
+/// `ArenaState::new`; `REROLL_COST_STEP` is added after each PAID reroll.
+pub(crate) const REROLL_COST_BASE: i64 = 100;
 const REROLL_COST_STEP: i64 = 100;
 
 /// Phase 2: apply `inp`.
@@ -33,12 +39,13 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
             let idx = slot as usize;
             if let Some(offer) = s.shop.offers.get(idx).copied() {
                 // A pending meta perk (`docs/06` #5) may apply to this purchase,
-                // but never to another META item (no self-duplication / chaining).
+                // but never to another META item (no self-duplication / chaining
+                // — the source's "Does not work on Magic Coins, Magic Treasures
+                // or Black Markets"). Rarity AND scope must both match.
                 let perk = if ArenaState::offer_is_meta(offer) {
                     None
                 } else {
-                    let rarity = ArenaState::offer_rarity(offer);
-                    s.pending_perk.filter(|p| p.matches(rarity))
+                    s.pending_perk.filter(|p| p.matches(offer))
                 };
                 // Black Market voucher makes the matching purchase free.
                 let cost = match perk {
@@ -239,23 +246,69 @@ mod tests {
             .expect("modifier exists") as u16
     }
 
+    /// Find a catalog modifier index by rarity + predicate over the whole def.
+    fn modifier_where(pred: impl Fn(&content::ModifierDef) -> bool) -> u16 {
+        content::MODIFIERS
+            .iter()
+            .position(pred)
+            .expect("modifier exists") as u16
+    }
+
     #[test]
-    fn duplicator_grants_extra_copies_of_next_matching_purchase() {
+    fn common_duplicator_multiplies_next_common_upgrade() {
+        // Multiplication Gems: "+3 extra copies of the next 500 Gold (Common)
+        // UPGRADE" — upgrades only, never weapons.
         let mut s = fresh();
-        // Arm "+N copies of next Common (rarity 0)".
         let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(0, _)));
         let copies = content::MODIFIERS[dup as usize]
             .effects
             .iter()
             .find_map(|e| match e {
-                content::ModEffect::GrantDuplicator(_, c) => Some(*c as usize),
+                content::ModEffect::GrantDuplicator(_, c) => Some(*c),
                 _ => None,
             })
             .unwrap();
         s.buy_modifier(dup);
         assert!(s.pending_perk.is_some(), "perk armed");
 
-        // Buy a rarity-0 WEAPON; should yield 1 + copies instances.
+        // Buy a Common non-meta UPGRADE ("+10% Damage", def 0): the purchase
+        // applies 1 + copies times.
+        let target = modifier_where(|m| {
+            m.rarity == 0
+                && !m.is_meta()
+                && m.effects.len() == 1
+                && m.effects[0] == content::ModEffect::DamageGlobalPct(1, 10)
+        });
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Modifier,
+            def: target,
+            cost: 500,
+        }];
+        s.economy.gold = 500;
+        let add_before = s.modifiers.add_global;
+        apply(&mut s, Input::BuyOffer { slot: 0 });
+        // Expected: the +10% additive folded in 1 + copies times.
+        let per = Fixed::from_ratio(1, 10);
+        let mut expected = Fixed::ZERO;
+        for _ in 0..(1 + copies) {
+            expected += per;
+        }
+        assert_eq!(
+            s.modifiers.add_global - add_before,
+            expected,
+            "upgrade applied 1 + copies times"
+        );
+        assert!(s.pending_perk.is_none(), "perk consumed");
+        assert_eq!(s.economy.gold, 0, "only the base copy costs gold");
+    }
+
+    #[test]
+    fn common_duplicator_does_not_apply_to_weapons() {
+        // SOURCE SCOPE: Multiplication Gems target UPGRADES only — buying a
+        // Common WEAPON must neither duplicate nor consume the perk.
+        let mut s = fresh();
+        let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(0, _)));
+        s.buy_modifier(dup);
         let common_weapon = content::WEAPONS.iter().position(|w| w.rarity == 0).unwrap() as u16;
         s.shop.offers = vec![Offer {
             kind: OfferKind::Weapon,
@@ -265,25 +318,23 @@ mod tests {
         s.economy.gold = 100;
         let before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 0 });
-        assert_eq!(
-            s.weapons.len(),
-            before + 1 + copies,
-            "duplicated copies granted"
-        );
-        assert!(s.pending_perk.is_none(), "perk consumed");
-        assert_eq!(s.economy.gold, 0, "only the base copy costs gold");
+        assert_eq!(s.weapons.len(), before + 1, "no extra weapon copies");
+        assert!(s.pending_perk.is_some(), "perk still armed");
+        assert_eq!(s.economy.gold, 0, "weapon paid full price");
     }
 
     #[test]
-    fn duplicator_ignores_non_matching_rarity() {
+    fn rare_duplicator_applies_to_weapons_but_not_wrong_rarity() {
+        // Duplicator: "+1 extra copy of the next RARE Weapon or Spikes Damage
+        // Upgrade" — weapons qualify, but only at the matching rarity.
         let mut s = fresh();
-        let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(0, _)));
+        let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(2, _)));
         s.buy_modifier(dup);
-        // Buy a rarity-2 weapon: perk (rarity 0) must NOT apply and must remain armed.
-        let rare_weapon = content::WEAPONS.iter().position(|w| w.rarity == 2).unwrap() as u16;
+        // A COMMON weapon: wrong rarity — perk must NOT apply and stays armed.
+        let common_weapon = content::WEAPONS.iter().position(|w| w.rarity == 0).unwrap() as u16;
         s.shop.offers = vec![Offer {
             kind: OfferKind::Weapon,
-            def: rare_weapon,
+            def: common_weapon,
             cost: 0,
         }];
         let before = s.weapons.len();
@@ -294,6 +345,18 @@ mod tests {
             "no extra copies for wrong rarity"
         );
         assert!(s.pending_perk.is_some(), "perk still armed");
+
+        // A RARE weapon: matches — 1 + copies instances land.
+        let rare_weapon = content::WEAPONS.iter().position(|w| w.rarity == 2).unwrap() as u16;
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Weapon,
+            def: rare_weapon,
+            cost: 0,
+        }];
+        let before = s.weapons.len();
+        apply(&mut s, Input::BuyOffer { slot: 0 });
+        assert_eq!(s.weapons.len(), before + 2, "rare weapon duplicated");
+        assert!(s.pending_perk.is_none(), "perk consumed");
     }
 
     #[test]
@@ -312,6 +375,62 @@ mod tests {
         let before = s.weapons.len();
         apply(&mut s, Input::BuyOffer { slot: 0 });
         assert_eq!(s.weapons.len(), before + 1, "free purchase happened");
+        assert_eq!(s.economy.gold, 0, "voucher charged no gold");
+        assert!(s.pending_perk.is_none(), "voucher consumed");
+    }
+
+    #[test]
+    fn voucher_scope_covers_spikes_upgrades_but_not_other_upgrades() {
+        // Black Market: "Buy 1 Uncommon WEAPON or SPIKES DAMAGE UPGRADE of
+        // your choosing" — a Spikes upgrade qualifies, other upgrades don't.
+        let voucher = modifier_idx(|e| matches!(e, content::ModEffect::GrantVoucher(1)));
+
+        // An Uncommon NON-spikes upgrade must not consume the voucher.
+        let mut s = fresh();
+        s.buy_modifier(voucher);
+        let plain = modifier_where(|m| {
+            m.rarity == 1
+                && !m.is_meta()
+                && !m.effects.iter().any(|e| {
+                    matches!(
+                        e,
+                        content::ModEffect::SpikesFlat(..)
+                            | content::ModEffect::SpikesPct(..)
+                            | content::ModEffect::SpikesPoison(..)
+                            | content::ModEffect::StackingSpikes(..)
+                    )
+                })
+        });
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Modifier,
+            def: plain,
+            cost: 0,
+        }];
+        s.economy.gold = 0;
+        apply(&mut s, Input::BuyOffer { slot: 0 });
+        assert!(s.pending_perk.is_some(), "non-spikes upgrade left it armed");
+
+        // An Uncommon SPIKES upgrade is inside the scope: free, consumed.
+        let mut s = fresh();
+        s.buy_modifier(voucher);
+        let spikes = modifier_where(|m| {
+            m.rarity == 1
+                && m.effects
+                    .iter()
+                    .any(|e| matches!(e, content::ModEffect::SpikesFlat(..)))
+        });
+        s.shop.offers = vec![Offer {
+            kind: OfferKind::Modifier,
+            def: spikes,
+            cost: 9999,
+        }];
+        s.economy.gold = 0;
+        let spikes_before = s.tank.spikes_damage;
+        apply(&mut s, Input::BuyOffer { slot: 0 });
+        assert!(
+            s.tank.spikes_damage > spikes_before,
+            "spikes upgrade purchased free"
+        );
         assert_eq!(s.economy.gold, 0, "voucher charged no gold");
         assert!(s.pending_perk.is_none(), "voucher consumed");
     }
@@ -342,10 +461,12 @@ mod tests {
     }
 
     #[test]
-    fn magic_treasure_grants_instant_gold() {
+    fn magic_treasure_arms_a_growing_pool_not_instant_gold() {
+        // Source: a HELD consumable — value starts at 250, grows +2/s, banked
+        // on use (here: at the next shop roll) or when a second is bought.
         let mut s = fresh();
         let treasure = modifier_idx(|e| matches!(e, content::ModEffect::GrantGold(_)));
-        let gold = content::MODIFIERS[treasure as usize]
+        let base = content::MODIFIERS[treasure as usize]
             .effects
             .iter()
             .find_map(|e| match e {
@@ -353,9 +474,18 @@ mod tests {
                 _ => None,
             })
             .unwrap();
-        let before = s.economy.gold;
+        let gold_before = s.economy.gold;
         s.buy_modifier(treasure);
-        assert_eq!(s.economy.gold, before + gold, "instant gold granted");
+        assert_eq!(s.economy.gold, gold_before, "no instant wallet gold");
+        assert_eq!(s.economy.treasure_pool, base, "pool armed at base value");
+        assert!(s.ramps.is_empty(), "no permanent income ramp anymore");
+
+        // "Purchasing a second Magic Treasure uses the first": the held pool
+        // is banked, then the new one starts fresh at the base value.
+        s.economy.treasure_pool = base + 40; // pretend it grew for 20 s
+        s.buy_modifier(treasure);
+        assert_eq!(s.economy.gold, gold_before + base + 40, "first banked");
+        assert_eq!(s.economy.treasure_pool, base, "second starts fresh");
     }
 
     #[test]

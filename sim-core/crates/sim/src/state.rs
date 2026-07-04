@@ -325,6 +325,11 @@ pub struct Economy {
     pub income_shield_pct: Fixed,
     pub rerolls_remaining: u32,
     pub reroll_cost: i64,
+    /// Magic Treasure holding pool: gold accrued by a held treasure (+2/s in
+    /// `economy::tick_income`), auto-banked into the wallet when the next shop
+    /// rolls (`economy::on_round_start`). `0` ⇒ no treasure held. Authoritative
+    /// (feeds `checksum()`, rides the snapshot).
+    pub treasure_pool: i64,
 }
 
 /// What a shop slot sells.
@@ -344,22 +349,86 @@ pub struct Offer {
     pub cost: i64,
 }
 
-/// A one-shot meta perk armed by a meta item (Magic Coin / Duplicator / Black
-/// Market), consumed by the next matching non-meta purchase (`docs/06` #5).
+/// What KINDS of purchase a [`PendingPerk`] may consume — the source scopes
+/// its meta items more tightly than rarity alone (see `buy_modifier`):
+/// Multiplication Gems target "the next 500 Gold (Common) **Upgrade**" while
+/// Duplicator / Black Market target "**Weapon or Spikes Damage Upgrade**".
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PerkScope {
+    /// Any offer kind qualifies (rarity check only).
+    Any,
+    /// Only modifier ("Upgrade") purchases qualify — never weapons.
+    UpgradeOnly,
+    /// Weapons, or modifiers from the Spikes upgrade family, qualify.
+    WeaponOrSpikes,
+}
+
+impl PerkScope {
+    /// Stable wire/checksum tag.
+    pub fn as_u8(self) -> u8 {
+        match self {
+            PerkScope::Any => 0,
+            PerkScope::UpgradeOnly => 1,
+            PerkScope::WeaponOrSpikes => 2,
+        }
+    }
+    /// Inverse of [`as_u8`](Self::as_u8).
+    pub fn from_u8(v: u8) -> Option<PerkScope> {
+        Some(match v {
+            0 => PerkScope::Any,
+            1 => PerkScope::UpgradeOnly,
+            2 => PerkScope::WeaponOrSpikes,
+            _ => return None,
+        })
+    }
+}
+
+/// A one-shot meta perk armed by a meta item (Multiplication Gems / Duplicator
+/// / Black Market), consumed by the next matching non-meta purchase
+/// (`docs/06` #5).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PendingPerk {
     /// Only purchases of this rarity qualify (`255` = any rarity).
     pub rarity: u8,
+    /// What offer kinds qualify (the source's per-item scoping).
+    pub scope: PerkScope,
     /// Extra free copies granted to the matching purchase (duplicator).
     pub extra_copies: u32,
     /// Whether the matching purchase is free (Black Market voucher).
     pub free: bool,
 }
 
+/// Whether a modifier belongs to the Spikes upgrade family (the source's
+/// "Spikes Damage Upgrade" wording) — any effect that grows/extends Spikes
+/// retaliation (flat/% Spikes damage, Bloody Spikes stacking, Poison Armor's
+/// spikes-applied poison). Judgment call: the source groups all its Spikes
+/// upgrades under that label, so the whole family qualifies.
+fn modifier_is_spikes_upgrade(def: u16) -> bool {
+    content::MODIFIERS[def as usize].effects.iter().any(|e| {
+        matches!(
+            e,
+            content::ModEffect::SpikesFlat(..)
+                | content::ModEffect::SpikesPct(..)
+                | content::ModEffect::SpikesPoison(..)
+                | content::ModEffect::StackingSpikes(..)
+        )
+    })
+}
+
 impl PendingPerk {
-    /// Whether a purchase at `rarity` qualifies for this perk.
-    pub fn matches(&self, rarity: u8) -> bool {
-        self.rarity == 255 || self.rarity == rarity
+    /// Whether a (non-meta) purchase of `offer` qualifies for this perk:
+    /// rarity must match AND the offer must fall inside the perk's scope.
+    pub fn matches(&self, offer: Offer) -> bool {
+        let rarity_ok = self.rarity == 255 || self.rarity == ArenaState::offer_rarity(offer);
+        let scope_ok = match self.scope {
+            PerkScope::Any => true,
+            PerkScope::UpgradeOnly => matches!(offer.kind, OfferKind::Modifier),
+            PerkScope::WeaponOrSpikes => match offer.kind {
+                OfferKind::Weapon => true,
+                OfferKind::Modifier => modifier_is_spikes_upgrade(offer.def),
+            },
+        };
+        rarity_ok && scope_ok
     }
 }
 
@@ -676,7 +745,9 @@ impl ArenaState {
             minions: Vec::new(),
             economy: Economy {
                 gold: 500,
-                income_per_tick: 20, // 600 gold/s baseline (tuning)
+                // 600 gold/s baseline (tuning); the UN-multiplied base — see
+                // `economy::BASE_INCOME_PER_TICK` (source income-scoping rule).
+                income_per_tick: crate::economy::BASE_INCOME_PER_TICK,
                 income_mult: Fixed::ONE,
                 income_regen_pct: Fixed::ZERO,
                 bounty_mult: Fixed::ONE,
@@ -685,7 +756,8 @@ impl ArenaState {
                 gold_per_damage: Fixed::ZERO,
                 income_shield_pct: Fixed::ZERO,
                 rerolls_remaining: 5,
-                reroll_cost: 100,
+                reroll_cost: crate::input::REROLL_COST_BASE,
+                treasure_pool: 0,
             },
             shop: ShopState::default(),
             modifiers: Modifiers::new(),
@@ -792,22 +864,46 @@ impl ArenaState {
                         next_tick: self.tick + interval as u32,
                     });
                 }
-                // META items (`docs/06` #5) arm the purchase flow / grant gold.
+                // META items (`docs/06` #5) arm the purchase flow / hold gold.
+                // Perk SCOPE is keyed off the source items (the catalog's only
+                // duplicators/voucher): the Common duplicator is Multiplication
+                // Gems — "the next 500 Gold (Common) Upgrade" ⇒ UPGRADES only;
+                // the Rare duplicator is Duplicator — "the next Rare Weapon or
+                // Spikes Damage Upgrade" ⇒ weapon-or-spikes.
                 content::ModEffect::GrantDuplicator(rarity, copies) => {
                     self.pending_perk = Some(PendingPerk {
                         rarity: rarity as u8,
+                        scope: if rarity == 0 {
+                            PerkScope::UpgradeOnly
+                        } else {
+                            PerkScope::WeaponOrSpikes
+                        },
                         extra_copies: copies as u32,
                         free: false,
                     });
                 }
+                // Black Market: "Buy 1 Uncommon Weapon or Spikes Damage
+                // Upgrade of your choosing" ⇒ weapon-or-spikes.
                 content::ModEffect::GrantVoucher(rarity) => {
                     self.pending_perk = Some(PendingPerk {
                         rarity: rarity as u8,
+                        scope: PerkScope::WeaponOrSpikes,
                         extra_copies: 0,
                         free: true,
                     });
                 }
-                content::ModEffect::GrantGold(g) => self.award_gold(g),
+                // Magic Treasure (the catalog's only `GrantGold` user): the
+                // source item is a HELD consumable whose value grows +2/s and
+                // is banked on use — or immediately when a second Treasure is
+                // bought ("Purchasing a second Magic Treasure uses the first").
+                // Modeled input-free: arm the pool at `g`; it grows in
+                // `economy::tick_income` and auto-banks at the next shop roll
+                // (`economy::on_round_start`). Buying another banks the first.
+                content::ModEffect::GrantGold(g) => {
+                    let prior = std::mem::take(&mut self.economy.treasure_pool);
+                    self.award_gold(prior);
+                    self.economy.treasure_pool = g;
+                }
                 // HP/defense ↔ Gold trades: pay tank stats for gold, intercepted
                 // here so the gold routes through the scoreboard.
                 content::ModEffect::TradeMaxHpForGold(hp_cost, gold_gain) => {

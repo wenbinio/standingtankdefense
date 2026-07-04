@@ -156,10 +156,14 @@ pub struct RenderEnemy {
 #[derive(Clone, Copy, Debug)]
 pub struct RenderEconomy {
     pub gold: i64,
-    /// Effective passive income per tick (base × income multiplier).
+    /// Effective passive income per tick — the base plus the MULTIPLIED bonus
+    /// (income-% applies only to bonus income; source rule, `docs/02 §2.4`).
     pub income_per_tick: i64,
     pub rerolls_remaining: u32,
     pub reroll_cost: i64,
+    /// Magic Treasure holding pool (0 = none held): gold accruing +2/s,
+    /// banked automatically when the next shop rolls.
+    pub treasure_pool: i64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -247,9 +251,10 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
 
     let economy = RenderEconomy {
         gold: s.economy.gold,
-        income_per_tick: s.economy.income_mult.scale_i64(s.economy.income_per_tick),
+        income_per_tick: crate::economy::income_award(&s.economy),
         rerolls_remaining: s.economy.rerolls_remaining,
         reroll_cost: s.economy.reroll_cost,
+        treasure_pool: s.economy.treasure_pool,
     };
 
     let shop = s

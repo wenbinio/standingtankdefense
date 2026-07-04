@@ -14,10 +14,14 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
+/// v21 (ECONOMY-FIDELITY PASS): `Economy::treasure_pool` (Magic Treasure's
+/// held, growing gold pool) and `PendingPerk::scope` (the source's per-item
+/// perk scoping) are new authoritative fields — both checksummed per the
+/// parity rule.
 /// v20: `Projectile::weapon_kind` (render bookkeeping; snapshot-carried so
 /// reconnect redraws correctly, checksummed per the parity rule). The transient
 /// `ArenaState::events` buffer is deliberately NOT serialized (`docs/09 §9.3`).
-pub const SNAPSHOT_VERSION: u32 = 20;
+pub const SNAPSHOT_VERSION: u32 = 21;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -288,6 +292,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.fixed(s.economy.income_shield_pct);
     w.u32(s.economy.rerolls_remaining);
     w.i64(s.economy.reroll_cost);
+    w.i64(s.economy.treasure_pool);
 
     // modifiers
     w.fixed(s.modifiers.add_global);
@@ -339,6 +344,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         Some(p) => {
             w.u8(1);
             w.u8(p.rarity);
+            w.u8(p.scope.as_u8());
             w.u32(p.extra_copies);
             w.u8(p.free as u8);
         }
@@ -530,6 +536,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         income_shield_pct: r.fixed()?,
         rerolls_remaining: r.u32()?,
         reroll_cost: r.i64()?,
+        treasure_pool: r.i64()?,
     };
 
     let add_global = r.fixed()?;
@@ -592,6 +599,10 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         0 => None,
         1 => Some(PendingPerk {
             rarity: r.u8()?,
+            scope: {
+                let tag = r.u8()?;
+                PerkScope::from_u8(tag).ok_or(SnapshotError::BadTag(tag))?
+            },
             extra_copies: r.u32()?,
             free: r.u8()? != 0,
         }),

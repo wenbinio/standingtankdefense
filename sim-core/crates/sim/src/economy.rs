@@ -4,11 +4,36 @@ use crate::content;
 use crate::state::*;
 use determinism::Fixed;
 
-/// Called once when a new round begins (before input). M0: keep simple
-/// (no-op, or a small flat per-round bonus). Deterministic.
+/// Base passive income (gold/tick) every tank earns unconditionally — the
+/// 20/tick (600 gold/s) baseline set in `ArenaState::new`. SOURCE RULE
+/// (`docs/02 §2.4`): %-income multipliers apply ONLY to income ABOVE this
+/// base; flat `+income` purchases are "bonus" income and DO scale. The base
+/// itself never scales.
+pub(crate) const BASE_INCOME_PER_TICK: i64 = 20;
+
+/// Magic Treasure growth: the held pool gains this much gold per SECOND
+/// (source: "Gold value increases by 2 per second" — +60 over a 30 s round).
+const TREASURE_GROWTH_PER_SEC: i64 = 2;
+
+/// The gold awarded by one income tick under the source scoping rule: the
+/// un-multiplied base, plus `income_mult × bonus` where bonus is everything
+/// above [`BASE_INCOME_PER_TICK`] (flat `+income` purchases). Shared by
+/// `tick_income` and the render view so the shown rate is the paid rate.
+pub(crate) fn income_award(e: &Economy) -> i64 {
+    let base = e.income_per_tick.min(BASE_INCOME_PER_TICK);
+    let bonus = (e.income_per_tick - BASE_INCOME_PER_TICK).max(0);
+    base + e.income_mult.scale_i64(bonus)
+}
+
+/// Called once when a new round begins (before input). Banks a held Magic
+/// Treasure: the accrued pool is paid out when the next shop rolls (the
+/// nearest input-free stand-in for the source's use-on-demand consumable —
+/// see the catalog entry in `content.rs`). Deterministic.
 pub(crate) fn on_round_start(s: &mut ArenaState) {
-    // M0: no per-round bonus. Kept as a deterministic no-op.
-    let _ = s;
+    if s.economy.treasure_pool > 0 {
+        let banked = std::mem::take(&mut s.economy.treasure_pool);
+        s.award_gold(banked);
+    }
 }
 
 /// Phase 7: drain `s.pending_kills`; for each enemy def add
@@ -53,11 +78,14 @@ pub(crate) fn collect_bounties(s: &mut ArenaState) {
     }
 }
 
-/// Phase 8: add `floor(income_per_tick × income_mult)` to gold. `bounty_mult`
+/// Phase 8: add `base + floor(bonus × income_mult)` to gold, where the bonus
+/// is income above [`BASE_INCOME_PER_TICK`] (source rule, `docs/02 §2.4`:
+/// %-income applies only to BONUS income, never the base). `bounty_mult`
 /// still never touches income (source rule); `income_mult` is its own lever.
 /// If `income_regen_pct > 0`, also heal the tank that fraction of the award.
+/// A held Magic Treasure pool also grows here, once per second.
 pub(crate) fn tick_income(s: &mut ArenaState) {
-    let amount = s.economy.income_mult.scale_i64(s.economy.income_per_tick);
+    let amount = income_award(&s.economy);
     s.award_gold(amount);
     // Income-as-HP-regen (the source's "% of Gold Income as instant HP Regen").
     if s.economy.income_regen_pct > Fixed::ZERO && !s.dead {
@@ -70,6 +98,11 @@ pub(crate) fn tick_income(s: &mut ArenaState) {
         if add > 0 && s.tank.mana_shield < s.tank.mana_shield_max {
             s.tank.mana_shield = (s.tank.mana_shield + add).min(s.tank.mana_shield_max);
         }
+    }
+    // Magic Treasure: the held pool grows +2 gold per second (integer tick
+    // cadence, no wall-clock) until it is banked at the next round boundary.
+    if s.economy.treasure_pool > 0 && s.tick.is_multiple_of(crate::TICK_HZ) {
+        s.economy.treasure_pool += TREASURE_GROWTH_PER_SEC;
     }
 }
 
@@ -151,17 +184,63 @@ mod tests {
     }
 
     #[test]
-    fn income_mult_scales_passive_income_floored() {
+    fn income_mult_scales_bonus_income_only() {
+        // SOURCE RULE (docs/02 §2.4): %-income applies only to income ABOVE the
+        // 20/tick base; the base itself never scales.
         let mut s = fresh();
         s.economy.gold = 0;
-        s.economy.income_per_tick = 20;
-        s.economy.income_mult = Fixed::ONE; // identity baseline
+        s.economy.income_per_tick = BASE_INCOME_PER_TICK; // base only
+        s.economy.income_mult = Fixed::from_int(2); // +100% income
         tick_income(&mut s);
-        assert_eq!(s.economy.gold, 20);
-        // +25% income ⇒ 25/tick.
+        assert_eq!(s.economy.gold, 20, "base income must NOT scale");
+
+        // Flat +30 income (bonus) on top of the base: only the 30 scales.
+        s.economy.gold = 0;
+        s.economy.income_per_tick = BASE_INCOME_PER_TICK + 30;
+        tick_income(&mut s);
+        assert_eq!(s.economy.gold, 20 + 60, "only the bonus 30 doubles");
+
+        // Fractional multiplier floors on the bonus: 1.25 × 30 = 37.5 → 37.
+        s.economy.gold = 0;
         s.economy.income_mult = Fixed::ONE + Fixed::from_ratio(1, 4);
         tick_income(&mut s);
-        assert_eq!(s.economy.gold, 45);
+        assert_eq!(s.economy.gold, 20 + 37);
+
+        // Identity multiplier pays base + bonus unchanged.
+        s.economy.gold = 0;
+        s.economy.income_mult = Fixed::ONE;
+        tick_income(&mut s);
+        assert_eq!(s.economy.gold, 50);
+    }
+
+    #[test]
+    fn treasure_pool_grows_per_second_and_banks_at_round_start() {
+        let mut s = fresh();
+        s.economy.gold = 0;
+        s.economy.income_per_tick = 0;
+        s.economy.treasure_pool = 250;
+        // 30 ticks = 1 second: exactly one +2 growth event (at tick % 30 == 0).
+        for t in 1..=30u32 {
+            s.tick = t;
+            tick_income(&mut s);
+        }
+        assert_eq!(s.economy.treasure_pool, 252, "+2 per second while held");
+        assert_eq!(s.economy.gold, 0, "pool is not wallet gold until banked");
+
+        // Round boundary banks the pool through the gold chokepoint.
+        s.total_gold_earned = 0;
+        on_round_start(&mut s);
+        assert_eq!(s.economy.gold, 252, "pool banked at the shop roll");
+        assert_eq!(s.economy.treasure_pool, 0, "pool cleared after banking");
+        assert_eq!(s.total_gold_earned, 252, "banking feeds the scoreboard");
+
+        // No pool ⇒ round start is a no-op and no growth ticks occur.
+        let before = s.economy.gold;
+        on_round_start(&mut s);
+        s.tick = 60;
+        tick_income(&mut s);
+        assert_eq!(s.economy.gold, before);
+        assert_eq!(s.economy.treasure_pool, 0);
     }
 
     #[test]

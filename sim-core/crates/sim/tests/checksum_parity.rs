@@ -226,6 +226,7 @@ fn economy_fields_feed_checksum() {
         s.economy.rerolls_remaining += 1
     });
     parity("economy.reroll_cost", |s| s.economy.reroll_cost += 1);
+    parity("economy.treasure_pool", |s| s.economy.treasure_pool += 250);
 }
 
 #[test]
@@ -423,6 +424,7 @@ fn arena_collections_and_shop_feed_checksum() {
     parity("pending_perk presence", |s| {
         s.pending_perk = Some(PendingPerk {
             rarity: 255,
+            scope: PerkScope::Any,
             extra_copies: 0,
             free: false,
         })
@@ -430,6 +432,7 @@ fn arena_collections_and_shop_feed_checksum() {
     let with_perk = |s: &mut ArenaState| {
         s.pending_perk = Some(PendingPerk {
             rarity: 0,
+            scope: PerkScope::Any,
             extra_copies: 0,
             free: false,
         })
@@ -437,6 +440,15 @@ fn arena_collections_and_shop_feed_checksum() {
     parity2("pending_perk.rarity", with_perk, |s| {
         s.pending_perk = Some(PendingPerk {
             rarity: 1,
+            scope: PerkScope::Any,
+            extra_copies: 0,
+            free: false,
+        })
+    });
+    parity2("pending_perk.scope", with_perk, |s| {
+        s.pending_perk = Some(PendingPerk {
+            rarity: 0,
+            scope: PerkScope::WeaponOrSpikes,
             extra_copies: 0,
             free: false,
         })
@@ -444,6 +456,7 @@ fn arena_collections_and_shop_feed_checksum() {
     parity2("pending_perk.extra_copies", with_perk, |s| {
         s.pending_perk = Some(PendingPerk {
             rarity: 0,
+            scope: PerkScope::Any,
             extra_copies: 1,
             free: false,
         })
@@ -451,6 +464,7 @@ fn arena_collections_and_shop_feed_checksum() {
     parity2("pending_perk.free", with_perk, |s| {
         s.pending_perk = Some(PendingPerk {
             rarity: 0,
+            scope: PerkScope::Any,
             extra_copies: 0,
             free: true,
         })
