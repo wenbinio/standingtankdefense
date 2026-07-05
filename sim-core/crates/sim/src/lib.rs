@@ -251,6 +251,7 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_fixed(s.modifiers.fire_explosion_mult);
     c.write_fixed(s.modifiers.bounce_barrage_pct);
     c.write_fixed(s.modifiers.healthy_dmg);
+    c.write_fixed(s.modifiers.healing_weapon_healthy_dmg);
 
     // Active time-scaling ramps (append-only order).
     c.write_u32(s.ramps.len() as u32);

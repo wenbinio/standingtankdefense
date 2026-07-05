@@ -223,6 +223,27 @@ pub struct WeaponDef {
     pub ability: WeaponAbility,
 }
 
+impl WeaponDef {
+    /// THE healing-weapon classification (single source of truth): a weapon is a
+    /// "Healing Weapon" (the source's Battle Fervor scope) iff its signature
+    /// ability heals the tank's HP — [`WeaponAbility::LifeDrain`] (heal per enemy
+    /// hit), [`WeaponAbility::HealOnAttack`] (flat heal per fire), or
+    /// [`WeaponAbility::RegenOnAttack`] (permanent regen + instant heal per fire).
+    /// `ManaDrain` restores SHIELD, not HP, so it does NOT qualify. Shipped
+    /// qualifiers (pinned by a catalog test): Suckula, Lifeleecher, Chaotic
+    /// Spirit Bolt, Healthstone, Holy Bolt, Mendweaver, Healing Sprayer.
+    /// Consulted at fire time by `Modifiers::healing_weapon_add` (the scoped
+    /// `HealingWeaponDamagePct` bonus).
+    pub fn is_healing(&self) -> bool {
+        matches!(
+            self.ability,
+            WeaponAbility::LifeDrain { .. }
+                | WeaponAbility::HealOnAttack { .. }
+                | WeaponAbility::RegenOnAttack { .. }
+        )
+    }
+}
+
 /// Coarse behavior class for an enemy (`docs/05 §5.4`). Drives flavor and a few
 /// movement/attack defaults; render reads `EnemyDef::archetype` for telemetry but
 /// maps SPRITES by the def index (`view::RenderEnemy::kind`), so adding rows here
@@ -507,7 +528,19 @@ pub enum ModEffect {
     /// health or above"): a GLOBAL additive damage bonus active only while
     /// `tank.hp ≥ 95% of max_hp`, resolved LIVE at fire time via
     /// `dynamic_global_add`. Accumulates into `Modifiers::healthy_dmg`.
+    /// NOTE: no catalog entry currently uses this (Battle Fervor moved to the
+    /// properly scoped [`HealingWeaponDamagePct`](Self::HealingWeaponDamagePct));
+    /// the mechanic is kept as an engine capability for future entries.
     DamageWhileHealthyPct(i64, i64),
+    /// HEALING-WEAPON-scoped heal-conditional damage `(num, den)` (Battle
+    /// Fervor's "+35% Damage for Healing Weapons and Upgrades when at 95%
+    /// health or above"): an additive damage bonus that applies ONLY to
+    /// weapons classified by [`WeaponDef::is_healing`], active only while
+    /// `Tank::is_healthy()` (the same ≥95%-HP integer gate as
+    /// `DamageWhileHealthyPct`), resolved LIVE at fire time via
+    /// `Modifiers::healing_weapon_add`. Accumulates into
+    /// `Modifiers::healing_weapon_healthy_dmg`.
+    HealingWeaponDamagePct(i64, i64),
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
@@ -604,6 +637,7 @@ impl ModEffect {
             ModEffect::SpikesAsDrPct(n, d) => (57, n, d, 0),
             ModEffect::DamageTakenToSpikesPct(n, d) => (58, n, d, 0),
             ModEffect::DamageWhileHealthyPct(n, d) => (59, n, d, 0),
+            ModEffect::HealingWeaponDamagePct(n, d) => (60, n, d, 0),
         }
     }
 
@@ -690,6 +724,7 @@ impl ModEffect {
             57 => ModEffect::SpikesAsDrPct(a, b),
             58 => ModEffect::DamageTakenToSpikesPct(a, b),
             59 => ModEffect::DamageWhileHealthyPct(a, b),
+            60 => ModEffect::HealingWeaponDamagePct(a, b),
             _ => return None,
         })
     }
@@ -1827,17 +1862,16 @@ pub static MODIFIERS: &[ModifierDef] = &[
         ramp: None,
     },
     // Battle Fervor (source: "+50% Healing | +35% Damage for Healing Weapons
-    // and Upgrades when at 95% health or above"). APPROXIMATION (documented):
-    // the +35% is modeled as a GLOBAL healthy-threshold damage bonus
-    // (DamageWhileHealthyPct) rather than scoping to healing weapons only —
-    // no healing-weapon damage scope exists. rarity 2.
+    // and Upgrades when at 95% health or above"). The +35% is scoped exactly:
+    // it applies only to weapons classified by `WeaponDef::is_healing`, gated
+    // on the same ≥95%-HP threshold (HealingWeaponDamagePct). rarity 2.
     ModifierDef {
         name: "Battle Fervor",
         rarity: 2,
         cost: 3000,
         effects: &[
             ModEffect::HealingPct(50, 100),
-            ModEffect::DamageWhileHealthyPct(35, 100),
+            ModEffect::HealingWeaponDamagePct(35, 100),
         ],
         ramp: None,
     },

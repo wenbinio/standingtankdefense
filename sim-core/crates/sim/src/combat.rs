@@ -303,7 +303,11 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // DYNAMIC global-damage scalers resolved from the LIVE tank/economy (per
         // 2000 Max HP / per 50% Bounty / while Mana Shield active). GLOBAL additive,
         // so they thread in exactly like `add_self` — additive, then `×mul_global`.
-        let add_dyn = s.modifiers.dynamic_global_add(&s.tank, &s.economy);
+        // Battle Fervor's HEALING-WEAPON-only healthy bonus threads in the same
+        // way, but is nonzero only when THIS weapon `is_healing()` and the tank
+        // is at ≥95% HP (`healing_weapon_add`).
+        let add_dyn = s.modifiers.dynamic_global_add(&s.tank, &s.economy)
+            + s.modifiers.healing_weapon_add(&wdef, &s.tank);
         let wmult = static_mult + (add_self + add_dyn).mul(s.modifiers.mul_global);
         let baked = wmult.scale_i64(wdef.damage);
         // Poison-damage / stun-duration scalers depend only on the player's
@@ -2878,6 +2882,49 @@ mod tests {
         assert_eq!(
             s.tank.hp, 1080,
             "healed 80 once per attack (3 enemies in range)"
+        );
+    }
+
+    #[test]
+    fn healing_weapon_healthy_bonus_bakes_into_healing_weapons_only() {
+        // Battle Fervor's scoped +35%: at ≥95% HP a HEALING weapon's projectile
+        // bakes ×1.35; a non-healing weapon, or a sub-95% tank, bakes ×1.
+        let fired_damage = |name: &str, hp: i64| -> i64 {
+            let mut s = blank_state();
+            only_weapon(&mut s, name);
+            s.modifiers.apply_effect(
+                crate::content::ModEffect::HealingWeaponDamagePct(35, 100),
+                &mut s.economy,
+                &mut s.tank,
+            );
+            s.tank.max_hp = 10_000;
+            s.tank.hp = hp;
+            mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(200), Fixed::ZERO),
+            );
+            fire_weapons(&mut s);
+            s.projectiles[0].damage
+        };
+        let holy = content::WEAPONS[weapon_idx("Holy Bolt") as usize].damage;
+        let bow = content::WEAPONS[weapon_idx("Bow") as usize].damage;
+        let boosted = (Fixed::ONE + Fixed::from_ratio(35, 100)).scale_i64(holy);
+        assert_eq!(
+            fired_damage("Holy Bolt", 10_000),
+            boosted,
+            "healing weapon at full HP gets ×1.35"
+        );
+        assert_eq!(
+            fired_damage("Holy Bolt", 9_000),
+            holy,
+            "below 95% the healing weapon bakes base damage"
+        );
+        assert_eq!(
+            fired_damage("Bow", 10_000),
+            bow,
+            "non-healing weapon at full HP is unaffected"
         );
     }
 

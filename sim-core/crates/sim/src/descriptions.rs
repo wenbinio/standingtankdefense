@@ -217,7 +217,7 @@ const MODIFIER_TEXT: [(&str, &str); 110] = [
     ("The barbs angled by a patient hand until the blow slides, and some of its weight never arrives at all.", "Deflection: +160 spikes; 5% of spikes damage becomes flat damage reduction (capped)."),  // 102
     ("Plate quenched in the Ashmark melt-water; what beats on it comes away slower than it arrived.", "Frost Armor: +10 armor; attackers catch 2 frost stacks."),  // 103
     ("The Hexwrights found the ratio the Foundry would not print: how much air a dying fire wants.", "Combustion: fire death-explosions deal +500% damage."),  // 104
-    ("A Warden line at full strength fights like the Relief already came; the surgeons make sure it stays true.", "Battle Fervor: +50% healing; +35% damage while at 95% health or above."),  // 105
+    ("A Warden line at full strength fights like the Relief already came; the surgeons make sure it stays true.", "Battle Fervor: +50% healing; healing weapons deal +35% damage while at 95% health or above."),  // 105
     ("Each orb the Conclave racks hums to the others, and the chorus is worse than the count suggests.", "Chaotic Resonance: +100% chaos damage, +1% more per Chaos Orb owned."),  // 106
     ("The Conclave teaches the same first rite to every missile; recited in ranks, it lands harder.", "Arcane Resonance: +100% magic damage, +1% more per Magic Missile owned."),  // 107
     ("A full rack of Greycoat axes, each one ground on the last; the whole rack swings with every throw.", "Axe Rack: +100% normal damage, +1% more per Throwing Axes owned."),  // 108

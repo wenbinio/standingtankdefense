@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x672269466cd58df0, // re-baselined (SOURCE-ARC RESTORATION — the largest legitimate trajectory change of the fidelity program): the match arc returned from the interim 30-minute / 3-min-stepped-ramp shape to the source's 15-minute arc (docs/01 §1.2) — BOSS_SPAWN_TICK 54000→27000, a smooth +25%/min curve with a 2-min opening grace, the +20% step at 10:00, the post-15:00 swift end (waves continue, ×1.5/min), the 15:00 shop close + ramp stop, wave gates compressed onto 15 min, the escort swarm removed, and the boss re-statted (30M HP / 16k fixed contact). Every scripted trajectory shifts; captured fresh from `cargo run -p harness`. (Previous baseline 0x20e2dabc7009c960 was the catalog-fidelity pass.)
+        0x3b7f3e9de60f57f0, // re-baselined (BATTLE FERVOR SCOPING): `Modifiers::healing_weapon_healthy_dmg` entered the checksum stream — Battle Fervor's +35% is now scoped to healing weapons (HealingWeaponDamagePct / WeaponDef::is_healing) instead of the documented global DamageWhileHealthyPct approximation. The M0 TRAJECTORY is unchanged: the scripted bot never buys Battle Fervor and owns no healing weapon (probed: both healthy-damage aggregates zero, healing_mult untouched at the final tick), so the shift is purely the new checksummed field in the digest. Captured fresh from `cargo run -p harness`. (Previous baseline 0x672269466cd58df0 was the source-arc restoration.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

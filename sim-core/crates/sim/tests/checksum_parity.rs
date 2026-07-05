@@ -328,6 +328,9 @@ fn modifier_fields_feed_checksum() {
     parity("modifiers.healthy_dmg", move |s| {
         s.modifiers.healthy_dmg = pct(7, 20)
     });
+    parity("modifiers.healing_weapon_healthy_dmg", move |s| {
+        s.modifiers.healing_weapon_healthy_dmg = pct(7, 20)
+    });
 }
 
 #[test]

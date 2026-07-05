@@ -71,6 +71,7 @@ impl Modifiers {
             fire_explosion_mult: Fixed::ONE,
             bounce_barrage_pct: Fixed::ZERO,
             healthy_dmg: Fixed::ZERO,
+            healing_weapon_healthy_dmg: Fixed::ZERO,
         }
     }
 
@@ -102,17 +103,27 @@ impl Modifiers {
         if self.shield_active_dmg != Fixed::ZERO && tank.mana_shield > 0 {
             add += self.shield_active_dmg;
         }
-        // Heal-conditional damage (the source's "+35% Damage … when at 95%
-        // health or above"): active iff hp ≥ 95% of max_hp. Pure integer
-        // compare (hp × 20 ≥ max_hp × 19 ⇔ hp/max ≥ 0.95); both stats are
-        // clamped ≤ STAT_CEIL (1e12) so the ×20 cannot overflow i64.
-        if self.healthy_dmg != Fixed::ZERO
-            && tank.max_hp > 0
-            && tank.hp.saturating_mul(20) >= tank.max_hp.saturating_mul(19)
-        {
+        // GLOBAL heal-conditional damage ("+35% Damage … when at 95% health or
+        // above"): active iff the shared ≥95%-HP gate (`Tank::is_healthy`) holds.
+        if self.healthy_dmg != Fixed::ZERO && tank.is_healthy() {
             add += self.healthy_dmg;
         }
         add
+    }
+
+    /// HEALING-WEAPON-scoped heal-conditional additive bonus (Battle Fervor's
+    /// "+35% Damage for Healing Weapons … when at 95% health or above"):
+    /// nonzero only when the FIRING weapon is a healing weapon
+    /// ([`WeaponDef::is_healing`]) AND the same ≥95%-HP gate as
+    /// `DamageWhileHealthyPct` holds ([`Tank::is_healthy`]). Resolved LIVE at
+    /// fire time and folded into the per-weapon multiplier exactly like
+    /// `dynamic_global_add` (additive, then `×mul_global`). Integer/Fixed only.
+    pub fn healing_weapon_add(&self, w: &WeaponDef, tank: &Tank) -> Fixed {
+        if self.healing_weapon_healthy_dmg != Fixed::ZERO && w.is_healing() && tank.is_healthy() {
+            self.healing_weapon_healthy_dmg
+        } else {
+            Fixed::ZERO
+        }
     }
 
     /// Full damage multiplier for a specific weapon: global + its damage type +
@@ -358,6 +369,11 @@ impl Modifiers {
             }
             // Heal-conditional global damage (resolved live in dynamic_global_add).
             ModEffect::DamageWhileHealthyPct(n, d) => self.healthy_dmg += Fixed::from_ratio(n, d),
+            // Heal-conditional HEALING-WEAPON damage (resolved live, per firing
+            // weapon, in healing_weapon_add).
+            ModEffect::HealingWeaponDamagePct(n, d) => {
+                self.healing_weapon_healthy_dmg += Fixed::from_ratio(n, d)
+            }
             // Registered as per-arena trigger / purchase-flow state in
             // `buy_modifier`; they have no aggregate contribution here. The
             // HP/regen→gold trades need the full ArenaState (gold scoreboard) and
@@ -791,6 +807,109 @@ mod tests {
             s.modifiers.dynamic_global_add(&s.tank, &s.economy),
             Fixed::ZERO,
             "bonus gone below 95%"
+        );
+    }
+
+    // ---- Battle Fervor: healing-weapon-scoped healthy damage -----------------
+
+    #[test]
+    fn catalog_healing_weapon_classification_is_pinned() {
+        // THE healing-weapon set (`WeaponDef::is_healing`) — Battle Fervor's
+        // +35% scope. If a weapon is added/removed here, that is a deliberate
+        // balance decision, not an accident: update this pin consciously.
+        let healing: Vec<&str> = content::WEAPONS
+            .iter()
+            .filter(|w| w.is_healing())
+            .map(|w| w.name)
+            .collect();
+        assert_eq!(
+            healing,
+            [
+                "Suckula",
+                "Lifeleecher",
+                "Chaotic Spirit Bolt",
+                "Healthstone",
+                "Holy Bolt",
+                "Mendweaver",
+                "Healing Sprayer",
+            ],
+            "healing-weapon classification changed"
+        );
+    }
+
+    #[test]
+    fn healing_weapon_healthy_damage_gates_on_weapon_class_and_hp() {
+        let mut s = ArenaState::new(1, 0);
+        s.modifiers.apply_effect(
+            ModEffect::HealingWeaponDamagePct(35, 100),
+            &mut s.economy,
+            &mut s.tank,
+        );
+        let healer = content::WEAPONS
+            .iter()
+            .find(|w| w.name == "Holy Bolt")
+            .unwrap();
+        let plain = content::WEAPONS.iter().find(|w| w.name == "Bow").unwrap();
+        assert!(healer.is_healing() && !plain.is_healing());
+        s.tank.max_hp = 10_000;
+        s.tank.hp = 10_000; // full
+        let full = s.modifiers.healing_weapon_add(healer, &s.tank);
+        assert!(
+            (349..=350).contains(&full.scale_i64(1000)),
+            "≈+35% for a healing weapon at/above 95%"
+        );
+        assert_eq!(
+            s.modifiers.healing_weapon_add(plain, &s.tank),
+            Fixed::ZERO,
+            "non-healing weapon never gets the scoped bonus"
+        );
+        s.tank.hp = 9_500; // exactly 95% — same gate as DamageWhileHealthyPct
+        assert_eq!(
+            s.modifiers.healing_weapon_add(healer, &s.tank),
+            full,
+            "boundary (95%) still counts"
+        );
+        s.tank.hp = 9_499; // below the threshold: neither weapon class
+        assert_eq!(
+            s.modifiers.healing_weapon_add(healer, &s.tank),
+            Fixed::ZERO,
+            "bonus gone below 95%"
+        );
+        assert_eq!(s.modifiers.healing_weapon_add(plain, &s.tank), Fixed::ZERO);
+        // The scoped bonus never leaks into the GLOBAL dynamic add.
+        s.tank.hp = 10_000;
+        assert_eq!(
+            s.modifiers.dynamic_global_add(&s.tank, &s.economy),
+            Fixed::ZERO,
+            "healing-weapon bonus is not a global add"
+        );
+    }
+
+    #[test]
+    fn battle_fervor_scopes_its_damage_to_healing_weapons() {
+        // Catalog wiring: +50% Healing (unchanged) + the SCOPED +35% — the
+        // global healthy_dmg aggregate stays untouched.
+        let mut s = ArenaState::new(1, 0);
+        let idx = content::MODIFIERS
+            .iter()
+            .position(|m| m.name == "Battle Fervor")
+            .expect("Battle Fervor exists") as u16;
+        let healing0 = s.tank.healing_mult;
+        s.buy_modifier(idx);
+        assert_eq!(
+            s.tank.healing_mult,
+            healing0 + Fixed::from_ratio(50, 100),
+            "+50% Healing half unchanged"
+        );
+        assert_eq!(
+            s.modifiers.healing_weapon_healthy_dmg,
+            Fixed::from_ratio(35, 100),
+            "+35% rides the healing-weapon-scoped aggregate"
+        );
+        assert_eq!(
+            s.modifiers.healthy_dmg,
+            Fixed::ZERO,
+            "no global healthy-damage from Battle Fervor anymore"
         );
     }
 

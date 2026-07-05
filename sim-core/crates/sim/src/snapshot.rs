@@ -14,6 +14,10 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
+/// v22: `Modifiers::healing_weapon_healthy_dmg` — Battle Fervor's +35% scoped
+/// to HEALING weapons only (`WeaponDef::is_healing`) at ≥95% HP, replacing the
+/// documented global-`healthy_dmg` approximation. Checksummed per the parity
+/// rule.
 /// v21 (FIDELITY PASSES, one combined bump): the economy pass added
 /// `Economy::treasure_pool` (Magic Treasure's held, growing gold pool) and
 /// `PendingPerk::scope` (the source's per-item perk scoping); the E3
@@ -28,7 +32,7 @@ use determinism::{Fixed, Rng};
 /// reconnect redraws correctly, checksummed per the parity rule). The
 /// transient `ArenaState::events` buffer and per-tick flags/accumulators are
 /// deliberately NOT serialized (`docs/09 §9.3`).
-pub const SNAPSHOT_VERSION: u32 = 21;
+pub const SNAPSHOT_VERSION: u32 = 22;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -368,6 +372,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.fixed(s.modifiers.fire_explosion_mult);
     w.fixed(s.modifiers.bounce_barrage_pct);
     w.fixed(s.modifiers.healthy_dmg);
+    w.fixed(s.modifiers.healing_weapon_healthy_dmg);
 
     // active ramps
     w.len(s.ramps.len());
@@ -666,6 +671,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         fire_explosion_mult: r.fixed()?,
         bounce_barrage_pct: r.fixed()?,
         healthy_dmg: r.fixed()?,
+        healing_weapon_healthy_dmg: r.fixed()?,
     };
 
     let mut ramps = Vec::new();

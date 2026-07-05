@@ -217,6 +217,14 @@ impl Tank {
         self.hp = (self.hp + scaled).min(self.max_hp);
     }
 
+    /// THE "at 95% health or above" gate shared by every heal-conditional
+    /// damage bonus (`DamageWhileHealthyPct` / `HealingWeaponDamagePct`). Pure
+    /// integer compare (hp × 20 ≥ max_hp × 19 ⇔ hp/max ≥ 0.95); both stats are
+    /// clamped ≤ `STAT_CEIL` (1e12) so the ×20 cannot overflow i64.
+    pub fn is_healthy(&self) -> bool {
+        self.max_hp > 0 && self.hp.saturating_mul(20) >= self.max_hp.saturating_mul(19)
+    }
+
     /// Restore `amount` to the Mana-Shield pool, capped at its max (the source's
     /// mana-drain weapons "restore N Mana Shield per enemy hit"). A no-op if the
     /// tank has no shield pool. Not scaled by `healing_mult` (it is shield, not HP).
@@ -615,6 +623,12 @@ pub struct Modifiers {
     /// (the source's "+35% Damage when at 95% health or above"), resolved LIVE
     /// at fire time via `dynamic_global_add`. Starts `ZERO`.
     pub healthy_dmg: Fixed,
+    /// HEALING-WEAPON-scoped additive damage bonus active only while
+    /// `Tank::is_healthy()` (Battle Fervor's "+35% Damage for Healing Weapons
+    /// … when at 95% health or above"): applies ONLY to weapons classified by
+    /// `content::WeaponDef::is_healing`, resolved LIVE at fire time via
+    /// `healing_weapon_add`. Starts `ZERO`; accumulates additively.
+    pub healing_weapon_healthy_dmg: Fixed,
 }
 
 /// One self-scaling damage rule (see [`Modifiers::weapon_count_scaling`]).
