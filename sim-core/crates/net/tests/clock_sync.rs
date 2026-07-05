@@ -10,7 +10,7 @@ use net::client::Client;
 use net::director::Director;
 use net::hub::Hub;
 use net::transport::{PeerId, DIRECTOR};
-use net::{BEACON_INTERVAL, START_LEAD};
+use net::{GameSpeed, BEACON_INTERVAL, START_LEAD};
 use sim::Input;
 
 const P1: PeerId = PeerId(1);
@@ -181,4 +181,125 @@ fn no_beacons_free_runs_gracefully() {
         gap <= MAX_GAP,
         "free-run drifted by {gap} despite matched rates"
     );
+}
+
+// ---------------------------- game speed (cadence) ----------------------------
+//
+// Speed is host-set at match start (`docs/04 §4.4.1`) and is PURE CADENCE: the
+// driver calls director/client `ticks_per_second()` times per wall-clock
+// second, so `server_tick` advances at 30/45/60/90 ticks/sec — but per driver
+// ITERATION everything is identical, which is exactly what these tests pin.
+
+/// The director broadcasts its host-set speed in `MatchStart`; the client
+/// adopts it and reports the driver cadence. The clock-sync expected-rate is
+/// speed-correct by construction (both sides advance one tick per iteration,
+/// and the estimate free-runs per STEPPED tick, not per wall-clock second) —
+/// so the estimate tracks the truth at Hyper exactly as it does at Normal.
+#[test]
+fn hyper_speed_is_broadcast_adopted_and_clock_locks() {
+    let mut d = Director::with_config(&[P1], SEED, HASH, GameSpeed::Hyper);
+    assert_eq!(d.game_speed(), GameSpeed::Hyper);
+    assert_eq!(d.ticks_per_second(), 90);
+
+    let mut c = Client::new(P1, HASH);
+    assert_eq!(c.game_speed(), None, "unknown before MatchStart");
+    let mut hub = Hub::with_chaos_seed(0xC10C);
+    hub.set_delay(DIRECTOR, 3);
+    hub.set_jitter(DIRECTOR, 2);
+
+    let mut locked = false;
+    let mut worst_after_lock: u32 = 0;
+    for _ in 0..600 {
+        if let Some(gap) = step(&mut d, &mut c, &mut hub) {
+            if locked {
+                worst_after_lock = worst_after_lock.max(gap);
+            }
+            if c.server_tick().unwrap() >= 2 * BEACON_INTERVAL {
+                locked = true;
+            }
+        }
+    }
+    assert!(locked, "client never acquired a server-time estimate");
+    assert!(
+        worst_after_lock <= MAX_GAP,
+        "post-lock gap {worst_after_lock} exceeded {MAX_GAP} ticks at Hyper"
+    );
+    assert_eq!(
+        c.game_speed(),
+        Some(GameSpeed::Hyper),
+        "client adopts the broadcast speed"
+    );
+    assert_eq!(c.ticks_per_second(), Some(90));
+}
+
+/// A short match driven at Hyper produces BIT-IDENTICAL state to the same
+/// match at Normal — same seed, same inputs, same number of driver iterations.
+/// Cadence must never leak into the sim: speed changes how often the driver
+/// iterates in wall-time, never what an iteration computes.
+#[test]
+fn hyper_match_checksums_equal_normal_match_checksums() {
+    use net::transport::{Channel, Inbound};
+    use net::wire::{self, Msg};
+
+    let run = |speed: GameSpeed| -> (Vec<u64>, u32) {
+        let mut d = Director::with_config(&[P1], SEED, HASH, speed);
+        let mut c = Client::new(P1, HASH);
+        let mut hub = Hub::new();
+        let mut trace = Vec::new();
+        for it in 0..(START_LEAD + 300) {
+            let in_d = hub.take(DIRECTOR);
+            let in_c = hub.take(P1);
+            let out_d = d.tick(in_d);
+            // The same real inputs on both runs: a reroll and a buy, issued at
+            // fixed driver iterations (they ride the wire and are acked/applied
+            // at the director-pinned apply tick on both runs identically).
+            let desired = match it {
+                40 => Input::Reroll,
+                80 => Input::BuyOffer { slot: 0 },
+                _ => Input::Noop,
+            };
+            let out_c = c.tick(in_c, desired);
+            hub.send(DIRECTOR, out_d);
+            hub.send(P1, out_c);
+            hub.advance();
+            if let Some(cs) = d.shadow_checksum(P1) {
+                trace.push(cs);
+            }
+        }
+        (trace, d.server_tick())
+    };
+
+    let (normal_trace, normal_tick) = run(GameSpeed::Normal);
+    let (hyper_trace, hyper_tick) = run(GameSpeed::Hyper);
+    assert_eq!(
+        normal_tick, hyper_tick,
+        "same iterations ⇒ same server_tick at any speed"
+    );
+    assert!(!normal_trace.is_empty());
+    assert_eq!(
+        normal_trace, hyper_trace,
+        "cadence must not affect state: per-tick checksums diverged"
+    );
+
+    // Belt-and-braces: a hand-injected Hyper MatchStart yields the same arena
+    // trajectory as a Normal one on a lone client too (the sim never sees the
+    // speed at all).
+    let mk = |speed: GameSpeed| -> u64 {
+        let mut c = Client::new(P1, HASH);
+        let start = Inbound {
+            from: DIRECTOR,
+            channel: Channel::Control,
+            bytes: wire::encode(&Msg::MatchStart {
+                start_tick: 0,
+                master_seed: SEED,
+                game_speed: speed,
+            }),
+        };
+        c.tick(vec![start], Input::Noop);
+        for _ in 0..(START_LEAD + 100) {
+            c.tick(vec![], Input::Noop);
+        }
+        c.arena_checksum().unwrap()
+    };
+    assert_eq!(mk(GameSpeed::Normal), mk(GameSpeed::Hyper));
 }

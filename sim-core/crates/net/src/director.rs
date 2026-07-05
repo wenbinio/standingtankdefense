@@ -39,7 +39,7 @@
 
 use crate::replay::{Capture, Replay};
 use crate::transport::{Channel, Inbound, Outbound, PeerId};
-use crate::wire::{self, InputCode, Msg};
+use crate::wire::{self, GameSpeed, InputCode, Msg};
 use crate::Schedule;
 use crate::{BEACON_INTERVAL, INPUT_LEAD_TICKS, START_LEAD};
 use sim::ArenaState;
@@ -90,6 +90,13 @@ pub struct Director {
     iter: u32,
     /// Match seed broadcast in `MatchStart` and used to build shadows.
     master_seed: u64,
+    /// Host-set match pace (from the lobby plan's `Ruleset`), broadcast in
+    /// `MatchStart` and fixed for the whole match. Pure CADENCE: the director
+    /// still advances exactly one tick per `tick()` call — the DRIVER calls it
+    /// `game_speed.ticks_per_second()` times per wall-clock second, so
+    /// `server_tick` advances at the configured rate. Nothing tick-indexed
+    /// (schedules, beacon/digest intervals, apply leads) changes with speed.
+    game_speed: GameSpeed,
     /// Content version this match runs (`docs/05`); stamped into every player's
     /// replay so an independent verifier can gate on a matching content set.
     content_hash: u64,
@@ -112,11 +119,25 @@ impl Director {
     }
 
     /// Build a director for `players` seeded with `master_seed` and stamping
-    /// `content_hash` into every captured replay. Constructs a shadow
+    /// `content_hash` into every captured replay, at [`GameSpeed::Normal`].
+    /// Use [`Director::with_config`] to also set the host's game speed.
+    pub fn with_content_hash(players: &[PeerId], master_seed: u64, content_hash: u64) -> Director {
+        Director::with_config(players, master_seed, content_hash, GameSpeed::Normal)
+    }
+
+    /// Build a director for `players` seeded with `master_seed`, stamping
+    /// `content_hash` into every captured replay and running at the host-set
+    /// `game_speed` (broadcast in `MatchStart`; see the `game_speed` field —
+    /// speed is driver cadence, never sim state). Constructs a shadow
     /// `ArenaState::new(master_seed, player_id)` per player and a
     /// `replay::Capture` seeded with `(master_seed, player_id, content_hash)` so
     /// the live shadow's exact applied inputs are logged for verification.
-    pub fn with_content_hash(players: &[PeerId], master_seed: u64, content_hash: u64) -> Director {
+    pub fn with_config(
+        players: &[PeerId],
+        master_seed: u64,
+        content_hash: u64,
+        game_speed: GameSpeed,
+    ) -> Director {
         let mut peers: Vec<PeerId> = players.to_vec();
         peers.sort();
         peers.dedup();
@@ -136,6 +157,7 @@ impl Director {
         Director {
             iter: 0,
             master_seed,
+            game_speed,
             content_hash,
             peers,
             players,
@@ -172,6 +194,7 @@ impl Director {
                     &Msg::MatchStart {
                         start_tick: START_LEAD,
                         master_seed: self.master_seed,
+                        game_speed: self.game_speed,
                     },
                 ));
             }
@@ -219,6 +242,7 @@ impl Director {
                             &Msg::MatchStart {
                                 start_tick: START_LEAD,
                                 master_seed: self.master_seed,
+                                game_speed: self.game_speed,
                             },
                         ));
                     }
@@ -372,6 +396,19 @@ impl Director {
         self.iter.saturating_sub(START_LEAD)
     }
 
+    /// The host-set match pace this director runs at (fixed at construction).
+    pub fn game_speed(&self) -> GameSpeed {
+        self.game_speed
+    }
+
+    /// Driver cadence: how many times per wall-clock second the embedding
+    /// driver must call [`Director::tick`] (30/45/60/90 for
+    /// Normal/Fast/Faster/Hyper) so `server_tick` advances at the configured
+    /// rate.
+    pub fn ticks_per_second(&self) -> u32 {
+        self.game_speed.ticks_per_second()
+    }
+
     /// Whether player `p`'s shadow is still alive.
     pub fn is_alive(&self, p: PeerId) -> bool {
         match self.index_of(p) {
@@ -445,7 +482,7 @@ fn broadcast(out: &mut Vec<Outbound>, peers: &[PeerId], channel: Channel, msg: &
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wire::{self, InputCode, Msg};
+    use crate::wire::{self, GameSpeed, InputCode, Msg};
     use crate::{BEACON_INTERVAL, INPUT_LEAD_TICKS, START_LEAD};
     use sim::Input;
 
@@ -488,6 +525,7 @@ mod tests {
                     msgs.contains(&Msg::MatchStart {
                         start_tick: START_LEAD,
                         master_seed: 0xABCD,
+                        game_speed: GameSpeed::Normal,
                     }),
                     "expected MatchStart at iter {it} for {peer:?}, got {msgs:?}"
                 );

@@ -18,7 +18,7 @@
 
 use crate::schedule::Schedule;
 use crate::transport::{Channel, Inbound, Outbound, PeerId, DIRECTOR};
-use crate::wire::{self, InputCode, Msg};
+use crate::wire::{self, GameSpeed, InputCode, Msg};
 use crate::{DIGEST_INTERVAL, START_LEAD};
 use sim::{ArenaState, Input};
 use std::collections::BTreeMap;
@@ -44,6 +44,18 @@ pub struct Client {
     pending: BTreeMap<u32, Input>,
     corrections: u32,
     master_seed: Option<u64>,
+    /// Host-set match pace, learned from the authoritative `MatchStart`.
+    /// Pure CADENCE (`docs/04 §4.4.1`): the client still steps exactly one sim
+    /// tick per `tick()` call — the embedding DRIVER calls it
+    /// `game_speed.ticks_per_second()` times per wall-clock second. Because
+    /// the server-tick estimate free-runs +1 per STEPPED tick (not per
+    /// wall-clock second), the clock-sync expected-rate is speed-correct by
+    /// construction: at any speed both sides advance one tick per iteration,
+    /// so beacons and the estimate stay in the same units. `None` until
+    /// `MatchStart` arrives (a RECONNECTING client adopts a `Snapshot` and
+    /// never sees `MatchStart`; it learns the speed out-of-band from the
+    /// lobby data, like `content_hash`).
+    game_speed: Option<GameSpeed>,
     /// Iteration of the last `Join` sent, to rate-limit retries so we don't
     /// trigger redundant snapshots while one is already in flight.
     last_join_iter: Option<u32>,
@@ -109,6 +121,7 @@ impl Client {
             pending: BTreeMap::new(),
             corrections: 0,
             master_seed: None,
+            game_speed: None,
             last_join_iter: None,
             challenge: sim::bot::Challenge::None,
             server_tick_est: None,
@@ -134,8 +147,13 @@ impl Client {
                 Err(_) => continue,
             };
             match decoded {
-                Msg::MatchStart { master_seed, .. } => {
+                Msg::MatchStart {
+                    master_seed,
+                    game_speed,
+                    ..
+                } => {
                     self.master_seed = Some(master_seed);
+                    self.game_speed = Some(game_speed);
                     if self.arena.is_none() {
                         // Initial alignment: arenas start at tick 0 on global tick
                         // START_LEAD (step_gate already START_LEAD).
@@ -336,6 +354,20 @@ impl Client {
         self.clock_drift
     }
 
+    /// The host-set match pace, once `MatchStart` delivered it. `None` before
+    /// the match starts (and for a reconnecting client, which learns it from
+    /// the lobby data instead).
+    pub fn game_speed(&self) -> Option<GameSpeed> {
+        self.game_speed
+    }
+
+    /// Driver cadence: how many times per wall-clock second the embedding
+    /// driver must call [`Client::tick`] (30/45/60/90 for
+    /// Normal/Fast/Faster/Hyper). `None` until the speed is known.
+    pub fn ticks_per_second(&self) -> Option<u32> {
+        self.game_speed.map(GameSpeed::ticks_per_second)
+    }
+
     /// Take (read+clear) the "clock resync needed" flag, set when a beacon showed
     /// drift past the snap threshold and the estimate was hard-snapped. A UI/net
     /// layer can poll this to request a fresh `Snapshot`; it does not affect the
@@ -370,6 +402,7 @@ mod tests {
             &Msg::MatchStart {
                 start_tick: 0,
                 master_seed: SEED,
+                game_speed: GameSpeed::Normal,
             },
             Channel::Control,
         )

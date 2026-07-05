@@ -22,7 +22,7 @@
 //! which is this module's concern; it only tracks *who* the owner is.
 
 use crate::transport::PeerId;
-use crate::wire::WireError;
+use crate::wire::{GameSpeed, WireError};
 
 /// Maximum party size, including the host. Matches the demo's N=8
 /// (`docs/07 §7.3`, eight-player arena).
@@ -35,9 +35,11 @@ pub const MAX_PARTY: usize = 8;
 pub struct Ruleset {
     /// Map / arena identifier.
     pub map_id: u16,
-    /// Game-speed code (e.g. 0 = normal, 1 = fast). Purely a meta setting; it
-    /// never feeds `state_checksum`, so it cannot perturb determinism.
-    pub game_speed: u8,
+    /// Host-set match pace ([`GameSpeed`]: Normal/Fast/Faster/Hyper = 30/45/
+    /// 60/90 ticks per second), fixed at match start and shipped to every
+    /// client in [`crate::wire::Msg::MatchStart`]. Pure CADENCE — it never
+    /// feeds `state_checksum`, so it cannot perturb determinism.
+    pub game_speed: GameSpeed,
     /// Optional challenge / mutator code (0 = none). Mirrors `sim::bot::Challenge`
     /// selection at the meta layer; the director applies the real challenge.
     pub challenge: u16,
@@ -48,7 +50,7 @@ impl Ruleset {
     pub fn standard() -> Ruleset {
         Ruleset {
             map_id: 0,
-            game_speed: 0,
+            game_speed: GameSpeed::Normal,
             challenge: 0,
         }
     }
@@ -251,6 +253,17 @@ impl Lobby {
         found
     }
 
+    /// Host sets the match pace (part of the lobby data every member sees,
+    /// `docs/07 §7.3`). Match-start-only: refused (returns `false`) once the
+    /// match has started — there is no mid-match speed change.
+    pub fn set_game_speed(&mut self, speed: GameSpeed) -> bool {
+        if self.phase == Phase::Started {
+            return false;
+        }
+        self.ruleset.game_speed = speed;
+        true
+    }
+
     /// Whether every current member is ready.
     pub fn all_ready(&self) -> bool {
         self.members.iter().all(|m| m.ready)
@@ -344,7 +357,7 @@ impl Lobby {
         w.u32(self.host.0);
         w.u64(self.content_hash);
         w.u16(self.ruleset.map_id);
-        w.u8(self.ruleset.game_speed);
+        w.u8(self.ruleset.game_speed.as_u8());
         w.u16(self.ruleset.challenge);
         w.u8(phase_tag(self.phase));
         w.u32(self.members.len() as u32);
@@ -363,7 +376,10 @@ impl Lobby {
         let content_hash = r.u64()?;
         let ruleset = Ruleset {
             map_id: r.u16()?,
-            game_speed: r.u8()?,
+            game_speed: {
+                let t = r.u8()?;
+                GameSpeed::from_u8(t).ok_or(WireError::BadTag(t))?
+            },
             challenge: r.u16()?,
         };
         let phase = phase_from_tag(r.u8()?)?;
@@ -590,6 +606,24 @@ mod tests {
     }
 
     #[test]
+    fn host_sets_game_speed_pre_start_only() {
+        let mut l = host_lobby();
+        l.join(p(1), HASH).unwrap();
+        l.set_ready(p(1), true);
+        assert_eq!(l.ruleset().game_speed, GameSpeed::Normal);
+        assert!(l.set_game_speed(GameSpeed::Hyper), "pre-start set allowed");
+        assert_eq!(l.ruleset().game_speed, GameSpeed::Hyper);
+
+        // The started plan carries the host-set speed.
+        let plan = l.start(7).expect("ready lobby starts");
+        assert_eq!(plan.ruleset.game_speed, GameSpeed::Hyper);
+
+        // Match-start-only: no mid-match speed change.
+        assert!(!l.set_game_speed(GameSpeed::Fast), "post-start set refused");
+        assert_eq!(l.ruleset().game_speed, GameSpeed::Hyper);
+    }
+
+    #[test]
     fn start_twice_fails_and_lobby_closes() {
         let mut l = host_lobby();
         l.join(p(1), HASH).unwrap();
@@ -638,7 +672,7 @@ mod tests {
 
         let ruleset = Ruleset {
             map_id: 3,
-            game_speed: 1,
+            game_speed: GameSpeed::Fast,
             challenge: 42,
         };
         let mut l2 = Lobby::new(HOST, HASH, ruleset);

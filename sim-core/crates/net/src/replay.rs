@@ -278,6 +278,11 @@ fn encode_action(out: &mut Vec<u8>, a: InputCode) {
         }
         InputCode::Reroll => out.push(2),
         InputCode::Clear => out.push(3),
+        InputCode::BlackMarketPick { is_weapon, index } => {
+            out.push(4);
+            out.push(is_weapon as u8);
+            out.push(index);
+        }
     }
 }
 
@@ -310,6 +315,14 @@ fn decode_action(r: &mut Reader) -> Result<InputCode, WireError> {
         1 => InputCode::BuyOffer(r.u8()?),
         2 => InputCode::Reroll,
         3 => InputCode::Clear,
+        4 => InputCode::BlackMarketPick {
+            is_weapon: match r.u8()? {
+                0 => false,
+                1 => true,
+                t => return Err(WireError::BadTag(t)),
+            },
+            index: r.u8()?,
+        },
         t => return Err(WireError::BadTag(t)),
     })
 }

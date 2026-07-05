@@ -35,7 +35,7 @@ pub use replay::{verify, Capture, ClaimedResult, Replay, VerifyFail, VerifyOutco
 pub use results::{verify_submissions, MatchStats, PlayerStats, SubmittedResult};
 pub use schedule::Schedule;
 pub use transport::{Channel, Inbound, Outbound, PeerId, Transport, DIRECTOR};
-pub use wire::{InputCode, Msg, WireError};
+pub use wire::{GameSpeed, InputCode, Msg, WireError};
 
 /// Input delay in ticks (see invariant above). Must exceed normal one-way
 /// delivery delay so a healthy client schedules an action before it is due.

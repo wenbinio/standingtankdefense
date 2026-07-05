@@ -381,6 +381,7 @@ impl Modifiers {
             ModEffect::GrantVulnPulse(..)
             | ModEffect::GrantDuplicator(..)
             | ModEffect::GrantVoucher(..)
+            | ModEffect::GrantBlackMarket
             | ModEffect::GrantGold(..)
             | ModEffect::TradeMaxHpForGold(..)
             | ModEffect::TradeRegenForGold(..) => {}

@@ -65,7 +65,7 @@ see §4.4.7.
 
 | Message | Dir | Channel | Implemented fields | Purpose |
 | --- | --- | --- | --- | --- |
-| **`MatchStart`** | S→C | CONTROL | `start_tick:u32`, `master_seed:u64` | Begin the match; client builds `ArenaState::new(master_seed, player_id)` at `start_tick`. |
+| **`MatchStart`** | S→C | CONTROL | `start_tick:u32`, `master_seed:u64`, `game_speed:u8` | Begin the match; client builds `ArenaState::new(master_seed, player_id)` at `start_tick` and adopts the host-set game speed (§4.4.1). |
 | **`TimeBeacon`** | S→C | TELEMETRY | `server_tick:u32` | Authoritative clock beacon for drift correction. |
 | **`InputAck`** | S→C | CONTROL | `seq:u32`, `apply_tick:u32` | Ack an input and pin its authoritative apply tick. |
 | **`Snapshot`** | S→C | BULK | `tick:u32`, `bytes:Vec<u8>` | Authoritative serialized arena state (correction / reconnect). |
@@ -75,10 +75,12 @@ see §4.4.7.
 | **`Input`** | C→S | CONTROL | `seq:u32`, `action:InputCode` | A player action; the director assigns its `apply_tick`. |
 | **`Digest`** | C→S | TELEMETRY | `tick:u32`, `checksum:u64` | Liveness + drift digest for the client's current tick. |
 
-The `Input.action` payload is the `InputCode` tagged union — the only actions on
-the wire today are: `Noop`, `BuyOffer(slot:u8)`, `Reroll`, `Clear`. (The richer
-action menu sketched in §4.4.3 — `UseItem`, `BlackMarketPick`, `SetGameSpeed` —
-is **not yet on the wire**; it is planned, not implemented.)
+The `Input.action` payload is the `InputCode` tagged union — the actions on the
+wire today are: `Noop`, `BuyOffer(slot:u8)`, `Reroll`, `Clear`,
+`BlackMarketPick{is_weapon:bool, index:u8}`. (`UseItem` remains **not yet on
+the wire** — planned, not implemented. `SetGameSpeed` was retired as a message:
+game speed is a host-set, match-start-only setting carried in `MatchStart` —
+§4.4.1 — never a mid-match input.)
 
 ### 4.4.1 Lifecycle (CONTROL)
 
@@ -93,16 +95,35 @@ WC3 was version drift; here it's a hard pre-match check. (The richer
 future expansion; those identities are carried by the Steam lobby layer today —
 see §4.4.7.)
 
-**`MatchStart`** (S→C, broadcast) — implemented as `{ start_tick:u32, master_seed:u64 }`:
+**`MatchStart`** (S→C, broadcast) — implemented as `{ start_tick:u32, master_seed:u64, game_speed:u8 }`:
 ```json
-{ "type":"MatchStart", "start_tick":150, "master_seed":"u64" }
+{ "type":"MatchStart", "start_tick":150, "master_seed":"u64", "game_speed":0 }
 ```
-The director sends the `start_tick` and the `master_seed` from which every
-client deterministically builds its arena. (A future hardening replaces the raw
-seed with a **commit** revealed per round so no client can precompute the whole
-match's RNG; the current codec ships the seed directly. Lobby/ready/host
-selection — formerly sketched here as `JoinAccept` / `LobbyState` / `Ready` — is
-handled off-wire by the in-process `Lobby` state machine; see §4.4.7.)
+The director sends the `start_tick`, the `master_seed` from which every client
+deterministically builds its arena, and the host-set **`game_speed`**
+(`net::wire::GameSpeed`, chosen in the lobby via `Ruleset.game_speed`, fixed
+for the whole match — there is no mid-match speed change and no mid-match speed
+message). Speed is **pure cadence**: the sim stays tick-indexed and
+bit-identical at every speed; the driver simply steps director and clients at
+the configured ticks per second, so `server_tick` advances at that rate.
+Tick-indexed intervals (input lead, digest/beacon cadence, round lengths)
+are unchanged in *ticks* and simply elapse faster in wall-time. Exact integer
+rates (no floats anywhere):
+
+| `game_speed` | name | multiplier | ticks/sec |
+| --- | --- | --- | --- |
+| 0 | Normal | ×1.0 | 30 |
+| 1 | Fast | ×1.5 | 45 |
+| 2 | Faster | ×2.0 | 60 |
+| 3 | Hyper | ×3.0 | 90 |
+
+(A future hardening replaces the raw seed with a **commit** revealed per round
+so no client can precompute the whole match's RNG; the current codec ships the
+seed directly. Lobby/ready/host selection — formerly sketched here as
+`JoinAccept` / `LobbyState` / `Ready` — is handled off-wire by the in-process
+`Lobby` state machine; see §4.4.7. A reconnecting client re-enters via
+`Snapshot`, not `MatchStart`, and learns the speed from the lobby data, like
+`content_hash`.)
 
 ### 4.4.2 Clock (TELEMETRY)
 
@@ -129,10 +150,18 @@ union. Inputs affect only the sender's arena.
 - `BuyOffer(slot:u8)` — purchase the weapon/upgrade in a shop slot.
 - `Reroll` — refresh offers (consumes a reroll / charges gold).
 - `Clear` — fire the manual `Clear` ability (the one real-time combat input; also the boss-damage action).
+- `BlackMarketPick { is_weapon:bool, index:u8 }` — redeem a held Black Market
+  pick: grant, free, the Uncommon **weapon** (`is_weapon`, `index` into the
+  weapon catalog) or Uncommon **Spikes-damage upgrade** (`index` into the
+  modifier catalog) of the player's choosing. Validated authoritatively against
+  `ArenaState::pending_black_market` + catalog rarity/scope; an illegal pick is
+  a deterministic no-op on both client and shadow (§4.6). The held pick
+  survives the 15:00 shop close — the source's "lasts until a choice is made".
 
-Planned, **not yet on the wire**: `UseItem { item_id }` (Magic Treasure /
-Multiplication Gems / Black Market pick), `BlackMarketPick { weapon_id }`,
-`SetGameSpeed { speed }` (host-only, server-validated).
+Planned, **not yet on the wire**: `UseItem { item_id }` (Magic Treasure held
+consumable). The formerly sketched `SetGameSpeed { speed }` input was retired:
+game speed is host-set, match-start-only configuration carried by `MatchStart`
+(§4.4.1), never a mid-match action.
 
 **`InputAck`** (S→C) — implemented as `{ seq:u32, apply_tick:u32 }`:
 ```json

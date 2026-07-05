@@ -377,7 +377,10 @@ pub enum ModEffect {
     /// (`255` = any) yields `copies` extra free copies. `(rarity, copies)`.
     GrantDuplicator(i64, i64),
     /// META: arm a one-shot voucher — the next non-meta purchase of `(rarity)`
-    /// is free (the source's Black Market "of your choosing"). `(rarity)`.
+    /// is free. `(rarity)`. NOTE: since the Black Market picker landed
+    /// ([`ModEffect::GrantBlackMarket`]) no catalog entry carries this effect —
+    /// the variant (and the generic `PendingPerk { free: true }` machinery it
+    /// arms) is KEPT for tag/wire stability and for any future voucher item.
     GrantVoucher(i64),
     /// META: instantly grant flat gold on purchase (the source's Magic Treasure).
     GrantGold(i64),
@@ -541,6 +544,13 @@ pub enum ModEffect {
     /// `Modifiers::healing_weapon_add`. Accumulates into
     /// `Modifiers::healing_weapon_healthy_dmg`.
     HealingWeaponDamagePct(i64, i64),
+    /// META: hold a Black Market pick (source: "Buy 1 Uncommon Weapon or Spikes
+    /// Damage Upgrade of your choosing. The Black Market lasts until a choice
+    /// is made.", `research/tower-survivors-map/parsed/catalog.json`). Sets
+    /// `ArenaState::pending_black_market`; the pick itself arrives later as the
+    /// player's `Input::BlackMarketPick` and grants the chosen catalog item
+    /// free (see [`black_market_eligible`]). Intercepted in `buy_modifier`.
+    GrantBlackMarket,
 }
 
 /// Number of weapon damage scopes: 6 attack classes (0-5), 2 range buckets
@@ -638,6 +648,7 @@ impl ModEffect {
             ModEffect::DamageTakenToSpikesPct(n, d) => (58, n, d, 0),
             ModEffect::DamageWhileHealthyPct(n, d) => (59, n, d, 0),
             ModEffect::HealingWeaponDamagePct(n, d) => (60, n, d, 0),
+            ModEffect::GrantBlackMarket => (61, 0, 0, 0),
         }
     }
 
@@ -648,6 +659,7 @@ impl ModEffect {
             self,
             ModEffect::GrantDuplicator(..)
                 | ModEffect::GrantVoucher(..)
+                | ModEffect::GrantBlackMarket
                 | ModEffect::GrantGold(..)
                 | ModEffect::TradeMaxHpForGold(..)
                 | ModEffect::TradeRegenForGold(..)
@@ -725,8 +737,50 @@ impl ModEffect {
             58 => ModEffect::DamageTakenToSpikesPct(a, b),
             59 => ModEffect::DamageWhileHealthyPct(a, b),
             60 => ModEffect::HealingWeaponDamagePct(a, b),
+            61 => ModEffect::GrantBlackMarket,
             _ => return None,
         })
+    }
+}
+
+/// Whether a modifier belongs to the Spikes upgrade family (the source's
+/// "Spikes Damage Upgrade" wording) — any effect that grows/extends Spikes
+/// retaliation (flat/% Spikes damage, Bloody Spikes stacking, Poison Armor's
+/// spikes-applied poison). Judgment call: the source groups all its Spikes
+/// upgrades under that label, so the whole family qualifies. Shared by the
+/// perk scoping (`PendingPerk::matches`) and the Black Market pick.
+pub fn modifier_is_spikes_upgrade(def: u16) -> bool {
+    MODIFIERS[def as usize].effects.iter().any(|e| {
+        matches!(
+            e,
+            ModEffect::SpikesFlat(..)
+                | ModEffect::SpikesPct(..)
+                | ModEffect::SpikesPoison(..)
+                | ModEffect::StackingSpikes(..)
+        )
+    })
+}
+
+/// Rarity code for Uncommon (0 Common · 1 Uncommon · 2 Rare · 3 Epic) — the
+/// rarity the Black Market's pick is restricted to.
+pub const RARITY_UNCOMMON: u8 = 1;
+
+/// Whether `(is_weapon, index)` is a legal Black Market pick. SOURCE SCOPE
+/// (`research/tower-survivors-map/parsed/catalog.json`, Black Market): "Buy 1
+/// Uncommon **Weapon or Spikes Damage Upgrade** of your choosing" — so the
+/// choice spans the Uncommon WEAPONS plus the Uncommon SPIKES-family upgrades,
+/// never other upgrades. Pure content predicate (no arena state); the sim,
+/// the bot, and the render layer all consult this one function.
+pub fn black_market_eligible(is_weapon: bool, index: usize) -> bool {
+    if is_weapon {
+        WEAPONS
+            .get(index)
+            .is_some_and(|w| w.rarity == RARITY_UNCOMMON)
+    } else {
+        MODIFIERS
+            .get(index)
+            .is_some_and(|m| m.rarity == RARITY_UNCOMMON)
+            && modifier_is_spikes_upgrade(index as u16)
     }
 }
 
@@ -1180,12 +1234,16 @@ pub static MODIFIERS: &[ModifierDef] = &[
         effects: &[ModEffect::GrantDuplicator(2, 1)],
         ramp: None,
     },
-    // Black Market (A0GR): "Buy 1 Uncommon Weapon or Spikes Upgrade of your choosing".
+    // Black Market (A0GR): "Buy 1 Uncommon Weapon or Spikes Damage Upgrade of
+    // your choosing. The Black Market lasts until a choice is made." — a HELD
+    // pick, redeemed by the player's `Input::BlackMarketPick` (free grant of
+    // any Uncommon weapon / Uncommon Spikes upgrade; see
+    // `black_market_eligible`).
     ModifierDef {
         name: "Black Market",
         rarity: 1,
         cost: 1500,
-        effects: &[ModEffect::GrantVoucher(1)],
+        effects: &[ModEffect::GrantBlackMarket],
         ramp: None,
     },
     // Magic Treasure (A0FP): "When used, gain +250 Gold | Gold value increases

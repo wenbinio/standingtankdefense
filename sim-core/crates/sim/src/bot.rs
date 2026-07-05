@@ -455,6 +455,37 @@ impl Bot {
         best.map(|(i, _)| i)
     }
 
+    /// Deterministic Black Market pick for a held market
+    /// (`ArenaState::pending_black_market`): the TANKY archetype takes the
+    /// first Uncommon Spikes-damage upgrade (its defense identity); every
+    /// other archetype takes the first Uncommon weapon — both "first" in
+    /// stable catalog order, so the choice is a pure function of
+    /// `(master_seed, catalog)` with no RNG stream touched. Falls back to the
+    /// other class if a catalog ever lacks one (today both exist).
+    fn black_market_pick(&mut self, s: &ArenaState) -> Input {
+        let prefer_spikes = self.archetype(s) == Archetype::Tanky;
+        let first = |is_weapon: bool| -> Option<u8> {
+            let len = if is_weapon {
+                content::WEAPONS.len()
+            } else {
+                content::MODIFIERS.len()
+            };
+            (0..len)
+                .find(|&i| content::black_market_eligible(is_weapon, i))
+                .map(|i| i as u8)
+        };
+        for is_weapon in if prefer_spikes {
+            [false, true]
+        } else {
+            [true, false]
+        } {
+            if let Some(index) = first(is_weapon) {
+                return Input::BlackMarketPick { is_weapon, index };
+            }
+        }
+        Input::Noop
+    }
+
     /// Choose this tick's action from the current state.
     pub fn decide(&mut self, s: &ArenaState) -> Input {
         if s.dead {
@@ -463,6 +494,13 @@ impl Bot {
         if self.cooldown > 0 {
             self.cooldown -= 1;
             return Input::Noop;
+        }
+
+        // Holding a Black Market pick: redeem it first (it is free and
+        // instant, so nothing is gained by sitting on it).
+        if s.pending_black_market {
+            self.cooldown = 6;
+            return self.black_market_pick(s);
         }
 
         // Emergency: swarmed and the Clear is off cooldown → wipe the board.
@@ -633,3 +671,36 @@ const MODIFIER_BUY_CAP: u32 = 250;
 /// weapons for the rest of the match (thousands of instances). Challenge runs are
 /// exempt.
 const WEAPON_BUY_CAP: usize = 40;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ArenaState;
+
+    #[test]
+    fn bot_redeems_a_held_black_market_pick_deterministically() {
+        // Across seeds (i.e. across archetypes) a held pick yields a VALID
+        // `BlackMarketPick`, the same one for the same state, and stepping it
+        // consumes the held market.
+        for seed in 0..8u64 {
+            let mut s = ArenaState::new(seed, 0);
+            s.pending_black_market = true;
+            let mut bot = Bot::default();
+            let inp = bot.decide(&s);
+            let Input::BlackMarketPick { is_weapon, index } = inp else {
+                panic!("bot must issue a pick while one is held, got {inp:?}");
+            };
+            assert!(
+                content::black_market_eligible(is_weapon, index as usize),
+                "bot pick must be catalog-legal"
+            );
+            assert_eq!(
+                Bot::default().decide(&s),
+                inp,
+                "same state ⇒ same pick (stable, seed-derived)"
+            );
+            crate::step(&mut s, inp);
+            assert!(!s.pending_black_market, "pick consumed by the sim");
+        }
+    }
+}

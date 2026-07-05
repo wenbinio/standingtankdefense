@@ -31,4 +31,15 @@ pub enum Input {
     Reroll,
     /// Fire the manual `Clear` ability (also the boss-damage action).
     Clear,
+    /// Redeem a held Black Market pick (`ArenaState::pending_black_market`):
+    /// grant, free of charge, the Uncommon weapon (`is_weapon = true`, `index`
+    /// into `content::WEAPONS`) or the Uncommon Spikes-damage upgrade
+    /// (`is_weapon = false`, `index` into `content::MODIFIERS`) of the player's
+    /// choosing — the source's "Buy 1 Uncommon Weapon or Spikes Damage Upgrade
+    /// of your choosing. The Black Market lasts until a choice is made."
+    /// (`research/tower-survivors-map/parsed/catalog.json`). Illegal picks (no
+    /// pending pick / index out of range / wrong rarity / non-Spikes upgrade)
+    /// are deterministic no-ops (`docs/04 §4.6` anti-cheat discipline). `u8`
+    /// covers both catalogs (96 weapons / 110 modifiers).
+    BlackMarketPick { is_weapon: bool, index: u8 },
 }

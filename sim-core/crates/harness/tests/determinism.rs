@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x3b7f3e9de60f57f0, // re-baselined (BATTLE FERVOR SCOPING): `Modifiers::healing_weapon_healthy_dmg` entered the checksum stream — Battle Fervor's +35% is now scoped to healing weapons (HealingWeaponDamagePct / WeaponDef::is_healing) instead of the documented global DamageWhileHealthyPct approximation. The M0 TRAJECTORY is unchanged: the scripted bot never buys Battle Fervor and owns no healing weapon (probed: both healthy-damage aggregates zero, healing_mult untouched at the final tick), so the shift is purely the new checksummed field in the digest. Captured fresh from `cargo run -p harness`. (Previous baseline 0x672269466cd58df0 was the source-arc restoration.)
+        0x0000000000000000, // PLACEHOLDER - recaptured below for the merged deferred-fidelity passes
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

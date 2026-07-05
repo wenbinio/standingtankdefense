@@ -85,6 +85,40 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
             }
         }
 
+        Input::BlackMarketPick { is_weapon, index } => {
+            // Redeem a HELD Black Market pick (source: "Buy 1 Uncommon Weapon
+            // or Spikes Damage Upgrade of your choosing. The Black Market
+            // lasts until a choice is made."). Validity is authoritative and
+            // deterministic: the pick must be held, the catalog index in
+            // range, and the item an Uncommon weapon / Uncommon Spikes-family
+            // upgrade (`content::black_market_eligible`). Anything else is a
+            // deterministic NO-OP (the flag stays held on a bad pick — the
+            // player keeps the market until a VALID choice is made). The
+            // 15:00 shop close does NOT block a held pick: the close clears
+            // the OFFERS (buy/reroll no-op naturally), but the pick is not a
+            // shop offer — per the source it "lasts until a choice is made",
+            // so it stays redeemable post-boss.
+            if s.pending_black_market
+                && crate::content::black_market_eligible(is_weapon, index as usize)
+            {
+                s.pending_black_market = false;
+                // Same acquisition path as a normal buy, minus the gold: one
+                // `grant_offer` (weapon instance / modifier application +
+                // telemetry). Deliberately does NOT consult `pending_perk` —
+                // a pick is not a shop purchase, so an armed duplicator
+                // neither applies nor is consumed.
+                s.grant_offer(Offer {
+                    kind: if is_weapon {
+                        OfferKind::Weapon
+                    } else {
+                        OfferKind::Modifier
+                    },
+                    def: index as u16,
+                    cost: 0,
+                });
+            }
+        }
+
         Input::Clear => {
             if s.tick >= s.tank.clear_cooldown_end {
                 let mut survivors = Vec::with_capacity(s.enemies.len());
@@ -387,80 +421,170 @@ mod tests {
         assert!(s.pending_perk.is_none(), "perk consumed");
     }
 
-    #[test]
-    fn voucher_makes_next_matching_purchase_free() {
-        let mut s = fresh();
-        let voucher = modifier_idx(|e| matches!(e, content::ModEffect::GrantVoucher(1)));
-        s.buy_modifier(voucher);
-        // A rarity-1 weapon costs more gold than we hold, but the voucher zeroes it.
-        let unc_weapon = content::WEAPONS.iter().position(|w| w.rarity == 1).unwrap() as u16;
-        s.shop.offers = vec![Offer {
-            kind: OfferKind::Weapon,
-            def: unc_weapon,
-            cost: 9999,
-        }];
-        s.economy.gold = 0;
-        let before = s.weapons.len();
-        apply(&mut s, Input::BuyOffer { slot: 0 });
-        assert_eq!(s.weapons.len(), before + 1, "free purchase happened");
-        assert_eq!(s.economy.gold, 0, "voucher charged no gold");
-        assert!(s.pending_perk.is_none(), "voucher consumed");
+    // ---- Black Market picker (`Input::BlackMarketPick`) --------------------
+    //
+    // SOURCE (research/tower-survivors-map/parsed/catalog.json, "Black
+    // Market"): "Buy 1 Uncommon Weapon or Spikes Damage Upgrade of your
+    // choosing. The Black Market lasts until a choice is made."
+
+    /// Catalog index of the Black Market modifier.
+    fn black_market() -> u16 {
+        modifier_idx(|e| matches!(e, content::ModEffect::GrantBlackMarket))
+    }
+
+    /// First Uncommon weapon in stable catalog order.
+    fn uncommon_weapon() -> u8 {
+        content::WEAPONS.iter().position(|w| w.rarity == 1).unwrap() as u8
+    }
+
+    /// First Uncommon Spikes-family upgrade in stable catalog order.
+    fn uncommon_spikes_upgrade() -> u8 {
+        (0..content::MODIFIERS.len())
+            .position(|i| content::black_market_eligible(false, i))
+            .unwrap() as u8
     }
 
     #[test]
-    fn voucher_scope_covers_spikes_upgrades_but_not_other_upgrades() {
-        // Black Market: "Buy 1 Uncommon WEAPON or SPIKES DAMAGE UPGRADE of
-        // your choosing" — a Spikes upgrade qualifies, other upgrades don't.
-        let voucher = modifier_idx(|e| matches!(e, content::ModEffect::GrantVoucher(1)));
-
-        // An Uncommon NON-spikes upgrade must not consume the voucher.
+    fn buying_black_market_arms_a_held_pick() {
         let mut s = fresh();
-        s.buy_modifier(voucher);
-        let plain = modifier_where(|m| {
-            m.rarity == 1
-                && !m.is_meta()
-                && !m.effects.iter().any(|e| {
-                    matches!(
-                        e,
-                        content::ModEffect::SpikesFlat(..)
-                            | content::ModEffect::SpikesPct(..)
-                            | content::ModEffect::SpikesPoison(..)
-                            | content::ModEffect::StackingSpikes(..)
-                    )
-                })
-        });
-        s.shop.offers = vec![Offer {
-            kind: OfferKind::Modifier,
-            def: plain,
-            cost: 0,
-        }];
-        s.economy.gold = 0;
-        apply(&mut s, Input::BuyOffer { slot: 0 });
-        assert!(s.pending_perk.is_some(), "non-spikes upgrade left it armed");
+        assert!(!s.pending_black_market);
+        s.buy_modifier(black_market());
+        assert!(s.pending_black_market, "pick held after purchase");
+        assert!(
+            s.pending_perk.is_none(),
+            "Black Market is a held pick, not a pending_perk voucher"
+        );
+        // Buying a second is idempotent — the pick never stacks charges.
+        s.buy_modifier(black_market());
+        assert!(s.pending_black_market);
+    }
 
-        // An Uncommon SPIKES upgrade is inside the scope: free, consumed.
+    #[test]
+    fn black_market_pick_grants_uncommon_weapon_free() {
         let mut s = fresh();
-        s.buy_modifier(voucher);
-        let spikes = modifier_where(|m| {
-            m.rarity == 1
-                && m.effects
-                    .iter()
-                    .any(|e| matches!(e, content::ModEffect::SpikesFlat(..)))
-        });
-        s.shop.offers = vec![Offer {
-            kind: OfferKind::Modifier,
-            def: spikes,
-            cost: 9999,
-        }];
+        s.buy_modifier(black_market());
+        s.economy.gold = 0; // free: no gold needed
+        let idx = uncommon_weapon();
+        let before = s.weapons.len();
+        apply(
+            &mut s,
+            Input::BlackMarketPick {
+                is_weapon: true,
+                index: idx,
+            },
+        );
+        assert_eq!(s.weapons.len(), before + 1, "weapon granted");
+        assert_eq!(s.weapons.last().unwrap().def, idx as u16);
+        assert_eq!(s.economy.gold, 0, "no gold charged");
+        assert!(!s.pending_black_market, "pick consumed");
+    }
+
+    #[test]
+    fn black_market_pick_grants_uncommon_spikes_upgrade_free() {
+        let mut s = fresh();
+        s.buy_modifier(black_market());
         s.economy.gold = 0;
+        let idx = uncommon_spikes_upgrade();
         let spikes_before = s.tank.spikes_damage;
-        apply(&mut s, Input::BuyOffer { slot: 0 });
+        apply(
+            &mut s,
+            Input::BlackMarketPick {
+                is_weapon: false,
+                index: idx,
+            },
+        );
         assert!(
             s.tank.spikes_damage > spikes_before,
-            "spikes upgrade purchased free"
+            "spikes upgrade applied free"
         );
-        assert_eq!(s.economy.gold, 0, "voucher charged no gold");
-        assert!(s.pending_perk.is_none(), "voucher consumed");
+        assert_eq!(s.economy.gold, 0, "no gold charged");
+        assert!(!s.pending_black_market, "pick consumed");
+    }
+
+    #[test]
+    fn black_market_pick_without_a_held_pick_is_a_noop() {
+        let mut s = fresh();
+        let before = s.clone();
+        apply(
+            &mut s,
+            Input::BlackMarketPick {
+                is_weapon: true,
+                index: uncommon_weapon(),
+            },
+        );
+        assert_eq!(s, before, "no held pick ⇒ deterministic no-op");
+    }
+
+    #[test]
+    fn black_market_illegal_picks_are_noops_and_keep_the_pick() {
+        // Bad index / wrong rarity / non-spikes upgrade: all deterministic
+        // no-ops that leave the pick HELD ("lasts until a choice is made").
+        let common_weapon = content::WEAPONS.iter().position(|w| w.rarity == 0).unwrap() as u8;
+        let plain_uncommon_upgrade = (0..content::MODIFIERS.len())
+            .find(|&i| {
+                content::MODIFIERS[i].rarity == 1
+                    && !content::MODIFIERS[i].is_meta()
+                    && !content::modifier_is_spikes_upgrade(i as u16)
+            })
+            .unwrap() as u8;
+        let bad_picks = [
+            (true, 255u8),                   // weapon index out of range
+            (false, 255u8),                  // modifier index out of range
+            (true, common_weapon),           // wrong rarity (Common weapon)
+            (false, plain_uncommon_upgrade), // Uncommon but not a Spikes upgrade
+        ];
+        for (is_weapon, index) in bad_picks {
+            let mut s = fresh();
+            s.buy_modifier(black_market());
+            let before = s.clone();
+            apply(&mut s, Input::BlackMarketPick { is_weapon, index });
+            assert_eq!(s, before, "illegal pick ({is_weapon}, {index}) must no-op");
+            assert!(s.pending_black_market, "pick stays held on an illegal pick");
+        }
+    }
+
+    #[test]
+    fn black_market_pick_survives_the_shop_close_at_the_boss() {
+        // The 15:00 shop close clears the OFFERS (buys/rerolls no-op), but a
+        // held pick is not an offer — "lasts until a choice is made" — so it
+        // stays redeemable post-boss.
+        let mut s = fresh();
+        s.buy_modifier(black_market());
+        s.tick = content::BOSS_SPAWN_TICK;
+        s.shop.offers.clear();
+        s.economy.gold = 0;
+        let before = s.weapons.len();
+        apply(
+            &mut s,
+            Input::BlackMarketPick {
+                is_weapon: true,
+                index: uncommon_weapon(),
+            },
+        );
+        assert_eq!(s.weapons.len(), before + 1, "pick redeemed post-close");
+        assert!(!s.pending_black_market);
+    }
+
+    #[test]
+    fn black_market_pick_ignores_an_armed_duplicator_perk() {
+        // A pick is not a shop purchase: an armed duplicator neither applies
+        // to it (no extra copies) nor is consumed by it.
+        let mut s = fresh();
+        let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(2, _)));
+        s.buy_modifier(dup);
+        s.buy_modifier(black_market());
+        let armed = s.pending_perk;
+        assert!(armed.is_some(), "duplicator perk armed alongside the pick");
+        let before = s.weapons.len();
+        apply(
+            &mut s,
+            Input::BlackMarketPick {
+                is_weapon: true,
+                index: uncommon_weapon(),
+            },
+        );
+        assert_eq!(s.weapons.len(), before + 1, "exactly one copy granted");
+        assert_eq!(s.pending_perk, armed, "duplicator perk untouched");
     }
 
     #[test]
@@ -469,23 +593,19 @@ mod tests {
         let dup = modifier_idx(|e| matches!(e, content::ModEffect::GrantDuplicator(0, _)));
         s.buy_modifier(dup);
         let armed = s.pending_perk;
-        // Buying ANOTHER meta item (a rarity-1 voucher) must not consume the
-        // duplicator perk — it replaces it with its own (no self-duplication).
-        let voucher = modifier_idx(|e| matches!(e, content::ModEffect::GrantVoucher(1)));
+        // Buying ANOTHER meta item (the Black Market) must not consume or
+        // trigger the duplicator perk (the source's "Does not work on Magic
+        // Coins, Magic Treasures or Black Markets") — the perk stays armed and
+        // the market's pick is held alongside it.
         s.shop.offers = vec![Offer {
             kind: OfferKind::Modifier,
-            def: voucher,
+            def: black_market(),
             cost: 0,
         }];
         s.economy.gold = 0;
         apply(&mut s, Input::BuyOffer { slot: 0 });
-        // The duplicator did not duplicate the voucher; the perk is now the voucher.
-        assert_ne!(s.pending_perk, armed);
-        assert_eq!(
-            s.pending_perk.map(|p| p.free),
-            Some(true),
-            "perk is the voucher"
-        );
+        assert_eq!(s.pending_perk, armed, "duplicator perk untouched");
+        assert!(s.pending_black_market, "pick held alongside the perk");
     }
 
     #[test]

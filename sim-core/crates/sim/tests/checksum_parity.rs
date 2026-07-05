@@ -555,6 +555,7 @@ fn arena_collections_and_shop_feed_checksum() {
             free: true,
         })
     });
+    parity("pending_black_market", |s| s.pending_black_market = true);
     parity("shop.shop_seq", |s| s.shop.shop_seq += 1);
     parity("shop.offers[0].kind", |s| {
         s.shop.offers[0].kind = OfferKind::Modifier

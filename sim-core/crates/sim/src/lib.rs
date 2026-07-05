@@ -285,6 +285,8 @@ pub fn checksum(s: &ArenaState) -> u64 {
         }
         None => c.write_u32(0),
     }
+    // Held Black Market pick (redeemed by `Input::BlackMarketPick`).
+    c.write_u32(s.pending_black_market as u32);
 
     // Shop offers (slot order is meaningful).
     c.write_u32(s.shop.shop_seq);

@@ -4,6 +4,61 @@
 
 use sim::Input;
 
+/// Host-set match pace (`docs/04 §4.4.1`), fixed at match start — there is NO
+/// mid-match speed change and no mid-match message for it. Speed is pure
+/// CADENCE: the sim stays tick-indexed and bit-identical at every speed; the
+/// driver simply steps director and clients at the configured ticks/sec, so
+/// `server_tick` advances faster in wall-time. Exact integer rates (no
+/// floats):
+///
+/// | speed  | multiplier | ticks/sec |
+/// |--------|------------|-----------|
+/// | Normal | ×1.0       | 30        |
+/// | Fast   | ×1.5       | 45        |
+/// | Faster | ×2.0       | 60        |
+/// | Hyper  | ×3.0       | 90        |
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum GameSpeed {
+    #[default]
+    Normal,
+    Fast,
+    Faster,
+    Hyper,
+}
+
+impl GameSpeed {
+    /// Driver cadence: how many sim ticks per wall-clock second this speed
+    /// runs at (the ×1.0/×1.5/×2.0/×3.0 multipliers on the 30 Hz base, as
+    /// exact integers).
+    pub const fn ticks_per_second(self) -> u32 {
+        match self {
+            GameSpeed::Normal => 30,
+            GameSpeed::Fast => 45,
+            GameSpeed::Faster => 60,
+            GameSpeed::Hyper => 90,
+        }
+    }
+    /// Stable wire tag.
+    pub const fn as_u8(self) -> u8 {
+        match self {
+            GameSpeed::Normal => 0,
+            GameSpeed::Fast => 1,
+            GameSpeed::Faster => 2,
+            GameSpeed::Hyper => 3,
+        }
+    }
+    /// Inverse of [`as_u8`](Self::as_u8).
+    pub const fn from_u8(v: u8) -> Option<GameSpeed> {
+        Some(match v {
+            0 => GameSpeed::Normal,
+            1 => GameSpeed::Fast,
+            2 => GameSpeed::Faster,
+            3 => GameSpeed::Hyper,
+            _ => return None,
+        })
+    }
+}
+
 /// The encoded form of a player action (mirrors `sim::Input`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum InputCode {
@@ -11,6 +66,11 @@ pub enum InputCode {
     BuyOffer(u8),
     Reroll,
     Clear,
+    /// Redeem a held Black Market pick (`docs/04 §4.4.3`).
+    BlackMarketPick {
+        is_weapon: bool,
+        index: u8,
+    },
 }
 
 impl InputCode {
@@ -20,6 +80,9 @@ impl InputCode {
             Input::BuyOffer { slot } => InputCode::BuyOffer(slot),
             Input::Reroll => InputCode::Reroll,
             Input::Clear => InputCode::Clear,
+            Input::BlackMarketPick { is_weapon, index } => {
+                InputCode::BlackMarketPick { is_weapon, index }
+            }
         }
     }
     pub fn to_input(self) -> Input {
@@ -28,6 +91,9 @@ impl InputCode {
             InputCode::BuyOffer(slot) => Input::BuyOffer { slot },
             InputCode::Reroll => Input::Reroll,
             InputCode::Clear => Input::Clear,
+            InputCode::BlackMarketPick { is_weapon, index } => {
+                Input::BlackMarketPick { is_weapon, index }
+            }
         }
     }
 }
@@ -36,8 +102,14 @@ impl InputCode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Msg {
     // ---- director → client ----
-    /// Begin the match; build `ArenaState::new(master_seed, player_id)` at `start_tick`.
-    MatchStart { start_tick: u32, master_seed: u64 },
+    /// Begin the match; build `ArenaState::new(master_seed, player_id)` at
+    /// `start_tick`. `game_speed` is the host-set pace from the lobby plan
+    /// (`lobby::Ruleset`), fixed for the whole match.
+    MatchStart {
+        start_tick: u32,
+        master_seed: u64,
+        game_speed: GameSpeed,
+    },
     /// Authoritative clock beacon.
     TimeBeacon { server_tick: u32 },
     /// Acknowledge an input and pin its authoritative apply tick.
@@ -112,6 +184,11 @@ impl W {
             }
             InputCode::Reroll => self.u8(2),
             InputCode::Clear => self.u8(3),
+            InputCode::BlackMarketPick { is_weapon, index } => {
+                self.u8(4);
+                self.u8(is_weapon as u8);
+                self.u8(index);
+            }
         }
     }
 }
@@ -146,6 +223,14 @@ impl<'a> R<'a> {
             1 => InputCode::BuyOffer(self.u8()?),
             2 => InputCode::Reroll,
             3 => InputCode::Clear,
+            4 => InputCode::BlackMarketPick {
+                is_weapon: match self.u8()? {
+                    0 => false,
+                    1 => true,
+                    t => return Err(WireError::BadTag(t)),
+                },
+                index: self.u8()?,
+            },
             t => return Err(WireError::BadTag(t)),
         })
     }
@@ -158,10 +243,12 @@ pub fn encode(m: &Msg) -> Vec<u8> {
         Msg::MatchStart {
             start_tick,
             master_seed,
+            game_speed,
         } => {
             w.u8(0);
             w.u32(*start_tick);
             w.u64(*master_seed);
+            w.u8(game_speed.as_u8());
         }
         Msg::TimeBeacon { server_tick } => {
             w.u8(1);
@@ -220,6 +307,10 @@ pub fn decode(bytes: &[u8]) -> Result<Msg, WireError> {
         0 => Msg::MatchStart {
             start_tick: r.u32()?,
             master_seed: r.u64()?,
+            game_speed: {
+                let t = r.u8()?;
+                GameSpeed::from_u8(t).ok_or(WireError::BadTag(t))?
+            },
         },
         1 => Msg::TimeBeacon {
             server_tick: r.u32()?,
@@ -271,6 +362,7 @@ mod tests {
             Msg::MatchStart {
                 start_tick: 5,
                 master_seed: 0xDEAD_BEEF_1234,
+                game_speed: GameSpeed::Hyper,
             },
             Msg::TimeBeacon { server_tick: 99 },
             Msg::InputAck {
@@ -300,6 +392,20 @@ mod tests {
                 seq: 4,
                 action: InputCode::Clear,
             },
+            Msg::Input {
+                seq: 5,
+                action: InputCode::BlackMarketPick {
+                    is_weapon: true,
+                    index: 17,
+                },
+            },
+            Msg::Input {
+                seq: 6,
+                action: InputCode::BlackMarketPick {
+                    is_weapon: false,
+                    index: 43,
+                },
+            },
             Msg::Digest {
                 tick: 30,
                 checksum: 0x1122_3344_5566_7788,
@@ -313,6 +419,48 @@ mod tests {
     #[test]
     fn bad_tag_is_rejected() {
         assert_eq!(decode(&[200]), Err(WireError::BadTag(200)));
+    }
+
+    #[test]
+    fn bad_game_speed_and_pick_bool_tags_are_rejected() {
+        // MatchStart with an out-of-range speed tag (the trailing byte).
+        let mut bytes = encode(&Msg::MatchStart {
+            start_tick: 1,
+            master_seed: 2,
+            game_speed: GameSpeed::Normal,
+        });
+        *bytes.last_mut().unwrap() = 9;
+        assert_eq!(decode(&bytes), Err(WireError::BadTag(9)));
+
+        // BlackMarketPick with a non-boolean `is_weapon` byte.
+        let mut bytes = encode(&Msg::Input {
+            seq: 1,
+            action: InputCode::BlackMarketPick {
+                is_weapon: false,
+                index: 3,
+            },
+        });
+        let n = bytes.len();
+        bytes[n - 2] = 7;
+        assert_eq!(decode(&bytes), Err(WireError::BadTag(7)));
+    }
+
+    #[test]
+    fn game_speed_table_is_the_documented_rational_multipliers() {
+        // ×1.0 / ×1.5 / ×2.0 / ×3.0 of the 30 Hz base, as exact integers.
+        assert_eq!(GameSpeed::Normal.ticks_per_second(), 30);
+        assert_eq!(GameSpeed::Fast.ticks_per_second(), 45);
+        assert_eq!(GameSpeed::Faster.ticks_per_second(), 60);
+        assert_eq!(GameSpeed::Hyper.ticks_per_second(), 90);
+        for s in [
+            GameSpeed::Normal,
+            GameSpeed::Fast,
+            GameSpeed::Faster,
+            GameSpeed::Hyper,
+        ] {
+            assert_eq!(GameSpeed::from_u8(s.as_u8()), Some(s));
+        }
+        assert_eq!(GameSpeed::from_u8(4), None);
     }
 
     #[test]

@@ -510,23 +510,6 @@ pub struct PendingPerk {
     pub free: bool,
 }
 
-/// Whether a modifier belongs to the Spikes upgrade family (the source's
-/// "Spikes Damage Upgrade" wording) — any effect that grows/extends Spikes
-/// retaliation (flat/% Spikes damage, Bloody Spikes stacking, Poison Armor's
-/// spikes-applied poison). Judgment call: the source groups all its Spikes
-/// upgrades under that label, so the whole family qualifies.
-fn modifier_is_spikes_upgrade(def: u16) -> bool {
-    content::MODIFIERS[def as usize].effects.iter().any(|e| {
-        matches!(
-            e,
-            content::ModEffect::SpikesFlat(..)
-                | content::ModEffect::SpikesPct(..)
-                | content::ModEffect::SpikesPoison(..)
-                | content::ModEffect::StackingSpikes(..)
-        )
-    })
-}
-
 impl PendingPerk {
     /// Whether a (non-meta) purchase of `offer` qualifies for this perk:
     /// rarity must match AND the offer must fall inside the perk's scope.
@@ -537,7 +520,7 @@ impl PendingPerk {
             PerkScope::UpgradeOnly => matches!(offer.kind, OfferKind::Modifier),
             PerkScope::WeaponOrSpikes => match offer.kind {
                 OfferKind::Weapon => true,
-                OfferKind::Modifier => modifier_is_spikes_upgrade(offer.def),
+                OfferKind::Modifier => content::modifier_is_spikes_upgrade(offer.def),
             },
         };
         rarity_ok && scope_ok
@@ -782,6 +765,14 @@ pub struct ArenaState {
     pub vuln_pulses: Vec<VulnPulse>,
     /// A meta perk (duplicator/voucher) armed for the next matching purchase.
     pub pending_perk: Option<PendingPerk>,
+    /// A held Black Market pick (the source's "Buy 1 Uncommon Weapon or Spikes
+    /// Damage Upgrade of your choosing. The Black Market lasts until a choice
+    /// is made."). Set by buying the Black Market; redeemed (and cleared) by a
+    /// valid `Input::BlackMarketPick`. It survives round boundaries AND the
+    /// 15:00 shop close — "lasts until a choice is made" — so a held pick is
+    /// still redeemable post-boss. AUTHORITATIVE: feeds `checksum()`, rides the
+    /// snapshot (`SNAPSHOT_VERSION` 22).
+    pub pending_black_market: bool,
     /// Set when the tank takes damage this tick (drives Spikes retaliation).
     /// Transient: always `false` at a tick boundary, so it is excluded from the
     /// checksum/snapshot.
@@ -925,6 +916,7 @@ impl ArenaState {
             ramps: Vec::new(),
             vuln_pulses: Vec::new(),
             pending_perk: None,
+            pending_black_market: false,
             tank_hit_this_tick: false,
             shield_broke_this_tick: false,
             damage_taken_this_tick: 0,
@@ -1045,8 +1037,9 @@ impl ArenaState {
                         free: false,
                     });
                 }
-                // Black Market: "Buy 1 Uncommon Weapon or Spikes Damage
-                // Upgrade of your choosing" ⇒ weapon-or-spikes.
+                // Generic voucher (no catalog entry carries it since the Black
+                // Market picker; the mechanism is kept for future items): the
+                // next matching purchase is free.
                 content::ModEffect::GrantVoucher(rarity) => {
                     self.pending_perk = Some(PendingPerk {
                         rarity: rarity as u8,
@@ -1054,6 +1047,15 @@ impl ArenaState {
                         extra_copies: 0,
                         free: true,
                     });
+                }
+                // Black Market: hold a pick — "Buy 1 Uncommon Weapon or Spikes
+                // Damage Upgrade of your choosing. The Black Market lasts until
+                // a choice is made." Redeemed later by `Input::BlackMarketPick`
+                // (`input::apply`). Buying a second while one is held is
+                // idempotent (the source item persists until used, it never
+                // stacks charges).
+                content::ModEffect::GrantBlackMarket => {
+                    self.pending_black_market = true;
                 }
                 // Magic Treasure (the catalog's only `GrantGold` user): the
                 // source item is a HELD consumable whose value grows +2/s and

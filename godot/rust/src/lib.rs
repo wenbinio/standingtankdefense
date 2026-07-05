@@ -6,6 +6,9 @@
 //! GDScript surface (see ../main.gd):
 //!   var sim = StSim.new_match(seed)
 //!   sim.step(code, slot)          # 0 Noop · 1 Buy(slot) · 2 Reroll · 3 Clear
+//!                                 # 4 BMPick weapon · 5 BMPick upgrade (slot = catalog idx)
+//!   sim.black_market_pending()
+//!   sim.black_market_choices(weapons) / black_market_choice_names(weapons)
 //!   sim.tick(); sim.round(); sim.is_dead()
 //!   sim.clear_state() -> [ready_in_ticks, cooldown_total_ticks]
 //!   sim.timing() -> [ticks_to_next_round, round_len_ticks, boss_spawn_tick]
@@ -30,6 +33,7 @@ use net::director::Director;
 use net::hub::Hub;
 use net::lobby::{Lobby, MatchPlan, Phase, Ruleset, StartReject, MAX_PARTY};
 use net::transport::{PeerId, DIRECTOR};
+use net::GameSpeed;
 use sim::bot::Bot;
 use sim::view;
 use sim::{ArenaState, Input, SimEvent};
@@ -160,18 +164,87 @@ impl StSim {
         })
     }
 
-    /// Advance exactly one 30 Hz tick with the player's action this tick.
+    /// Advance exactly one sim tick with the player's action this tick.
+    ///
+    /// Input codes: 0 Noop · 1 BuyOffer(slot) · 2 Reroll · 3 Clear ·
+    /// 4 BlackMarketPick WEAPON (`slot` = weapon catalog index) ·
+    /// 5 BlackMarketPick UPGRADE (`slot` = modifier catalog index).
+    ///
+    /// GAME SPEED (local play): the sim is tick-indexed and needs NOTHING
+    /// sim-side for Fast/Faster/Hyper — the frontend simply calls `step()`
+    /// more often (45/60/90 times per second instead of 30; the
+    /// Normal/Fast/Faster/Hyper table lives on `net::wire::GameSpeed` and is
+    /// surfaced by `StLobby.ticks_per_second()` / `StMatch.ticks_per_second()`).
     #[func]
     fn step(&mut self, input_code: i64, slot: i64) {
         let inp = match input_code {
             1 => Input::BuyOffer { slot: slot as u8 },
             2 => Input::Reroll,
             3 => Input::Clear,
+            4 => Input::BlackMarketPick {
+                is_weapon: true,
+                index: slot as u8,
+            },
+            5 => Input::BlackMarketPick {
+                is_weapon: false,
+                index: slot as u8,
+            },
             _ => Input::Noop,
         };
         sim::step(&mut self.state, inp);
         self.view = view::snapshot(&self.state);
         self.events = self.state.events.take();
+    }
+
+    /// Whether a Black Market pick is currently held ("Buy 1 Uncommon Weapon
+    /// or Spikes Damage Upgrade of your choosing. The Black Market lasts until
+    /// a choice is made.") — when true, the UI should offer the picker and
+    /// submit input code 4 (weapon) or 5 (upgrade) with the chosen catalog
+    /// index. An illegal pick is a deterministic sim no-op.
+    #[func]
+    fn black_market_pending(&self) -> bool {
+        self.state.pending_black_market
+    }
+
+    /// Catalog indices of the legal Black Market picks: the Uncommon weapons
+    /// (`weapons = true`) or the Uncommon Spikes-damage upgrades
+    /// (`weapons = false`). Parallel to `black_market_choice_names`.
+    #[func]
+    fn black_market_choices(&self, weapons: bool) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        let len = if weapons {
+            sim::content::WEAPONS.len()
+        } else {
+            sim::content::MODIFIERS.len()
+        };
+        for i in 0..len {
+            if sim::content::black_market_eligible(weapons, i) {
+                a.push(i as i64);
+            }
+        }
+        a
+    }
+
+    /// Display names for `black_market_choices(weapons)`, in the same order.
+    #[func]
+    fn black_market_choice_names(&self, weapons: bool) -> PackedStringArray {
+        let mut a = PackedStringArray::new();
+        let len = if weapons {
+            sim::content::WEAPONS.len()
+        } else {
+            sim::content::MODIFIERS.len()
+        };
+        for i in 0..len {
+            if sim::content::black_market_eligible(weapons, i) {
+                let name = if weapons {
+                    sim::content::WEAPONS[i].name
+                } else {
+                    sim::content::MODIFIERS[i].name
+                };
+                a.push(&GString::from(name));
+            }
+        }
+        a
     }
 
     /// Drain this tick's sim→render events as flat 6-int records — see the
@@ -508,12 +581,25 @@ pub struct StMatch {
 
 #[godot_api]
 impl StMatch {
-    /// Start an `n`-player match (clamped 1..=16) seeded with `seed`.
+    /// Start an `n`-player match (clamped 1..=16) seeded with `seed`, at
+    /// Normal speed. Use [`StMatch::new_match_at_speed`] for a host-set pace.
     #[func]
     fn new_match(n: i64, seed: i64) -> Gd<StMatch> {
+        Self::new_match_at_speed(n, seed, 0)
+    }
+
+    /// Start an `n`-player match at the host-set game speed (`speed_code`:
+    /// 0 Normal ×1.0 / 1 Fast ×1.5 / 2 Faster ×2.0 / 3 Hyper ×3.0 — i.e.
+    /// 30/45/60/90 ticks per second; out-of-range codes fall back to Normal;
+    /// pass `StLobby.game_speed()` after a started plan). Speed is CADENCE
+    /// only: the frontend calls `step()` `ticks_per_second()` times per
+    /// wall-clock second; per step everything is bit-identical to Normal.
+    #[func]
+    fn new_match_at_speed(n: i64, seed: i64, speed_code: i64) -> Gd<StMatch> {
+        let speed = GameSpeed::from_u8(u8::try_from(speed_code).unwrap_or(255)).unwrap_or_default();
         let n = n.clamp(1, 16) as u32;
         let peers: Vec<PeerId> = (1..=n).map(PeerId).collect();
-        let director = Director::new(&peers, seed as u64);
+        let director = Director::with_config(&peers, seed as u64, 0, speed);
         let clients = peers
             .iter()
             .map(|p| Client::new(*p, DEMO_CONTENT_HASH))
@@ -617,6 +703,18 @@ impl StMatch {
     #[func]
     fn server_tick(&self) -> i64 {
         self.director.server_tick() as i64
+    }
+    /// The active host-set game speed code (0 Normal · 1 Fast · 2 Faster ·
+    /// 3 Hyper), fixed at match start.
+    #[func]
+    fn game_speed(&self) -> i64 {
+        self.director.game_speed().as_u8() as i64
+    }
+    /// How many times per wall-clock second the frontend should call `step()`
+    /// for the active speed (30/45/60/90).
+    #[func]
+    fn ticks_per_second(&self) -> i64 {
+        self.director.ticks_per_second() as i64
     }
     #[func]
     fn alive_count(&self) -> i64 {
@@ -816,6 +914,31 @@ impl StLobby {
     #[func]
     fn all_ready(&self) -> bool {
         self.lobby.all_ready()
+    }
+
+    /// Host sets the match pace before start (`speed_code`: 0 Normal ×1.0 /
+    /// 1 Fast ×1.5 / 2 Faster ×2.0 / 3 Hyper ×3.0 = 30/45/60/90 ticks/sec).
+    /// Returns false for an invalid code or once the match has started —
+    /// game speed is match-start-only, there is no mid-match change.
+    #[func]
+    fn set_game_speed(&mut self, speed_code: i64) -> bool {
+        match GameSpeed::from_u8(u8::try_from(speed_code).unwrap_or(255)) {
+            Some(speed) => self.lobby.set_game_speed(speed),
+            None => false,
+        }
+    }
+    /// The lobby's current game speed code (0 Normal · 1 Fast · 2 Faster ·
+    /// 3 Hyper). After a successful `try_start` this is the speed the match
+    /// runs at (pass it to `StMatch.new_match_at_speed`).
+    #[func]
+    fn game_speed(&self) -> i64 {
+        self.lobby.ruleset().game_speed.as_u8() as i64
+    }
+    /// Driver cadence for the lobby's current speed: how many sim ticks per
+    /// wall-clock second the match will run at (30/45/60/90).
+    #[func]
+    fn ticks_per_second(&self) -> i64 {
+        self.lobby.ruleset().game_speed.ticks_per_second() as i64
     }
     /// 0 = Filling, 1 = Ready, 2 = Started.
     #[func]

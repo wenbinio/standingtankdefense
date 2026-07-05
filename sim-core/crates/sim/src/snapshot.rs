@@ -14,10 +14,13 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
-/// v22: `Modifiers::healing_weapon_healthy_dmg` — Battle Fervor's +35% scoped
-/// to HEALING weapons only (`WeaponDef::is_healing`) at ≥95% HP, replacing the
-/// documented global-`healthy_dmg` approximation. Checksummed per the parity
-/// rule.
+/// v22 (DEFERRED-FIDELITY PASSES, one combined bump): `Modifiers::
+/// healing_weapon_healthy_dmg` (Battle Fervor's +35% scoped to HEALING
+/// weapons via `WeaponDef::is_healing` at ≥95% HP, replacing the global
+/// approximation) and `ArenaState::pending_black_market` (the held Black
+/// Market pick — the source's "lasts until a choice is made" — redeemed by
+/// the new `Input::BlackMarketPick`, serialized right after `pending_perk`).
+/// Both checksummed per the parity rule.
 /// v21 (FIDELITY PASSES, one combined bump): the economy pass added
 /// `Economy::treasure_pool` (Magic Treasure's held, growing gold pool) and
 /// `PendingPerk::scope` (the source's per-item perk scoping); the E3
@@ -407,6 +410,9 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         None => w.u8(0),
     }
 
+    // held Black Market pick
+    w.bool(s.pending_black_market);
+
     // shop
     w.u32(s.shop.shop_seq);
     w.len(s.shop.offers.len());
@@ -712,6 +718,8 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         t => return Err(SnapshotError::BadTag(t)),
     };
 
+    let pending_black_market = r.bool()?;
+
     let shop_seq = r.u32()?;
     let mut offers = Vec::new();
     for _ in 0..r.len()? {
@@ -769,6 +777,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         ramps,
         vuln_pulses,
         pending_perk,
+        pending_black_market,
         tank_hit_this_tick: false,
         shield_broke_this_tick: false,
         damage_taken_this_tick: 0,
