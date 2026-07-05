@@ -16,8 +16,22 @@ extends Node2D
 
 const N := 8                  # players in the demo match
 
+# Sim tick rate (mirrors sim::TICK_HZ) — the tick-accumulator's denominator.
+const TICK_HZ := 30
+# Game-speed labels/multipliers by StMatch.game_speed() code (translation keys).
+const SPEED_NAMES := ["Normal", "Fast", "Faster", "Hyper"]
+const SPEED_MULTS := ["1.0", "1.5", "2.0", "3.0"]
+
 var m
 var _views: Array = []        # SimView per player index (read-only wrappers)
+# GAME SPEED (host-set in the lobby, fixed at match start): the director's
+# cadence in ticks per wall-clock second (30/45/60/90), read once at _ready.
+var _tps := TICK_HZ
+# Integer tick accumulator: each 30 Hz physics frame banks _tps and the whole
+# match steps while a full tick (TICK_HZ) is banked — Normal 1 step/frame,
+# Fast alternates 1/2, Faster 2, Hyper 3. Exact integer math, no drift.
+var _tick_accum := 0
+var _speed_txt := ""          # cached header speed segment (built once)
 
 # Per-player cosmetic assignment, built once in _ready (stable across frames).
 # players[i] = {"theme": <idx into ArtTheme.themes>, "skin": <skin id string>}.
@@ -92,11 +106,17 @@ func _ready() -> void:
 	# planned seed) instead of the standalone demo's defaults; then clear the
 	# hand-off so a later direct launch falls back to the demo behavior.
 	if Session.lobby_players > 0:
-		m = StMatch.new_match(Session.lobby_players + 1, Session.lobby_seed)
+		# Host-authoritative plan INCLUDING the host-set game speed (cadence
+		# only — per tick the sharded sims are bit-identical to Normal).
+		m = StMatch.new_match_at_speed(Session.lobby_players + 1, Session.lobby_seed,
+			Session.lobby_speed)
 		_from_lobby = true   # remembered past clear() for the results panel's rematch
 		Session.clear()
 	else:
-		m = StMatch.new_match(N, randi())
+		m = StMatch.new_match(N, randi())   # standalone demo: Normal speed
+	_tps = int(m.ticks_per_second())
+	var sp: int = clampi(int(m.game_speed()), 0, SPEED_NAMES.size() - 1)
+	_speed_txt = tr("speed %s ×%s · %d ticks/s") % [tr(SPEED_NAMES[sp]), SPEED_MULTS[sp], _tps]
 	# You are player 0; honor a chosen challenge so its achievement is earnable.
 	if Profile.active_challenge_code != 0:
 		m.set_challenge(0, Profile.active_challenge_code)
@@ -221,12 +241,22 @@ func _unhandled_input(e: InputEvent) -> void:
 func _physics_process(_delta: float) -> void:
 	if m == null:
 		return
-	m.step()
-	# JUICE (render-only, one-way): drain each live cell's event stream, detect
-	# death/round edges. Nothing below writes the sim.
-	_drain_events()
-	_detect_eliminations()
-	_detect_round_pulse()
+	# GAME SPEED accumulator (exact integers; see the consts above). Everything
+	# per-tick happens INSIDE the loop, once per step: StMatch REPLACES each
+	# player's event buffer on step (undrained = dropped), so draining once per
+	# frame at speed would silently lose whole ticks of events. The per-tick FX
+	# caps in _drain_events apply per step — at Hyper that is up to 3 capped
+	# batches per frame, with the Fx pools as the global backstop. There is NO
+	# pause gate here by design: docs/03's director model never stops ticking.
+	_tick_accum += _tps
+	while _tick_accum >= TICK_HZ:
+		_tick_accum -= TICK_HZ
+		m.step()
+		# JUICE (render-only, one-way): drain each live cell's event stream,
+		# detect death/round edges. Nothing below writes the sim.
+		_drain_events()
+		_detect_eliminations()
+		_detect_round_pulse()
 	# Credit "you" (player 0) once the match is decided. Cosmetic only.
 	if not _recorded and m.match_over():
 		_recorded = true
@@ -405,7 +435,8 @@ func _draw() -> void:
 	var hcol := Color(0.82, 0.88, 0.96).lerp(Color(1.35, 1.30, 1.05), hk)
 	draw_string(font, Vector2(16, 26),
 		tr("MULTI-ARENA NET VIEW  —  %d sharded sims · 1 authoritative director · server tick %d · alive %d/%d  [%s]")
-		% [n, m.server_tick(), m.alive_count(), n, status],
+		% [n, m.server_tick(), m.alive_count(), n, status]
+		+ "  ·  " + _speed_txt,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16 + int(3.0 * hk), hcol)
 	var you := tr("YOU: %s  ·  [S] skins") % tr(Profile.skin_def(Profile.selected).name)
 	if Profile.active_challenge_code != 0:

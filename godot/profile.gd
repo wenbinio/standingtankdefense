@@ -75,6 +75,14 @@ var active_challenge_code := 0   # transient: applied to player 0 on next deploy
 var last_unlocks: Array = []     # ach ids granted by the most recent record_match()
 var _locale := "en"              # persisted UI language ("en" / "zh_CN")
 var _screen_shake := true        # persisted render pref: camera shake/zoom punch
+var _game_speed := 0             # persisted single-player pace (index into SPEED_TPS)
+
+# Single-player game-speed table: sim ticks per wall-clock second by speed code
+# (0 Normal ×1.0 · 1 Fast ×1.5 · 2 Faster ×2.0 · 3 Hyper ×3.0). CADENCE ONLY:
+# main.gd's accumulator just calls sim.step() more often — every tick stays a
+# bit-identical 30 Hz sim tick, so this pref can never touch determinism.
+# Mirrors net::GameSpeed (the lobby's host-set speed for netplay).
+const SPEED_TPS := [30, 45, 60, 90]
 
 func _ready() -> void:
 	_load()
@@ -120,6 +128,18 @@ func screen_shake() -> bool:
 func set_screen_shake(on: bool) -> void:
 	_screen_shake = on
 	_save()
+
+# --- game speed (single-player pace pref, persisted; cadence-only) ------------
+func game_speed() -> int:
+	return _game_speed
+
+func set_game_speed(code: int) -> void:
+	_game_speed = clampi(code, 0, SPEED_TPS.size() - 1)
+	_save()
+
+# Ticks the single-player driver should run per wall-clock second (30/45/60/90).
+func ticks_per_second() -> int:
+	return SPEED_TPS[_game_speed]
 
 func is_unlocked(skin_id: String) -> bool:
 	var u: String = skin_def(skin_id).unlock
@@ -183,6 +203,7 @@ func _load() -> void:
 	selected = cf.get_value("profile", "selected", "ol_reliable")
 	_locale = cf.get_value("profile", "locale", "en")
 	_screen_shake = bool(cf.get_value("profile", "screen_shake", true))
+	_game_speed = clampi(int(cf.get_value("profile", "game_speed", 0)), 0, SPEED_TPS.size() - 1)
 	for id in cf.get_value("profile", "earned", []):
 		earned[id] = true
 	if not is_unlocked(selected):   # a skin that lost its unlock falls back
@@ -197,5 +218,6 @@ func _save() -> void:
 	cf.set_value("profile", "selected", selected)
 	cf.set_value("profile", "locale", _locale)
 	cf.set_value("profile", "screen_shake", _screen_shake)
+	cf.set_value("profile", "game_speed", _game_speed)
 	cf.set_value("profile", "earned", earned.keys())
 	cf.save(SAVE_PATH)

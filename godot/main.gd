@@ -1,20 +1,22 @@
 # Standing Tank Defense — single-arena ROOT COORDINATOR. Drives the Rust
-# `StSim` (one deterministic tick per 30 Hz physics frame), owns the
-# input-intent FIFO, routes InputMap actions + clicks, drains the sim event
-# stream once per tick (fanning it to juice + audio), and wires the render
-# modules (children of Main.tscn):
-#   Camera            — screen shake via offset (world canvas only)
-#   ArenaRenderer     — world drawing + lighting rig + event-driven juice
-#   UiLayer/FxOverlay — screen-space FX bus drawing + full-screen flash
-#   UiLayer/Hud       — top bar + arsenal panel
-#   UiLayer/Shop      — shop cards / reroll / clear (alive)
-#   UiLayer/Results   — death panel + redeploy (dead)
-#   UiLayer/PauseMenu — pause/settings overlay (alive; owns input while open)
+# `StSim` (deterministic 30 Hz ticks; the GAME SPEED pref only changes how many
+# ticks run per wall-clock second — see the accumulator in _physics_process),
+# owns the input-intent FIFO, routes InputMap actions + clicks, drains the sim
+# event stream once per tick (fanning it to juice + audio), and wires the
+# render modules (children of Main.tscn):
+#   Camera              — screen shake via offset (world canvas only)
+#   ArenaRenderer       — world drawing + lighting rig + event-driven juice
+#   UiLayer/FxOverlay   — screen-space FX bus drawing + full-screen flash
+#   UiLayer/Hud         — top bar + arsenal panel
+#   UiLayer/Shop        — shop cards / reroll / clear (alive)
+#   UiLayer/Results     — death panel + redeploy (dead)
+#   UiLayer/BlackMarket — Black Market picker overlay + pending badge (alive)
+#   UiLayer/PauseMenu   — pause/settings overlay (alive; owns input while open)
 # All sim reads go through the SimView wrapper; only THIS file calls sim.step.
 # Controls: click a shop card or press 1-8 to buy · R reroll · Space clear ·
-# Esc pause menu (resume/settings/quit — quit is confirm-gated so a live run
-# can't be abandoned by one keypress) · M multi-arena net demo (see
-# project.godot [input]).
+# B reopen a dismissed Black Market picker · Esc pause menu (resume/settings/
+# quit — quit is confirm-gated so a live run can't be abandoned by one
+# keypress) · M multi-arena net demo (see project.godot [input]).
 #
 # PAUSE (single-player only): while the PauseMenu overlay is open this file
 # stops calling sim.step() and stops draining the intent FIFO — the LOCAL,
@@ -30,14 +32,28 @@ const BUY_ACTIONS: Array[StringName] = [
 	&"ui_buy_5", &"ui_buy_6", &"ui_buy_7", &"ui_buy_8",
 ]
 
+# Sim tick rate (mirrors sim::TICK_HZ) — the tick-accumulator's denominator.
+const TICK_HZ := 30
+# Black-Market pick intent codes (mirror StSim.step's input table; the overlay
+# submits these through on_pick with slot = the chosen CATALOG index).
+const BM_CODE_WEAPON := 4
+const BM_CODE_UPGRADE := 5
+
 var sim                        # StSim — the ONLY handle that ever steps
 var view: SimView              # typed read-only wrapper every module consumes
-# Input-intent FIFO: [code, slot] pairs (1 buy · 2 reroll · 3 clear) queued by
-# the input handlers and drained ONE per 30 Hz physics tick in arrival order,
-# so two inputs landing within the same tick no longer overwrite each other.
-# Capped small so stale input can't buffer up.
+# Input-intent FIFO: [code, slot] pairs (1 buy · 2 reroll · 3 clear ·
+# 4/5 Black-Market pick) queued by the input handlers and drained ONE per SIM
+# TICK in arrival order (NOT per frame — a multi-step game-speed frame drains
+# one intent per step), so two inputs landing within the same tick no longer
+# overwrite each other. Capped small so stale input can't buffer up.
 const MAX_QUEUED_INTENTS := 4
 var _intents: Array = []
+# GAME SPEED (single-player, persisted pref): integer tick accumulator. Each
+# 30 Hz physics frame banks Profile.ticks_per_second() (30/45/60/90) and the
+# sim steps while a whole tick's worth (TICK_HZ) is banked. Exact integer
+# math: Normal = 1 step/frame · Fast alternates 1/2 · Faster = 2 · Hyper = 3.
+# Cadence only — every tick stays bit-identical to Normal speed.
+var _tick_accum := 0
 # The intent consumed THIS tick (exactly what sim.step() received); kept for the
 # shop's pressed-state draw feedback. 0 = none.
 var pending_code := 0
@@ -56,12 +72,17 @@ var _recorded := false        # match-end achievements credited once
 const RESULTS_DELAY_MS := 800
 var _dead_since_ms := -1      # wall-clock ms of the is_dead() edge (-1 = alive)
 
+# Black Market pending-edge tracker: the overlay arms (choice lists built
+# ONCE) on the false->true edge and disarms on the redeem edge.
+var _bm_was_pending := false
+
 @onready var _camera: Camera2D = $Camera
 @onready var _arena: Node2D = $ArenaRenderer
 @onready var _fx_overlay: Node2D = $UiLayer/FxOverlay
 @onready var _hud: Node2D = $UiLayer/Hud
 @onready var _shop: Node2D = $UiLayer/Shop
 @onready var _results: Node2D = $UiLayer/Results
+@onready var _bm: Node2D = $UiLayer/BlackMarket
 @onready var _pause_menu: Node2D = $UiLayer/PauseMenu
 
 func _ready() -> void:
@@ -72,8 +93,10 @@ func _ready() -> void:
 	# The world canvas is dimmed by ArenaRenderer's CanvasModulate; the UI layer
 	# lives outside that canvas, so give its nodes the same ambient modulate to
 	# keep FX/HUD/shop colors identical to the pre-split rendering.
-	for ui_node in [_fx_overlay, _hud, _shop, _results, _pause_menu]:
+	for ui_node in [_fx_overlay, _hud, _shop, _results, _bm, _pause_menu]:
 		ui_node.modulate = _arena.AMBIENT_DIM
+	# Black Market picks route back through the SAME intent FIFO as buy/reroll.
+	_bm.on_pick = _on_bm_pick
 	_wire_modules()
 	# AUDIO (render-only): start the looping ambient bed.
 	Audio.set_music("ambient_bed.wav")
@@ -122,6 +145,13 @@ func _unhandled_input(e: InputEvent) -> void:
 	if _pause_menu.is_open():
 		_pause_menu.handle_input(e)
 		return
+	# Black Market picker: while OPEN it owns the remaining events (modal for
+	# INPUT only — the sim keeps stepping behind it). It never blocks the pause
+	# path: Esc dismisses it to the badge, so the next Esc lands below and
+	# opens the pause menu as usual.
+	if _bm.is_open():
+		_bm.handle_input(e)
+		return
 	if e is InputEventMouseButton:
 		if e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
 			_handle_click(e.position)
@@ -145,6 +175,11 @@ func _unhandled_input(e: InputEvent) -> void:
 		_queue_intent(2)
 	elif e.is_action_pressed(&"ui_clear"):
 		_queue_intent(3)
+	elif e.is_action_pressed(&"ui_black_market"):
+		# [B] reopens a dismissed-but-held Black Market picker (while the
+		# picker is open, [B]/Esc dismiss it inside _bm.handle_input above).
+		if _bm.is_held():
+			_bm.reopen()
 	elif e.is_action_pressed(&"ui_theme_cycle"):
 		_cycle_theme()
 	elif e.is_action_pressed(&"ui_net_view"):
@@ -162,6 +197,10 @@ func _handle_click(pos: Vector2) -> void:
 	if sim != null and view.is_dead():
 		if _results.redeploy_hit(pos):
 			_redeploy()
+		return
+	# Held Black Market pick: the shop-area badge reopens the picker.
+	if _bm.badge_hit(pos):
+		_bm.reopen()
 		return
 	var card: int = _shop.card_at(pos)
 	if card >= 0:
@@ -182,9 +221,19 @@ func _cycle_theme() -> void:
 
 # Enqueue an input intent for the sim, preserving arrival order. Intents beyond
 # the small cap are dropped (better than buffering seconds of stale clicks).
-func _queue_intent(code: int, slot: int = 0) -> void:
-	if _intents.size() < MAX_QUEUED_INTENTS:
-		_intents.append([code, slot])
+# Returns whether the intent was actually queued (the Black Market overlay
+# stays open on a full-FIFO false so the pick is never silently lost).
+func _queue_intent(code: int, slot: int = 0) -> bool:
+	if _intents.size() >= MAX_QUEUED_INTENTS:
+		return false
+	_intents.append([code, slot])
+	return true
+
+# Black Market overlay pick callback: queue (code 4/5, slot = catalog index)
+# through the SAME FIFO as buy/reroll/clear — the sim still receives exactly
+# one (code, slot) per tick.
+func _on_bm_pick(code: int, slot: int) -> bool:
+	return _queue_intent(code, slot)
 
 # Start a fresh single-arena run in-place. Rebuilds the sim exactly as _ready()
 # does — plain new_match(randi()), no challenge (single-arena never applies
@@ -201,6 +250,10 @@ func _redeploy() -> void:
 	pending_slot = 0
 	_shop.pending_code = 0
 	_shop.pending_slot = 0
+	_tick_accum = 0
+	# Fresh sim holds no Black Market pick: reset the overlay + edge tracker.
+	_bm.disarm()
+	_bm_was_pending = false
 	# Re-arm the death-edge audio tracker for the fresh run.
 	_au_was_dead = false
 	_wire_modules()
@@ -209,14 +262,80 @@ func _physics_process(_delta: float) -> void:
 	if sim == null:
 		return
 	# PAUSE GATE (single-player only): overlay open -> no sim.step, no intent
-	# drain, no event fan-out. The local sim's tick counter/checksum hold exactly
-	# where they were; queued intents (≤4) stay queued and resume in order.
-	# Netplay must never gate a shared sim like this (see header note).
+	# drain, no event fan-out, and the tick accumulator does not grow — a pause
+	# freezes stepping AT ANY GAME SPEED. The local sim's tick counter/checksum
+	# hold exactly where they were; queued intents (≤4) stay queued and resume
+	# in order. Netplay must never gate a shared sim like this (see header note).
 	if _pause_menu.is_open():
 		return
-	# Drain exactly ONE queued intent this tick (FIFO — earlier of two same-tick
-	# inputs is no longer lost; the later one simply runs next tick). What the
-	# sim receives per tick is unchanged: a single (code, slot) pair.
+	if view.is_dead():
+		# Frozen run (results panel): no stepping at any speed. Keep the old
+		# once-per-frame cadence for the render/audio trackers.
+		_tick_accum = 0
+		_drain_one_intent()
+		_shop.pending_code = pending_code
+		_shop.pending_slot = pending_slot
+		if not _recorded:
+			# Credit your own run's achievements from how you actually played.
+			_recorded = true
+			var rec: Dictionary = view.stats_record()
+			rec["won"] = false                              # single-arena: no opponents
+			for id in Profile.record_match(rec):
+				print("Achievement unlocked: ", Profile.ach_def(id).get("name", id))
+		_arena.tick_juice([])
+		_update_audio([], pending_code, view.gold())
+		_sync_black_market()
+		_sync_dead_panels()
+		return
+	# GAME SPEED accumulator (exact integers): bank ticks_per_second per 30 Hz
+	# physics frame, run one full sim tick per banked TICK_HZ. Each iteration
+	# is a complete tick — one drained intent, one step, one event fan-out —
+	# so every per-tick invariant survives multi-step frames unchanged.
+	_tick_accum += Profile.ticks_per_second()
+	while _tick_accum >= TICK_HZ and not view.is_dead():
+		_tick_accum -= TICK_HZ
+		_step_one_tick()
+	_sync_black_market()
+	_sync_dead_panels()
+
+# ONE complete sim tick: drain exactly one queued intent (the FIFO invariant —
+# one (code, slot) per SIM TICK, not per frame), step, drain the event stream
+# EXACTLY ONCE, and fan it out to the arena juice + audio hooks. Nobody
+# re-queries the stream (take_events is read-and-clear at the binding).
+func _step_one_tick() -> void:
+	_drain_one_intent()
+	# Mirror the consumed intent to the shop for its pressed-state feedback
+	# (last step of a multi-step frame wins — a 1-frame cosmetic).
+	_shop.pending_code = pending_code
+	_shop.pending_slot = pending_slot
+	# Capture pre-step gold so the audio hook can tell a successful buy (gold
+	# actually dropped) from a no-op click; and the pre-step Black Market flag
+	# so a consumed pick can be classified below. Read-only.
+	var au_gold_before: int = view.gold()
+	var bm_was_held: bool = view.black_market_pending()
+	sim.step(pending_code, pending_slot)
+	var events: Array = view.take_events()
+	if pending_code == 3:
+		# Clear is input-driven (no sim event): arm the shockwave + voice it
+		# here, the one place the consumed intent is known.
+		_arena.trigger_clear()
+		Audio.play(&"clear")
+	elif pending_code == BM_CODE_WEAPON or pending_code == BM_CODE_UPGRADE:
+		# Black Market pick consumed this tick: redeemed (pending dropped —
+		# voice the free "buy") or no-oped by the sim (pending survived; should
+		# not happen since the overlay only offers eligible indices — resurface
+		# the badge so the pick is never stranded invisible).
+		if bm_was_held and not view.black_market_pending():
+			Audio.play(&"buy")
+		elif bm_was_held:
+			_bm.pick_failed()
+	_arena.tick_juice(events)
+	_update_audio(events, pending_code, au_gold_before)
+
+# Pop exactly ONE queued intent (FIFO — earlier of two same-tick inputs is no
+# longer lost; the later one simply runs next tick). What the sim receives per
+# tick is unchanged: a single (code, slot) pair.
+func _drain_one_intent() -> void:
 	if _intents.is_empty():
 		pending_code = 0
 		pending_slot = 0
@@ -224,35 +343,20 @@ func _physics_process(_delta: float) -> void:
 		var intent: Array = _intents.pop_front()
 		pending_code = intent[0]
 		pending_slot = intent[1]
-	# Mirror the consumed intent to the shop for its pressed-state feedback.
-	_shop.pending_code = pending_code
-	_shop.pending_slot = pending_slot
-	# Capture the input intent + pre-step gold so the audio hook can tell a
-	# successful buy (gold actually dropped) from a no-op click. Read-only.
-	var au_intent := pending_code
-	var au_gold_before: int = view.gold()
-	# This tick's sim→render events, drained EXACTLY ONCE right after step and
-	# fanned out below to (a) the arena juice and (b) the audio hooks. Nobody
-	# re-queries the stream (take_events is read-and-clear at the binding).
-	var events: Array = []
-	if not view.is_dead():
-		sim.step(pending_code, pending_slot)
-		events = view.take_events()
-		if pending_code == 3:
-			# Clear is input-driven (no sim event): arm the shockwave + voice it
-			# here, the one place the consumed intent is known.
-			_arena.trigger_clear()
-			Audio.play(&"clear")
-	elif not _recorded:
-		# Credit your own run's achievements from how you actually played.
-		_recorded = true
-		var rec: Dictionary = view.stats_record()
-		rec["won"] = false                                  # single-arena: no opponents
-		for id in Profile.record_match(rec):
-			print("Achievement unlocked: ", Profile.ach_def(id).get("name", id))
-	_arena.tick_juice(events)
-	_update_audio(events, au_intent, au_gold_before)
-	_sync_dead_panels()
+
+# Black Market pending-edge sync (once per physics frame, after all steps):
+# on false->true the overlay arms — the eligible choice lists are built HERE,
+# exactly once per edge (never per frame); on true->false (pick redeemed, or
+# death hiding the run) it disarms, badge included.
+func _sync_black_market() -> void:
+	var pending: bool = not view.is_dead() and view.black_market_pending()
+	if pending and not _bm_was_pending:
+		_bm.arm(
+			view.black_market_choices(true), view.black_market_choice_names(true),
+			view.black_market_choices(false), view.black_market_choice_names(false))
+	elif _bm_was_pending and not pending:
+		_bm.disarm()
+	_bm_was_pending = pending
 
 # Frame-rate cosmetic update: advance the FX bus and feed its shake + zoom
 # punch into the camera (the world canvas moves as one; the UI CanvasLayer
@@ -284,7 +388,8 @@ func _process(delta: float) -> void:
 # STRICTLY ONE-WAY: nothing here calls sim.step() or otherwise writes the sim;
 # audio cannot influence determinism.
 #   `events`     = this tick's drained sim events (empty while dead)
-#   `intent`     = this tick's pending_code (1 buy · 2 reroll · 3 clear · else none)
+#   `intent`     = this tick's pending_code (1 buy · 2 reroll · 3 clear ·
+#                  4/5 Black-Market pick, voiced in _step_one_tick · else none)
 #   `gold_before`= gold sampled BEFORE the step, to confirm a buy actually spent.
 func _update_audio(events: Array, intent: int, gold_before: int) -> void:
 	# --- death edge: tank_destroyed + defeat (single-arena has no victory).

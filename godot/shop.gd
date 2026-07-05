@@ -5,10 +5,6 @@
 # queued by main.gd (this module only reports hit-tests and draws state).
 extends Node2D
 
-# Sim tick rate (mirrors sim::TICK_HZ) — ticks → seconds for the Clear cooldown
-# readout. Render-only arithmetic.
-const TICK_HZ := 30
-
 var view: SimView = null      # wired by main.gd
 # The intent consumed THIS tick (exactly what sim.step() received), pushed by
 # main.gd for the pressed-state draw feedback. 0 = none.
@@ -192,7 +188,9 @@ func _draw() -> void:
 		draw_rect(Rect2(clear_rect.position, Vector2(clear_rect.size.x * frac, clear_rect.size.y)), cl_fill)
 		draw_string(head, clear_rect.position + Vector2(12, clear_rect.size.y * 0.5 + 5), tr("[Space] CLEAR"),
 			HORIZONTAL_ALIGNMENT_LEFT, btn_w - 52, 14, ArtTheme.ui("text_dim"))
-		var cl_secs := "%ds" % ceili(float(cd_left) / float(TICK_HZ))
+		# Ticks → WALL-CLOCK seconds via the live game-speed cadence (at Hyper
+		# the same tick count elapses 3× faster). Render-only arithmetic.
+		var cl_secs := "%ds" % ceili(float(cd_left) / float(Profile.ticks_per_second()))
 		var csw := head.get_string_size(cl_secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 		draw_string(head, clear_rect.position + Vector2(clear_rect.size.x - csw - 10, clear_rect.size.y * 0.5 + 5),
 			cl_secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("danger").lightened(0.15))

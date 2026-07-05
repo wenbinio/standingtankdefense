@@ -16,6 +16,13 @@ extends Node2D
 
 # Max seats StLobby allows (host peer 0 + peers 1..7).
 const MAX_PEERS := 8
+# Game-speed labels/multipliers by StLobby.game_speed() code (0 Normal ×1.0 ·
+# 1 Fast ×1.5 · 2 Faster ×2.0 · 3 Hyper ×3.0 = 30/45/60/90 ticks/s). Labels
+# are translation-table keys. The AUTHORITY for the value is StLobby (the
+# deterministic net::lobby ruleset — host-only, locked once started); this
+# script only cycles and displays it.
+const SPEED_NAMES := ["Normal", "Fast", "Faster", "Hyper"]
+const SPEED_MULTS := ["1.0", "1.5", "2.0", "3.0"]
 # After a simulated peer joins, auto-ready it this many seconds later so the host
 # can actually reach phase Ready without a human on the other end. A "ready all"
 # key (R) also exists for impatience.
@@ -159,6 +166,9 @@ func _attempt_start() -> void:
 		# authoritative total; >= 2 here since try_start required ≥1 peer.
 		Session.lobby_seed = lobby.plan_seed()
 		Session.lobby_players = maxi(lobby.plan_player_count() - 1, 1)
+		# The host-set pace rides the same hand-off: Match passes it verbatim
+		# to StMatch.new_match_at_speed (cadence only, fixed for the match).
+		Session.lobby_speed = lobby.game_speed()
 		get_tree().change_scene_to_file("res://Match.tscn")
 	elif code == -1:
 		_flash(tr("Start rejected: not all players ready."))
@@ -172,6 +182,21 @@ func _attempt_start() -> void:
 func _flash(msg: String) -> void:
 	_start_msg = msg
 	_start_msg_t = 3.0
+	queue_redraw()
+
+# --- game speed (host control; [F] cycles Normal → Fast → Faster → Hyper) ------
+# The rule lives in StLobby.set_game_speed (host-only, pre-start); this only
+# drives it and surfaces the rejections. Non-hosts see the read-only readout in
+# the footer (in this local demo YOU are always the host, peer 0).
+func _cycle_speed() -> void:
+	if lobby == null:
+		return
+	if lobby.host_peer() != 0:
+		_flash(tr("Only the host can change game speed."))
+		return
+	var next: int = posmod(int(lobby.game_speed()) + 1, SPEED_NAMES.size())
+	if not lobby.set_game_speed(next):
+		_flash(tr("Game speed is locked once the match has started."))
 	queue_redraw()
 
 # --- input (InputMap actions; bindings in project.godot [input]) ---------------
@@ -188,6 +213,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		_ready_all()
 	elif e.is_action_pressed(&"ui_lobby_start"):
 		_attempt_start()
+	elif e.is_action_pressed(&"ui_speed_cycle"):
+		_cycle_speed()
 	elif e.is_action_pressed(&"ui_theme_cycle"):
 		ArtTheme.cycle()
 		_refresh_all_cos()
@@ -362,6 +389,17 @@ func _draw_footer(vp: Vector2, phase: int, n: int, ready_n: int,
 		(tr("YOU: ✓ ready") if youready else tr("YOU: ✗ not ready")) + "   " + tr("[Space] toggle"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 		Color(0.42, 0.85, 0.55) if youready else my_text)
+
+	# Host-set game speed readout, right-aligned on the button row: name +
+	# multiplier + the driver cadence, all read live from StLobby. Hosts get
+	# the [F] hint; non-hosts see it read-only. Measured width (CJK-safe).
+	var sp: int = clampi(int(lobby.game_speed()), 0, SPEED_NAMES.size() - 1)
+	var sp_fmt := tr("SPEED: %s  ·  ×%s  ·  %d ticks/s   [F] change") \
+		if lobby.host_peer() == 0 else tr("SPEED: %s  ·  ×%s  ·  %d ticks/s")
+	var sp_label: String = sp_fmt % [tr(SPEED_NAMES[sp]), SPEED_MULTS[sp], lobby.ticks_per_second()]
+	var sp_w: float = font.get_string_size(sp_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+	draw_string(font, Vector2(maxf(vp.x - 36.0 - sp_w, 20.0), fy + 29), sp_label,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 15, my_accent if sp > 0 else my_dim)
 
 	# Flash message (rejection reason / hint) — already tr()'d at its source.
 	if _start_msg != "":

@@ -18,9 +18,12 @@
 #                              (keys, clicks, and mouse motion for slider drag)
 #   standalone_settings = true settings-only mode (no pause entries; back = close)
 #
-# COSMETIC ONLY: it never touches a sim. All settings it edits are persisted
-# render-layer prefs (Audio volumes/mute -> [audio] in user://profile.cfg via
-# audio.gd; language + screen shake -> [profile] via profile.gd).
+# COSMETIC/CADENCE ONLY: it never touches a sim. All settings it edits are
+# persisted prefs (Audio volumes/mute -> [audio] in user://profile.cfg via
+# audio.gd; language + screen shake + game speed -> [profile] via profile.gd).
+# Game Speed only changes how often main.gd calls sim.step() (30/45/60/90
+# ticks/s); every tick stays bit-identical, so determinism is untouched. It
+# applies live: main.gd re-reads Profile.ticks_per_second() every physics frame.
 extends Node2D
 
 # Panes.
@@ -36,13 +39,19 @@ const ROW_MUSIC := 2
 const ROW_MUTE := 3
 const ROW_LANG := 4
 const ROW_SHAKE := 5
-const ROW_BACK := 6
-const SETTINGS_ROWS := 7
+const ROW_SPEED := 6
+const ROW_BACK := 7
+const SETTINGS_ROWS := 8
 const MENU_ROWS := 3
 const CONFIRM_ROWS := 2
-const MAX_ROWS := 7            # fixed hit-rect capacity (largest pane)
+const MAX_ROWS := 8            # fixed hit-rect capacity (largest pane)
 
 const VOL_STEP := 0.05         # arrow-key volume increment (5%)
+
+# Game-speed labels/multipliers by Profile.game_speed() code (labels are
+# translation-table keys; the speed itself is CADENCE-only — see profile.gd).
+const SPEED_NAMES := ["Normal", "Fast", "Faster", "Hyper"]
+const SPEED_MULTS := ["1.0", "1.5", "2.0", "3.0"]
 
 # Settings-only mode (SkinSelect): open_* lands on SETTINGS and "back" closes
 # the overlay instead of returning to the pause menu.
@@ -180,6 +189,9 @@ func _activate(i: int) -> void:
 					_toggle_language()
 				ROW_SHAKE:
 					Profile.set_screen_shake(not Profile.screen_shake())
+				ROW_SPEED:
+					# Enter cycles forward; left/right in _adjust go both ways.
+					Profile.set_game_speed(posmod(Profile.game_speed() + 1, SPEED_NAMES.size()))
 				ROW_BACK:
 					_back()
 				_:
@@ -192,6 +204,9 @@ func _adjust(dir: int) -> void:
 	if _sel <= ROW_MUSIC:
 		_set_vol(_sel, _vol(_sel) + VOL_STEP * dir)
 		Audio.play(&"ui_move")     # audible level feedback (rides the new volume)
+	elif _sel == ROW_SPEED:
+		# Directional cycle through Normal/Fast/Faster/Hyper (wraps both ways).
+		Profile.set_game_speed(posmod(Profile.game_speed() + dir, SPEED_NAMES.size()))
 	elif _sel == ROW_MUTE or _sel == ROW_LANG or _sel == ROW_SHAKE:
 		_activate(_sel)
 	queue_redraw()
@@ -340,7 +355,7 @@ func _draw_confirm(vp: Vector2) -> void:
 
 func _draw_settings(vp: Vector2) -> void:
 	var pw := 560.0
-	var ph := 404.0
+	var ph := 444.0
 	var px := vp.x * 0.5 - pw * 0.5
 	var py := vp.y * 0.5 - ph * 0.5
 	_panel(px, py, pw, ph, ArtTheme.ui("header"))
@@ -361,6 +376,8 @@ func _draw_settings(vp: Vector2) -> void:
 	_settings_row(ROW_LANG, lx, rx, ry, tr("Language"))
 	ry += rstep
 	_settings_row(ROW_SHAKE, lx, rx, ry, tr("Screen Shake"))
+	ry += rstep
+	_settings_row(ROW_SPEED, lx, rx, ry, tr("Game Speed"))
 	ry += rstep + 8.0
 	var bw := 200.0
 	_button(ROW_BACK, Rect2(cx - bw * 0.5, ry - 14.0, bw, 38.0), tr("Back"))
@@ -407,6 +424,11 @@ func _settings_row(row: int, lx: float, rx: float, y: float, label: String) -> v
 			ROW_SHAKE:
 				on = Profile.screen_shake()
 				value = tr("On") if on else tr("Off")
+			ROW_SPEED:
+				# e.g. "Fast ×1.5" — accent-lit whenever off the Normal default.
+				var sp: int = Profile.game_speed()
+				on = sp > 0
+				value = "%s ×%s" % [tr(SPEED_NAMES[sp]), SPEED_MULTS[sp]]
 		var vw := _font_head.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 		draw_string(_font_head, Vector2(rx - vw, y), value, HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 			ArtTheme.ui("accent") if on else ArtTheme.ui("text_dim"))

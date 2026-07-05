@@ -314,6 +314,25 @@ func minions_kind() -> PackedByteArray:
 func minions_id() -> PackedInt64Array:
 	return _sim.minions_id() if _sim != null else PackedInt64Array()
 
+# --- Black Market (single-arena) --------------------------------------------------
+# The sim holds a Black Market pick ("Buy 1 Uncommon Weapon or Spikes Damage
+# Upgrade of your choosing. The Black Market lasts until a choice is made.").
+# While true, the UI offers the picker overlay and submits intent code 4
+# (weapon) / 5 (upgrade) with the chosen CATALOG index. Match-wrapped views
+# return inert defaults — the net view's bots redeem their picks instantly.
+func black_market_pending() -> bool:
+	return _sim != null and _sim.black_market_pending()
+
+# Catalog indices of the legal picks (weapons = true → Uncommon weapons,
+# false → Uncommon Spikes-damage upgrades). Parallel to the names below.
+func black_market_choices(weapons: bool) -> PackedInt64Array:
+	return _sim.black_market_choices(weapons) if _sim != null else PackedInt64Array()
+
+# Display names for black_market_choices(weapons), same order. English catalog
+# strings — tr() them at the draw boundary like the shop names.
+func black_market_choice_names(weapons: bool) -> PackedStringArray:
+	return _sim.black_market_choice_names(weapons) if _sim != null else PackedStringArray()
+
 # --- shop (single-arena) --------------------------------------------------------
 # One dictionary per offer, decoding shop_meta's flat [cost, flags, rarity, …]
 # (flags bit0 = is_weapon, bit1 = affordable) and shop_desc's [flavor, tip, …]:

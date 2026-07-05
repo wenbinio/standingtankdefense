@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3 uid="uid://b0standtankmain01"]
+[gd_scene load_steps=9 format=3 uid="uid://b0standtankmain01"]
 
 [ext_resource type="Script" path="res://main.gd" id="1_main"]
 [ext_resource type="Script" path="res://arena_renderer.gd" id="2_arena"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://shop.gd" id="5_shop"]
 [ext_resource type="Script" path="res://results.gd" id="6_results"]
 [ext_resource type="Script" path="res://pause_menu.gd" id="7_pause"]
+[ext_resource type="Script" path="res://black_market.gd" id="8_bm"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -32,6 +33,10 @@ script = ExtResource("5_shop")
 [node name="Results" type="Node2D" parent="UiLayer"]
 visible = false
 script = ExtResource("6_results")
+
+[node name="BlackMarket" type="Node2D" parent="UiLayer"]
+visible = false
+script = ExtResource("8_bm")
 
 [node name="PauseMenu" type="Node2D" parent="UiLayer"]
 visible = false
