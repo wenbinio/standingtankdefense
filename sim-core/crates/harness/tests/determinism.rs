@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x0000000000000000, // PLACEHOLDER - recaptured below for the merged deferred-fidelity passes
+        0x7b9690c6d0e661f0, // re-baselined (MERGED DEFERRED-FIDELITY PASSES): the Battle Fervor healing-weapon scoping (`Modifiers::healing_weapon_healthy_dmg`) and the Black Market picker (`ArenaState::pending_black_market`, effect change from voucher to held pick — this one alters the M0 trajectory via the bot redeeming picks) landed together; both add checksummed fields (snapshot v22) and the combined trajectory differs from either branch alone, so this value was captured fresh from `cargo run -p harness` on the merged tree. (Previous baseline 0x672269466cd58df0 was the source-arc restoration.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }
