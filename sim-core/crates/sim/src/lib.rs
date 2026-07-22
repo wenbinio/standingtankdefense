@@ -206,6 +206,12 @@ pub fn checksum(s: &ArenaState) -> u64 {
     }
     c.write_i64(s.total_damage_dealt);
     c.write_i64(s.total_gold_earned);
+    // Per-source damage-attribution ledger (BTreeMap ⇒ key-sorted order).
+    c.write_u32(s.damage_by_weapon.len() as u32);
+    for (src, dmg) in &s.damage_by_weapon {
+        c.write_u32(*src as u32);
+        c.write_i64(*dmg);
+    }
     c.write_u32(s.bought_attack_mask as u32);
     c.write_u32(s.weapons_bought);
     c.write_u32(s.economy_purchases);
@@ -315,6 +321,7 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_fixed(x.pos.y);
         c.write_i64(x.status.poison_dps);
         c.write_u32(x.status.poison_ticks);
+        c.write_u32(x.status.poison_src as u32);
         c.write_u32(x.status.frost_stacks as u32);
         c.write_u32(x.status.frost_ticks);
         c.write_u32(x.status.fire_stacks as u32);
@@ -369,6 +376,7 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.damage_type as u32);
         c.write_i64(x.radius);
         c.write_u32(x.ticks_left);
+        c.write_u32(x.source as u32);
     }
 
     // Summoned allies (minions) in id order.
@@ -385,6 +393,7 @@ pub fn checksum(s: &ArenaState) -> u64 {
         c.write_u32(x.damage_type as u32);
         c.write_u32(x.next_attack_tick);
         c.write_u32(x.expire_tick);
+        c.write_u32(x.source as u32);
     }
 
     // Rotating-wave sweeps in id order.

@@ -14,6 +14,15 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
+/// v24 (DAMAGE ATTRIBUTION / DPS meter — behavior-neutral bookkeeping only):
+/// the per-source damage ledger `ArenaState::damage_by_weapon` (BTreeMap of
+/// weapon def / `DMG_SRC_*` pseudo id → total damage, serialized after
+/// `total_gold_earned`), plus the attribution source stamps
+/// `EnemyStatus::poison_src` (after `poison_ticks`), `Hazard::source` and
+/// `Minion::source` (each at the end of its record). Nothing branches on any
+/// of them; all checksummed per the parity rule. (Authored as a v23 bump in a
+/// parallel branch; renumbered to v24 at merge because SP DIFFICULTY had
+/// already claimed v23.)
 /// v23 (SP DIFFICULTY): `ArenaState::difficulty` — the single-player Easy/
 /// Normal/Hard preset over the `RAMP_BASE` dial (`content::DIFF_*`,
 /// `enemy_hp_mult_at`). Authoritative (it steers the enemy ramp), so it is
@@ -40,7 +49,7 @@ use determinism::{Fixed, Rng};
 /// reconnect redraws correctly, checksummed per the parity rule). The
 /// transient `ArenaState::events` buffer and per-tick flags/accumulators are
 /// deliberately NOT serialized (`docs/09 §9.3`).
-pub const SNAPSHOT_VERSION: u32 = 23;
+pub const SNAPSHOT_VERSION: u32 = 24;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -253,6 +262,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.vec2(e.pos);
         w.i64(e.status.poison_dps);
         w.u32(e.status.poison_ticks);
+        w.u16(e.status.poison_src);
         w.u8(e.status.frost_stacks);
         w.u32(e.status.frost_ticks);
         w.u16(e.status.fire_stacks);
@@ -300,6 +310,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u8(h.damage_type);
         w.i64(h.radius);
         w.u32(h.ticks_left);
+        w.u16(h.source);
     }
 
     // minions (summoned Larvae / Spores)
@@ -313,6 +324,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
         w.u8(m.damage_type);
         w.u32(m.next_attack_tick);
         w.u32(m.expire_tick);
+        w.u16(m.source);
     }
 
     // rotating-wave sweeps
@@ -441,6 +453,12 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     }
     w.i64(s.total_damage_dealt);
     w.i64(s.total_gold_earned);
+    // per-source damage-attribution ledger (BTreeMap => key-sorted order)
+    w.len(s.damage_by_weapon.len());
+    for (src, dmg) in &s.damage_by_weapon {
+        w.u16(*src);
+        w.i64(*dmg);
+    }
     w.i64(s.bought_attack_mask as i64);
     w.i64(s.weapons_bought as i64);
     w.i64(s.economy_purchases as i64);
@@ -539,6 +557,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
             status: EnemyStatus {
                 poison_dps: r.i64()?,
                 poison_ticks: r.u32()?,
+                poison_src: r.u16()?,
                 frost_stacks: r.u8()?,
                 frost_ticks: r.u32()?,
                 fire_stacks: r.u16()?,
@@ -591,6 +610,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
             damage_type: r.u8()?,
             radius: r.i64()?,
             ticks_left: r.u32()?,
+            source: r.u16()?,
         });
     }
 
@@ -605,6 +625,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
             damage_type: r.u8()?,
             next_attack_tick: r.u32()?,
             expire_tick: r.u32()?,
+            source: r.u16()?,
         });
     }
 
@@ -755,6 +776,12 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
     }
     let total_damage_dealt = r.i64()?;
     let total_gold_earned = r.i64()?;
+    let mut damage_by_weapon = std::collections::BTreeMap::new();
+    for _ in 0..r.len()? {
+        let src = r.u16()?;
+        let dmg = r.i64()?;
+        damage_by_weapon.insert(src, dmg);
+    }
     let bought_attack_mask = r.i64()? as u16;
     let weapons_bought = r.i64()? as u32;
     let economy_purchases = r.i64()? as u32;
@@ -800,6 +827,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         pending_kills,
         total_damage_dealt,
         total_gold_earned,
+        damage_by_weapon,
         bought_attack_mask,
         weapons_bought,
         economy_purchases,

@@ -11,9 +11,11 @@
 #   UiLayer/Shop        — shop cards / reroll / clear (alive)
 #   UiLayer/Results     — death panel + redeploy (dead)
 #   UiLayer/BlackMarket — Black Market picker overlay + pending badge (alive)
+#   UiLayer/DamageOverlay — hold-[Tab] per-weapon damage table (alive or dead)
 #   UiLayer/PauseMenu   — pause/settings overlay (alive; owns input while open)
 # All sim reads go through the SimView wrapper; only THIS file calls sim.step.
 # Controls: click a shop card or press 1-8 to buy · R reroll · Space clear ·
+# hold Tab damage-by-weapon table ·
 # B reopen a dismissed Black Market picker · Esc pause menu (resume/settings/
 # quit — quit is confirm-gated so a live run can't be abandoned by one
 # keypress) · M multi-arena net demo (see project.godot [input]).
@@ -95,6 +97,7 @@ var _bm_was_pending := false
 @onready var _shop: Node2D = $UiLayer/Shop
 @onready var _results: Node2D = $UiLayer/Results
 @onready var _bm: Node2D = $UiLayer/BlackMarket
+@onready var _dmg_overlay: Node2D = $UiLayer/DamageOverlay
 @onready var _pause_menu: Node2D = $UiLayer/PauseMenu
 
 func _ready() -> void:
@@ -108,7 +111,7 @@ func _ready() -> void:
 	# The world canvas is dimmed by ArenaRenderer's CanvasModulate; the UI layer
 	# lives outside that canvas, so give its nodes the same ambient modulate to
 	# keep FX/HUD/shop colors identical to the pre-split rendering.
-	for ui_node in [_fx_overlay, _hud, _shop, _results, _bm, _pause_menu]:
+	for ui_node in [_fx_overlay, _hud, _shop, _results, _bm, _dmg_overlay, _pause_menu]:
 		ui_node.modulate = _arena.AMBIENT_DIM
 	# Black Market picks route back through the SAME intent FIFO as buy/reroll.
 	_bm.on_pick = _on_bm_pick
@@ -129,6 +132,7 @@ func _wire_modules() -> void:
 	_hud.view = view
 	_shop.view = view
 	_results.view = view
+	_dmg_overlay.view = view
 	_sync_dead_panels()
 
 # Shop while alive, results panel while dead — the visibility switch that used
@@ -487,6 +491,12 @@ func _sync_black_market() -> void:
 func _process(delta: float) -> void:
 	if sim == null or fx == null:
 		return
+	# DPS meter: shown only while the [Tab] action is HELD, alive or dead —
+	# but never inside the pause menu (a still frame stays a still frame).
+	# Polled here (not routed through _unhandled_input) because hold-to-show
+	# is a state, not an edge; the overlay itself rebuilds at most ~1/s.
+	_dmg_overlay.held = not _pause_menu.is_open() \
+		and Input.is_action_pressed(&"ui_damage_overlay")
 	# Paused: the FX bus freezes too (pools/timers hold in place) so the pause
 	# reads as a true still frame behind the dimmed menu — chosen over "FX keep
 	# animating" so nothing decays or expires while the player is away.

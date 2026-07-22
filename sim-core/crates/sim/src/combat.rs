@@ -43,8 +43,10 @@ struct AbilityAccum {
 impl AbilityAccum {
     /// Apply the deferred tank/world effects of `ability` (placed at
     /// `damage_type` for hazards). Called once after a damage site, while `s` is
-    /// fully borrowable again.
-    fn flush(self, s: &mut ArenaState, ability: WeaponAbility, damage_type: u8) {
+    /// fully borrowable again. `source` is the owning weapon's catalog index —
+    /// stamped onto spawned hazards/minions so their later damage attributes
+    /// back to this weapon (bookkeeping only, no behavior).
+    fn flush(self, s: &mut ArenaState, ability: WeaponAbility, damage_type: u8, source: u16) {
         if self.heal > 0 && !s.dead {
             s.tank.heal(self.heal);
         }
@@ -61,6 +63,7 @@ impl AbilityAccum {
                 damage_type,
                 radius,
                 ticks_left: ticks,
+                source,
             });
             s.emit(SimEvent::HazardPlaced {
                 x: pos.x.floor_to_int(),
@@ -89,6 +92,7 @@ impl AbilityAccum {
                 damage_type,
                 next_attack_tick: s.tick,
                 expire_tick: s.tick + MINION_LIFETIME,
+                source,
             });
         }
     }
@@ -148,6 +152,7 @@ fn apply_weapon_hit(
     on_hit: &content::StatusOnHit,
     ability: WeaponAbility,
     tank_pos: Vec2,
+    source: u16,
     accum: &mut AbilityAccum,
 ) -> i64 {
     let edef = &content::ENEMIES[e.def as usize];
@@ -163,10 +168,10 @@ fn apply_weapon_hit(
         .mul(cond.mult(e))
         .scale_i64(base);
     e.hp -= dmg;
-    if crate::status::apply_on_hit(e, on_hit, cond.deep_freeze) {
+    if crate::status::apply_on_hit(e, on_hit, cond.deep_freeze, source) {
         accum.freeze_procs.push(e.id.0);
     }
-    apply_ability_on_hit(e, ability, tank_pos, accum);
+    apply_ability_on_hit(e, ability, tank_pos, source, accum);
     dmg
 }
 
@@ -178,6 +183,7 @@ fn apply_ability_on_hit(
     e: &mut Enemy,
     ability: WeaponAbility,
     tank_pos: Vec2,
+    source: u16,
     accum: &mut AbilityAccum,
 ) {
     match ability {
@@ -211,6 +217,10 @@ fn apply_ability_on_hit(
                 // a stronger existing poison.
                 if e.status.poison_dps == 0 {
                     e.status.poison_dps = 1;
+                    // Attribution: the token DoT is THIS weapon's; when an
+                    // existing (stronger) poison merely gains duration, its
+                    // original source keeps the credit.
+                    e.status.poison_src = source;
                 }
             }
         }
@@ -318,6 +328,10 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // Instant-attack abilities (Area/Wave/Bounce) accumulate here, flushed
         // once after this weapon's instant hits resolve.
         let mut accum = AbilityAccum::default();
+        // Attribution watermark: instant damage this weapon adds below is
+        // `instant_damage - instant_before` (projectile damage attributes at
+        // impact instead, keyed by the carried `weapon_kind`).
+        let instant_before = instant_damage;
         let mut new_proj = |s: &mut ArenaState, target_idx: usize, splash: Fixed| {
             let e = &s.enemies[target_idx];
             let (target_id, target_pos) = (e.id, e.pos);
@@ -389,6 +403,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                             &on_hit,
                             ability,
                             tank_pos,
+                            def,
                             &mut accum,
                         );
                     }
@@ -410,6 +425,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                             &on_hit,
                             ability,
                             tank_pos,
+                            def,
                             &mut accum,
                         );
                     }
@@ -440,6 +456,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                         &on_hit,
                         ability,
                         tank_pos,
+                        def,
                         &mut accum,
                     );
                 }
@@ -467,6 +484,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                                 &on_hit,
                                 ability,
                                 tank_pos,
+                                def,
                                 &mut accum,
                             );
                         }
@@ -522,7 +540,12 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // Apply this weapon's deferred ability effects (life/mana drain heal,
         // hazard placement). A no-op for projectile attacks (their abilities
         // resolve at impact) and for ability-less weapons.
-        accum.flush(s, ability, wdef.damage_type);
+        accum.flush(s, ability, wdef.damage_type, def);
+
+        // Attribute this weapon's instant damage (Area/Wave/Bounce hits this
+        // fire) to its catalog id — bookkeeping only; the aggregated
+        // `record_player_damage(instant_damage)` below is untouched.
+        s.record_weapon_damage(def, instant_damage - instant_before);
 
         // Effective cooldown is reduced by the attack-speed modifier — EXCEPT
         // for `fixed_rate` weapons (the source's "Attack Cooldown: N/A" class:
@@ -595,6 +618,8 @@ pub(crate) fn tick_sweeps(s: &mut ArenaState) {
         };
         let r2 = sw.radius.mul(sw.radius);
         let mut accum = AbilityAccum::default();
+        // Attribution watermark for this sweep's share of `total`.
+        let sweep_before = total;
         // `s.enemies` is id-ordered ⇒ this pass is run-to-run stable.
         for e in s.enemies.iter_mut() {
             if tank_pos.dist_sq(e.pos) > r2 {
@@ -611,12 +636,15 @@ pub(crate) fn tick_sweeps(s: &mut ArenaState) {
                     &sw.on_hit,
                     sw.ability,
                     tank_pos,
+                    sw.weapon_kind,
                     &mut accum,
                 );
                 any = true;
             }
         }
-        accum.flush(s, sw.ability, sw.damage_type);
+        // Attribute this sweep's hits to its firing weapon (bookkeeping only).
+        s.record_weapon_damage(sw.weapon_kind, total - sweep_before);
+        accum.flush(s, sw.ability, sw.damage_type, sw.weapon_kind);
         sw.angle_bam = next_angle;
         sw.ticks_left -= 1;
     }
@@ -658,6 +686,8 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
         splash_radius: Fixed,
         on_hit: crate::content::StatusOnHit,
         ability: WeaponAbility,
+        /// Firing weapon's catalog index (damage attribution).
+        weapon_kind: u16,
     }
 
     let mut impacts: Vec<Impact> = Vec::new();
@@ -683,6 +713,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                         splash_radius: p.splash_radius,
                         on_hit: p.on_hit,
                         ability: p.ability,
+                        weapon_kind: p.weapon_kind,
                     });
                 } else {
                     p.pos = moved;
@@ -701,6 +732,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                         splash_radius: p.splash_radius,
                         on_hit: p.on_hit,
                         ability: p.ability,
+                        weapon_kind: p.weapon_kind,
                     });
                 }
                 // either way, projectile is removed (not pushed to survivors).
@@ -732,6 +764,8 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                                    // Each impact's signature ability accumulates over the enemies it hits,
                                    // then flushes (tank heal / mana / hazard) once.
         let mut accum = AbilityAccum::default();
+        // Attribution watermark for this impact's share of `impact_damage`.
+        let impact_before = impact_damage;
         if imp.splash_radius > Fixed::ZERO {
             let radius_sq = imp.splash_radius.mul(imp.splash_radius);
             for e in s.enemies.iter_mut() {
@@ -745,6 +779,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                         &imp.on_hit,
                         imp.ability,
                         tank_pos,
+                        imp.weapon_kind,
                         &mut accum,
                     );
                 }
@@ -759,10 +794,14 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                 &imp.on_hit,
                 imp.ability,
                 tank_pos,
+                imp.weapon_kind,
                 &mut accum,
             );
         }
-        accum.flush(s, imp.ability, imp.damage_type);
+        // Attribute this impact's damage to its firing weapon (bookkeeping
+        // only; the Bloodmoney/scoreboard path below is untouched).
+        s.record_weapon_damage(imp.weapon_kind, impact_damage - impact_before);
+        accum.flush(s, imp.ability, imp.damage_type, imp.weapon_kind);
     }
     s.record_player_damage(impact_damage);
 
@@ -877,6 +916,8 @@ pub(crate) fn tick_hazards(s: &mut ArenaState) {
         let r2 = radius.mul(radius);
         // A hazard carries no on-hit status and no chained ability.
         let mut accum = AbilityAccum::default();
+        // Attribution watermark for this hazard's share of `total`.
+        let hazard_before = total;
         for e in s.enemies.iter_mut() {
             if h.pos.dist_sq(e.pos) <= r2 {
                 total += apply_weapon_hit(
@@ -888,11 +929,14 @@ pub(crate) fn tick_hazards(s: &mut ArenaState) {
                     &content::StatusOnHit::NONE,
                     WeaponAbility::None,
                     tank_pos,
+                    h.source,
                     &mut accum,
                 );
                 any = true;
             }
         }
+        // Attribute this hazard's pulse to the weapon that placed it.
+        s.record_weapon_damage(h.source, total - hazard_before);
         h.ticks_left -= 1;
     }
     // Drop expired hazards, preserving id order (announcing each expiry).
@@ -957,11 +1001,15 @@ pub(crate) fn tick_aura(s: &mut ArenaState) {
                 &poison,
                 WeaponAbility::None,
                 tank_pos,
+                // The aura is a TANK upgrade, not a weapon: its damage (and
+                // its poison DoT) attributes to the OTHER pseudo source.
+                DMG_SRC_OTHER,
                 &mut accum,
             );
             any = true;
         }
     }
+    s.record_weapon_damage(DMG_SRC_OTHER, total);
     s.record_player_damage(total);
     if any {
         crate::status::reap_dead(s);
@@ -998,7 +1046,8 @@ pub(crate) fn tick_minions(s: &mut ArenaState) {
 
     // Move minions / decide strikes without holding an enemy borrow.
     let mut minions = std::mem::take(&mut s.minions);
-    let mut strikes: Vec<(EntityId, i64, u8)> = Vec::new(); // (target, scaled dmg, dtype)
+    // (target, scaled dmg, dtype, summoning weapon def).
+    let mut strikes: Vec<(EntityId, i64, u8, u16)> = Vec::new();
     for m in minions.iter_mut() {
         // Nearest non-boss enemy; ties resolve to the lower id (id-ordered list).
         let mut best: Option<(EntityId, Vec2, Fixed)> = None;
@@ -1015,7 +1064,7 @@ pub(crate) fn tick_minions(s: &mut ArenaState) {
             if d2 <= reach2 {
                 if now >= m.next_attack_tick {
                     m.next_attack_tick = now + MINION_ATTACK_CD;
-                    strikes.push((tid, dmg_mult.scale_i64(m.damage), m.damage_type));
+                    strikes.push((tid, dmg_mult.scale_i64(m.damage), m.damage_type, m.source));
                 }
             } else {
                 m.pos = m.pos.step_toward(tpos, speed);
@@ -1033,9 +1082,9 @@ pub(crate) fn tick_minions(s: &mut ArenaState) {
     let tank_pos = s.tank.pos;
     let mut accum = AbilityAccum::default();
     let mut total: i64 = 0;
-    for (tid, dmg, dtype) in strikes {
-        if let Some(e) = s.enemies.iter_mut().find(|e| e.id == tid) {
-            total += apply_weapon_hit(
+    for (tid, dmg, dtype, src) in strikes {
+        let dealt = match s.enemies.iter_mut().find(|e| e.id == tid) {
+            Some(e) => apply_weapon_hit(
                 e,
                 dmg,
                 dtype,
@@ -1044,9 +1093,14 @@ pub(crate) fn tick_minions(s: &mut ArenaState) {
                 &content::StatusOnHit::NONE,
                 WeaponAbility::None,
                 tank_pos,
+                src,
                 &mut accum,
-            );
-        }
+            ),
+            None => 0,
+        };
+        total += dealt;
+        // Attribute the strike to the Summon weapon that raised the minion.
+        s.record_weapon_damage(src, dealt);
     }
     s.record_player_damage(total);
     crate::status::reap_dead(s);
@@ -1630,6 +1684,7 @@ mod tests {
             &content::StatusOnHit::NONE,
             WeaponAbility::None,
             Vec2::ZERO,
+            0,
             &mut AbilityAccum::default(),
         );
         apply_weapon_hit(
@@ -1641,6 +1696,7 @@ mod tests {
             &content::StatusOnHit::NONE,
             WeaponAbility::None,
             Vec2::ZERO,
+            0,
             &mut AbilityAccum::default(),
         );
         assert_eq!(
@@ -1950,6 +2006,7 @@ mod tests {
             &content::StatusOnHit::NONE,
             content::WeaponAbility::None,
             Vec2::ZERO,
+            0,
             &mut accum,
         );
         let light_pierce =
@@ -1971,6 +2028,7 @@ mod tests {
             &content::StatusOnHit::NONE,
             content::WeaponAbility::None,
             Vec2::ZERO,
+            0,
             &mut accum,
         );
         assert!(dealt_siege > base, "Siege bites Fortified harder (>1×)");
@@ -2232,7 +2290,12 @@ mod tests {
             mana: 80,
             ..Default::default()
         };
-        accum.flush(&mut s, content::WeaponAbility::ManaDrain { per_hit: 80 }, 0);
+        accum.flush(
+            &mut s,
+            content::WeaponAbility::ManaDrain { per_hit: 80 },
+            0,
+            0,
+        );
         assert_eq!(
             s.tank.mana_shield, 0,
             "no shield pool → mana-drain is a no-op"
@@ -2374,6 +2437,7 @@ mod tests {
             damage_type: content::DMG_SIEGE,
             radius: 200,
             ticks_left: 2,
+            source: 0,
         });
         mk_enemy(
             &mut s,
@@ -2450,10 +2514,11 @@ mod tests {
                 &content::StatusOnHit::NONE,
                 ability,
                 Vec2::ZERO,
+                0,
                 &mut accum,
             );
         }
-        accum.flush(s, ability, content::DMG_CHAOS);
+        accum.flush(s, ability, content::DMG_CHAOS, 0);
     }
 
     #[test]
@@ -2499,10 +2564,11 @@ mod tests {
                 &content::StatusOnHit::NONE,
                 ability,
                 Vec2::ZERO,
+                0,
                 &mut accum,
             );
         }
-        accum.flush(&mut s, ability, content::DMG_CHAOS);
+        accum.flush(&mut s, ability, content::DMG_CHAOS, 0);
         assert!(s.minions.is_empty(), "survivor ⇒ no minion raised");
     }
 
@@ -2536,10 +2602,11 @@ mod tests {
                 &content::StatusOnHit::NONE,
                 ability,
                 Vec2::ZERO,
+                0,
                 &mut accum,
             );
         }
-        accum.flush(&mut s, ability, content::DMG_CHAOS);
+        accum.flush(&mut s, ability, content::DMG_CHAOS, 0);
         assert_eq!(s.minions.len(), MAX_MINIONS, "capped at MAX_MINIONS");
     }
 
@@ -2557,6 +2624,7 @@ mod tests {
             damage_type: content::DMG_CHAOS,
             next_attack_tick: now,
             expire_tick: now + 1000,
+            source: 0,
         });
         let eid = mk_enemy(
             &mut s,
@@ -2583,6 +2651,7 @@ mod tests {
             damage_type: content::DMG_CHAOS,
             next_attack_tick: 0,
             expire_tick: 5,
+            source: 0,
         });
         s.tick = 4;
         tick_minions(&mut s);
@@ -2609,6 +2678,7 @@ mod tests {
                 damage_type: content::DMG_CHAOS,
                 next_attack_tick: 0,
                 expire_tick: 500,
+                source: 0,
             });
             mk_enemy(
                 &mut s,
@@ -2961,6 +3031,7 @@ mod tests {
                 ticks: 90,
             },
             Vec2::ZERO,
+            0,
             &mut accum,
         );
         assert_eq!(s.enemies[0].status.obscure_pct, 100);
@@ -3003,6 +3074,7 @@ mod tests {
                 stacks: 5,
             },
             Vec2::ZERO,
+            0,
             &mut accum,
         );
         assert_eq!(e.status.vuln_by_type[content::DMG_NORMAL as usize], 5);
@@ -3263,6 +3335,190 @@ mod tests {
             crate::checksum(&a),
             crate::checksum(&b),
             "checksum stable across runs"
+        );
+    }
+
+    // ---- DAMAGE ATTRIBUTION (the DPS-meter ledger) ---------------------------
+
+    /// Sum of the attribution ledger (all sources).
+    fn ledger_sum(s: &ArenaState) -> i64 {
+        s.damage_by_weapon.values().sum()
+    }
+
+    #[test]
+    fn splash_impact_attributes_to_the_firing_weapon() {
+        // Same setup as `splash_hits_multiple_enemies`, watching the ledger.
+        let mut s = blank_state();
+        s.weapons.clear();
+        let impact = Vec2::new(Fixed::from_int(100), Fixed::ZERO);
+        let near1 = mk_enemy(&mut s, 0, 100, impact);
+        let _near2 = mk_enemy(&mut s, 0, 100, Vec2::new(Fixed::from_int(250), Fixed::ZERO));
+        let pid = s.alloc_entity_id();
+        s.projectiles.push(Projectile {
+            id: pid,
+            weapon_kind: 1, // the Mortar's catalog idx — the attribution key
+            pos: impact,
+            target: near1,
+            last_target_pos: impact,
+            damage: 300,
+            damage_type: content::DMG_SIEGE,
+            splash_radius: Fixed::from_int(300),
+            speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit::NONE,
+            ability: content::WeaponAbility::None,
+        });
+        advance_projectiles(&mut s);
+        assert!(s.total_damage_dealt > 0, "splash dealt damage");
+        assert_eq!(
+            s.damage_by_weapon.get(&1).copied(),
+            Some(s.total_damage_dealt),
+            "both splash victims credit weapon 1"
+        );
+        assert_eq!(ledger_sum(&s), s.total_damage_dealt);
+    }
+
+    #[test]
+    fn bounce_chain_attributes_to_the_firing_weapon() {
+        // A real Bounce-class weapon from the catalog; the whole chain (first
+        // target + chained hits) credits its def id.
+        let def = content::WEAPONS
+            .iter()
+            .position(|w| matches!(w.attack, Attack::Bounce(_)))
+            .expect("a Bounce weapon exists") as u16;
+        let mut s = blank_state();
+        s.weapons.clear();
+        let wid = s.alloc_entity_id();
+        s.weapons.push(WeaponInstance {
+            instance_id: wid,
+            def,
+            next_fire_tick: 0,
+        });
+        for i in 0..4 {
+            mk_enemy(
+                &mut s,
+                0,
+                1_000_000,
+                Vec2::new(Fixed::from_int(100 + i * 50), Fixed::ZERO),
+            );
+        }
+        fire_weapons(&mut s);
+        assert!(s.total_damage_dealt > 0, "chain dealt damage");
+        assert_eq!(
+            s.damage_by_weapon.get(&def).copied(),
+            Some(s.total_damage_dealt),
+            "every chained hit credits the bounce weapon"
+        );
+        assert_eq!(ledger_sum(&s), s.total_damage_dealt);
+    }
+
+    #[test]
+    fn hazard_ticks_attribute_to_the_placing_weapon() {
+        // Fired hazard carries its weapon's def; each pulse credits it.
+        let mut s = blank_state();
+        only_weapon(&mut s, "Boom Bloom");
+        let def = s.weapons[0].def;
+        mk_enemy(
+            &mut s,
+            0,
+            1_000_000_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
+        fire_weapons(&mut s); // Wave hit + hazard placed
+        assert_eq!(s.hazards[0].source, def, "hazard stamped with its weapon");
+        let after_fire = s.damage_by_weapon.get(&def).copied().unwrap_or(0);
+        assert!(after_fire > 0, "the wave hit itself was attributed");
+        tick_hazards(&mut s);
+        let after_tick = s.damage_by_weapon.get(&def).copied().unwrap_or(0);
+        assert_eq!(
+            after_tick - after_fire,
+            1000,
+            "the hazard pulse credits the placing weapon"
+        );
+        assert_eq!(ledger_sum(&s), s.total_damage_dealt);
+    }
+
+    #[test]
+    fn minion_strikes_attribute_to_the_summoning_weapon() {
+        let mut s = blank_state();
+        s.weapons.clear();
+        let mid = s.alloc_entity_id();
+        s.minions.push(Minion {
+            id: mid,
+            pos: Vec2::ZERO,
+            kind: 0,
+            hp: 500,
+            damage: 1000,
+            damage_type: content::DMG_CHAOS,
+            next_attack_tick: 0,
+            expire_tick: 500,
+            source: 5,
+        });
+        mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
+        tick_minions(&mut s);
+        assert!(s.total_damage_dealt > 0, "minion struck");
+        assert_eq!(
+            s.damage_by_weapon.get(&5).copied(),
+            Some(s.total_damage_dealt),
+            "the strike credits the summoning weapon's def"
+        );
+    }
+
+    #[test]
+    fn summoned_minion_inherits_the_weapon_def_as_source() {
+        // A Summon weapon's kill raises a minion stamped with that weapon.
+        let mut s = blank_state();
+        s.weapons.clear();
+        let eid = mk_enemy(&mut s, 0, 1, Vec2::new(Fixed::from_int(50), Fixed::ZERO));
+        let cond = CondDamage::of(&s);
+        let mut accum = AbilityAccum::default();
+        let ability = WeaponAbility::Summon {
+            kind: 0,
+            hp: 100,
+            damage: 50,
+        };
+        {
+            let e = s.enemies.iter_mut().find(|e| e.id == eid).unwrap();
+            apply_weapon_hit(
+                e,
+                9_999_999,
+                content::DMG_CHAOS,
+                Fixed::ONE,
+                cond,
+                &content::StatusOnHit::NONE,
+                ability,
+                Vec2::ZERO,
+                42,
+                &mut accum,
+            );
+        }
+        accum.flush(&mut s, ability, content::DMG_CHAOS, 42);
+        assert_eq!(s.minions.len(), 1);
+        assert_eq!(s.minions[0].source, 42, "minion inherits the weapon def");
+    }
+
+    #[test]
+    fn aura_damage_attributes_to_the_other_pseudo_source() {
+        let mut s = aura_state();
+        mk_enemy(
+            &mut s,
+            0,
+            1_000_000,
+            Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+        );
+        for _ in 0..30 {
+            tick_aura(&mut s);
+            s.tick += 1;
+        }
+        assert!(s.total_damage_dealt > 0, "aura pulsed");
+        assert_eq!(
+            s.damage_by_weapon.get(&DMG_SRC_OTHER).copied(),
+            Some(s.total_damage_dealt),
+            "aura damage lands under OTHER (tank upgrade, not a weapon)"
         );
     }
 }

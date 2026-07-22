@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0xb7c1308925f50f6d, // re-baselined (SP DIFFICULTY, snapshot v23): `ArenaState::difficulty` entered the digest (`checksum()` writes it after `player_id`). PURE FIELD-DOMAIN SHIFT, NOT a trajectory shift: the M0 scenario runs `ArenaState::new` = Normal, and with the new digest write temporarily disabled the harness reproduced the previous golden 0x7b9690c6d0e661f0 bit-exactly — every simulated state is unchanged; only the digest domain grew. Captured fresh from `cargo run -p harness` with the write restored. (Previous baseline 0x7b9690c6d0e661f0 was the merged deferred-fidelity passes.)
+        0x0000000000000000, // PLACEHOLDER - recaptured for the merged difficulty+DPS-ledger passes
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

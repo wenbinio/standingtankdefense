@@ -5,6 +5,20 @@
 use crate::content;
 use crate::ids::*;
 use determinism::{Fixed, Rng};
+use std::collections::BTreeMap;
+
+/// Reserved pseudo source ids for the per-weapon damage attribution ledger
+/// (`ArenaState::damage_by_weapon`). Real weapon sources use their catalog
+/// index (`content::WEAPONS`, far below this range); damage paths with no
+/// single owning weapon accumulate under these:
+/// - `DMG_SRC_SPIKES` — Spikes retaliation (a tank stat, not a weapon).
+/// - `DMG_SRC_CLEAR` — the Clear ability.
+/// - `DMG_SRC_OTHER` — everything else with no clean weapon source: Fire
+///   death-explosions (the stacks blend many weapons' applications) and the
+///   Blight Aura (a tank upgrade).
+pub const DMG_SRC_SPIKES: u16 = 0xFFFD;
+pub const DMG_SRC_CLEAR: u16 = 0xFFFE;
+pub const DMG_SRC_OTHER: u16 = 0xFFFF;
 
 /// 2D point/vector in Fixed units. The tank sits at the origin.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -252,6 +266,13 @@ pub struct EnemyStatus {
     /// Poison damage per tick while `poison_ticks > 0` (a DoT).
     pub poison_dps: i64,
     pub poison_ticks: u32,
+    /// Damage-attribution source of the ACTIVE poison DoT: the weapon catalog
+    /// index that applied it, or a `DMG_SRC_*` pseudo id (Spikes poison, Blight
+    /// Aura). Pure bookkeeping — nothing branches on it — but it rides the
+    /// snapshot (the DoT keeps paying out after a reconnect, so its attribution
+    /// must survive too) and therefore feeds `checksum()` (parity rule). Set
+    /// whenever `poison_dps` is set; reset to 0 when the poison expires.
+    pub poison_src: u16,
     /// Frost stacks (each slows move/attack ~2%, capped at `FROST_MAX_STACKS`).
     pub frost_stacks: u8,
     /// Remaining frost duration; on expiry the stacks clear.
@@ -333,6 +354,10 @@ pub struct Hazard {
     pub radius: i64,
     /// Remaining ticks before the hazard expires.
     pub ticks_left: u32,
+    /// Catalog index of the weapon whose ability placed this hazard — damage
+    /// attribution only (its tick damage credits that weapon). Nothing
+    /// branches on it; snapshot-carried, so checksummed (parity rule).
+    pub source: u16,
 }
 
 /// An active ROTATING-WAVE sweep (from `Attack::WaveRotating`): fired once,
@@ -387,6 +412,10 @@ pub struct Minion {
     pub next_attack_tick: Tick,
     /// Tick at which it vanishes.
     pub expire_tick: Tick,
+    /// Catalog index of the Summon weapon that raised this minion — damage
+    /// attribution only (its strikes credit that weapon). Nothing branches on
+    /// it; snapshot-carried, so checksummed (parity rule).
+    pub source: u16,
 }
 
 /// An in-flight projectile (homes on `target`; applies splash at arrival).
@@ -819,6 +848,16 @@ pub struct ArenaState {
     /// (feed the checksum); never reset.
     pub total_damage_dealt: i64,
     pub total_gold_earned: i64,
+    /// Per-source damage-attribution ledger (the DPS-meter accumulators):
+    /// total damage dealt, keyed by weapon catalog index — or a `DMG_SRC_*`
+    /// pseudo id for paths with no single owning weapon (Spikes / Clear /
+    /// Other). Every `record_player_damage` site records the same amounts here
+    /// through `record_weapon_damage`, so `Σ values == total_damage_dealt`
+    /// (saturation aside). BTreeMap ⇒ stable key order for checksum/snapshot.
+    /// STRICTLY OBSERVATIONAL: no sim decision ever reads it (behavior-
+    /// neutral by construction); authoritative bookkeeping only — it rides the
+    /// snapshot and feeds `checksum()` (parity rule). Never reset.
+    pub damage_by_weapon: BTreeMap<u16, i64>,
 
     /// Playstyle telemetry for cosmetic achievements (which weapon *attack
     /// classes* the player chose to BUY, how many weapons, how many income
@@ -935,6 +974,7 @@ impl ArenaState {
             pending_kills: Vec::new(),
             total_damage_dealt: 0,
             total_gold_earned: 0,
+            damage_by_weapon: BTreeMap::new(),
             bought_attack_mask: 0,
             weapons_bought: 0,
             economy_purchases: 0,
@@ -1019,6 +1059,21 @@ impl ArenaState {
         if self.economy.gold_per_damage > Fixed::ZERO {
             self.award_gold(self.economy.gold_per_damage.scale_i64(amount));
         }
+    }
+
+    /// Attribute `amount` of player damage to `source` (a weapon catalog index
+    /// or a `DMG_SRC_*` pseudo id) in the per-source ledger. Called alongside
+    /// `record_player_damage` at every damage site with the SAME amounts, so
+    /// the ledger cross-checks the scoreboard total. Pure bookkeeping — the
+    /// ledger drives the DPS-meter overlay and nothing else; no sim decision
+    /// ever reads it (behavior-neutral). Saturating, like the scoreboard.
+    #[inline]
+    pub fn record_weapon_damage(&mut self, source: u16, amount: i64) {
+        if amount <= 0 {
+            return;
+        }
+        let slot = self.damage_by_weapon.entry(source).or_insert(0);
+        *slot = slot.saturating_add(amount);
     }
 
     /// Apply a purchased modifier (folds into the damage/attack-speed aggregate,

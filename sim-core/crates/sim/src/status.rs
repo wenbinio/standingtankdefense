@@ -31,7 +31,17 @@ const FIRE_STACKS_PER_DAMAGE: u16 = 5;
 /// Returns `true` iff this application triggered the Deep-Freeze payoff (the
 /// enemy reached `FROST_MAX_STACKS` and froze) — callers turn that edge into a
 /// `SimEvent::FreezeProc` render event.
-pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit, deep_freeze: bool) -> bool {
+///
+/// `source` is the applier's damage-attribution id (weapon catalog index or a
+/// `DMG_SRC_*` pseudo id): when this application's poison WINS the keep-the-
+/// stronger contest, the DoT's future ticks credit `source` (bookkeeping only
+/// — nothing branches on it).
+pub(crate) fn apply_on_hit(
+    enemy: &mut Enemy,
+    on_hit: &StatusOnHit,
+    deep_freeze: bool,
+    source: u16,
+) -> bool {
     let mut froze = false;
     let st = &mut enemy.status;
     if on_hit.poison_dps > 0 && on_hit.poison_ticks > 0 {
@@ -41,6 +51,7 @@ pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit, deep_freeze:
         if incoming >= existing {
             st.poison_dps = on_hit.poison_dps;
             st.poison_ticks = on_hit.poison_ticks;
+            st.poison_src = source;
         }
     }
     if on_hit.frost_stacks > 0 {
@@ -198,7 +209,10 @@ pub(crate) fn reap_dead(s: &mut ArenaState) {
         }
         // Remove the enemies reaped this pass; survivors keep id order.
         s.enemies.retain(|e| e.hp != i64::MIN);
-        // Explosion damage is a player source (scoreboard / Bloodmoney).
+        // Explosion damage is a player source (scoreboard / Bloodmoney). Its
+        // Fire stacks blend arbitrarily many weapons' applications, so there
+        // is no single owning weapon: attribute to the OTHER pseudo source.
+        s.record_weapon_damage(crate::state::DMG_SRC_OTHER, explosion_damage);
         s.record_player_damage(explosion_damage);
         // Loop: chained deaths from this pass's explosions detonate next pass.
     }
@@ -211,6 +225,9 @@ pub(crate) fn tick(s: &mut ArenaState) {
     let mut survivors: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
     let mut poison_hits: i64 = 0;
     let mut poison_damage: i64 = 0;
+    // Poison damage grouped by the DoT's attribution source (weapon def or
+    // pseudo id) — BTreeMap ⇒ stable ledger-record order. Bookkeeping only.
+    let mut poison_by_src: std::collections::BTreeMap<u16, i64> = std::collections::BTreeMap::new();
     for mut e in std::mem::take(&mut s.enemies) {
         let immune = content::ENEMIES[e.def as usize].boss;
 
@@ -220,10 +237,12 @@ pub(crate) fn tick(s: &mut ArenaState) {
                 e.hp -= e.status.poison_dps;
                 poison_hits += 1;
                 poison_damage += e.status.poison_dps;
+                *poison_by_src.entry(e.status.poison_src).or_insert(0) += e.status.poison_dps;
             }
             e.status.poison_ticks -= 1;
             if e.status.poison_ticks == 0 {
                 e.status.poison_dps = 0;
+                e.status.poison_src = 0;
             }
         }
         // Frost duration / expiry.
@@ -254,6 +273,11 @@ pub(crate) fn tick(s: &mut ArenaState) {
     s.enemies = survivors;
     // Reap poison kills (and their Fire death-explosions) in a stable pass.
     reap_dead(s);
+    // Attribute each DoT's tick to the weapon (or pseudo source) that applied
+    // it — the same amounts the scoreboard records below (bookkeeping only).
+    for (src, dmg) in poison_by_src {
+        s.record_weapon_damage(src, dmg);
+    }
     // Poison DoT counts toward the player's damage scoreboard / Bloodmoney.
     s.record_player_damage(poison_damage);
     // On-poison trigger: heal the tank per enemy that took poison this tick.
@@ -288,6 +312,7 @@ mod tests {
                 ..StatusOnHit::NONE
             },
             true,
+            0,
         );
         assert_eq!(e.status.poison_dps, 20);
         // Weaker incoming poison does not replace.
@@ -299,6 +324,7 @@ mod tests {
                 ..StatusOnHit::NONE
             },
             true,
+            0,
         );
         assert_eq!(e.status.poison_dps, 20);
         assert_eq!(e.status.poison_ticks, 90);
@@ -347,6 +373,7 @@ mod tests {
                 ..StatusOnHit::NONE
             },
             true,
+            0,
         );
         assert_eq!(
             e.status.frost_stacks, 24,
@@ -376,6 +403,7 @@ mod tests {
                 ..StatusOnHit::NONE
             },
             true,
+            0,
         );
         assert_eq!(e.status.frost_stacks, 0, "stacks reset on freeze");
         assert_eq!(e.status.frost_ticks, 0, "frost slow cleared on freeze");
@@ -400,6 +428,7 @@ mod tests {
                 ..StatusOnHit::NONE
             },
             true,
+            0,
         );
         assert_eq!(e2.status.frost_stacks, 0);
         assert_eq!(e2.status.freeze_ticks, FREEZE_DURATION);
@@ -522,6 +551,7 @@ mod tests {
                 ..StatusOnHit::NONE
             },
             true,
+            0,
         );
         // 10 × 0.5% = +5% ⇒ ≈×1.05 (fixed-point floors deterministically).
         let v = vulnerability_mult(&e, 0, Fixed::ONE).scale_i64(1_000_000);
@@ -543,6 +573,7 @@ mod tests {
                 ..StatusOnHit::NONE
             },
             true,
+            0,
         );
         assert!(is_immobile(&e));
         let mut s = arena_with(vec![e]);
@@ -664,6 +695,7 @@ mod tests {
                 ..StatusOnHit::NONE
             },
             false, // no Deep Freeze
+            0,
         );
         assert_eq!(
             e.status.frost_stacks, FROST_MAX_STACKS,
@@ -686,6 +718,7 @@ mod tests {
                 ..StatusOnHit::NONE
             },
             true,
+            0,
         );
         assert_eq!(e2.status.frost_stacks, 0, "stacks reset on freeze");
         assert_eq!(e2.status.freeze_ticks, FREEZE_DURATION);
@@ -776,6 +809,107 @@ mod tests {
         assert_eq!(
             s.enemies[0].status.obscure_pct, 0,
             "magnitude clears on expiry"
+        );
+    }
+
+    #[test]
+    fn poison_dot_attributes_to_its_applying_source() {
+        // Two enemies poisoned by different sources: each tick's DoT credits
+        // the source that applied it, and the ledger sums to the scoreboard.
+        let mut s = arena_with(vec![
+            {
+                let mut e = enemy(0, 1000);
+                e.status.poison_dps = 30;
+                e.status.poison_ticks = 5;
+                e.status.poison_src = 2; // weapon def 2
+                e
+            },
+            {
+                let mut e = Enemy::new(EntityId(2), 0, 1000, Vec2::ZERO);
+                e.status.poison_dps = 10;
+                e.status.poison_ticks = 5;
+                e.status.poison_src = 9; // weapon def 9
+                e
+            },
+        ]);
+        tick(&mut s);
+        assert_eq!(s.damage_by_weapon.get(&2).copied(), Some(30));
+        assert_eq!(s.damage_by_weapon.get(&9).copied(), Some(10));
+        assert_eq!(
+            s.damage_by_weapon.values().sum::<i64>(),
+            s.total_damage_dealt
+        );
+    }
+
+    #[test]
+    fn winning_poison_takes_over_the_attribution() {
+        // A stronger incoming poison replaces the DoT AND its source credit.
+        let mut e = enemy(0, 1000);
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                poison_dps: 5,
+                poison_ticks: 30,
+                ..StatusOnHit::NONE
+            },
+            false,
+            3,
+        );
+        assert_eq!(e.status.poison_src, 3);
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                poison_dps: 50,
+                poison_ticks: 30,
+                ..StatusOnHit::NONE
+            },
+            false,
+            8,
+        );
+        assert_eq!(e.status.poison_src, 8, "stronger poison takes the credit");
+        // A weaker one does not steal it back.
+        apply_on_hit(
+            &mut e,
+            &StatusOnHit {
+                poison_dps: 1,
+                poison_ticks: 10,
+                ..StatusOnHit::NONE
+            },
+            false,
+            4,
+        );
+        assert_eq!(e.status.poison_src, 8);
+    }
+
+    #[test]
+    fn fire_explosion_attributes_to_the_other_pseudo_source() {
+        // Same setup as `fire_stacked_enemy_explodes_on_death_damaging_neighbors`:
+        // 20 explosion damage lands under OTHER (no single owning weapon).
+        let mut s = arena_with(vec![
+            {
+                let mut e = Enemy::new(EntityId(1), 0, -1, Vec2::ZERO);
+                e.status.fire_stacks = 50;
+                e
+            },
+            Enemy::new(
+                EntityId(2),
+                0,
+                8,
+                Vec2::new(Fixed::from_int(100), Fixed::ZERO),
+            ),
+            Enemy::new(
+                EntityId(3),
+                0,
+                1000,
+                Vec2::new(Fixed::from_int(200), Fixed::ZERO),
+            ),
+        ]);
+        reap_dead(&mut s);
+        assert_eq!(s.total_damage_dealt, 20);
+        assert_eq!(
+            s.damage_by_weapon.get(&DMG_SRC_OTHER).copied(),
+            Some(20),
+            "explosion damage lands under OTHER"
         );
     }
 

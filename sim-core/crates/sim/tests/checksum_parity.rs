@@ -58,6 +58,7 @@ fn base() -> ArenaState {
         damage_type: 2,
         radius: 300,
         ticks_left: 45,
+        source: 3,
     });
     s.minions.push(Minion {
         id: EntityId(104),
@@ -68,7 +69,9 @@ fn base() -> ArenaState {
         damage_type: 0,
         next_attack_tick: 12,
         expire_tick: 200,
+        source: 4,
     });
+    s.damage_by_weapon.insert(0, 1234);
     s.sweeps.push(WaveSweep {
         id: EntityId(105),
         weapon_kind: 91,
@@ -147,6 +150,16 @@ fn header_and_bookkeeping_fields_feed_checksum() {
     parity("pending_kills.len", |s| s.pending_kills.push(4));
     parity("total_damage_dealt", |s| s.total_damage_dealt += 1);
     parity("total_gold_earned", |s| s.total_gold_earned += 1);
+    // Per-source damage-attribution ledger (the DPS meter, snapshot v23).
+    parity("damage_by_weapon value", |s| {
+        s.damage_by_weapon.insert(0, 9999);
+    });
+    parity("damage_by_weapon new weapon key", |s| {
+        s.damage_by_weapon.insert(7, 50);
+    });
+    parity("damage_by_weapon pseudo key", |s| {
+        s.damage_by_weapon.insert(DMG_SRC_SPIKES, 50);
+    });
     parity("bought_attack_mask", |s| s.bought_attack_mask |= 1);
     parity("weapons_bought", |s| s.weapons_bought += 1);
     parity("economy_purchases", |s| s.economy_purchases += 1);
@@ -364,6 +377,9 @@ fn entity_fields_feed_checksum() {
     parity("enemies[0].status.poison_ticks", |s| {
         s.enemies[0].status.poison_ticks = 30
     });
+    parity("enemies[0].status.poison_src", |s| {
+        s.enemies[0].status.poison_src = 5
+    });
     parity("enemies[0].status.frost_stacks", |s| {
         s.enemies[0].status.frost_stacks = 1
     });
@@ -452,6 +468,7 @@ fn entity_fields_feed_checksum() {
     parity("hazards[0].damage_type", |s| s.hazards[0].damage_type = 3);
     parity("hazards[0].radius", |s| s.hazards[0].radius += 1);
     parity("hazards[0].ticks_left", |s| s.hazards[0].ticks_left += 1);
+    parity("hazards[0].source", |s| s.hazards[0].source = 9);
     // Minions.
     parity("minions[0].id", |s| s.minions[0].id = EntityId(240));
     parity("minions[0].pos.x", move |s| s.minions[0].pos.x = f(8));
@@ -464,6 +481,7 @@ fn entity_fields_feed_checksum() {
         s.minions[0].next_attack_tick += 1
     });
     parity("minions[0].expire_tick", |s| s.minions[0].expire_tick += 1);
+    parity("minions[0].source", |s| s.minions[0].source = 9);
     // Rotating-wave sweeps.
     parity("sweeps[0].id", |s| s.sweeps[0].id = EntityId(250));
     parity("sweeps[0].weapon_kind", |s| s.sweeps[0].weapon_kind = 1);

@@ -431,6 +431,44 @@ func _refresh_arsenal() -> void:
 			"bonus_milli": int(sm[o + 4]),
 		})
 
+# --- damage attribution (DPS meter) ----------------------------------------------
+# Reserved pseudo source ids (mirror sim-core state::DMG_SRC_*): rows with no
+# single owning weapon.
+const DMG_SRC_SPIKES := 0xFFFD
+const DMG_SRC_CLEAR := 0xFFFE
+const DMG_SRC_OTHER := 0xFFFF
+
+# One dict per attribution row, decoding damage_meta's flat
+# [source, damage_type, count, total, …] (see lib.rs) zipped with the parallel
+# names:  {name, source, damage_type, count, total}
+# Rows arrive in ascending source order (weapons first, pseudo rows last);
+# damage_type is 255 on pseudo rows. Ranking/percentages are the caller's job.
+# Built on demand (the overlay rebuilds at most ~1/s while held) — no caching.
+func damage_rows() -> Array:
+	var out: Array = []
+	var names: PackedStringArray
+	var meta: PackedInt64Array
+	if _sim != null:
+		names = _sim.damage_names()
+		meta = _sim.damage_meta()
+	elif _match != null:
+		names = _match.damage_names(_pi)
+		meta = _match.damage_meta(_pi)
+	else:
+		return out
+	for i in names.size():
+		var o := i * 4
+		if o + 3 >= meta.size():
+			break
+		out.append({
+			"name": names[i],
+			"source": int(meta[o]),
+			"damage_type": int(meta[o + 1]),
+			"count": int(meta[o + 2]),
+			"total": int(meta[o + 3]),
+		})
+	return out
+
 # --- stats -----------------------------------------------------------------------
 # stats() = [damage_dealt, gold_earned, bought_attack_mask, weapons_bought,
 # economy_purchases]. Exposed both raw-by-name and as the Profile.record_match

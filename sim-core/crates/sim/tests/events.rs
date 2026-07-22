@@ -413,6 +413,7 @@ fn hazard_placement_and_expiry_emit_events() {
         damage_type: content::DMG_SIEGE,
         radius: 100,
         ticks_left: 1,
+        source: 0,
     });
     step(&mut s, Input::Noop);
     assert!(s.hazards.is_empty(), "hazard expired");

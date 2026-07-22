@@ -190,7 +190,14 @@ pub(crate) fn spikes(s: &mut ArenaState) {
                 e.hp -= dmg;
                 spikes_dealt += dmg;
             }
-            if has_status && crate::status::apply_on_hit(&mut e, &status, deep_freeze) {
+            if has_status
+                && crate::status::apply_on_hit(
+                    &mut e,
+                    &status,
+                    deep_freeze,
+                    crate::state::DMG_SRC_SPIKES,
+                )
+            {
                 // Frost Armor drove the enemy to the Deep-Freeze payoff.
                 s.emit(SimEvent::FreezeProc { id: e.id.0 });
             }
@@ -214,6 +221,8 @@ pub(crate) fn spikes(s: &mut ArenaState) {
     }
     s.enemies = survivors;
     // Spikes retaliation counts as player damage (scoreboard + Bloodmoney).
+    // Attribution: Spikes is a tank stat, not a weapon — SPIKES pseudo source.
+    s.record_weapon_damage(crate::state::DMG_SRC_SPIKES, spikes_dealt);
     s.record_player_damage(spikes_dealt);
 }
 
@@ -429,6 +438,14 @@ mod tests {
         assert_eq!(s.total_damage_dealt, 200, "spikes counted as player damage");
         assert_eq!(s.economy.gold, gold0 + 50, "200 × 1/4 = 50 gold");
         assert_eq!(s.total_gold_earned, 50);
+        // Attribution: Spikes damage lands under the SPIKES pseudo source.
+        assert_eq!(
+            s.damage_by_weapon
+                .get(&crate::state::DMG_SRC_SPIKES)
+                .copied(),
+            Some(200),
+            "spikes attribute to the SPIKES pseudo id"
+        );
     }
 
     #[test]

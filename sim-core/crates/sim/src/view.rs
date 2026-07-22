@@ -10,7 +10,7 @@
 //! never feeds the checksum.
 
 use crate::content;
-use crate::state::{ArenaState, EnemyStatus};
+use crate::state::{ArenaState, EnemyStatus, DMG_SRC_CLEAR, DMG_SRC_OTHER, DMG_SRC_SPIKES};
 use determinism::Fixed;
 use std::collections::BTreeMap;
 
@@ -49,6 +49,12 @@ pub struct RenderView {
     pub synergies: Vec<RenderSynergy>,
     /// Match scoreboard totals.
     pub stats: RenderStats,
+    /// Per-source damage attribution (the DPS-meter rows), in stable
+    /// ascending source-id order: real weapons first (catalog order), then the
+    /// `DMG_SRC_*` pseudo rows (Spikes / Clear / Other). `Σ total` equals
+    /// `stats.damage_dealt` (saturation aside). Pure read of
+    /// `ArenaState::damage_by_weapon` + catalog facts.
+    pub damage_by_weapon: Vec<RenderDamage>,
 }
 
 /// Match-long scoreboard totals (damage dealt / gold earned).
@@ -240,6 +246,24 @@ pub struct RenderSynergy {
     pub bonus_milli_pct: i64,
 }
 
+/// One damage-attribution row (the DPS meter): a weapon's lifetime damage —
+/// or a pseudo source's (Spikes / Clear / Other). `name` doubles as the
+/// translation key at the render boundary, like every other content name.
+#[derive(Clone, Copy, Debug)]
+pub struct RenderDamage {
+    /// Weapon catalog index, or a `crate::state::DMG_SRC_*` pseudo id.
+    pub source: u16,
+    /// Catalog display name, or "Spikes" / "Clear" / "Other".
+    pub name: &'static str,
+    /// The weapon's damage type 0..=4 (row colour); 255 for pseudo rows.
+    pub damage_type: u8,
+    /// Currently owned copies of the weapon (0 for pseudo rows / sold-out
+    /// hypothetical — weapons are never removed today).
+    pub count: u32,
+    /// Total damage attributed to this source over the match.
+    pub total: i64,
+}
+
 /// Display-only conversion: a `Fixed` fraction → milli-percent (1000 = 1%),
 /// rounded to nearest. Integer math throughout; the result never feeds the
 /// checksum or any sim decision.
@@ -413,6 +437,36 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         })
         .collect();
 
+    // Damage-attribution rows: the ledger is a BTreeMap, so iteration is
+    // already in ascending source order (weapons, then the pseudo ids at the
+    // top of the u16 range). Owned counts resolve against the arsenal stacks.
+    let damage_by_weapon = s
+        .damage_by_weapon
+        .iter()
+        .map(|(&source, &total)| {
+            let (name, damage_type) = match source {
+                DMG_SRC_SPIKES => ("Spikes", 255),
+                DMG_SRC_CLEAR => ("Clear", 255),
+                DMG_SRC_OTHER => ("Other", 255),
+                def => {
+                    let w = &content::WEAPONS[def as usize];
+                    (w.name, w.damage_type)
+                }
+            };
+            let count = arsenal
+                .iter()
+                .find(|e| e.kind == source)
+                .map_or(0, |e| e.count);
+            RenderDamage {
+                source,
+                name,
+                damage_type,
+                count,
+                total,
+            }
+        })
+        .collect();
+
     RenderView {
         tick: s.tick,
         round: s.round,
@@ -437,6 +491,7 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
             weapons_bought: s.weapons_bought,
             economy_purchases: s.economy_purchases,
         },
+        damage_by_weapon,
     }
 }
 

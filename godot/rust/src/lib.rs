@@ -27,6 +27,7 @@
 //!   sim.arsenal_names() / arsenal_meta()   # grouped-arsenal panel (5-int recs)
 //!   sim.synergy_names() / synergies_meta() # active self-scalers (5-int recs)
 //!   sim.arsenal_rev()             # monotone; GDScript decode-cache key
+//!   sim.damage_names() / damage_meta()     # DPS-meter rows (4-int recs)
 //!   sim.take_events()             # read-and-clear; see EVENT RECORD LAYOUT
 //!
 //! Perf note: ONE `RenderView` is built per `step()` and cached; every accessor
@@ -649,6 +650,50 @@ impl StSim {
         a.push(v.stats.economy_purchases as i64);
         a
     }
+
+    /// Per-source display names for the damage-attribution rows (DPS meter),
+    /// parallel to `damage_meta()`. English catalog strings ("Spikes" /
+    /// "Clear" / "Other" for the pseudo rows) — tr() them at the draw boundary.
+    #[func]
+    fn damage_names(&self) -> PackedStringArray {
+        damage_names_impl(&self.view)
+    }
+
+    /// Flat 4-int records per damage-attribution row, parallel to
+    /// `damage_names()`: `[source, damage_type, count, total, …]` — `source` =
+    /// weapon catalog index (or a reserved pseudo id ≥ 0xFFFD: Spikes / Clear /
+    /// Other); `damage_type` 0..=4 (255 for pseudo rows); `count` = copies
+    /// owned; `total` = lifetime damage attributed. Rows arrive in ascending
+    /// source order; ranking/percentages are the overlay's job.
+    #[func]
+    fn damage_meta(&self) -> PackedInt64Array {
+        damage_meta_impl(&self.view)
+    }
+}
+
+/// Marshal the view's damage-attribution rows' names (shared StSim/StMatch).
+fn damage_names_impl(v: &view::RenderView) -> PackedStringArray {
+    let mut a = PackedStringArray::new();
+    for d in &v.damage_by_weapon {
+        a.push(&GString::from(d.name));
+    }
+    a
+}
+
+/// Marshal the view's damage-attribution rows' facts (shared StSim/StMatch).
+fn damage_meta_impl(v: &view::RenderView) -> PackedInt64Array {
+    let mut a = PackedInt64Array::new();
+    for d in &v.damage_by_weapon {
+        for x in [
+            d.source as i64,
+            d.damage_type as i64,
+            d.count as i64,
+            d.total,
+        ] {
+            a.push(x);
+        }
+    }
+    a
 }
 
 // ===================== Multi-arena / net view =====================
@@ -1143,6 +1188,22 @@ impl StMatch {
     fn weapon_count(&self, i: i64) -> i64 {
         self.snap(i)
             .map_or(0, |v| v.arsenal.iter().map(|a| a.count as i64).sum())
+    }
+
+    /// Damage-attribution row names for player `i` (mirrors
+    /// `StSim.damage_names()`; empty while the shadow is unreadable).
+    #[func]
+    fn damage_names(&self, i: i64) -> PackedStringArray {
+        self.snap(i)
+            .map_or_else(PackedStringArray::new, damage_names_impl)
+    }
+
+    /// Damage-attribution row facts for player `i` (mirrors
+    /// `StSim.damage_meta()`: flat `[source, damage_type, count, total, …]`).
+    #[func]
+    fn damage_meta(&self, i: i64) -> PackedInt64Array {
+        self.snap(i)
+            .map_or_else(PackedInt64Array::new, damage_meta_impl)
     }
 
     /// `[damage_dealt, gold_earned]` scoreboard totals for player `i`.

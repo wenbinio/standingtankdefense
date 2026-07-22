@@ -150,6 +150,10 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
                     });
                 }
                 s.enemies = survivors;
+                // Attribution: Clear is an ability, not a weapon — the CLEAR
+                // pseudo source gets the same (kill-clamped) amount the
+                // scoreboard records.
+                s.record_weapon_damage(crate::state::DMG_SRC_CLEAR, cleared_damage);
                 s.record_player_damage(cleared_damage);
                 s.tank.clear_cooldown_end = s.tick + CLEAR_COOLDOWN_TICKS;
             }
@@ -648,6 +652,16 @@ mod tests {
         assert_eq!(s.tank.clear_cooldown_end, CLEAR_COOLDOWN_TICKS);
         // sanity: those defs exist in content.
         assert!(content::ENEMIES.len() >= 2);
+        // Attribution: Clear damage (kill-clamped, so 200 + 1200 here) lands
+        // under the CLEAR pseudo source, matching the scoreboard exactly.
+        assert_eq!(s.total_damage_dealt, 1400);
+        assert_eq!(
+            s.damage_by_weapon
+                .get(&crate::state::DMG_SRC_CLEAR)
+                .copied(),
+            Some(1400),
+            "clear attributes to the CLEAR pseudo id"
+        );
     }
 
     #[test]
