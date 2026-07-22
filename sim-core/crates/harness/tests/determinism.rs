@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x0000000000000000, // PLACEHOLDER - recaptured for the merged difficulty+DPS-ledger passes
+        0x0c0ba40d0da8aa23, // re-baselined (MERGED SP-DIFFICULTY + DAMAGE-ATTRIBUTION passes, snapshot v24): both passes proved field-domain-only shifts independently (difficulty via disable-the-write reproduction of the prior golden; the ledger via a bit-identical behavior probe over the full M0 scenario); the merged digest domain contains both field sets, so this value was captured fresh from `cargo run -p harness` on the merged tree. (Previous baselines: 0xb7c1308925f50f6d difficulty-only, 0x7b9690c6d0e661f0 pre-both.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }
