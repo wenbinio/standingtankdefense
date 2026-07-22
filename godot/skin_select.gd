@@ -106,6 +106,12 @@ func _unhandled_input(e: InputEvent) -> void:
 	elif e.is_action_pressed(&"ui_language"):
 		_toggle_language()
 		Audio.play(&"ui_click")
+	elif e.is_action_pressed(&"ui_difficulty"):
+		# SP difficulty is a DEPLOY-TIME choice, so it lives here (not in the
+		# pause-menu settings): cycle Easy → Normal → Hard, persisted.
+		Profile.set_difficulty((Profile.difficulty() + 1) % Profile.DIFF_NAMES.size())
+		Audio.play(&"ui_click")
+		queue_redraw()
 	elif e.is_action_pressed(&"ui_settings"):
 		_open_settings()
 	elif e.is_action_pressed(&"ui_dev_unlock"):
@@ -168,9 +174,16 @@ func _draw() -> void:
 		tr("Unlock skins via achievements — purist runs (one weapon type), no-economy, and more.   [arrows] move   [Enter] play   [C] challenges   [L] lobby   [M] net demo   [T] theme   [U] dev-unlock"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.56, 0.6, 0.68))
 	# Language toggle hint + current language (own line; label shown in its
-	# script) + the settings-pane key.
-	draw_string(font, Vector2(36, 90), "[G] %s   ·   [O] %s" % [_lang_label(), tr("Settings")],
+	# script) + the settings-pane key + the SP difficulty cycler (deploy-time
+	# choice; records only land on Normal, hinted in amber on Easy/Hard).
+	var prefs := "[G] %s   ·   [O] %s   ·   %s" % [_lang_label(), tr("Settings"),
+		tr("[H] Difficulty: %s") % tr(Profile.difficulty_name())]
+	draw_string(font, Vector2(36, 90), prefs,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.62, 0.72, 0.9))
+	if Profile.difficulty() != Profile.DIFF_NORMAL:
+		var hx := 36.0 + font.get_string_size(prefs, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x + 16.0
+		draw_string(font, Vector2(hx, 90), tr("records: Normal only"),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.85, 0.67, 0.30))
 
 	cards.clear()
 	var rows := int(ceil(float(n) / COLS))

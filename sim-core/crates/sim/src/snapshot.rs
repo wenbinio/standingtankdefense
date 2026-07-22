@@ -14,6 +14,11 @@ use crate::state::*;
 use determinism::{Fixed, Rng};
 
 /// Bump when the on-the-wire layout changes; `deserialize` rejects mismatches.
+/// v23 (SP DIFFICULTY): `ArenaState::difficulty` — the single-player Easy/
+/// Normal/Hard preset over the `RAMP_BASE` dial (`content::DIFF_*`,
+/// `enemy_hp_mult_at`). Authoritative (it steers the enemy ramp), so it is
+/// checksummed per the parity rule and serialized right after `player_id`.
+/// The MP/director path never sets it off-Normal.
 /// v22 (DEFERRED-FIDELITY PASSES, one combined bump): `Modifiers::
 /// healing_weapon_healthy_dmg` (Battle Fervor's +35% scoped to HEALING
 /// weapons via `WeaponDef::is_healing` at ≥95% HP, replacing the global
@@ -35,7 +40,7 @@ use determinism::{Fixed, Rng};
 /// reconnect redraws correctly, checksummed per the parity rule). The
 /// transient `ArenaState::events` buffer and per-tick flags/accumulators are
 /// deliberately NOT serialized (`docs/09 §9.3`).
-pub const SNAPSHOT_VERSION: u32 = 22;
+pub const SNAPSHOT_VERSION: u32 = 23;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -182,6 +187,7 @@ pub fn serialize(s: &ArenaState) -> Vec<u8> {
     w.u32(s.round);
     w.u64(s.master_seed);
     w.u32(s.player_id);
+    w.u8(s.difficulty); // SP difficulty preset (v23; mirrors the checksum order)
 
     // tank
     w.i64(s.tank.hp);
@@ -463,6 +469,10 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
     let round = r.u32()?;
     let master_seed = r.u64()?;
     let player_id = r.u32()?;
+    let difficulty = r.u8()?;
+    if difficulty > crate::content::DIFF_HARD {
+        return Err(SnapshotError::BadTag(difficulty));
+    }
 
     let tank = Tank {
         hp: r.i64()?,
@@ -764,6 +774,7 @@ pub fn deserialize(bytes: &[u8]) -> Result<ArenaState, SnapshotError> {
         round,
         master_seed,
         player_id,
+        difficulty,
         tank,
         weapons,
         enemies,
@@ -825,6 +836,30 @@ mod tests {
         let s = ArenaState::new(0xDEAD_BEEF, 3);
         let back = deserialize(&serialize(&s)).unwrap();
         assert_eq!(s, back);
+    }
+
+    #[test]
+    fn roundtrip_preserves_sp_difficulty() {
+        // v23: the SP difficulty preset is authoritative — it must survive the
+        // snapshot (reconnect/replay keeps the chosen ramp) and feed the digest.
+        for d in [
+            crate::content::DIFF_EASY,
+            crate::content::DIFF_NORMAL,
+            crate::content::DIFF_HARD,
+        ] {
+            let s = ArenaState::new_with_difficulty(0xD1FF, 0, d);
+            assert_eq!(s.difficulty, d);
+            let back = deserialize(&serialize(&s)).unwrap();
+            assert_eq!(s, back);
+            assert_eq!(checksum(&s), checksum(&back));
+        }
+        // An out-of-range code on the wire is rejected, mirroring the
+        // constructor clamp (no arena can hold an unmapped difficulty).
+        let mut bytes = serialize(&ArenaState::new(1, 0));
+        // Difficulty byte offset: version(4) + tick(4) + round(4) + seed(8) +
+        // player_id(4) = 24.
+        bytes[24] = 9;
+        assert_eq!(deserialize(&bytes), Err(SnapshotError::BadTag(9)));
     }
 
     #[test]

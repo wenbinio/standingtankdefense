@@ -741,6 +741,12 @@ pub struct ArenaState {
     pub round: u32, // u32::MAX sentinel before the first round starts
     pub master_seed: u64,
     pub player_id: u32,
+    /// SP difficulty preset (`content::DIFF_EASY/NORMAL/HARD`) — scales the
+    /// per-minute base ramp only (`content::enemy_hp_mult_at`). AUTHORITATIVE:
+    /// feeds `checksum()`, rides the snapshot (v23). Always `DIFF_NORMAL` on
+    /// the MP/director path (`new`); only the SP constructor
+    /// (`new_with_difficulty`) can set Easy/Hard.
+    pub difficulty: u8,
 
     pub tank: Tank,
     pub weapons: Vec<WeaponInstance>,
@@ -844,6 +850,7 @@ impl ArenaState {
             round: u32::MAX,
             master_seed,
             player_id,
+            difficulty: content::DIFF_NORMAL,
             tank: Tank {
                 hp: 24_000,
                 max_hp: 24_000,
@@ -943,6 +950,22 @@ impl ArenaState {
             def: content::STARTING_WEAPON,
             next_fire_tick: 0,
         });
+        s
+    }
+
+    /// Fresh arena at an explicit SP difficulty preset (`content::DIFF_*`).
+    /// SINGLE-PLAYER ONLY entry point: the MP/director path always uses
+    /// [`ArenaState::new`] (Normal), so Easy/Hard can never enter a
+    /// competitive match. Out-of-range codes clamp to Normal — the same
+    /// mapping `content::ramp_base_for` applies, so the stored code and the
+    /// curve it selects can never disagree.
+    pub fn new_with_difficulty(master_seed: u64, player_id: u32, difficulty: u8) -> ArenaState {
+        let mut s = ArenaState::new(master_seed, player_id);
+        s.difficulty = if difficulty <= content::DIFF_HARD {
+            difficulty
+        } else {
+            content::DIFF_NORMAL
+        };
         s
     }
 

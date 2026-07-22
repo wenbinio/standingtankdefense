@@ -764,3 +764,9 @@ CLEAR %ds,CLEAR %ds,清场 %d 秒
 ABANDON MATCH?,ABANDON MATCH?,放弃对局？
 Your rivals keep fighting — a live net match never pauses.,Your rivals keep fighting — a live net match never pauses.,你的对手仍在战斗——联网对局永不暂停。
 [Enter] leave match   ·   [Esc] keep playing,[Enter] leave match   ·   [Esc] keep playing,[Enter] 离开对局   ·   [Esc] 继续战斗
+Easy,Easy,简单
+Hard,Hard,困难
+[H] Difficulty: %s,[H] Difficulty: %s,[H] 难度：%s
+records: Normal only,records: Normal only,记录仅限“正常”难度
+BOSS SLAIN — YOU SURVIVED THE ARC,BOSS SLAIN — YOU SURVIVED THE ARC,首领已灭——你挺过了整场战局
+Survived %s beyond the boss,Survived %s beyond the boss,击败首领后又坚持了 %s

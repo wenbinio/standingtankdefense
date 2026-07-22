@@ -83,11 +83,33 @@ var best_damage := 0
 var best_gold := 0
 var total_runs := 0
 var total_deaths := 0
+var total_victories := 0             # boss-kill runs recorded (Normal only)
 var run_history: Array = []          # newest-first {round, damage, mmss, when}
 var unseen_achievements: Array = []  # unlocked but not yet viewed in SkinSelect
 var _locale := "en"              # persisted UI language ("en" / "zh_CN")
 var _screen_shake := true        # persisted render pref: camera shake/zoom punch
 var _game_speed := 0             # persisted single-player pace (index into SPEED_TPS)
+
+# --- SP difficulty (deploy-time choice, persisted) ---------------------------
+# Preset codes mirror the sim's content::DIFF_* (0 Easy · 1 Normal · 2 Hard).
+# UNLIKE the cosmetic prefs above this one DOES feed the sim — main.gd passes
+# it to StSim.new_match_with_difficulty, where it becomes authoritative arena
+# state (checksummed; SP-only — the MP/director path is hard-coded Normal).
+# Records/achievements are only credited on Normal (guarded in main.gd).
+const DIFF_NORMAL := 1
+const DIFF_NAMES := ["Easy", "Normal", "Hard"]   # translation-table keys
+var _difficulty := DIFF_NORMAL
+
+func difficulty() -> int:
+	return _difficulty
+
+func set_difficulty(code: int) -> void:
+	_difficulty = clampi(code, 0, DIFF_NAMES.size() - 1)
+	_save()
+
+# Untranslated name key of the active preset (tr() at the draw boundary).
+func difficulty_name() -> String:
+	return DIFF_NAMES[_difficulty]
 
 # Single-player game-speed table: sim ticks per wall-clock second by speed code
 # (0 Normal ×1.0 · 1 Fast ×1.5 · 2 Faster ×2.0 · 3 Hyper ×3.0). CADENCE ONLY:
@@ -216,7 +238,11 @@ func record_run(rec: Dictionary, mmss: String) -> Dictionary:
 	best_damage = maxi(best_damage, dmg)
 	best_gold = maxi(best_gold, gld)
 	total_runs += 1
-	if not bool(rec.get("won", false)):
+	if bool(rec.get("won", false)):
+		# SP victory: the boss died on this run (the run itself still ends at
+		# the tank's death — victory latches, per docs/02 §2.7's prestige goal).
+		total_victories += 1
+	else:
 		total_deaths += 1
 	var dt := Time.get_datetime_dict_from_system()   # render-side only, never sim
 	run_history.push_front({
@@ -301,6 +327,7 @@ func reset() -> void:
 	best_gold = 0
 	total_runs = 0
 	total_deaths = 0
+	total_victories = 0
 	run_history = []
 	unseen_achievements = []
 	_save()
@@ -314,6 +341,7 @@ func _load() -> void:
 	_locale = cf.get_value("profile", "locale", "en")
 	_screen_shake = bool(cf.get_value("profile", "screen_shake", true))
 	_game_speed = clampi(int(cf.get_value("profile", "game_speed", 0)), 0, SPEED_TPS.size() - 1)
+	_difficulty = clampi(int(cf.get_value("profile", "difficulty", DIFF_NORMAL)), 0, DIFF_NAMES.size() - 1)
 	for id in cf.get_value("profile", "earned", []):
 		earned[id] = true
 	if not is_unlocked(selected):   # a skin that lost its unlock falls back
@@ -324,6 +352,7 @@ func _load() -> void:
 	best_gold = int(cf.get_value("records", "best_gold", 0))
 	total_runs = int(cf.get_value("records", "total_runs", 0))
 	total_deaths = int(cf.get_value("records", "total_deaths", 0))
+	total_victories = int(cf.get_value("records", "total_victories", 0))
 	run_history = cf.get_value("records", "history", [])
 	unseen_achievements = cf.get_value("records", "unseen_achievements", [])
 
@@ -337,12 +366,14 @@ func _save() -> void:
 	cf.set_value("profile", "locale", _locale)
 	cf.set_value("profile", "screen_shake", _screen_shake)
 	cf.set_value("profile", "game_speed", _game_speed)
+	cf.set_value("profile", "difficulty", _difficulty)
 	cf.set_value("profile", "earned", earned.keys())
 	cf.set_value("records", "best_round", best_round)
 	cf.set_value("records", "best_damage", best_damage)
 	cf.set_value("records", "best_gold", best_gold)
 	cf.set_value("records", "total_runs", total_runs)
 	cf.set_value("records", "total_deaths", total_deaths)
+	cf.set_value("records", "total_victories", total_victories)
 	cf.set_value("records", "history", run_history)
 	cf.set_value("records", "unseen_achievements", unseen_achievements)
 	cf.save(SAVE_PATH)

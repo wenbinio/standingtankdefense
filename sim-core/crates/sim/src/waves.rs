@@ -31,7 +31,7 @@ pub(crate) fn spawn(s: &mut ArenaState) {
     }
 
     // Enemy HP scales with match time (`enemy_hp_mult` — the source-shaped curve).
-    let hp_mult = content::enemy_hp_mult(s.tick);
+    let hp_mult = content::enemy_hp_mult_at(s.tick, s.difficulty);
     // Process wave entries in their fixed catalog order so the rng_spawn draws
     // happen in a deterministic sequence.
     for ws in content::WAVE_M0 {
@@ -192,6 +192,85 @@ mod tests {
                 < m(boss).scale_i64(10000) / 20,
             "no instantaneous jump at the boss tick"
         );
+    }
+
+    #[test]
+    fn difficulty_scales_the_base_ramp_only() {
+        // SP DIFFICULTY PRESETS: Easy/Hard swap only the per-minute BASE ramp
+        // (Easy 97/80 · Normal 5/4 · Hard 103/80 — ×0.85 / ×1.15 on Normal's
+        // +25%/min increment); the grace window, the 10:00 step and the swift
+        // end are shared. Normal must stay bit-identical to `enemy_hp_mult`.
+        use crate::content::{enemy_hp_mult, enemy_hp_mult_at, DIFF_EASY, DIFF_HARD, DIFF_NORMAL};
+        let pow = |num: i64, den: i64, k: u32| -> Fixed {
+            let f = Fixed::from_ratio(num, den);
+            let mut b = Fixed::ONE;
+            for _ in 0..k {
+                b = b.mul(f);
+            }
+            b
+        };
+
+        // (1) Normal == the calibrated competitive curve, every sampled tick.
+        let mut t = 0u32;
+        while t <= content::BOSS_SPAWN_TICK + 4 * 1800 {
+            assert_eq!(enemy_hp_mult_at(t, DIFF_NORMAL), enemy_hp_mult(t));
+            t += 30;
+        }
+
+        // (2) Opening grace: ×1 on all three through 2:00.
+        for d in [DIFF_EASY, DIFF_NORMAL, DIFF_HARD] {
+            assert_eq!(enemy_hp_mult_at(2 * 1800, d), Fixed::ONE);
+        }
+
+        // (3) Whole-minute pins: at 5:00 (3 compounded minutes past the grace)
+        // each preset is exactly its ramp rate cubed — and strictly ordered.
+        let e5 = enemy_hp_mult_at(5 * 1800, DIFF_EASY);
+        let n5 = enemy_hp_mult_at(5 * 1800, DIFF_NORMAL);
+        let h5 = enemy_hp_mult_at(5 * 1800, DIFF_HARD);
+        assert_eq!(e5, pow(97, 80, 3));
+        assert_eq!(n5, pow(5, 4, 3));
+        assert_eq!(h5, pow(103, 80, 3));
+        assert!(e5 < n5 && n5 < h5);
+
+        // (4) The +20% step and the ×1.5/min swift end are difficulty-blind:
+        // the same multiplicative jumps land on every preset.
+        for d in [DIFF_EASY, DIFF_HARD] {
+            // ×100 granularity, like the Normal-curve pin: one tick of
+            // piecewise-linear drift sits below it, the +20% jump far above.
+            assert_eq!(
+                enemy_hp_mult_at(content::SCALE_STEP_TICK, d).scale_i64(100),
+                enemy_hp_mult_at(content::SCALE_STEP_TICK - 1, d)
+                    .mul(Fixed::from_ratio(6, 5))
+                    .scale_i64(100),
+                "10:00 step must be exactly +20% on preset {d}"
+            );
+            let boss = content::BOSS_SPAWN_TICK;
+            assert_eq!(
+                enemy_hp_mult_at(boss + 1800, d).scale_i64(100),
+                enemy_hp_mult_at(boss, d)
+                    .mul(Fixed::from_ratio(3, 2))
+                    .scale_i64(100),
+                "swift end must compound ×1.5/min on preset {d}"
+            );
+        }
+
+        // (5) Constructor plumbing: the preset lands on the arena (invalid
+        // codes clamp to Normal) and spawns actually ride it — the same tick's
+        // spawn has less HP on Easy than on Hard.
+        assert_eq!(ArenaState::new(7, 0).difficulty, DIFF_NORMAL);
+        assert_eq!(
+            ArenaState::new_with_difficulty(7, 0, 9).difficulty,
+            DIFF_NORMAL
+        );
+        let spawn_hp = |d: u8| -> i64 {
+            let mut s = ArenaState::new_with_difficulty(7, 0, d);
+            s.tick = 14 * 1800; // late pre-boss, deep into the ramp
+            s.tick -= s.tick % content::EARLY_GRUNT_CADENCE; // grunt stream fires
+            spawn(&mut s);
+            s.enemies[0].hp
+        };
+        assert!(spawn_hp(DIFF_EASY) < spawn_hp(DIFF_NORMAL));
+        assert!(spawn_hp(DIFF_NORMAL) < spawn_hp(DIFF_HARD));
     }
 
     #[test]

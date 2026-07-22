@@ -4115,6 +4115,36 @@ pub const BOSS_CONTACT_CADENCE: u32 = 16;
 const RAMP_BASE: (i64, i64) = (5, 4); // +25%/min — the overall-scale dial
 const STEP_10MIN: (i64, i64) = (6, 5); //  +20% step at 10:00 (source)
 const SWIFT_END: (i64, i64) = (3, 2); //   ×1.5/min after 15:00 — the swift end
+
+/// SINGLE-PLAYER difficulty presets over the `RAMP_BASE` dial (docs/06).
+/// The code is AUTHORITATIVE arena state: it feeds `state_checksum` and rides
+/// the snapshot (v23). SP-ONLY BY CONSTRUCTION: only the single-player
+/// constructor path (`ArenaState::new_with_difficulty`) can select Easy/Hard;
+/// `ArenaState::new` — the MP/director/harness path — is hard-coded Normal, so
+/// the competitive arc and the calibrated 17–23% win band are untouched.
+pub const DIFF_EASY: u8 = 0;
+pub const DIFF_NORMAL: u8 = 1;
+pub const DIFF_HARD: u8 = 2;
+
+/// Per-minute base-ramp rate by difficulty — exact rationals derived from
+/// `RAMP_BASE`'s +25%/min increment (TUNABLE, same review gate as `RAMP_BASE`
+/// itself): Easy scales the increment ×0.85 → +21.25%/min = 97/80; Hard ×1.15
+/// → +28.75%/min = 103/80. Difficulty touches the BASE RAMP ONLY — the +20%
+/// step (`STEP_10MIN`), the swift end (`SWIFT_END`), the grace window, the
+/// wave table and the fixed-stat boss are identical on all three, so an
+/// Easy/Hard run keeps the source arc's shape, just gentler/steeper.
+const RAMP_EASY: (i64, i64) = (97, 80); // +21.25%/min (×0.85 on the increment)
+const RAMP_HARD: (i64, i64) = (103, 80); // +28.75%/min (×1.15 on the increment)
+
+/// The base-ramp `(num, den)` for a difficulty code (unknown codes = Normal —
+/// the same clamp `ArenaState::new_with_difficulty` applies).
+const fn ramp_base_for(difficulty: u8) -> (i64, i64) {
+    match difficulty {
+        DIFF_EASY => RAMP_EASY,
+        DIFF_HARD => RAMP_HARD,
+        _ => RAMP_BASE,
+    }
+}
 /// The base ramp holds ×1 for this many opening minutes before compounding
 /// starts. Preserves the shipped "brutal opening" design window (docs/06,
 /// `balance_guards.rs`): the ≤2-min eco-rush punish is carried by WAVE VOLUME
@@ -4140,7 +4170,20 @@ const SWIFT_END_CAP_MIN: u32 = 15;
 ///     boss fight scale hard enough to end any stalled match.
 /// Monotonic non-decreasing; the only instantaneous jump is the 10:00 step.
 /// `RAMP_BASE` is the overall-scale / win-rate dial. Integer/fixed-point only.
+///
+/// The Normal-difficulty curve (`= enemy_hp_mult_at(tick, DIFF_NORMAL)`) —
+/// the calibrated competitive curve every MP/harness path uses. Hot-path sim
+/// callers go through [`enemy_hp_mult_at`] with the arena's authoritative
+/// `difficulty` instead.
 pub fn enemy_hp_mult(tick: u32) -> Fixed {
+    enemy_hp_mult_at(tick, DIFF_NORMAL)
+}
+
+/// [`enemy_hp_mult`] at an explicit SP difficulty: identical curve shape, with
+/// only the per-minute BASE ramp swapped per [`ramp_base_for`] (Easy 97/80 ·
+/// Normal 5/4 · Hard 103/80). At `DIFF_NORMAL` this is bit-identical to the
+/// pre-difficulty curve. Deterministic, integer/fixed-point only.
+pub fn enemy_hp_mult_at(tick: u32, difficulty: u8) -> Fixed {
     // f^k by repeated multiplication — deterministic, cheap (k ≤ 15).
     let pow = |f: Fixed, k: u32| -> Fixed {
         let mut b = Fixed::ONE;
@@ -4163,7 +4206,8 @@ pub fn enemy_hp_mult(tick: u32) -> Fixed {
         lo + (hi - lo).mul(frac)
     };
 
-    let base_rate = Fixed::from_ratio(RAMP_BASE.0, RAMP_BASE.1);
+    let (rb_num, rb_den) = ramp_base_for(difficulty);
+    let base_rate = Fixed::from_ratio(rb_num, rb_den);
     // Base ramp: ×1 through the opening grace (`RAMP_GRACE_MIN`), then per-minute
     // compounding; frozen at its 15:00 value once the boss arrives (the swift end
     // takes over as the growth engine from there).

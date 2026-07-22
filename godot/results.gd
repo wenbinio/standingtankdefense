@@ -35,6 +35,8 @@ const TIPS := [
 
 # --- cached report strings (composed ONCE in set_report; no per-frame allocs) --
 var _report := {}
+var _victory := false                    # boss slain this run → gold variant
+var _title := ""                         # panel headline (defeat or victory)
 var _stat_vals := PackedStringArray()    # round / damage / gold / weapons values
 var _stat_bests := PackedStringArray()   # dim "best: N" companions ("" = none)
 var _new_best := ""                      # gold headline under the subtitle
@@ -77,6 +79,13 @@ func set_report(report: Dictionary) -> void:
 	var runs := int(report.get("total_runs", 0))
 	var had_history := runs > 1   # a PREVIOUS run exists to compare against
 
+	# SP VICTORY VARIANT: the boss died on this run (main.gd's latch), so the
+	# panel reframes gold — title/accents swap, stats stay identical. The run
+	# still ended in the tank's death; that is the "you survived the arc" fantasy
+	# (docs/02 §2.7's prestige goal), not a different stats set.
+	_victory = bool(report.get("won", false))
+	_title = tr("BOSS SLAIN — YOU SURVIVED THE ARC") if _victory else tr("TANK DESTROYED")
+
 	# Stat values + "best: N" companions (A1). No garbage comparisons on the
 	# very first run — companions only appear once a previous best exists.
 	_stat_vals = PackedStringArray([
@@ -102,6 +111,12 @@ func set_report(report: Dictionary) -> void:
 	_info_lines = []
 	var tick := int(report.get("tick", 0))
 	_info_lines.append([tr("Survived %s") % _mmss(tick), ArtTheme.ui("text")])
+	if _victory:
+		# Victory clock: how long the run lasted BEYOND the boss kill (the
+		# swift-end waves keep coming; outlasting them is the bonus flex).
+		var won_tick := int(report.get("won_tick", tick))
+		_info_lines.append([tr("Survived %s beyond the boss") % _mmss(tick - won_tick),
+			ArtTheme.ui("coin")])
 	var boss_tick := int(report.get("boss_spawn_tick", 0))
 	var boss_permille := int(report.get("boss_hp_permille", -1))
 	if boss_permille >= 0:
@@ -119,6 +134,11 @@ func set_report(report: Dictionary) -> void:
 		elif rnd < prev_best:
 			_info_lines.append([tr("-%d rounds short of your best") % (prev_best - rnd),
 				ArtTheme.ui("text_dim")])
+	if bool(report.get("records_off", false)):
+		# Easy/Hard runs: full summary, but no bests/achievements landed
+		# (mirrors the SkinSelect hint at the difficulty cycler).
+		_info_lines.append([tr("records: Normal only"),
+			ArtTheme.ui("coin").darkened(0.25)])
 
 	# Death explanation (A11): dominant on-screen kind + trailing-10 s damage.
 	var top_kind := int(report.get("top_kind", -1))
@@ -175,16 +195,20 @@ func _draw() -> void:
 	var px := vp.x * 0.5 - pw * 0.5
 	var py := vp.y * 0.5 - ph * 0.5
 	var panel := Rect2(Vector2(px, py), Vector2(pw, ph))
+	# Accent swaps with the run's ending: red defeat frame, GOLD victory frame
+	# (boss slain — main.gd's latch; the stats/rows below are identical).
+	var accent: Color = ArtTheme.ui("coin") if _victory else ArtTheme.ui("danger")
 	draw_rect(panel, ArtTheme.ui("panel_bg"))
-	draw_rect(panel, ArtTheme.ui("danger").darkened(0.5), false, 2.0)
-	# Emissive top rule so it blooms under glow (boost danger to HDR for bloom).
-	draw_rect(Rect2(Vector2(px, py), Vector2(pw, 3)), ArtTheme.ui("danger") * 1.4)
+	draw_rect(panel, accent.darkened(0.5), false, 2.0)
+	# Emissive top rule so it blooms under glow (boost accent to HDR for bloom).
+	draw_rect(Rect2(Vector2(px, py), Vector2(pw, 3)), accent * 1.4)
 
 	var cx := vp.x * 0.5
-	# Title.
-	var title := tr("TANK DESTROYED")
-	var tw := head.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34).x
-	draw_string(head, Vector2(cx - tw * 0.5, py + 48), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, ArtTheme.ui("danger") * 1.4)
+	# Title (pre-composed in set_report; sized down when the long victory
+	# headline would overflow the 560 px panel).
+	var tsize := 34 if head.get_string_size(_title, HORIZONTAL_ALIGNMENT_LEFT, -1, 34).x <= pw - 40.0 else 22
+	var tw := head.get_string_size(_title, HORIZONTAL_ALIGNMENT_LEFT, -1, tsize).x
+	draw_string(head, Vector2(cx - tw * 0.5, py + 48), _title, HORIZONTAL_ALIGNMENT_LEFT, -1, tsize, accent * 1.4)
 	var sub := tr("Run summary")
 	var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 	draw_string(font, Vector2(cx - sw * 0.5, py + 72), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("text_dim"))

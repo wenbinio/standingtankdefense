@@ -781,7 +781,7 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
     // Contact damage scales with match time on the SAME curve as enemy HP
     // (`content::enemy_hp_mult`): late game gets deadlier, not just tankier
     // (`docs/05`; mirrors the spawn-time HP scaling in `waves::spawn`).
-    let dmg_mult = content::enemy_hp_mult(s.tick);
+    let dmg_mult = content::enemy_hp_mult_at(s.tick, s.difficulty);
     // "+% Frost … slow strength" scales the per-stack Frost slow.
     let frost_mult = s.modifiers.frost_strength_mult;
 
@@ -991,7 +991,7 @@ pub(crate) fn tick_minions(s: &mut ArenaState) {
         return;
     }
 
-    let dmg_mult = content::enemy_hp_mult(now);
+    let dmg_mult = content::enemy_hp_mult_at(now, s.difficulty);
     let reach = Fixed::from_int(MINION_REACH);
     let reach2 = reach.mul(reach);
     let speed = Fixed::from_int(MINION_SPEED);
@@ -1063,7 +1063,7 @@ pub(crate) fn tick_minions(s: &mut ArenaState) {
 /// contact damage / HP (`content::enemy_hp_mult`).
 pub(crate) fn enemy_ranged_attacks(s: &mut ArenaState) {
     let tank_pos = s.tank.pos;
-    let dmg_mult = content::enemy_hp_mult(s.tick);
+    let dmg_mult = content::enemy_hp_mult_at(s.tick, s.difficulty);
 
     // Resolve which enemies fire (and for how much) without holding an enemy
     // borrow across the `defense::hit_tank` mutation. Stable id order.

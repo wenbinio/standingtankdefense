@@ -68,6 +68,13 @@ var _au_was_dead := false      # death edge -> tank_destroyed + defeat
 # --- juice / modules (render-only) -----------------------------------------
 var fx: Fx                    # reusable pooled FX + screen-shake/hitstop bus
 var _recorded := false        # match-end achievements credited once
+# SP VICTORY LATCH: killing the boss (boss-flagged EV_ENEMY_KILLED) marks the
+# run won — permanently. The run CONTINUES (swift-end waves keep coming) and
+# the eventual death still shows the results panel, in its gold victory
+# variant, with "won" recorded in the profile. Render-side only: the latch is
+# derived from the drained event stream and never feeds back into the sim.
+var _won := false
+var _won_tick := -1           # sim tick of the boss kill (-1 = not yet)
 # A11 death forensics (render-side only): ring of tank damage taken per tick
 # over the trailing 10 s (300 ticks @ 30 Hz). Slot tick % window is overwritten
 # every tick, so the ring always holds exactly the last window — no allocs.
@@ -92,7 +99,10 @@ var _bm_was_pending := false
 
 func _ready() -> void:
 	randomize()
-	sim = StSim.new_match(randi())
+	# SP deploy honors the profile's difficulty preset (Easy/Normal/Hard over
+	# the sim's ramp dial — authoritative sim state, SP-only; netplay's
+	# StMatch/director path has no difficulty parameter and stays Normal).
+	sim = StSim.new_match_with_difficulty(randi(), Profile.difficulty())
 	view = SimView.of_sim(sim)
 	fx = Fx.new()
 	# The world canvas is dimmed by ArenaRenderer's CanvasModulate; the UI layer
@@ -245,15 +255,19 @@ func _on_bm_pick(code: int, slot: int) -> bool:
 	return _queue_intent(code, slot)
 
 # Start a fresh single-arena run in-place. Rebuilds the sim exactly as _ready()
-# does — plain new_match(randi()), no challenge (single-arena never applies
-# Profile.active_challenge_code) — then resets every render/juice/FX tracker so
-# nothing leaks across runs. Clearing _recorded re-arms the once-per-run
-# achievement latch so the new run credits its own play.
+# does — new_match_with_difficulty(randi(), profile preset), no challenge
+# (single-arena never applies Profile.active_challenge_code) — then resets
+# every render/juice/FX tracker so nothing leaks across runs. Clearing
+# _recorded re-arms the once-per-run achievement latch so the new run credits
+# its own play.
 func _redeploy() -> void:
-	sim = StSim.new_match(randi())
+	sim = StSim.new_match_with_difficulty(randi(), Profile.difficulty())
 	view = SimView.of_sim(sim)
 	fx = Fx.new()
 	_recorded = false
+	# Fresh run: the victory latch re-arms.
+	_won = false
+	_won_tick = -1
 	_intents.clear()
 	pending_code = 0
 	pending_slot = 0
@@ -293,10 +307,18 @@ func _physics_process(_delta: float) -> void:
 			# (all result strings composed here at the death edge, never per frame).
 			_recorded = true
 			var rec: Dictionary = view.stats_record()
-			rec["won"] = false                              # single-arena: no opponents
+			# SP victory = the boss died on this run (latched above). "won"
+			# feeds the profile record + the sole_survivor-style framing.
+			rec["won"] = _won
 			var prev_best_round: int = Profile.best_round   # before this run lands
-			var unlocks: Array = Profile.record_match(rec)
-			var bests: Dictionary = Profile.record_run(rec, _mmss(view.tick()))
+			# RECORDS GUARD: bests/achievements/history only land on Normal —
+			# an Easy run must not set farmable PBs and a Hard run must not
+			# demand them (the SkinSelect hint says so). Easy/Hard still get
+			# the full results panel, just with no record side-effects.
+			var on_normal: bool = Profile.difficulty() == Profile.DIFF_NORMAL
+			var unlocks: Array = Profile.record_match(rec) if on_normal else []
+			var bests: Dictionary = \
+				Profile.record_run(rec, _mmss(view.tick())) if on_normal else {}
 			_results.set_report(_build_death_report(rec, unlocks, bests, prev_best_round))
 			# Death-moment celebration (A1/A6): gold NEW BEST banner (round beats
 			# damage beats gold when several land), then achievement banners —
@@ -363,10 +385,24 @@ func _step_one_tick() -> void:
 			_bm.pick_failed()
 	# A11 forensics ring: bank this tick's incoming tank damage (0 most ticks —
 	# the write itself is what expires the stale slot from one window ago).
+	# Same pass: watch for the boss-flagged kill that latches SP victory.
 	var tank_dmg := 0
 	for ev in events:
 		if ev.kind == SimView.EV_TANK_HIT:
 			tank_dmg += int(ev.damage)
+		elif ev.kind == SimView.EV_ENEMY_KILLED and bool(ev.boss) and not _won:
+			# SP VICTORY (docs/02 §2.7's prestige goal, rendered): latch — the
+			# run keeps going against the swift-end tide, but it is now a win.
+			# COMPOSITION with the existing boss-death juice: arena_renderer
+			# already fires the kill's flash/shockwaves/slow-mo (stage 1) and
+			# the delayed gold fountain (stage 2) from this same event — those
+			# stay untouched; this adds the ONE gold banner + victory sting on
+			# top, guarded by the latch so nothing can ever double-fire.
+			_won = true
+			_won_tick = view.tick()
+			fx.banner(tr("BOSS SLAIN — YOU SURVIVED THE ARC"),
+				Color(1.9, 1.6, 0.7), 2.6, 46)
+			Audio.play(&"victory")
 	_hit_ring[view.tick() % HIT_WINDOW_TICKS] = tank_dmg
 	_arena.tick_juice(events)
 	_update_audio(events, pending_code, au_gold_before)
@@ -408,6 +444,9 @@ func _build_death_report(rec: Dictionary, unlocks: Array, bests: Dictionary,
 		"rec": rec,
 		"unlocks": unlocks,
 		"bests": bests,
+		"won": _won,                        # SP victory latch (boss killed)
+		"won_tick": _won_tick,              # boss-kill tick (victory clock base)
+		"records_off": Profile.difficulty() != Profile.DIFF_NORMAL,
 		"prev_best_round": prev_best_round,
 		"tick": view.tick(),
 		"boss_spawn_tick": view.boss_spawn_tick(),
@@ -474,12 +513,15 @@ func _process(delta: float) -> void:
 #                  4/5 Black-Market pick, voiced in _step_one_tick · else none)
 #   `gold_before`= gold sampled BEFORE the step, to confirm a buy actually spent.
 func _update_audio(events: Array, intent: int, gold_before: int) -> void:
-	# --- death edge: tank_destroyed + defeat (single-arena has no victory).
+	# --- death edge: tank_destroyed always; the defeat sting only on a LOST
+	# run — a boss-slaying (latched-victory) run already had its victory sting
+	# at the kill and ends on the gold results panel, not a defeat note.
 	# Your own death has NO sim event, so this edge tracker stays.
 	var dead: bool = view.is_dead()
 	if dead and not _au_was_dead:
 		Audio.play(&"tank_destroyed")
-		Audio.play(&"defeat")
+		if not _won:
+			Audio.play(&"defeat")
 	_au_was_dead = dead
 	if dead:
 		return   # frozen run: no further gameplay SFX while on the results panel

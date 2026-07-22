@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x7b9690c6d0e661f0, // re-baselined (MERGED DEFERRED-FIDELITY PASSES): the Battle Fervor healing-weapon scoping (`Modifiers::healing_weapon_healthy_dmg`) and the Black Market picker (`ArenaState::pending_black_market`, effect change from voucher to held pick — this one alters the M0 trajectory via the bot redeeming picks) landed together; both add checksummed fields (snapshot v22) and the combined trajectory differs from either branch alone, so this value was captured fresh from `cargo run -p harness` on the merged tree. (Previous baseline 0x672269466cd58df0 was the source-arc restoration.)
+        0xb7c1308925f50f6d, // re-baselined (SP DIFFICULTY, snapshot v23): `ArenaState::difficulty` entered the digest (`checksum()` writes it after `player_id`). PURE FIELD-DOMAIN SHIFT, NOT a trajectory shift: the M0 scenario runs `ArenaState::new` = Normal, and with the new digest write temporarily disabled the harness reproduced the previous golden 0x7b9690c6d0e661f0 bit-exactly — every simulated state is unchanged; only the digest domain grew. Captured fresh from `cargo run -p harness` with the write restored. (Previous baseline 0x7b9690c6d0e661f0 was the merged deferred-fidelity passes.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

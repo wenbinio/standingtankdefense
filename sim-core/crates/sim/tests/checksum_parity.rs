@@ -139,6 +139,7 @@ fn header_and_bookkeeping_fields_feed_checksum() {
     parity("round", |s| s.round = 3);
     parity("master_seed", |s| s.master_seed ^= 1);
     parity("player_id", |s| s.player_id = 7);
+    parity("difficulty", |s| s.difficulty = sim::content::DIFF_HARD);
     parity("next_entity_id", |s| s.next_entity_id += 1);
     parity("dead", |s| s.dead = true);
     parity("death_tick", |s| s.death_tick = Some(5));

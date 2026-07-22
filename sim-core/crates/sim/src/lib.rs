@@ -129,6 +129,9 @@ pub fn checksum(s: &ArenaState) -> u64 {
     c.write_u32(s.round);
     c.write_u64(s.master_seed);
     c.write_u32(s.player_id);
+    // SP difficulty preset — authoritative (it steers the enemy ramp), so two
+    // arenas differing only in difficulty must never digest equal.
+    c.write_u32(s.difficulty as u32);
 
     c.write_i64(s.tank.hp);
     c.write_i64(s.tank.max_hp);

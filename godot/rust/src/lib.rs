@@ -4,7 +4,9 @@
 //! engine-agnostic render contract). No game logic lives here — only marshaling.
 //!
 //! GDScript surface (see ../main.gd):
-//!   var sim = StSim.new_match(seed)
+//!   var sim = StSim.new_match(seed)                    # Normal difficulty
+//!   var sim = StSim.new_match_with_difficulty(seed, d) # SP: 0 Easy·1 Normal·2 Hard
+//!   sim.difficulty()
 //!   sim.step(code, slot)          # 0 Noop · 1 Buy(slot) · 2 Reroll · 3 Clear
 //!                                 # 4 BMPick weapon · 5 BMPick upgrade (slot = catalog idx)
 //!   sim.black_market_pending()
@@ -154,10 +156,21 @@ pub struct StSim {
 
 #[godot_api]
 impl StSim {
-    /// Start a fresh match with the given RNG seed.
+    /// Start a fresh match with the given RNG seed (Normal difficulty).
     #[func]
     fn new_match(seed: i64) -> Gd<StSim> {
-        let state = ArenaState::new(seed as u64, 0);
+        Self::new_match_with_difficulty(seed, sim::content::DIFF_NORMAL as i64)
+    }
+
+    /// Start a fresh SINGLE-PLAYER match at an explicit difficulty preset
+    /// (0 Easy · 1 Normal · 2 Hard — out-of-range clamps to Normal). SP-only
+    /// by construction: `StMatch`/the director path has no difficulty
+    /// parameter and always runs Normal, so the competitive arc is untouched.
+    /// The code is authoritative sim state (checksummed, snapshot v23).
+    #[func]
+    fn new_match_with_difficulty(seed: i64, difficulty: i64) -> Gd<StSim> {
+        let code = u8::try_from(difficulty).unwrap_or(sim::content::DIFF_NORMAL);
+        let state = ArenaState::new_with_difficulty(seed as u64, 0, code);
         let view = view::snapshot(&state);
         Gd::from_init_fn(|base| StSim {
             state,
@@ -165,6 +178,12 @@ impl StSim {
             events: Vec::new(),
             base,
         })
+    }
+
+    /// The arena's difficulty preset code (0 Easy · 1 Normal · 2 Hard).
+    #[func]
+    fn difficulty(&self) -> i64 {
+        self.state.difficulty as i64
     }
 
     /// Advance exactly one sim tick with the player's action this tick.
