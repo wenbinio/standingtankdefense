@@ -43,7 +43,9 @@ That's it — you'll boot to the **Tank Select** screen.
 1. On **Tank Select**, press **Enter** to deploy with the starter tank.
 2. You're now in a single arena. Enemies stream in from the ring toward your tank.
 3. A **shop bar** sits along the bottom. Press **1–8** (or click a card) to buy.
-   **Slots 1–4 are weapons; slots 5–8 are economy / passives / spikes.**
+   **All 8 slots roll independently from one weighted pool** — weapons and
+   economy / passives / spikes appear mixed; each card's colored pip and label
+   show its category, and rarer cards (rare/epic) are less common.
 4. Keep buying as gold comes in. The shop **refreshes every round (~30s)**; press
    **R** to reroll it sooner. (The shop **closes for good at 15:00** — it flees
    when the boss arrives — so spend before the bell.)
@@ -82,8 +84,11 @@ Your tank sits at the center. The **HUD** (top-left) shows your **HP**, **gold**
 you currently own. The **shop bar** is along the bottom.
 
 **Shop rules**
-- **8 offers** per round. **Slots 1–4 are always weapons**; **slots 5–8 are
-  economy, passives, and spikes.**
+- **8 offers** per round. **Every slot rolls independently** from one weighted
+  pool — first weapon-vs-modifier, then rarity (**50 / 30 / 15 / 5** for
+  common / uncommon / rare / epic) — so the board is a mix, not fixed halves.
+  The colored **category pip** on each card (weapon / economy / spike / passive)
+  tells you what it is.
 - **Buy:** press the slot's number **1–8**, or click the card. Buy as many as you
   can afford.
 - **Hover** a card for its lore + mechanical effect, its cost, and rarity.
@@ -103,7 +108,11 @@ you currently own. The **shop bar** is along the bottom.
 | **Esc** | Back to Tank Select |
 
 **When you die:** a centered **run summary** appears (round reached, damage, gold,
-weapons bought, and any achievements you just unlocked).
+weapons bought — each with your **personal best** beside it — plus how close you
+came to the boss, what overwhelmed you, any achievements you just unlocked, and
+your **next achievement goals**). Personal bests and your last runs persist
+between sessions. The pause menu (**Esc** while alive) also offers a
+confirm-gated **Restart Run**.
 - **Enter / Space / click Redeploy** — start a fresh run immediately.
 - **Esc** — back to Tank Select.
 
@@ -158,9 +167,9 @@ in the arena to mute/unmute sound. Both stick between sessions.
 ## 4. How to play well
 
 - **You can't move.** Positioning isn't the game — **shop decisions** are.
-- **Weapons vs. economy:** weapons (slots 1–4) kill things now; economy (slots
-  5–8) compounds your gold so you can out-buy the late game. Most runs want some
-  of both — pure-greed and pure-aggression are both viable but risky.
+- **Weapons vs. economy:** weapons kill things now; economy compounds your gold
+  so you can out-buy the late game. Most runs want some of both — pure-greed and
+  pure-aggression are both viable but risky.
 - **Clear (Space)** is your panic button and your **only answer to the boss**
   (~10 Clears to kill it) — but it's on a cooldown, so spend it wisely.
 - **High-risk picks exist on purpose.** Some cheap cards are deliberately

@@ -68,6 +68,11 @@ var _au_was_dead := false      # death edge -> tank_destroyed + defeat
 # --- juice / modules (render-only) -----------------------------------------
 var fx: Fx                    # reusable pooled FX + screen-shake/hitstop bus
 var _recorded := false        # match-end achievements credited once
+# A11 death forensics (render-side only): ring of tank damage taken per tick
+# over the trailing 10 s (300 ticks @ 30 Hz). Slot tick % window is overwritten
+# every tick, so the ring always holds exactly the last window — no allocs.
+const HIT_WINDOW_TICKS := 300
+var _hit_ring := PackedInt64Array()
 # P3.9: the results panel holds off ~0.8 s so the death FX sequence can play.
 const RESULTS_DELAY_MS := 800
 var _dead_since_ms := -1      # wall-clock ms of the is_dead() edge (-1 = alive)
@@ -97,6 +102,10 @@ func _ready() -> void:
 		ui_node.modulate = _arena.AMBIENT_DIM
 	# Black Market picks route back through the SAME intent FIFO as buy/reroll.
 	_bm.on_pick = _on_bm_pick
+	# A12: the pause menu's confirm-gated "Restart Run" reuses the exact
+	# _redeploy() path (the menu closes itself before calling).
+	_pause_menu.on_restart = _redeploy
+	_hit_ring.resize(HIT_WINDOW_TICKS)   # zero-filled by resize
 	_wire_modules()
 	# AUDIO (render-only): start the looping ambient bed.
 	Audio.set_music("ambient_bed.wav")
@@ -256,6 +265,9 @@ func _redeploy() -> void:
 	_bm_was_pending = false
 	# Re-arm the death-edge audio tracker for the fresh run.
 	_au_was_dead = false
+	# Fresh run: empty damage ring + stale death report dropped.
+	_hit_ring.fill(0)
+	_results.clear_report()
 	_wire_modules()
 
 func _physics_process(_delta: float) -> void:
@@ -276,12 +288,32 @@ func _physics_process(_delta: float) -> void:
 		_shop.pending_code = pending_code
 		_shop.pending_slot = pending_slot
 		if not _recorded:
-			# Credit your own run's achievements from how you actually played.
+			# Credit your own run's achievements + personal records from how you
+			# actually played, and build the results panel's death report ONCE
+			# (all result strings composed here at the death edge, never per frame).
 			_recorded = true
 			var rec: Dictionary = view.stats_record()
 			rec["won"] = false                              # single-arena: no opponents
-			for id in Profile.record_match(rec):
-				print("Achievement unlocked: ", Profile.ach_def(id).get("name", id))
+			var prev_best_round: int = Profile.best_round   # before this run lands
+			var unlocks: Array = Profile.record_match(rec)
+			var bests: Dictionary = Profile.record_run(rec, _mmss(view.tick()))
+			_results.set_report(_build_death_report(rec, unlocks, bests, prev_best_round))
+			# Death-moment celebration (A1/A6): gold NEW BEST banner (round beats
+			# damage beats gold when several land), then achievement banners —
+			# rarer, so they win the single fx banner slot. &"victory" sting for
+			# both (the orchestrator re-points sting names after the audio pass).
+			if bool(bests.get("round", false)):
+				fx.banner(tr("NEW BEST ROUND!"), Color(1.8, 1.5, 0.6), 1.8, 48)
+			elif bool(bests.get("damage", false)):
+				fx.banner(tr("NEW BEST DAMAGE!"), Color(1.8, 1.5, 0.6), 1.8, 48)
+			elif bool(bests.get("gold", false)):
+				fx.banner(tr("NEW BEST GOLD!"), Color(1.8, 1.5, 0.6), 1.8, 48)
+			if bests.values().has(true):
+				Audio.play(&"victory")
+			for id in unlocks:
+				fx.banner("★ " + tr(String(Profile.ach_def(id).get("name", id))),
+					Color(1.9, 1.6, 0.7), 2.2, 44)
+				Audio.play(&"victory")
 		_arena.tick_juice([])
 		_update_audio([], pending_code, view.gold())
 		_sync_black_market()
@@ -329,6 +361,13 @@ func _step_one_tick() -> void:
 			Audio.play(&"buy")
 		elif bm_was_held:
 			_bm.pick_failed()
+	# A11 forensics ring: bank this tick's incoming tank damage (0 most ticks —
+	# the write itself is what expires the stale slot from one window ago).
+	var tank_dmg := 0
+	for ev in events:
+		if ev.kind == SimView.EV_TANK_HIT:
+			tank_dmg += int(ev.damage)
+	_hit_ring[view.tick() % HIT_WINDOW_TICKS] = tank_dmg
 	_arena.tick_juice(events)
 	_update_audio(events, pending_code, au_gold_before)
 
@@ -343,6 +382,49 @@ func _drain_one_intent() -> void:
 		var intent: Array = _intents.pop_front()
 		pending_code = intent[0]
 		pending_slot = intent[1]
+
+# Assemble the render-side death report ONCE at the death edge (A1/A2/A7/A11):
+# everything the results panel shows beyond the raw stats — near-miss timing,
+# the final-10-seconds forensics, next goals, and the personal-best context.
+# Reads only the frozen sim view + Profile; results.set_report composes the
+# display strings from this exactly once.
+func _build_death_report(rec: Dictionary, unlocks: Array, bests: Dictionary,
+		prev_best_round: int) -> Dictionary:
+	# Census of enemy kinds on screen at the death moment -> dominant kind.
+	var counts := {}
+	for k in view.enemies_kind():
+		counts[int(k)] = int(counts.get(int(k), 0)) + 1
+	var top_kind := -1
+	var top_n := 0
+	for k in counts:
+		if int(counts[k]) > top_n:
+			top_kind = int(k)
+			top_n = int(counts[k])
+	var recent := 0
+	for d in _hit_ring:
+		recent += int(d)
+	var boss: Dictionary = view.boss_info()
+	return {
+		"rec": rec,
+		"unlocks": unlocks,
+		"bests": bests,
+		"prev_best_round": prev_best_round,
+		"tick": view.tick(),
+		"boss_spawn_tick": view.boss_spawn_tick(),
+		"boss_hp_permille": int(boss.get("hp_permille", -1)),   # -1 = no boss up
+		"top_kind": top_kind,
+		"top_kind_count": top_n,
+		"recent_damage": recent,
+		"total_runs": Profile.total_runs,   # post-increment (drives tip rotation)
+		"goals": Profile.nearest_goals(rec),
+	}
+
+# "mm:ss" for a tick count (floor'd to whole seconds; hud.gd's formatter).
+func _mmss(ticks: int) -> String:
+	@warning_ignore("integer_division")
+	var secs := maxi(ticks, 0) / TICK_HZ
+	@warning_ignore("integer_division")
+	return "%02d:%02d" % [secs / 60, secs % 60]
 
 # Black Market pending-edge sync (once per physics frame, after all steps):
 # on false->true the overlay arms — the eligible choice lists are built HERE,

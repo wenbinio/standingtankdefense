@@ -83,24 +83,21 @@ func _draw() -> void:
 		tr("click a card or press [1-8] to buy  ·  refreshes every round (30s)  ·  buy as many as you can afford") + "  ·  " + audio_hint,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
 
+	# All 8 slots roll independently from ONE weighted pool (shop.rs draws
+	# category then rarity per slot) — no fixed weapon/modifier halves, so no
+	# group headers or divider; each card's category pip + label say what it is.
 	var n := offers.size()
-	var split := 4              # slots 0-3 are weapons, 4-7 are economy/passives/spikes
 	var btn_w := 156.0
 	var left := 14.0
 	var top := y0 + 54.0
 	var ch := bar_h - 64.0
 	var gap := 8.0
-	var group_gap := 30.0
 	var area := vp.x - left - btn_w - 16.0
-	var cw := (area - group_gap - gap * (n - 2)) / maxf(n, 1)
+	var cw := (area - gap * (n - 1)) / maxf(n, 1)
 
 	shop_rects.clear()
 	var x := left
 	for i in n:
-		if i == split:
-			# divider between the two groups
-			draw_rect(Rect2(Vector2(x - group_gap * 0.5 - gap * 0.5, top - 18), Vector2(2, ch + 18)), ArtTheme.ui("panel_border"))
-			x += group_gap - gap
 		var r := Rect2(x, top, cw, ch)
 		shop_rects.append(r)
 		var offer: Dictionary = offers[i]
@@ -139,10 +136,6 @@ func _draw() -> void:
 		draw_string(head, r.position + Vector2(6, ch - 5), "%dg" % cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("coin") if affordable else ArtTheme.ui("accent_dim"))
 		var cat_lbl := tr(cat[0])
 		draw_string(font, r.position + Vector2(cw - 8 - font.get_string_size(cat_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x, ch - 6), cat_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, (cat[1] as Color).lightened(0.1) if affordable else ArtTheme.ui("text_dim").darkened(0.2))
-		if i == 0:
-			draw_string(head, Vector2(x, top - 6), tr("WEAPONS"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ArtTheme.ui("header"))
-		elif i == split:
-			draw_string(head, Vector2(x, top - 6), tr("ECONOMY · PASSIVES · SPIKES"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ArtTheme.ui("accent"))
 		x += cw + gap
 
 	var bx := vp.x - btn_w - 8.0

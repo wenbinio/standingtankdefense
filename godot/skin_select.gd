@@ -14,6 +14,10 @@ var sel := 0
 var cards: Array[Rect2] = []
 var thumbs := {}              # skin id -> Texture2D (cached up-front, per theme)
 var _settings: Node2D = null  # lazily created PAUSE_MENU child (standalone mode)
+# A6: snapshot of achievements unlocked since the gallery was last viewed —
+# drawn as the "N NEW" badge + per-card NEW tags for THIS visit, then the
+# backing profile list is cleared (viewing SkinSelect counts as seeing them).
+var _new_ids: Array = []
 
 func _ready() -> void:
 	font = ArtTheme.ui_font(false)   # Barlow + Noto SC fallback (renders CJK)
@@ -22,6 +26,8 @@ func _ready() -> void:
 	for i in Profile.SKINS.size():
 		if Profile.SKINS[i].id == Profile.selected:
 			sel = i
+	_new_ids = Profile.unseen_achievements.duplicate()
+	Profile.mark_achievements_seen()
 	_cache_thumbs()
 	queue_redraw()
 
@@ -131,8 +137,17 @@ func _draw() -> void:
 		if Profile.is_unlocked(s.id): have += 1
 	draw_string(font, Vector2(36, 46), tr("SELECT YOUR TANK"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(0.9, 0.93, 0.98))
-	draw_string(font, Vector2(330, 46), tr("%d / %d unlocked") % [have, n],
+	var unlocked_txt := tr("%d / %d unlocked") % [have, n]
+	draw_string(font, Vector2(330, 46), unlocked_txt,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.55, 0.78, 0.6))
+	if not _new_ids.is_empty():
+		# A6: "N NEW" badge beside the unlock tally for freshly earned
+		# achievements (cleared for next visit — this viewing counts as seen).
+		var badge := tr("%d NEW") % _new_ids.size()
+		var bx := 330.0 + font.get_string_size(unlocked_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x + 16.0
+		var bw := font.get_string_size(badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+		draw_rect(Rect2(bx - 6.0, 46.0 - 15.0, bw + 12.0, 20.0), Color(0.85, 0.67, 0.30, 0.22))
+		draw_string(font, Vector2(bx, 46), badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.95, 0.8, 0.4))
 	draw_string(font, Vector2(36, 72),
 		tr("Unlock skins via achievements — purist runs (one weapon type), no-economy, and more.   [arrows] move   [Enter] play   [C] challenges   [L] lobby   [M] net demo   [T] theme   [U] dev-unlock"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.56, 0.6, 0.68))
@@ -192,6 +207,19 @@ func _draw_card(s: Dictionary, r: Rect2, cw: float, ch: float, i: int) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, cw - 12, 12, Color(0.85, 0.55, 0.34))
 		draw_string(font, r.position + Vector2(8, ch - 18), tr(String(a.get("desc", ""))),
 			HORIZONTAL_ALIGNMENT_LEFT, cw - 12, 10, Color(0.55, 0.5, 0.5))
+		# A7: quantifiable-goal progress vs your best-ever numbers (threshold
+		# achievements only; constraint ones have no partial progress to show).
+		var g: Dictionary = Profile.goal_progress(s.unlock, Profile.best_rec())
+		if not g.is_empty():
+			draw_string(font, r.position + Vector2(8, ch - 4),
+				"%s / %s" % [Profile.fmt_num(int(g["current"])), Profile.fmt_num(int(g["target"]))],
+				HORIZONTAL_ALIGNMENT_LEFT, cw - 12, 10, Color(0.85, 0.72, 0.4))
+	# A6: freshly-earned tag on cards whose unlock is in this visit's snapshot.
+	if _new_ids.has(s.unlock):
+		var nb := tr("NEW")
+		var nbw := font.get_string_size(nb, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		draw_string(font, r.position + Vector2(cw - nbw - 8.0, 18.0), nb,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.95, 0.8, 0.4))
 	# selection outline
 	if i == sel:
 		draw_rect(r, Color(0.42, 0.72, 1.0) if unlocked else Color(0.85, 0.45, 0.32), false, 3.0)

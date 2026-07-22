@@ -73,6 +73,18 @@ var earned := {}                 # ach_id -> true
 var selected := "ol_reliable"
 var active_challenge_code := 0   # transient: applied to player 0 on next deploy
 var last_unlocks: Array = []     # ach ids granted by the most recent record_match()
+
+# --- personal bests + run history ([records] section; THIS file is its only
+# writer, same single-owner rule as [profile]). Render-side only — timestamps
+# come from Time.get_datetime_* and never go anywhere near the sim.
+const RUN_HISTORY_CAP := 10
+var best_round := 0
+var best_damage := 0
+var best_gold := 0
+var total_runs := 0
+var total_deaths := 0
+var run_history: Array = []          # newest-first {round, damage, mmss, when}
+var unseen_achievements: Array = []  # unlocked but not yet viewed in SkinSelect
 var _locale := "en"              # persisted UI language ("en" / "zh_CN")
 var _screen_shake := true        # persisted render pref: camera shake/zoom punch
 var _game_speed := 0             # persisted single-player pace (index into SPEED_TPS)
@@ -180,9 +192,100 @@ func record_match(rec: Dictionary) -> Array:
 		if not earned.has(a.id) and _qualifies(a.id, rec):
 			earned[a.id] = true
 			last_unlocks.append(a.id)
+			unseen_achievements.append(a.id)   # cleared when SkinSelect is viewed
 	if not last_unlocks.is_empty():
 		_save()
 	return last_unlocks
+
+# --- personal bests / run history (render-side, [records] section) ------------
+# Record one finished run and return which personal bests it beat:
+# {"round": bool, "damage": bool, "gold": bool}. The very first run sets the
+# baselines SILENTLY (an empty slate is not a record to beat). `mmss` is the
+# caller's render-side survival clock string ("12:34").
+func record_run(rec: Dictionary, mmss: String) -> Dictionary:
+	var first := total_runs == 0
+	var rnd := int(rec.get("round", 0))
+	var dmg := int(rec.get("damage", 0))
+	var gld := int(rec.get("gold", 0))
+	var bests := {
+		"round": not first and rnd > best_round,
+		"damage": not first and dmg > best_damage,
+		"gold": not first and gld > best_gold,
+	}
+	best_round = maxi(best_round, rnd)
+	best_damage = maxi(best_damage, dmg)
+	best_gold = maxi(best_gold, gld)
+	total_runs += 1
+	if not bool(rec.get("won", false)):
+		total_deaths += 1
+	var dt := Time.get_datetime_dict_from_system()   # render-side only, never sim
+	run_history.push_front({
+		"round": rnd, "damage": dmg, "mmss": mmss,
+		"when": "%04d-%02d-%02d %02d:%02d" % [dt.year, dt.month, dt.day, dt.hour, dt.minute],
+	})
+	if run_history.size() > RUN_HISTORY_CAP:
+		run_history.resize(RUN_HISTORY_CAP)
+	_save()
+	return bests
+
+# The bests as a pseudo run record, for goal_progress() outside a run
+# (SkinSelect's locked cards measure against your best-ever numbers).
+func best_rec() -> Dictionary:
+	return {"round": best_round, "damage": best_damage, "gold": best_gold}
+
+# SkinSelect viewed: the "N NEW" badge's backing list clears (keep it simple).
+func mark_achievements_seen() -> void:
+	if unseen_achievements.is_empty():
+		return
+	unseen_achievements = []
+	_save()
+
+# --- next-goal surfacing (A7) -------------------------------------------------
+# Threshold-style achievements whose progress is derivable from a run record /
+# profile bests: ach id -> [record key, target]. Constraint/boolean ones
+# (purists, no_economy, jack_of_all, sole_survivor) have no partial progress.
+const GOAL_METRICS := {
+	"bloodletter":   ["damage", 1000000],
+	"long_watch":    ["round", 20],
+	"war_profiteer": ["gold", 500000],
+}
+
+# Progress toward one unearned quantifiable achievement, measured against `rec`
+# (a run record or best_rec()). {} when earned or not quantifiable.
+func goal_progress(ach_id: String, rec: Dictionary) -> Dictionary:
+	if earned.has(ach_id) or not GOAL_METRICS.has(ach_id):
+		return {}
+	var m: Array = GOAL_METRICS[ach_id]
+	var target := int(m[1])
+	return {
+		"id": ach_id,
+		"name": String(ach_def(ach_id).get("name", ach_id)),
+		"current": mini(int(rec.get(m[0], 0)), target),
+		"target": target,
+	}
+
+# Up to 2 unearned quantifiable achievements, closest-to-done first.
+func nearest_goals(rec: Dictionary) -> Array:
+	var out: Array = []
+	for a in ACHIEVEMENTS:
+		var g := goal_progress(a.id, rec)
+		if not g.is_empty():
+			out.append(g)
+	# Fraction compare without floats-in-sim worries (render layer, but exact
+	# cross-multiplication is free): current/target desc.
+	out.sort_custom(func(x, y): return int(x.current) * int(y.target) > int(y.current) * int(x.target))
+	if out.size() > 2:
+		out.resize(2)
+	return out
+
+# "1234567" -> "1,234,567" (render-side thousands separators for goal lines).
+func fmt_num(n: int) -> String:
+	var s := str(absi(n))
+	var out := ""
+	while s.length() > 3:
+		out = "," + s.right(3) + out
+		s = s.substr(0, s.length() - 3)
+	return ("-" if n < 0 else "") + s + out
 
 # --- dev helpers (no real match needed to preview the gallery) ---------------
 func unlock_all() -> void:
@@ -193,6 +296,13 @@ func unlock_all() -> void:
 func reset() -> void:
 	earned = {}
 	selected = "ol_reliable"
+	best_round = 0
+	best_damage = 0
+	best_gold = 0
+	total_runs = 0
+	total_deaths = 0
+	run_history = []
+	unseen_achievements = []
 	_save()
 
 # --- persistence -------------------------------------------------------------
@@ -208,11 +318,19 @@ func _load() -> void:
 		earned[id] = true
 	if not is_unlocked(selected):   # a skin that lost its unlock falls back
 		selected = "ol_reliable"
+	# [records] — personal bests + run history (this file is the only writer).
+	best_round = int(cf.get_value("records", "best_round", 0))
+	best_damage = int(cf.get_value("records", "best_damage", 0))
+	best_gold = int(cf.get_value("records", "best_gold", 0))
+	total_runs = int(cf.get_value("records", "total_runs", 0))
+	total_deaths = int(cf.get_value("records", "total_deaths", 0))
+	run_history = cf.get_value("records", "history", [])
+	unseen_achievements = cf.get_value("records", "unseen_achievements", [])
 
 func _save() -> void:
 	# user://profile.cfg is shared with audio.gd (its [audio] section). Reload the
-	# file before writing so we only overwrite [profile] and preserve the rest —
-	# the same reload-before-save pattern audio.gd uses for its section.
+	# file before writing so we only overwrite [profile] + [records] and preserve
+	# the rest — the same reload-before-save pattern audio.gd uses for its section.
 	var cf := ConfigFile.new()
 	cf.load(SAVE_PATH)   # ignore failure: a missing file just starts empty
 	cf.set_value("profile", "selected", selected)
@@ -220,4 +338,11 @@ func _save() -> void:
 	cf.set_value("profile", "screen_shake", _screen_shake)
 	cf.set_value("profile", "game_speed", _game_speed)
 	cf.set_value("profile", "earned", earned.keys())
+	cf.set_value("records", "best_round", best_round)
+	cf.set_value("records", "best_damage", best_damage)
+	cf.set_value("records", "best_gold", best_gold)
+	cf.set_value("records", "total_runs", total_runs)
+	cf.set_value("records", "total_deaths", total_deaths)
+	cf.set_value("records", "history", run_history)
+	cf.set_value("records", "unseen_achievements", unseen_achievements)
 	cf.save(SAVE_PATH)

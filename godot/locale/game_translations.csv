@@ -190,13 +190,12 @@ ARSENAL,ARSENAL,武器库
 — nothing yet —,— nothing yet —,— 空空如也 —
 SHOP,SHOP,商店
 click a card or press [1-8] to buy  ·  refreshes every round (30s)  ·  buy as many as you can afford,click a card or press [1-8] to buy  ·  refreshes every round (30s)  ·  buy as many as you can afford,点击卡牌或按 [1-8] 购买  ·  每轮刷新（30秒）·  能买多少买多少
-WEAPONS,WEAPONS,武器
-ECONOMY · PASSIVES · SPIKES,ECONOMY · PASSIVES · SPIKES,经济 · 被动 · 尖刺
 [R] REROLL  free x%d,[R] REROLL  free x%d,[R] 重投  免费 x%d
 [R] REROLL  %dg,[R] REROLL  %dg,[R] 重投  %dg
 [Space] CLEAR,[Space] CLEAR,[Space] 清场
 [N] sound: on,[N] sound: on,[N] 声音：开
 [N] sound: off,[N] sound: off,[N] 声音：关
+WEAPONS,WEAPONS,武器
 WEAPON,WEAPON,武器
 ECONOMY,ECONOMY,经济
 SPIKE,SPIKE,尖刺
@@ -722,3 +721,27 @@ SPEED: %s  ·  ×%s  ·  %d ticks/s,SPEED: %s  ·  ×%s  ·  %d ticks/s,速度�
 speed %s ×%s · %d ticks/s,speed %s ×%s · %d ticks/s,速度 %s ×%s · 每秒 %d 刻
 Only the host can change game speed.,Only the host can change game speed.,只有主机可以更改游戏速度。
 Game speed is locked once the match has started.,Game speed is locked once the match has started.,对局开始后游戏速度即被锁定。
+best: %s,best: %s,最佳：%s
+NEW BEST ROUND!,NEW BEST ROUND!,新纪录：最高轮次！
+NEW BEST DAMAGE!,NEW BEST DAMAGE!,新纪录：最高伤害！
+NEW BEST GOLD!,NEW BEST GOLD!,新纪录：最高金币！
+Survived %s,Survived %s,存活 %s
+The boss was %s away,The boss was %s away,距首领登场还差 %s
+Boss had %d%% left,Boss had %d%% left,首领仅剩 %d%% 生命
++%d rounds vs your best,+%d rounds vs your best,比你的最佳纪录多 %d 轮
+-%d rounds short of your best,-%d rounds short of your best,距你的最佳纪录还差 %d 轮
+Overwhelmed by %s ×%d — took %s damage in the final 10 s,Overwhelmed by %s ×%d — took %s damage in the final 10 s,被 %s ×%d 淹没——最后 10 秒承受 %s 伤害
+NEXT: %s — %s / %s,NEXT: %s — %s / %s,下一目标：%s — %s / %s
+"Tip: enemy waves scale every round (and jump +20% at 10:00) — buy HP, armor and regen so the ramp doesn't outpace you.","Tip: enemy waves scale every round (and jump +20% at 10:00) — buy HP, armor and regen so the ramp doesn't outpace you.",提示：敌潮每轮都在增强（10:00 更猛增 +20%）——购买生命、护甲与回复，别被强度曲线甩开。
+Tip: the shop closes for good at 15:00 when the boss arrives — spend your gold before the bell.,Tip: the shop closes for good at 15:00 when the boss arrives — spend your gold before the bell.,提示：15:00 首领登场时商店将永久关闭——赶在钟声前把金币花掉。
+Tip: Clear [Space] is the only thing that hurts the boss — keep it off cooldown once the boss is up.,Tip: Clear [Space] is the only thing that hurts the boss — keep it off cooldown once the boss is up.,提示：清场 [Space] 是唯一能伤到首领的手段——首领现身后要掐好冷却。
+"Tip: every shop slot rolls independently — rarity odds are 50/30/15/5, so an epic on the board is a rare treat.","Tip: every shop slot rolls independently — rarity odds are 50/30/15/5, so an epic on the board is a rare treat.",提示：商店每个栏位独立随机——稀有度概率为 50/30/15/5，牌面上出现史诗实属难得。
+Tip: free rerolls bank up and never expire — spend them freely when the board is bad.,Tip: free rerolls bank up and never expire — spend them freely when the board is bad.,提示：免费重投可以攒着且永不过期——牌面不好就放心用。
+"Tip: damage types matter — piercing, siege and magic each punish different armor, and the typed +25% upgrades compound.","Tip: damage types matter — piercing, siege and magic each punish different armor, and the typed +25% upgrades compound.",提示：伤害类型很重要——穿刺、攻城、魔法各克不同护甲，对应的 +25% 强化收益还会叠加。
+Tip: economy compounds — income early snowballs into weapons late; pure greed and pure guns are both risky.,Tip: economy compounds — income early snowballs into weapons late; pure greed and pure guns are both risky.,提示：经济会滚雪球——前期攒收入，后期换武器；纯贪金和纯火力都有风险。
+"Tip: Deep Freeze is an upgrade — without it 25 Frost stacks never freeze; with it, frozen enemies take +50% damage.","Tip: Deep Freeze is an upgrade — without it 25 Frost stacks never freeze; with it, frozen enemies take +50% damage.",提示：深度冻结是一件强化——没有它，25 层冰霜也不会冻结；有了它，冻结的敌人多受 50% 伤害。
+%d NEW,%d NEW,%d 个新成就
+NEW,NEW,新
+Restart Run,Restart Run,重新开始本局
+RESTART RUN?,RESTART RUN?,重新开始本局？
+This run is still live — restarting abandons it.,This run is still live — restarting abandons it.,本局仍在进行中——重新开始将放弃这局。

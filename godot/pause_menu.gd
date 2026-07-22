@@ -12,7 +12,7 @@
 #
 # Owner contract (main.gd / skin_select.gd):
 #   is_open() -> bool          gate your sim step / input handling on this
-#   open_pause()               open at the pause menu (Resume/Settings/Quit)
+#   open_pause()               open at the pause menu (Resume/Restart/Settings/Quit)
 #   open_settings()            open straight at the settings pane
 #   handle_input(e)            forward EVERY InputEvent while is_open()
 #                              (keys, clicks, and mouse motion for slider drag)
@@ -28,9 +28,10 @@ extends Node2D
 
 # Panes.
 const CLOSED := 0
-const MENU := 1        # Resume / Settings / Quit to Menu
-const CONFIRM := 2     # one-step "really quit? run is live" gate
-const SETTINGS := 3    # volumes / mute / language / screen shake
+const MENU := 1             # Resume / Restart Run / Settings / Quit to Menu
+const CONFIRM := 2          # one-step "really quit? run is live" gate
+const SETTINGS := 3         # volumes / mute / language / screen shake
+const CONFIRM_RESTART := 4  # one-step "really restart? run is live" gate (A12)
 
 # Settings rows (index into the fixed row tables below).
 const ROW_MASTER := 0
@@ -42,7 +43,7 @@ const ROW_SHAKE := 5
 const ROW_SPEED := 6
 const ROW_BACK := 7
 const SETTINGS_ROWS := 8
-const MENU_ROWS := 3
+const MENU_ROWS := 4
 const CONFIRM_ROWS := 2
 const MAX_ROWS := 8            # fixed hit-rect capacity (largest pane)
 
@@ -56,6 +57,11 @@ const SPEED_MULTS := ["1.0", "1.5", "2.0", "3.0"]
 # Settings-only mode (SkinSelect): open_* lands on SETTINGS and "back" closes
 # the overlay instead of returning to the pause menu.
 var standalone_settings := false
+
+# A12: owner-wired restart hook (main.gd sets this to its _redeploy). The menu
+# closes itself FIRST, so the pause gate is fully released before the fresh
+# run starts. Unset (invalid) in standalone/settings-only embeds.
+var on_restart := Callable()
 
 var _mode := CLOSED
 var _sel := 0                  # keyboard cursor within the active pane
@@ -149,6 +155,8 @@ func _back() -> void:
 				_enter(MENU)
 		CONFIRM:
 			_enter(MENU)
+		CONFIRM_RESTART:
+			_enter(MENU)
 		MENU:
 			_close()
 
@@ -156,6 +164,7 @@ func _row_count() -> int:
 	match _mode:
 		MENU: return MENU_ROWS
 		CONFIRM: return CONFIRM_ROWS
+		CONFIRM_RESTART: return CONFIRM_ROWS
 		SETTINGS: return SETTINGS_ROWS
 	return 0
 
@@ -173,12 +182,22 @@ func _activate(i: int) -> void:
 		MENU:
 			match i:
 				0: _close()                                   # Resume
-				1: _enter(SETTINGS)                           # Settings
-				2: _enter(CONFIRM)                            # Quit -> confirm gate
+				1: _enter(CONFIRM_RESTART)                    # Restart -> confirm gate
+				2: _enter(SETTINGS)                           # Settings
+				3: _enter(CONFIRM)                            # Quit -> confirm gate
 		CONFIRM:
 			match i:
 				0: _close()                                   # Keep Playing (resume)
 				1: get_tree().change_scene_to_file("res://SkinSelect.tscn")
+		CONFIRM_RESTART:
+			match i:
+				0: _close()                                   # Keep Playing (resume)
+				1:
+					# Close FIRST (releases the pause gate + resets pane state),
+					# then hand off to the owner's _redeploy path.
+					_close()
+					if on_restart.is_valid():
+						on_restart.call()
 		SETTINGS:
 			match i:
 				ROW_MUTE:
@@ -279,7 +298,11 @@ func _draw() -> void:
 		MENU:
 			_draw_menu(vp)
 		CONFIRM:
-			_draw_confirm(vp)
+			_draw_confirm(vp, tr("QUIT TO MENU?"),
+				tr("This run is still live — quitting abandons it."), tr("Quit to Menu"))
+		CONFIRM_RESTART:
+			_draw_confirm(vp, tr("RESTART RUN?"),
+				tr("This run is still live — restarting abandons it."), tr("Restart Run"))
 		SETTINGS:
 			_draw_settings(vp)
 
@@ -321,7 +344,7 @@ func _hint(cx: float, y: float, text: String) -> void:
 
 func _draw_menu(vp: Vector2) -> void:
 	var pw := 360.0
-	var ph := 300.0
+	var ph := 356.0
 	var px := vp.x * 0.5 - pw * 0.5
 	var py := vp.y * 0.5 - ph * 0.5
 	_panel(px, py, pw, ph, ArtTheme.ui("accent"))
@@ -331,26 +354,28 @@ func _draw_menu(vp: Vector2) -> void:
 	var bh := 42.0
 	var by := py + 80.0
 	_button(0, Rect2(cx - bw * 0.5, by, bw, bh), tr("Resume"))
-	_button(1, Rect2(cx - bw * 0.5, by + 56.0, bw, bh), tr("Settings"))
-	_button(2, Rect2(cx - bw * 0.5, by + 112.0, bw, bh), tr("Quit to Menu"), true)
+	_button(1, Rect2(cx - bw * 0.5, by + 56.0, bw, bh), tr("Restart Run"))
+	_button(2, Rect2(cx - bw * 0.5, by + 112.0, bw, bh), tr("Settings"))
+	_button(3, Rect2(cx - bw * 0.5, by + 168.0, bw, bh), tr("Quit to Menu"), true)
 	_hint(cx, py + ph - 14.0, tr("[↑↓] select   [Enter] confirm   [Esc] resume"))
 
-func _draw_confirm(vp: Vector2) -> void:
+# Shared confirm-gate pane (Quit / Restart): title + one body line + Keep
+# Playing vs the destructive action (danger-styled).
+func _draw_confirm(vp: Vector2, title: String, body: String, go_label: String) -> void:
 	var pw := 460.0
 	var ph := 236.0
 	var px := vp.x * 0.5 - pw * 0.5
 	var py := vp.y * 0.5 - ph * 0.5
 	_panel(px, py, pw, ph, ArtTheme.ui("danger"))
 	var cx := vp.x * 0.5
-	_title(cx, py + 46.0, tr("QUIT TO MENU?"), ArtTheme.ui("danger"))
-	var body := tr("This run is still live — quitting abandons it.")
+	_title(cx, py + 46.0, title, ArtTheme.ui("danger"))
 	var bw2 := _font.get_string_size(body, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 	draw_string(_font, Vector2(cx - bw2 * 0.5, py + 78.0), body,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("text"))
 	var bw := 250.0
 	var bh := 42.0
 	_button(0, Rect2(cx - bw * 0.5, py + 100.0, bw, bh), tr("Keep Playing"))
-	_button(1, Rect2(cx - bw * 0.5, py + 156.0, bw, bh), tr("Quit to Menu"), true)
+	_button(1, Rect2(cx - bw * 0.5, py + 156.0, bw, bh), go_label, true)
 	_hint(cx, py + ph - 14.0, tr("[↑↓] select   [Enter] confirm   [Esc] back"))
 
 func _draw_settings(vp: Vector2) -> void:
