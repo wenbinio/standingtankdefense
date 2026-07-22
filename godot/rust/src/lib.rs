@@ -637,11 +637,81 @@ impl StSim {
 /// Arbitrary content hash for the demo clients (the M2 director doesn't gate it).
 const DEMO_CONTENT_HASH: u64 = 0xC0DE_C0DE;
 
+/// Decode the GDScript-facing `(code, slot)` input pair into a sim [`Input`] —
+/// the SAME table as `StSim::step` (0 Noop · 1 BuyOffer(slot) · 2 Reroll ·
+/// 3 Clear · 4 BlackMarketPick weapon · 5 BlackMarketPick upgrade, `slot` =
+/// catalog index for 4/5). Used by [`StMatch::queue_player_input`] so the human
+/// seat's intents share the single-arena numbering exactly.
+fn input_from_code(code: i64, slot: i64) -> Input {
+    match code {
+        1 => Input::BuyOffer { slot: slot as u8 },
+        2 => Input::Reroll,
+        3 => Input::Clear,
+        4 => Input::BlackMarketPick {
+            is_weapon: true,
+            index: slot as u8,
+        },
+        5 => Input::BlackMarketPick {
+            is_weapon: false,
+            index: slot as u8,
+        },
+        _ => Input::Noop,
+    }
+}
+
+/// Catalog indices of the legal Black Market picks (mirrors
+/// `StSim::black_market_choices` — a pure function of the catalog, identical
+/// for every player, so `StMatch` serves it without a player index).
+fn black_market_choices_impl(weapons: bool) -> PackedInt64Array {
+    let mut a = PackedInt64Array::new();
+    let len = if weapons {
+        sim::content::WEAPONS.len()
+    } else {
+        sim::content::MODIFIERS.len()
+    };
+    for i in 0..len {
+        if sim::content::black_market_eligible(weapons, i) {
+            a.push(i as i64);
+        }
+    }
+    a
+}
+
+/// Display names parallel to [`black_market_choices_impl`] (mirrors
+/// `StSim::black_market_choice_names`).
+fn black_market_choice_names_impl(weapons: bool) -> PackedStringArray {
+    let mut a = PackedStringArray::new();
+    let len = if weapons {
+        sim::content::WEAPONS.len()
+    } else {
+        sim::content::MODIFIERS.len()
+    };
+    for i in 0..len {
+        if sim::content::black_market_eligible(weapons, i) {
+            let name = if weapons {
+                sim::content::WEAPONS[i].name
+            } else {
+                sim::content::MODIFIERS[i].name
+            };
+            a.push(&GString::from(name));
+        }
+    }
+    a
+}
+
 /// A full N-player match running the REAL netcode loop — authoritative
 /// [`Director`] + per-player [`Client`]s wired through the deterministic [`Hub`],
 /// each client driven by the shared [`Bot`]. It renders every player's
 /// authoritative shadow arena, showcasing the sharded-simulation architecture:
 /// N independent arenas advancing under one director, no entity replication.
+///
+/// HUMAN MODE: `set_human_seat(i)` disables seat `i`'s bot; the frontend then
+/// feeds that seat's intents via `queue_player_input(code, slot)` (one per
+/// `step()`, same code table as `StSim.step`). The intent flows the NORMAL
+/// client→director path — sent as a wire `Msg::Input`, validated/acked by the
+/// director, scheduled at the acked apply tick on both shadows (`docs/03`
+/// authority: no back door, the human is just another client). Without
+/// `set_human_seat` every seat stays bot-driven (the spectate demo).
 #[derive(GodotClass)]
 #[class(no_init, base = RefCounted)]
 pub struct StMatch {
@@ -650,6 +720,12 @@ pub struct StMatch {
     bots: Vec<Bot>,
     hub: Hub,
     peers: Vec<PeerId>,
+    /// Seat driven by a human instead of its bot (`None` = all bots).
+    human_seat: Option<usize>,
+    /// The human seat's ONE queued intent, consumed (and reset to `Noop`) by
+    /// the next `step()`. REPLACED by a newer intent, never accumulated — the
+    /// frontend's FIFO owns ordering and feeds exactly one intent per tick.
+    human_input: Input,
     /// ONE cached `RenderView` per player per `step()` (`docs/09 §9.3`) —
     /// every per-player accessor serves from here, not a fresh snapshot.
     views: Vec<Option<view::RenderView>>,
@@ -696,10 +772,35 @@ impl StMatch {
             bots,
             hub: Hub::new(),
             peers,
+            human_seat: None,
+            human_input: Input::Noop,
             views,
             events,
             base,
         })
+    }
+
+    /// Hand seat `i` to a human: that seat's bot is fully disabled and its
+    /// client's desired action each iteration comes from `queue_player_input`
+    /// instead (Noop when nothing is queued). An out-of-range `i` reverts to
+    /// all-bots (the spectate demo). Call once right after construction.
+    #[func]
+    fn set_human_seat(&mut self, i: i64) {
+        self.human_seat = usize::try_from(i).ok().filter(|x| *x < self.peers.len());
+        self.human_input = Input::Noop;
+    }
+
+    /// Queue the human seat's ONE `(code, slot)` intent for the NEXT `step()`
+    /// — same input table as `StSim.step` (1 Buy(slot) · 2 Reroll · 3 Clear ·
+    /// 4/5 Black-Market pick with `slot` = catalog index). Replaces any
+    /// unconsumed intent; a no-op while no human seat is set. The intent is
+    /// SUBMITTED by the seat's client on the next iteration and applies at the
+    /// director-acked apply tick (input lead), like every other client input.
+    #[func]
+    fn queue_player_input(&mut self, code: i64, slot: i64) {
+        if self.human_seat.is_some() {
+            self.human_input = input_from_code(code, slot);
+        }
     }
 
     /// Constrain player `i`'s bot to a challenge (see `bot::Challenge::from_code`:
@@ -730,9 +831,17 @@ impl StMatch {
         self.hub.send(DIRECTOR, out_d);
         for (i, p) in self.peers.iter().enumerate() {
             let in_i = self.hub.take(*p);
-            let desired = match self.director.shadow(*p) {
-                Some(sh) => self.bots[i].decide(sh),
-                None => Input::Noop,
+            // The human seat's bot never runs: its desired action is the queued
+            // player intent (consumed here, at most one per step). Everything
+            // downstream — submit, ack, schedule, apply — is the identical
+            // client path the bots use.
+            let desired = if self.human_seat == Some(i) {
+                std::mem::replace(&mut self.human_input, Input::Noop)
+            } else {
+                match self.director.shadow(*p) {
+                    Some(sh) => self.bots[i].decide(sh),
+                    None => Input::Noop,
+                }
             };
             let out_i = self.clients[i].tick(in_i, desired);
             self.hub.send(*p, out_i);
@@ -856,15 +965,110 @@ impl StMatch {
         a
     }
 
-    /// `[gold, income_per_tick]` for player `i`.
+    /// `[gold, income_per_tick, rerolls_remaining, reroll_cost]` for player `i`
+    /// — the SAME layout as `StSim.economy()`, so the shared SimView economy
+    /// accessors (gold/income/free_rerolls/reroll_cost) read both identically.
     #[func]
     fn economy(&self, i: i64) -> PackedInt64Array {
         let mut a = PackedInt64Array::new();
         if let Some(v) = self.snap(i) {
-            a.push(v.economy.gold);
-            a.push(v.economy.income_per_tick);
+            for x in [
+                v.economy.gold,
+                v.economy.income_per_tick,
+                v.economy.rerolls_remaining as i64,
+                v.economy.reroll_cost,
+            ] {
+                a.push(x);
+            }
         }
         a
+    }
+
+    /// `[ready_in_ticks, cooldown_total_ticks]` for player `i`'s Clear ability
+    /// (mirrors `StSim.clear_state()`; empty while the shadow is unreadable).
+    #[func]
+    fn clear_state(&self, i: i64) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        if let Some(v) = self.snap(i) {
+            a.push(v.clear_ready_in as i64);
+            a.push(v.clear_cooldown_total as i64);
+        }
+        a
+    }
+
+    /// Names of player `i`'s current shop offers, slot order (mirrors
+    /// `StSim.shop_names()`; empty once the shop closes at the boss).
+    #[func]
+    fn shop_names(&self, i: i64) -> PackedStringArray {
+        let mut a = PackedStringArray::new();
+        if let Some(v) = self.snap(i) {
+            for o in &v.shop {
+                a.push(&GString::from(o.name));
+            }
+        }
+        a
+    }
+
+    /// Flat `[cost, flags, rarity, …]` per offer for player `i` (mirrors
+    /// `StSim.shop_meta()`: flags bit0 = is_weapon, bit1 = affordable).
+    #[func]
+    fn shop_meta(&self, i: i64) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        if let Some(v) = self.snap(i) {
+            for o in &v.shop {
+                a.push(o.cost);
+                a.push((o.is_weapon as i64) | ((o.affordable as i64) << 1));
+                a.push(o.rarity as i64);
+            }
+        }
+        a
+    }
+
+    /// Flat `[flavor, tip, …]` per offer for player `i` (mirrors
+    /// `StSim.shop_desc()` — shop tooltips for the human seat).
+    #[func]
+    fn shop_desc(&self, i: i64) -> PackedStringArray {
+        let mut a = PackedStringArray::new();
+        let shadow = self
+            .peers
+            .get(i as usize)
+            .and_then(|p| self.director.shadow(*p));
+        if let Some(st) = shadow {
+            for off in &st.shop.offers {
+                let (flavor, tip) = match off.kind {
+                    sim::OfferKind::Weapon => sim::descriptions::weapon_text(off.def),
+                    sim::OfferKind::Modifier => sim::descriptions::modifier_text(off.def),
+                };
+                a.push(&GString::from(flavor));
+                a.push(&GString::from(tip));
+            }
+        }
+        a
+    }
+
+    /// Whether player `i`'s authoritative shadow holds a Black Market pick
+    /// (mirrors `StSim.black_market_pending()` — drives the picker overlay for
+    /// the human seat; bots redeem theirs on their own).
+    #[func]
+    fn black_market_pending(&self, i: i64) -> bool {
+        self.peers
+            .get(i as usize)
+            .and_then(|p| self.director.shadow(*p))
+            .is_some_and(|st| st.pending_black_market)
+    }
+
+    /// Catalog indices of the legal Black Market picks (identical for every
+    /// player — a pure function of the catalog; mirrors
+    /// `StSim.black_market_choices`).
+    #[func]
+    fn black_market_choices(&self, weapons: bool) -> PackedInt64Array {
+        black_market_choices_impl(weapons)
+    }
+
+    /// Display names for `black_market_choices(weapons)`, in the same order.
+    #[func]
+    fn black_market_choice_names(&self, weapons: bool) -> PackedStringArray {
+        black_market_choice_names_impl(weapons)
     }
 
     /// Enemy world positions for player `i`'s arena.

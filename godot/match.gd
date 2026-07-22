@@ -1,11 +1,26 @@
 # Multi-arena / net view. Runs the REAL netcode loop in `StMatch` (authoritative
-# director + N clients + hub, bot-driven) and renders every player's
-# authoritative shadow arena as a grid — the visual proof of the sharded-sim
-# architecture: N independent arenas under one director, no entity replication.
+# director + N clients + hub) and renders every player's authoritative shadow
+# arena as a grid — the visual proof of the sharded-sim architecture: N
+# independent arenas under one director, no entity replication.
+#
+# TWO ENTRY MODES:
+#   HUMAN (lobby launch, Session.lobby_players > 0): YOU play seat 0 — its bot
+#     is disabled (StMatch.set_human_seat) and your buy/reroll/Clear/Black-
+#     Market intents flow through main.gd's intent-FIFO pattern into
+#     StMatch.queue_player_input, ONE per sim tick. From there they take the
+#     NORMAL client→director path (wire Input, director-validated, acked,
+#     schedule-applied on both shadows) — docs/03 authority, no back door.
+#     The unmodified Shop + BlackMarket modules (UiLayer children) provide the
+#     buy UI over a SeatView (SimView subclass reading StMatch's seat-scoped
+#     accessors). 7 bots race you; there is NO pause (director sims never
+#     stop) — Esc while alive asks for a confirm before abandoning.
+#   SPECTATE (direct launch / ChallengeSelect deploy, Session empty): every
+#     seat stays bot-driven exactly as before — you watch the demo.
 #
 # Per-player sim reads go through the same typed SimView wrapper as the
-# single-arena view (one wrapper per player index); only m.step() and the
-# match-level meta (server_tick/alive_count/match_over) touch StMatch directly.
+# single-arena view (one wrapper per player index); only m.step(), the human
+# input feed and the match-level meta (server_tick/alive_count/match_over)
+# touch StMatch directly.
 #
 # JUICE (P3): one shared Fx bus + per-cell event-driven feedback (kill sparks,
 # boss flashes, tank-hit shake, elimination stamps, round pulse). All of it is
@@ -21,6 +36,47 @@ const TICK_HZ := 30
 # Game-speed labels/multipliers by StMatch.game_speed() code (translation keys).
 const SPEED_NAMES := ["Normal", "Fast", "Faster", "Hyper"]
 const SPEED_MULTS := ["1.0", "1.5", "2.0", "3.0"]
+
+# --- human seat (lobby launch) ------------------------------------------------
+# Number-row buy actions, slot order (mirrors main.gd).
+const BUY_ACTIONS: Array[StringName] = [
+	&"ui_buy_1", &"ui_buy_2", &"ui_buy_3", &"ui_buy_4",
+	&"ui_buy_5", &"ui_buy_6", &"ui_buy_7", &"ui_buy_8",
+]
+# Intent-FIFO cap (mirrors main.gd — stale input must not buffer up).
+const MAX_QUEUED_INTENTS := 4
+# Shop bar height (mirrors shop.gd's bar_h): the grid insets above it while
+# the human shop is up, and widens back to full height when it hides.
+const SHOP_BAR_H := 162.0
+# Ticks a submitted spend (buy / paid reroll) may wait for its gold-drop
+# confirm before it expires (covers the director's input-lead + jitter).
+const SPEND_CONFIRM_TTL := 60
+# Ticks after a queued Black-Market pick before we assume it no-oped and
+# resurface the badge (should never fire — the lists are eligible-only).
+const BM_PICK_TIMEOUT := 90
+# The shared ambient dim: CanvasModulate over the world canvas, plain modulate
+# on the UiLayer modules (a CanvasLayer sits outside the CanvasModulate).
+const AMBIENT_DIM := Color(0.74, 0.76, 0.82)
+
+var _human := false           # seat 0 is YOU (lobby launch); false = spectate
+# Input-intent FIFO: [code, slot] pairs (1 buy · 2 reroll · 3 clear · 4/5
+# Black-Market pick), drained ONE per SIM TICK inside the accumulator loop —
+# at Hyper a frame steps 3 ticks and so drains up to 3 intents, in order.
+var _intents: Array = []
+# The intent consumed THIS tick (mirrored to the shop's pressed feedback).
+var pending_code := 0
+var pending_slot := 0
+var _confirm_quit := false    # Esc-guard overlay (alive human only)
+# Black Market pending-edge tracker + the server tick a pick was queued at
+# (-1 = none in flight); drives arm/disarm and the redeem-confirm voice.
+var _bm_was_pending := false
+var _bm_pick_tick := -1
+# Spend intents awaiting their gold-drop confirm: [code, expire_server_tick].
+# Net inputs apply at the director-acked apply tick, so a buy is voiced when
+# seat-0 gold actually FALLS with a spend in flight (main.gd's gold-confirm
+# pattern, latency-tolerant).
+var _spend_inflight: Array = []
+var _gold_prev := -1
 
 var m
 var _views: Array = []        # SimView per player index (read-only wrappers)
@@ -69,6 +125,10 @@ const ELIM_STAMP_T := 0.35         # stamp overshoot->settle duration
 
 var fx: Fx = null                  # the ONE shared juice bus
 @onready var _camera: Camera2D = $Camera   # shake via offset (mirrors main.gd)
+# Human-seat buy UI: the UNMODIFIED single-arena modules, instantiated as
+# UiLayer children (Match.tscn) and driven through their public surface only.
+@onready var _shop: Node2D = $UiLayer/Shop
+@onready var _bm: Node2D = $UiLayer/BlackMarket
 
 # --- P5 end-of-match results panel (docs/09 §9.4-P5 item 5) -------------------
 # Appears RESULTS_DELAY seconds after match_over so the final juice (victory/
@@ -111,6 +171,9 @@ func _ready() -> void:
 		m = StMatch.new_match_at_speed(Session.lobby_players + 1, Session.lobby_seed,
 			Session.lobby_speed)
 		_from_lobby = true   # remembered past clear() for the results panel's rematch
+		# Lobby launches are HUMAN-PLAYED: you drive seat 0, the bots race you.
+		# Direct/ChallengeSelect launches (Session empty) stay full-bot spectate.
+		_human = true
 		Session.clear()
 	else:
 		m = StMatch.new_match(N, randi())   # standalone demo: Normal speed
@@ -118,11 +181,28 @@ func _ready() -> void:
 	var sp: int = clampi(int(m.game_speed()), 0, SPEED_NAMES.size() - 1)
 	_speed_txt = tr("speed %s ×%s · %d ticks/s") % [tr(SPEED_NAMES[sp]), SPEED_MULTS[sp], _tps]
 	# You are player 0; honor a chosen challenge so its achievement is earnable.
+	# In human mode the same director/client-side filter guards YOUR buys
+	# authoritatively (the seat-0 Bot object it also configures never runs).
 	if Profile.active_challenge_code != 0:
 		m.set_challenge(0, Profile.active_challenge_code)
 	_views.clear()
 	for i in m.player_count():
-		_views.append(SimView.of_match(m, i))
+		# The human seat reads through SeatView (adds shop/Clear/Black-Market
+		# accessors); everything else keeps the plain match wrapper.
+		if i == 0 and _human:
+			_views.append(SeatView.of_seat(m, i))
+		else:
+			_views.append(SimView.of_match(m, i))
+	if _human:
+		m.set_human_seat(0)   # seat-0 bot OFF; intents come from the FIFO below
+		_shop.view = _views[0]
+		_bm.on_pick = _on_bm_pick
+		_shop.visible = true
+	# The UiLayer modules sit outside the world canvas's CanvasModulate; hand
+	# them the same ambient dim so their chrome matches the grid (main.gd's
+	# pattern).
+	for ui_node in [_shop, _bm]:
+		ui_node.modulate = AMBIENT_DIM
 	_assign_cosmetics()
 	_cache_theme_textures()
 	_setup_environment()
@@ -205,21 +285,51 @@ func _setup_environment() -> void:
 	we.environment = env
 	add_child(we)
 	var cm := CanvasModulate.new()
-	cm.color = Color(0.74, 0.76, 0.82)   # gentle cool dim; lets bloom read
+	cm.color = AMBIENT_DIM   # gentle cool dim; lets bloom read
 	add_child(cm)
 
 var _recorded := false        # match-end achievements credited once
 var _toast: Array = []        # newly-unlocked achievement names to flash
 
+# Whether YOU are a live participant right now (human mode, seat 0 alive,
+# match undecided) — the gate for shop input, the Esc-confirm and the bar.
+func _human_alive() -> bool:
+	if not _human or m == null or m.match_over():
+		return false
+	var you: SimView = _views[0] if _views.size() > 0 else null
+	return you != null and you.is_valid() and not you.is_dead()
+
 func _unhandled_input(e: InputEvent) -> void:
-	# Results-panel click targets (mirrors main.gd's _handle_click routing);
-	# rects are only live while the panel is actually displayed.
-	if e is InputEventMouseButton:
-		if e.pressed and e.button_index == MOUSE_BUTTON_LEFT and _results_visible():
-			if _rematch_rect.has_point(e.position):
-				_rematch()
-			elif _menu_rect.has_point(e.position):
+	# Esc-guard overlay: while up it owns every event. Abandoning a live net
+	# match is the ONE destructive action here (the sims never pause), so Esc
+	# alone must not do it — [Enter] confirms, [Esc] returns to the fight.
+	if _confirm_quit:
+		if not _human_alive():
+			_confirm_quit = false   # died / match ended while the prompt was up
+		elif e is InputEventKey or e is InputEventJoypadButton:
+			# Space is BOTH ui_confirm and ui_clear (the combat mash key) — a
+			# destructive confirm must never fire from it, so only a press
+			# that is NOT ui_clear (i.e. Enter/pad-A) leaves the match.
+			if e.is_action_pressed(&"ui_confirm") and not e.is_action_pressed(&"ui_clear"):
 				get_tree().change_scene_to_file("res://SkinSelect.tscn")
+			elif e.is_action_pressed(&"ui_back") or e.is_action_pressed(&"ui_skins"):
+				_confirm_quit = false
+		return
+	# Black Market picker: while OPEN it owns the remaining events (input-modal
+	# only — the match keeps stepping behind it; mirrors main.gd's routing).
+	if _human and _bm.is_open():
+		_bm.handle_input(e)
+		return
+	if e is InputEventMouseButton:
+		if e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			# Results-panel click targets (rects live only while displayed).
+			if _results_visible():
+				if _rematch_rect.has_point(e.position):
+					_rematch()
+				elif _menu_rect.has_point(e.position):
+					get_tree().change_scene_to_file("res://SkinSelect.tscn")
+			elif _human_alive():
+				_handle_click(e.position)
 		return
 	if not (e is InputEventKey or e is InputEventJoypadButton):
 		return
@@ -228,15 +338,87 @@ func _unhandled_input(e: InputEvent) -> void:
 	if _results_visible() and e.is_action_pressed(&"ui_confirm"):
 		_rematch()
 		return
+	# Human seat: number-row buys + reroll/clear + Black-Market reopen, queued
+	# through the intent FIFO (one consumed per SIM TICK, mirroring main.gd).
+	if _human_alive():
+		for i in BUY_ACTIONS.size():
+			if e.is_action_pressed(BUY_ACTIONS[i]):
+				_queue_intent(1, i)
+				return
+		if e.is_action_pressed(&"ui_reroll"):
+			_queue_intent(2)
+			return
+		if e.is_action_pressed(&"ui_clear"):
+			_queue_intent(3)
+			return
+		if e.is_action_pressed(&"ui_black_market"):
+			# [B] reopens a dismissed-but-held picker (open-picker [B]/Esc are
+			# handled inside _bm.handle_input above).
+			if _bm.is_held():
+				_bm.reopen()
+			return
 	if e.is_action_pressed(&"ui_theme_cycle"):
 		# Cycling YOUR theme re-assigns your cell (player 0) and refreshes the
-		# peer spread + tank cache so the grid stays consistent.
+		# peer spread + tank cache so the grid stays consistent. The shop
+		# module re-resolves its icon/frame textures too (main.gd's pattern).
 		ArtTheme.cycle()
 		_assign_cosmetics()
 		_cache_theme_textures()
+		if _human:
+			_shop.reload_theme()
 	elif e.is_action_pressed(&"ui_skins") or e.is_action_pressed(&"ui_back"):
-		# Both S and Esc back out to the skin-select menu (no in-match quit).
-		get_tree().change_scene_to_file("res://SkinSelect.tscn")
+		# S/Esc back out to the skin-select menu — but while YOU are alive in a
+		# human match that abandons a live run, so it goes through the confirm.
+		# Dead/spectate/match-over keeps the direct back-out.
+		if _human_alive():
+			_confirm_quit = true
+		else:
+			get_tree().change_scene_to_file("res://SkinSelect.tscn")
+
+# Route a left-click by the modules' hit-targets (main.gd's pattern). Only
+# called while _human_alive(), so the shop rects are never stale.
+func _handle_click(pos: Vector2) -> void:
+	# Held Black Market pick: the shop-area badge reopens the picker.
+	if _bm.badge_hit(pos):
+		_bm.reopen()
+		return
+	var card: int = _shop.card_at(pos)
+	if card >= 0:
+		_queue_intent(1, card)
+		return
+	if _shop.reroll_hit(pos):
+		_queue_intent(2)
+		return
+	if _shop.clear_hit(pos):
+		_queue_intent(3)
+
+# Enqueue an input intent for seat 0, preserving arrival order (mirrors
+# main.gd: intents beyond the small cap are dropped; the Black Market overlay
+# stays open on a false return so a pick is never silently lost).
+func _queue_intent(code: int, slot: int = 0) -> bool:
+	if _intents.size() >= MAX_QUEUED_INTENTS:
+		return false
+	_intents.append([code, slot])
+	return true
+
+# Pop exactly ONE queued intent per sim tick (FIFO; main.gd's invariant).
+func _drain_one_intent() -> void:
+	if _intents.is_empty():
+		pending_code = 0
+		pending_slot = 0
+	else:
+		var intent: Array = _intents.pop_front()
+		pending_code = intent[0]
+		pending_slot = intent[1]
+
+# Black Market overlay pick callback: queue (code 4/5, slot = catalog index)
+# through the SAME FIFO as buy/reroll — one (code, slot) per tick reaches the
+# client. Remembers the submit tick for the redeem/no-op watchdog.
+func _on_bm_pick(code: int, slot: int) -> bool:
+	if not _queue_intent(code, slot):
+		return false
+	_bm_pick_tick = int(m.server_tick())
+	return true
 
 func _physics_process(_delta: float) -> void:
 	if m == null:
@@ -251,12 +433,37 @@ func _physics_process(_delta: float) -> void:
 	_tick_accum += _tps
 	while _tick_accum >= TICK_HZ:
 		_tick_accum -= TICK_HZ
+		# HUMAN SEAT: drain exactly ONE queued intent per SIM TICK (not per
+		# frame — at Hyper this loop runs 3× per frame and drains 3 intents,
+		# in order) and hand it to seat 0's client for this iteration. The
+		# director validates/acks/schedules it like any client input.
+		if _human:
+			if _human_alive():
+				_drain_one_intent()
+				if pending_code != 0:
+					m.queue_player_input(pending_code, pending_slot)
+			else:
+				_intents.clear()
+				pending_code = 0
+				pending_slot = 0
+			_shop.pending_code = pending_code
+			_shop.pending_slot = pending_slot
 		m.step()
+		if _human:
+			_confirm_intent_audio()
 		# JUICE (render-only, one-way): drain each live cell's event stream,
 		# detect death/round edges. Nothing below writes the sim.
 		_drain_events()
 		_detect_eliminations()
 		_detect_round_pulse()
+	# Human-seat UI sync, once per frame after all steps (main.gd's cadence):
+	# Black-Market pending edges + shop-bar visibility (hide on death/end so
+	# the grid widens back to the full spectate layout).
+	if _human:
+		_sync_black_market()
+		var show: bool = _human_alive()
+		if _shop.visible != show:
+			_shop.visible = show
 	# Credit "you" (player 0) once the match is decided. Cosmetic only.
 	if not _recorded and m.match_over():
 		_recorded = true
@@ -398,6 +605,64 @@ func _detect_eliminations() -> void:
 				Audio.play(&"tank_destroyed")
 		_was_dead[i] = 1 if d else 0
 
+# AUDIO for the human seat's own actions (render-only, mirrors main.gd's
+# intent+gold-confirm pattern under net latency). Reroll/Clear are voiced on
+# the tick their intent is consumed (like main.gd's consumption-tick voice);
+# a BUY is voiced only when seat-0 gold actually FALLS while a spend is in
+# flight — net inputs apply at the director-acked apply tick, so the drop
+# lands a few ticks after the click. Gold only ever falls on a spend (income
+# is additive), so a drop with a buy at the front of the in-flight queue is a
+# confirmed purchase; unaffordable clicks never drop gold and expire silently.
+func _confirm_intent_audio() -> void:
+	if not _human_alive():
+		_spend_inflight.clear()
+		_gold_prev = -1
+		return
+	match pending_code:
+		1:
+			_spend_inflight.append([1, int(m.server_tick()) + SPEND_CONFIRM_TTL])
+		2:
+			# Reroll refreshes the shop whether free or paid — always voice it;
+			# a PAID reroll also enters the in-flight queue so its gold drop
+			# isn't misattributed to a buy.
+			Audio.play(&"reroll")
+			if _views[0].free_rerolls() <= 0:
+				_spend_inflight.append([2, int(m.server_tick()) + SPEND_CONFIRM_TTL])
+		3:
+			Audio.play(&"clear")
+	var g: int = _views[0].gold()
+	if _gold_prev >= 0 and g < _gold_prev and not _spend_inflight.is_empty():
+		var it: Array = _spend_inflight.pop_front()
+		if it[0] == 1:
+			Audio.play(&"buy")
+	while not _spend_inflight.is_empty() and int(_spend_inflight[0][1]) < int(m.server_tick()):
+		_spend_inflight.pop_front()
+	_gold_prev = g
+
+# Black Market pending-edge sync for the human seat (main.gd's pattern, once
+# per frame after all steps): on false->true the overlay arms with the
+# eligible choice lists (built exactly once per edge); on true->false the
+# pick was redeemed by the authoritative apply — voice the free "buy" and
+# disarm. A queued pick that never redeems (should not happen: the lists are
+# eligible-only) resurfaces the badge after BM_PICK_TIMEOUT ticks.
+func _sync_black_market() -> void:
+	var pending: bool = _human_alive() and _views[0].black_market_pending()
+	if pending and not _bm_was_pending:
+		var sv: SimView = _views[0]
+		_bm.arm(
+			sv.black_market_choices(true), sv.black_market_choice_names(true),
+			sv.black_market_choices(false), sv.black_market_choice_names(false))
+	elif _bm_was_pending and not pending:
+		if _bm_pick_tick >= 0:
+			Audio.play(&"buy")
+		_bm_pick_tick = -1
+		_bm.disarm()
+	if pending and _bm_pick_tick >= 0 \
+			and int(m.server_tick()) - _bm_pick_tick > BM_PICK_TIMEOUT:
+		_bm_pick_tick = -1
+		_bm.pick_failed()
+	_bm_was_pending = pending
+
 # Global round counter edge -> brief header pulse so the match pacing reads.
 func _detect_round_pulse() -> void:
 	var rmax := 0
@@ -438,7 +703,9 @@ func _draw() -> void:
 		% [n, m.server_tick(), m.alive_count(), n, status]
 		+ "  ·  " + _speed_txt,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16 + int(3.0 * hk), hcol)
-	var you := tr("YOU: %s  ·  [S] skins") % tr(Profile.skin_def(Profile.selected).name)
+	# Human mode: Esc is the (confirm-gated) leave action, so the hint says so.
+	var you_fmt := tr("YOU: %s  ·  [Esc] leave") if _human else tr("YOU: %s  ·  [S] skins")
+	var you := you_fmt % tr(Profile.skin_def(Profile.selected).name)
 	if Profile.active_challenge_code != 0:
 		for c in Profile.CHALLENGES:
 			if c.code == Profile.active_challenge_code:
@@ -469,6 +736,12 @@ func _draw() -> void:
 	if _results_visible():
 		_draw_results(font, vp)
 
+	# Esc-guard confirm (human, alive): a small modal panel over the grid. The
+	# shop bar (own CanvasLayer) stays lit beneath — the match keeps running,
+	# which is exactly the point of the guard.
+	if _confirm_quit:
+		_draw_quit_confirm(font, vp)
+
 	# Achievement toasts draw LAST so they stay visible above the results panel.
 	if not _toast.is_empty():
 		# Each toast entry is an achievement name (in the translation table).
@@ -479,14 +752,20 @@ func _draw() -> void:
 			tr("ACHIEVEMENT UNLOCKED:  %s") % ", ".join(toast_names),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1.0, 0.82, 0.4))
 
+# Bottom inset the grid leaves for the human shop bar: SHOP_BAR_H while the
+# bar is up, 0 once it hides (your death / match over / spectate) — the grid
+# then widens back to the full-height spectate layout automatically.
+func _bottom_inset() -> float:
+	return SHOP_BAR_H if _shop != null and _shop.visible else 0.0
+
 # The one source of truth for cell geometry, used by BOTH _draw and the event
-# drain so juice lands exactly where the cell renders. Pure function of
-# (index, player count, viewport); allocates nothing but the returned Rect2.
+# drain so juice lands exactly where the cell renders. Function of (index,
+# player count, viewport) plus the shop-bar inset; allocates only the Rect2.
 func _cell_rect(i: int, n: int, vp: Vector2) -> Rect2:
 	var pad := 8.0
 	var top := 40.0
 	var avail_w := vp.x - pad * 3.0          # outer-left, center gutter, outer-right
-	var avail_h := vp.y - top - pad * 2.0
+	var avail_h := vp.y - top - pad * 2.0 - _bottom_inset()
 	var big_w := avail_w * 0.60
 	var x0 := pad
 	var y0 := top + pad
@@ -593,6 +872,27 @@ func _draw_cell(font, i: int, r: Rect2, is_big: bool = false) -> void:
 	var gw: float = font.get_string_size("%dg" % gold, HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * us)).x
 	draw_string(font, Vector2(meta_x + rw + gw, top_y), " · %dw" % view.weapon_count(),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * us), c_dim)
+	# HUMAN SEAT status line (drawn here — the featured cell IS your HUD in a
+	# net match; hud.gd stays single-arena): hp / income / Clear readiness in
+	# one compact line under the top meta. The round/gold header + boss info
+	# already live in the match header and the cell meta above.
+	if is_you and _human and not dead:
+		var cd_left: int = view.clear_ready_in()
+		var clear_txt: String
+		var clear_col: Color
+		if cd_left <= 0:
+			clear_txt = tr("CLEAR READY")
+			clear_col = c_danger
+		else:
+			clear_txt = tr("CLEAR %ds") % ceili(float(cd_left) / float(_tps))
+			clear_col = c_dim
+		var stat := "HP %d/%d · +%d/t · " % [hp, maxhp, view.income()]
+		draw_string(font, Vector2(r.position.x + 10, top_y + 20.0), stat,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, c_text)
+		var stat_w: float = font.get_string_size(stat, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		draw_string(font, Vector2(r.position.x + 10 + stat_w, top_y + 20.0), clear_txt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, clear_col)
+
 	# per-player damage score (log-compressed so it never runs into the thousands)
 	var score_txt := tr("SCORE %d") % _score(i)
 	var sw: float = font.get_string_size(score_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * us)).x
@@ -843,3 +1143,90 @@ func _draw_results(font: Font, vp: Vector2) -> void:
 	var hintw := font.get_string_size(_res_hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 	draw_string(font, Vector2(cx - hintw * 0.5, py + ph - 12.0), _res_hint,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, c_dim)
+
+# --- Esc-guard confirm (human mode) --------------------------------------------
+# Two-state like the pause menu's quit confirm, but drawn here (match.gd) —
+# the net view deliberately has NO PauseMenu (docs/03: director sims never
+# stop). Keyboard-driven: [Enter] leaves, [Esc]/[S] returns to the fight.
+func _draw_quit_confirm(font: Font, vp: Vector2) -> void:
+	var head: Font = ArtTheme.ui_font(true)
+	# Dim the arena area (root canvas). The shop bar lives on the UiLayer
+	# CanvasLayer above this canvas and stays lit — a visible reminder that
+	# the match keeps running behind the prompt.
+	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.02, 0.02, 0.04, 0.55))
+	var pw := 540.0
+	var ph := 148.0
+	var px := vp.x * 0.5 - pw * 0.5
+	var py := maxf((vp.y - _bottom_inset()) * 0.5 - ph * 0.5, 8.0)
+	var panel := Rect2(px, py, pw, ph)
+	draw_rect(panel, ArtTheme.ui("panel_bg"))
+	draw_rect(panel, ArtTheme.ui("panel_border"), false, 2.0)
+	# Emissive top rule in the danger color (this is the destructive prompt).
+	draw_rect(Rect2(Vector2(px, py), Vector2(pw, 3)), ArtTheme.ui("danger") * 1.4)
+	var cx := vp.x * 0.5
+	var title := tr("ABANDON MATCH?")
+	var tw := head.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x
+	draw_string(head, Vector2(cx - tw * 0.5, py + 44.0), title,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 26, ArtTheme.ui("danger").lightened(0.15))
+	var sub := tr("Your rivals keep fighting — a live net match never pauses.")
+	var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	draw_string(font, Vector2(cx - minf(sw, pw - 28.0) * 0.5, py + 76.0), sub,
+		HORIZONTAL_ALIGNMENT_LEFT, pw - 28.0, 14, ArtTheme.ui("text"))
+	var hint := tr("[Enter] leave match   ·   [Esc] keep playing")
+	var hw := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	draw_string(font, Vector2(cx - hw * 0.5, py + ph - 22.0), hint,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("text_dim"))
+
+# --- SeatView: the human seat's typed view ------------------------------------
+# Extends the shared SimView (match wrap) with the seat-scoped accessors
+# StMatch newly exposes — shop offers, Clear cooldown, Black Market — so the
+# UNMODIFIED shop.gd / black_market.gd modules run against a match-wrapped
+# view exactly as they do against StSim in main.gd. Every override keeps the
+# base method's shape and defensive guards; sim_view.gd itself is untouched.
+class SeatView extends SimView:
+	static func of_seat(match_obj, player_index: int) -> SeatView:
+		var v := SeatView.new()
+		v._match = match_obj
+		v._pi = player_index
+		return v
+
+	# shop.gd's card source — decodes StMatch.shop_names/meta/desc(i) exactly
+	# like the base class decodes StSim's (same flat layouts by construction).
+	func shop_offers() -> Array:
+		var out: Array = []
+		var names: PackedStringArray = _match.shop_names(_pi)
+		var meta: PackedInt64Array = _match.shop_meta(_pi)
+		var desc: PackedStringArray = _match.shop_desc(_pi)
+		for i in names.size():
+			var cost: int = meta[i * 3] if meta.size() > i * 3 else 0
+			var flags: int = meta[i * 3 + 1] if meta.size() > i * 3 + 1 else 0
+			var rarity: int = int(meta[i * 3 + 2]) if meta.size() > i * 3 + 2 else 0
+			out.append({
+				"name": names[i],
+				"cost": cost,
+				"is_weapon": (flags & 1) != 0,
+				"affordable": (flags & 2) != 0,
+				"rarity": rarity,
+				"flavor": desc[i * 2] if i * 2 < desc.size() else "",
+				"tip": desc[i * 2 + 1] if i * 2 + 1 < desc.size() else "",
+			})
+		return out
+
+	# Clear cooldown (shop.gd's disabled/recharge state) from StMatch.clear_state.
+	func clear_ready_in() -> int:
+		var cs: PackedInt64Array = _match.clear_state(_pi)
+		return cs[0] if cs.size() > 0 else 0
+
+	func clear_cooldown_total() -> int:
+		var cs: PackedInt64Array = _match.clear_state(_pi)
+		return maxi(int(cs[1]), 1) if cs.size() > 1 else 1
+
+	# Black Market surface (match.gd's pending-edge sync + picker lists).
+	func black_market_pending() -> bool:
+		return _match.black_market_pending(_pi)
+
+	func black_market_choices(weapons: bool) -> PackedInt64Array:
+		return _match.black_market_choices(weapons)
+
+	func black_market_choice_names(weapons: bool) -> PackedStringArray:
+		return _match.black_market_choice_names(weapons)

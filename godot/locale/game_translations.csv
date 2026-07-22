@@ -758,3 +758,9 @@ Piercing,Piercing,穿刺
 Magic,Magic,魔法
 Siege,Siege,攻城
 Chaos,Chaos,混沌
+YOU: %s  ·  [Esc] leave,YOU: %s  ·  [Esc] leave,你：%s  ·  [Esc] 离开
+CLEAR READY,CLEAR READY,清场就绪
+CLEAR %ds,CLEAR %ds,清场 %d 秒
+ABANDON MATCH?,ABANDON MATCH?,放弃对局？
+Your rivals keep fighting — a live net match never pauses.,Your rivals keep fighting — a live net match never pauses.,你的对手仍在战斗——联网对局永不暂停。
+[Enter] leave match   ·   [Esc] keep playing,[Enter] leave match   ·   [Esc] keep playing,[Enter] 离开对局   ·   [Esc] 继续战斗
