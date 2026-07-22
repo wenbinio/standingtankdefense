@@ -21,6 +21,8 @@ var _new_ids: Array = []
 
 func _ready() -> void:
 	font = ArtTheme.ui_font(false)   # Barlow + Noto SC fallback (renders CJK)
+	# Menu music bed (render-only; set_music dedupes, so re-entering is free).
+	Audio.set_music("menu_theme.wav")
 	# Apply the persisted (or default "en") UI language at the menu root.
 	TranslationServer.set_locale(Profile.locale())
 	for i in Profile.SKINS.size():
@@ -40,9 +42,12 @@ func _cache_thumbs() -> void:
 func _deploy() -> void:
 	var s: Dictionary = Profile.SKINS[sel]
 	if Profile.is_unlocked(s.id):
+		Audio.play(&"ui_click")
 		Profile.select(s.id)
 		Profile.active_challenge_code = 0   # plain deploy = you play, free of any rule
 		get_tree().change_scene_to_file("res://Main.tscn")
+	else:
+		Audio.play(&"ui_deny")              # locked skin: audible rejection
 
 # InputMap actions (bindings in project.godot [input]); was raw keycodes in
 # _input — moved to _unhandled_input like every other screen.
@@ -62,6 +67,7 @@ func _unhandled_input(e: InputEvent) -> void:
 						_deploy()
 					else:
 						sel = i
+						Audio.play(&"ui_move")
 					queue_redraw()
 		return
 	if not (e is InputEventKey or e is InputEventJoypadButton):
@@ -69,28 +75,37 @@ func _unhandled_input(e: InputEvent) -> void:
 	var n := Profile.SKINS.size()
 	if e.is_action_pressed(&"ui_nav_left"):
 		sel = (sel - 1 + n) % n
+		Audio.play(&"ui_move")
 		queue_redraw()
 	elif e.is_action_pressed(&"ui_nav_right"):
 		sel = (sel + 1) % n
+		Audio.play(&"ui_move")
 		queue_redraw()
 	elif e.is_action_pressed(&"ui_nav_up"):
 		sel = (sel - COLS + n) % n
+		Audio.play(&"ui_move")
 		queue_redraw()
 	elif e.is_action_pressed(&"ui_nav_down"):
 		sel = (sel + COLS) % n
+		Audio.play(&"ui_move")
 		queue_redraw()
 	elif e.is_action_pressed(&"ui_challenges"):
+		Audio.play(&"ui_click")
 		get_tree().change_scene_to_file("res://ChallengeSelect.tscn")
 	elif e.is_action_pressed(&"ui_lobby"):
+		Audio.play(&"ui_click")
 		get_tree().change_scene_to_file("res://Lobby.tscn")   # multiplayer lobby (host-authoritative)
 	elif e.is_action_pressed(&"ui_net_view"):
+		Audio.play(&"ui_click")
 		get_tree().change_scene_to_file("res://Match.tscn")   # multi-arena net demo
 	elif e.is_action_pressed(&"ui_theme_cycle"):
 		ArtTheme.cycle()
 		_cache_thumbs()
+		Audio.play(&"ui_click")
 		queue_redraw()
 	elif e.is_action_pressed(&"ui_language"):
 		_toggle_language()
+		Audio.play(&"ui_click")
 	elif e.is_action_pressed(&"ui_settings"):
 		_open_settings()
 	elif e.is_action_pressed(&"ui_dev_unlock"):
@@ -103,6 +118,7 @@ func _unhandled_input(e: InputEvent) -> void:
 	elif e.is_action_pressed(&"ui_confirm"):
 		_deploy()
 	elif e.is_action_pressed(&"ui_back"):
+		Audio.play(&"ui_back")
 		get_tree().quit()
 
 # Open the shared settings pane (pause_menu.gd, settings-only mode) on top of

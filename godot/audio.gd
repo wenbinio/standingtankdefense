@@ -27,26 +27,37 @@ extends Node
 const SFX_DIR := "res://audio/sfx/"
 const MUSIC_DIR := "res://audio/music/"
 const POOL_SIZE := 12                  # concurrent SFX voices
-# Until real music stems land, this bed stands in for any missing layer track.
-const PLACEHOLDER_MUSIC := "ambient_bed.wav"
+# Fallback stem for any missing layer track (also the default match bed).
+const PLACEHOLDER_MUSIC := "match_base.wav"
 
 # Event -> list of stream resource paths (a list allows simple round-robin
-# variants, e.g. two fire zaps). Keys are the canonical event names main.gd /
-# match.gd emit. Missing files are skipped silently at load time.
+# variants, e.g. the three fire zaps). Keys are the canonical event names
+# main.gd / match.gd / the menu scenes emit. Missing files are skipped
+# silently at load time. Assets: curated Kenney CC0 packs (fetch_sfx.py) +
+# score-matched procedural stingers (gen_music.py); see audio/ + /CREDITS.md.
 const EVENTS := {
-	&"fire":           ["fire.wav", "fire_b.wav"],
-	&"hit":            ["hit.wav"],
-	&"enemy_death":    ["enemy_death.wav"],
+	&"fire":           ["fire.wav", "fire_b.wav", "fire_c.wav"],
+	&"hit":            ["hit.wav", "hit_b.wav"],
+	&"enemy_death":    ["enemy_death.wav", "enemy_death_b.wav"],
 	&"boss_spawn":     ["boss_spawn.wav"],
-	&"tank_hit":       ["tank_hit.wav"],
+	&"boss_death":     ["boss_death.wav"],       # boss-kill hook (not wired yet)
+	&"tank_hit":       ["tank_hit.wav", "tank_hit_b.wav"],
 	&"tank_destroyed": ["tank_destroyed.wav"],
+	&"elimination":    ["elimination.wav"],      # a player fell (net view)
 	&"buy":            ["buy.wav"],
+	&"sell":           ["sell.wav"],             # reserved for shop sell-back
+	&"coin":           ["coin.wav"],             # gold-bounty hook (not wired yet)
 	&"reroll":         ["reroll.wav"],
 	&"clear":          ["clear.wav"],
 	&"round_start":    ["round_start.wav"],
 	&"victory":        ["victory.wav"],
 	&"defeat":         ["defeat.wav"],
-	&"ui_move":        ["ui_move.wav"],
+	&"achievement":    ["achievement.wav"],      # toast hook (not wired yet)
+	&"ui_move":        ["ui_move.wav"],          # selection / nav blip
+	&"ui_click":       ["ui_click.wav"],         # confirm / activate
+	&"ui_back":        ["ui_back.wav"],          # dismiss / back out
+	&"ui_hover":       ["ui_hover.wav"],         # pointer hover (reserved)
+	&"ui_deny":        ["ui_deny.wav"],          # rejected action
 }
 
 # Per-event minimum spacing (seconds) so a burst of identical deltas in one tick
@@ -57,6 +68,8 @@ const MIN_GAP := {
 	&"hit":         0.04,
 	&"enemy_death": 0.03,
 	&"tank_hit":    0.06,
+	&"coin":        0.06,
+	&"ui_hover":    0.06,
 }
 
 # --- per-play randomization (anti-repetition) ---------------------------------
@@ -66,12 +79,21 @@ const PITCH_SPAN := 0.08               # +/-8% pitch_scale at scale 1.0
 const VOL_JITTER_DB := 1.5             # +/-1.5 dB at scale 1.0
 const RAND_SCALE := {
 	&"ui_move":     0.0,               # UI: exempt — identical blips read as UI
+	&"ui_click":    0.0,
+	&"ui_back":     0.0,
+	&"ui_hover":    0.0,
+	&"ui_deny":     0.0,
 	&"victory":     0.0,               # stingers: play as authored
 	&"defeat":      0.0,
+	&"elimination": 0.0,
+	&"achievement": 0.0,
 	&"buy":         0.25,              # economy: a hint of life, still "clicky"
+	&"sell":        0.25,
+	&"coin":        0.25,
 	&"reroll":      0.25,
 	&"clear":       0.25,
 	&"round_start": 0.25,
+	&"boss_death":  0.25,
 }
 
 # --- mass-event scaling (play_many) --------------------------------------------
@@ -87,7 +109,9 @@ const DUCK_EVENTS := {                 # plays that auto-duck the music bed
 	&"victory": true,
 	&"defeat": true,
 	&"boss_spawn": true,
+	&"boss_death": true,
 	&"tank_destroyed": true,
+	&"elimination": true,
 }
 const DUCK_DB := -6.0
 const DUCK_ATTACK := 0.05
@@ -187,7 +211,7 @@ func play_many(event: StringName, count: int) -> void:
 		duck()
 
 # Swap the looping music bed with a ~1.5 s crossfade. `track` is a filename
-# under audio/music/ (e.g. "ambient_bed.wav") or "" / null to fade out and
+# under audio/music/ (e.g. "menu_theme.wav") or "" / null to fade out and
 # stop. Unknown filenames are ignored (current music keeps playing). Loops
 # automatically.
 func set_music(track) -> void:
@@ -198,7 +222,7 @@ func set_music(track) -> void:
 
 # Vertical mixing: crossfade into a deck holding a base stem plus an intense
 # stem whose level follows set_intensity(). Missing stems fall back to the
-# ambient-bed placeholder so the system works before real stems exist.
+# base match stem so a bad track name still yields music.
 func set_music_layers(
 	base: String = PLACEHOLDER_MUSIC,
 	intense: String = PLACEHOLDER_MUSIC,
@@ -376,7 +400,7 @@ func _play_stream(
 	p.play()
 
 # Crossfade into the inactive deck loaded with (base, intense). Empty base ==
-# fade to silence. `fallback` routes missing files to the placeholder bed
+# fade to silence. `fallback` routes missing files to the fallback stem
 # (layered mode); without it missing files were already rejected by the caller.
 func _start_deck(base_track: String, intense_track: String, fallback: bool) -> void:
 	if _decks.is_empty():
@@ -459,7 +483,7 @@ func _apply_music_bus() -> void:
 
 # Load (and loop-flag) a music stream. Returns null for "" or, when `fallback`
 # is off, for missing files. With `fallback` on, missing stems resolve to the
-# placeholder bed so layered mode works before real assets exist.
+# fallback stem (PLACEHOLDER_MUSIC) so layered mode always yields music.
 func _load_music(track: String, fallback: bool) -> AudioStream:
 	if track == "":
 		return null

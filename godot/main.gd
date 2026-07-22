@@ -108,7 +108,7 @@ func _ready() -> void:
 	_hit_ring.resize(HIT_WINDOW_TICKS)   # zero-filled by resize
 	_wire_modules()
 	# AUDIO (render-only): start the looping ambient bed.
-	Audio.set_music("ambient_bed.wav")
+	Audio.set_music_layers("match_base.wav", "match_combat.wav")
 	_au_was_dead = false
 
 # Hand every module its read-only view (+ the shared FX bus where needed) and

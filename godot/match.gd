@@ -207,7 +207,7 @@ func _ready() -> void:
 	_cache_theme_textures()
 	_setup_environment()
 	_init_juice()
-	Audio.set_music("ambient_bed.wav")   # render-only ambient bed
+	Audio.set_music_layers("match_base.wav", "match_combat.wav")   # render-only bed
 
 # Preallocate every per-cell timer array once (see the caps block above).
 func _init_juice() -> void:
@@ -602,7 +602,7 @@ func _detect_eliminations() -> void:
 			if not sfx_done:
 				sfx_done = true
 				# Muted stinger (play() carries jitter; ducks via DUCK_EVENTS).
-				Audio.play(&"tank_destroyed")
+				Audio.play(&"elimination")
 		_was_dead[i] = 1 if d else 0
 
 # AUDIO for the human seat's own actions (render-only, mirrors main.gd's

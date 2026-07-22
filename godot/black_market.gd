@@ -113,12 +113,13 @@ func disarm() -> void:
 # Esc/[B]/outside click while open: down to the passive badge.
 func dismiss() -> void:
 	if _mode == OPEN:
+		Audio.play(&"ui_back")
 		_set_mode(HELD)
 
 # Badge click / [B] while held: back up to the picker.
 func reopen() -> void:
 	if _mode == HELD:
-		Audio.play(&"ui_move")
+		Audio.play(&"ui_click")
 		_set_mode(OPEN)
 
 # The queued pick was no-oped by the sim (pending survived its tick). Should
@@ -189,6 +190,7 @@ func _pick() -> void:
 		return
 	var code := CODE_WEAPON if _col == 0 else CODE_UPGRADE
 	if on_pick.is_valid() and bool(on_pick.call(code, int(idx_arr[_row]))):
+		Audio.play(&"ui_click")
 		_set_mode(WAIT)
 
 func _click(pos: Vector2) -> void:

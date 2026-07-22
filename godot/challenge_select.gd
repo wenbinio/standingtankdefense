@@ -11,6 +11,8 @@ var thumbs := {}             # skin id -> Texture2D
 
 func _ready() -> void:
 	font = ArtTheme.ui_font(false)   # Barlow + Noto SC fallback (renders CJK)
+	# Menu music bed (render-only; set_music dedupes across menu scenes).
+	Audio.set_music("menu_theme.wav")
 	# Resume on the currently-armed challenge, if any.
 	for i in Profile.CHALLENGES.size():
 		if Profile.CHALLENGES[i].code == Profile.active_challenge_code:
@@ -28,6 +30,7 @@ func _count() -> int:
 	return Profile.CHALLENGES.size() + 1   # + free play
 
 func _deploy() -> void:
+	Audio.play(&"ui_click")
 	Profile.active_challenge_code = 0 if sel == 0 else int(Profile.CHALLENGES[sel - 1].code)
 	get_tree().change_scene_to_file("res://Match.tscn")
 
@@ -42,6 +45,7 @@ func _unhandled_input(e: InputEvent) -> void:
 						_deploy()
 					else:
 						sel = i
+						Audio.play(&"ui_move")
 					queue_redraw()
 		return
 	if not (e is InputEventKey or e is InputEventJoypadButton):
@@ -49,13 +53,16 @@ func _unhandled_input(e: InputEvent) -> void:
 	var n := _count()
 	if e.is_action_pressed(&"ui_nav_up"):
 		sel = (sel - 1 + n) % n
+		Audio.play(&"ui_move")
 		queue_redraw()
 	elif e.is_action_pressed(&"ui_nav_down"):
 		sel = (sel + 1) % n
+		Audio.play(&"ui_move")
 		queue_redraw()
 	elif e.is_action_pressed(&"ui_confirm"):
 		_deploy()
 	elif e.is_action_pressed(&"ui_back") or e.is_action_pressed(&"ui_challenges"):
+		Audio.play(&"ui_back")
 		get_tree().change_scene_to_file("res://SkinSelect.tscn")
 
 func _draw() -> void:

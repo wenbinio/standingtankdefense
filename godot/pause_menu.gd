@@ -96,9 +96,11 @@ func is_open() -> bool:
 	return _mode != CLOSED
 
 func open_pause() -> void:
+	Audio.play(&"ui_click")
 	_enter(SETTINGS if standalone_settings else MENU)
 
 func open_settings() -> void:
+	Audio.play(&"ui_click")
 	_enter(SETTINGS)
 
 # Route one InputEvent here while is_open(). The overlay owns everything the
@@ -147,6 +149,7 @@ func _close() -> void:
 # Esc / back: settings -> menu (or close when standalone), confirm -> menu,
 # menu -> resume (close). Esc-while-paused therefore resumes.
 func _back() -> void:
+	Audio.play(&"ui_back")
 	match _mode:
 		SETTINGS:
 			if standalone_settings:
@@ -180,12 +183,14 @@ func _move_sel(dir: int) -> void:
 func _activate(i: int) -> void:
 	match _mode:
 		MENU:
+			Audio.play(&"ui_click")
 			match i:
 				0: _close()                                   # Resume
 				1: _enter(CONFIRM_RESTART)                    # Restart -> confirm gate
 				2: _enter(SETTINGS)                           # Settings
 				3: _enter(CONFIRM)                            # Quit -> confirm gate
 		CONFIRM:
+			Audio.play(&"ui_click")
 			match i:
 				0: _close()                                   # Keep Playing (resume)
 				1: get_tree().change_scene_to_file("res://SkinSelect.tscn")
@@ -206,13 +211,16 @@ func _activate(i: int) -> void:
 						Audio.play(&"ui_move")                # audible unmute confirm
 				ROW_LANG:
 					_toggle_language()
+					Audio.play(&"ui_click")
 				ROW_SHAKE:
 					Profile.set_screen_shake(not Profile.screen_shake())
+					Audio.play(&"ui_click")
 				ROW_SPEED:
 					# Enter cycles forward; left/right in _adjust go both ways.
 					Profile.set_game_speed(posmod(Profile.game_speed() + 1, SPEED_NAMES.size()))
+					Audio.play(&"ui_click")
 				ROW_BACK:
-					_back()
+					_back()                                   # voices ui_back itself
 				_:
 					pass   # volume rows adjust via left/right or drag, not confirm
 

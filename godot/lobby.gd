@@ -52,6 +52,8 @@ const PEER_NAMES := [
 
 func _ready() -> void:
 	font = ArtTheme.ui_font(false)   # Barlow + Noto SC fallback (renders CJK)
+	# Menu music bed (render-only; set_music dedupes across menu scenes).
+	Audio.set_music("menu_theme.wav")
 	randomize()
 	# Open a lobby with us as host (peer 0): seated + ready, phase Filling.
 	lobby = StLobby.host()
@@ -160,6 +162,7 @@ func _attempt_start() -> void:
 		return
 	var code: int = lobby.try_start(randi())
 	if code == 0:
+		Audio.play(&"ui_click")
 		# Host-authoritative plan: hand the seed + PEER count to the match. We store
 		# peers-only (total members minus the host) so Match's `lobby_players + 1`
 		# reconstitutes the full host + peers roster. plan_player_count() is the
@@ -180,6 +183,7 @@ func _attempt_start() -> void:
 		_flash(tr("Start rejected (code %d).") % code)
 
 func _flash(msg: String) -> void:
+	Audio.play(&"ui_deny")     # every flash is a rejection/hint — voice it once
 	_start_msg = msg
 	_start_msg_t = 3.0
 	queue_redraw()
@@ -204,22 +208,29 @@ func _unhandled_input(e: InputEvent) -> void:
 	if not (e is InputEventKey or e is InputEventJoypadButton):
 		return
 	if e.is_action_pressed(&"ui_ready_toggle"):
+		Audio.play(&"ui_click")
 		_toggle_my_ready()
 	elif e.is_action_pressed(&"ui_lobby_add"):
+		Audio.play(&"ui_click")
 		_add_peer()
 	elif e.is_action_pressed(&"ui_lobby_remove"):
+		Audio.play(&"ui_back")
 		_remove_last_peer()
 	elif e.is_action_pressed(&"ui_ready_all"):
+		Audio.play(&"ui_click")
 		_ready_all()
 	elif e.is_action_pressed(&"ui_lobby_start"):
-		_attempt_start()
+		_attempt_start()           # voices ui_click on success / ui_deny via _flash
 	elif e.is_action_pressed(&"ui_speed_cycle"):
+		Audio.play(&"ui_move")
 		_cycle_speed()
 	elif e.is_action_pressed(&"ui_theme_cycle"):
 		ArtTheme.cycle()
 		_refresh_all_cos()
+		Audio.play(&"ui_click")
 		queue_redraw()
 	elif e.is_action_pressed(&"ui_back"):
+		Audio.play(&"ui_back")
 		get_tree().change_scene_to_file("res://SkinSelect.tscn")
 
 # --- per-frame: advance peer auto-ready timers --------------------------------
