@@ -115,3 +115,121 @@ The game is "randomized," but for a fair, cheat-resistant, reconnectable multipl
 - Co-op / shared-arena mode (architecture can grow into it; [03 §9](03-network-architecture.md)).
 - The full single-player **challenge/score & skins** meta (the system exists in the source; we note it as a v2 meta-progression layer, not v1 multiplayer).
 - **Cross-arena interaction** ("send a creep to a rival"): explicitly excluded in v1 because it would couple the otherwise-independent sims — noted as a deliberate networking trade-off in [03 §9](03-network-architecture.md), not a v1 feature.
+
+---
+
+## Post-source additions (§2.10–§2.13) — approved concepts, spec'd for review
+
+The four systems below are **original, post-source additions**: they are *not* extracted from Tower Survivors, and per the source-fidelity posture ([`09` §fidelity program](09-rebuild-plan.md)) they are labeled as such — the same class of addition as the catalog's E1–E3 expansion batches in `sim::content` (this design track is **E4** when it lands in code, and stays flagged there and in `CREDITS.md`). The *concepts* are owner-approved; every number marked **`TUNABLE-PENDING-SWEEP`** and every item on an **OPEN QUESTIONS** line is a reviewable proposal awaiting owner sign-off — the **set-bonus numbers (§2.13)** and the **mutator list (§2.11)** explicitly so. Nothing in this block is implemented yet; each spec is written to be handed to an agent against the invariants: deterministic integer/`Fixed` math only, sim core engine-independent, director authority over anything competitively load-bearing, config hashed per [`05 §5.8`](05-data-model.md).
+
+## 2.10 Score attack (canonical score formula)
+
+**Motivation.** The game already produces several ad-hoc scores — the net view's per-player tracker, the results panel, the profile's score-threshold achievements — and the ship track adds Steam leaderboards ([`06` M4](06-roadmap-risks-testing.md), [`07 §7.7`](07-steamworks-integration.md)). Without one canonical function these will drift into incomparable numbers. This section defines **the** score: one deterministic integer formula shared by local records, the results screen, and future Steam boards, so a score is the same number wherever it is displayed and can be **re-derived by a replay verifier**.
+
+**The formula [design choice].** All arithmetic is `i64`, saturating, integer-only (`ilog2` = floor of log₂ over `u64`); term weights are named constants and every one is **`TUNABLE-PENDING-SWEEP`**:
+
+```
+SCORE = ((T_surv + T_dmg + T_boss + T_place + T_last) × DIFF_NUM) / DIFF_DEN
+
+T_surv  = survival_ticks / SCORE_SURV_DIV          // SCORE_SURV_DIV = 3  → 10 pts per second survived
+T_dmg   = SCORE_DMG_W × ilog2(1 + damage_dealt)    // SCORE_DMG_W  = 250 → log-compressed, like the
+                                                   //   tracker's display score (match.gd `_score`),
+                                                   //   but INTEGER (ilog2, not float log10)
+T_boss  = SCORE_BOSS  if this arena killed the boss, else 0        // SCORE_BOSS = 5000
+T_place = SCORE_PLACE_W × (lobby_size − placement)  // SCORE_PLACE_W = 250; MP only (lobby_size 1 ⇒ 0)
+T_last  = SCORE_LAST_STAND  if Last Stand, else 0   // SCORE_LAST_STAND = 250 — the source's "+250
+                                                   //   score" prestige number, carried forward (§2.7)
+```
+
+- `survival_ticks` = the player's **death tick**, or the match-resolution tick for a tank still alive at the end (§2.7). A full run to the boss is 27000+ ticks ⇒ `T_surv` ≈ 9000+, so survival stays the dominant term — scoring mirrors pillar 4 (*you race the lobby*).
+- `damage_dealt` = `total_damage_dealt` from the arena stats. Log compression keeps a 10⁶-damage run (~4 750) and a 10¹²-damage snowball (~9 750) on the same axis; damage differentiates but never outruns survival.
+- **Difficulty interaction**: `DIFF_NUM/DIFF_DEN` is a reserved slot for a future difficulty ladder over the `RAMP_BASE` dial ([`06` §M4 balance pass](06-roadmap-risks-testing.md)). The shipped tune **is** Normal = `1/1`, and **only Normal-difficulty runs are board-eligible**. Game speed (30/45/60/90 tps) is cadence-only (§2.3) and never touches the score.
+- **Exclusions**: mutated runs (§2.11) never enter the standard boards — they key their own board namespaces. Loadout runs (§2.12) are proposed board-eligible (they are sidegrades) — flagged below.
+
+**Determinism & authority.** The score is computed in the **render/meta layer** — from `stats_record()` (`godot/sim_view.gd`) plus the director-owned placement/death-tick facts — **never inside `ArenaState`**: it is not part of `state_checksum`, not in snapshots, and never crosses the wire during a match. (The in-match tracker may keep its cosmetic float display; the canonical formula owns records/results/boards.) Two small stats-surface additions are required: the survival tick and a `boss_killed` flag exposed alongside the existing stats — render-only telemetry, same class as `bought_attack_mask`. **Anti-cheat is the replay-verified submission story of [`07 §7.6`](07-steamworks-integration.md)**: a board write ships `(seed, input_log, RunConfig)`; the verifier re-sims, recomputes the stats, recomputes this formula, and rejects a submission whose claimed score disagrees. The formula being pure-integer over re-simmable facts is what makes that check exact.
+
+**Test & balance hook.** Weight sanity is checked with the existing 80-seed bot sweep ([`06 §6.1` M4 balance pass](06-roadmap-risks-testing.md)): across the four archetypes, score must rank runs in placement-then-survival order (no archetype may out-score a longer-surviving one on damage alone) before any board ships.
+
+**OPEN QUESTIONS (owner sign-off needed):** the five weights (`3 / 250 / 5000 / 250 / 250`); whether loadout runs (§2.12) share the standard board; whether `T_place`/`T_last` should also pay out in single-player vs. bots (proposal: no — SP boards rank on `T_surv+T_dmg+T_boss` only).
+
+## 2.11 Run mutators
+
+**Motivation.** The randomized shop gives run-to-run variety, but every run today plays the same *ruleset*. Mutators add owner-curated, deterministic rule twists — replayability for veterans and a lobby-level "house rules" knob for multiplayer — without touching the tuned standard envelope, because mutated runs are fenced off from standard records.
+
+**Spec.** A mutator is a **small, fixed set of deterministic tuning deltas** selected **before** the run and applied **once, at `ArenaState` construction** — content-table ratio deltas and constructor fields, all integer/`(num,den)` `Fixed` ratios, never mid-match, never floats. The active set is a bitmask (`RunConfig.mutators`, [`05 §5.8`](05-data-model.md)) in the stable order of this table. Proposed initial set — **every delta `TUNABLE-PENDING-SWEEP`**, the list itself pending owner sign-off:
+
+| bit | id | Name | Deltas (exact, on named sim constants/fields) |
+| --- | --- | --- | --- |
+| 0 | `m_glass_cannon` | **Glass Cannon** | enemy HP ×1/2 · tank max HP ×1/2 |
+| 1 | `m_swarm` | **Swarm** | wave `cadence_ticks` ×1/2 (double spawn rate) · enemy HP ×3/5 |
+| 2 | `m_barren` | **Barren Market** | shop rarity draw weights: Uncommon/Rare/Epic → 0 (Common-only offers; Black Market unavailable) |
+| 3 | `m_no_reroll` | **No Reroll** | `reroll_count_remaining` 5 → 0 · gold rerolls disabled (reroll input = deterministic no-op, like the post-boss shop) |
+| 4 | `m_overclock` | **Overclock** | all weapon `cooldown_ticks` ×1/2 (floor 1 tick; includes fixed-rate weapons — this scales the *data*, not +Attack Speed, so the N/A rule of §2.5 is untouched) · enemy HP ×3/2 |
+| 5 | `m_iron_tank` | **Iron Tank** | `Clear` disabled (input = deterministic no-op) · tank max HP ×2. ⚠ The boss is then unkillable (§2.6): the boss phase becomes a pure swift-end survival race; match still resolves by elimination order |
+| 6 | `m_famine` | **Famine** | base passive income ×1/2 · bounty ×3/2 (a *config* delta on the un-multiplied base — the source's "income multipliers touch only bonus income" scoping rule of §2.4 still holds in-run) |
+| 7 | `m_blitz` | **Blitz** | ramp grace 2 min → 0 (`RAMP_GRACE_MIN` = 0; the +25%/min ramp starts at 0:00) |
+
+- **Records**: mutated runs are **excluded from standard records and boards**; each distinct `mutators` bitmask keys its **own** record/board namespace ([`05 §5.8`](05-data-model.md)). Scores inside a mutator board still use the §2.10 formula.
+- **Multiplayer**: the mutator set is **host-set in the lobby, visible to every member before ready-up**, identical for all players (starts stay symmetric — mutators are ruleset, not per-player handicaps), and fixed at `MatchStart`.
+
+**Determinism & authority.** Mutators are pre-run config, not runtime state: after construction the sim has no "mutator code path", just different numbers — so determinism, snapshots, and the checksum are untouched by construction. The director owns the authoritative set; **the bitmask is folded into the join-gate hash** (`ruleset_hash`, [`05 §5.8`](05-data-model.md)), so a client with a mismatched mutator config fails the same gate that catches content drift ([`04 §4.4.1`](04-protocol-and-messages.md)) and can never enter the lobby's match.
+
+**Test & balance hook.** Each shipped mutator gets a determinism run (same seed+inputs+bitmask ⇒ identical checksum trace) and an 80-seed bot sweep to confirm it is *playable* (win rate within a wide 5–50% sanity band, not the standard 17–23% target — mutators may be deliberately lopsided).
+
+**OPEN QUESTIONS (owner sign-off needed):** the mutator list itself (which of the 8 ship; any additions); every delta ratio; whether mutator sets may combine freely or ship as curated single picks; the Iron Tank boss-unkillable resolution rule.
+
+## 2.12 Unlock-gated starting loadouts (single-player only)
+
+**Motivation.** The achievement/skin meta (`godot/profile.gd`) currently pays out only cosmetics. Loadouts give the challenge achievements a small *gameplay* payoff — an alternate opening that skips the first shop lottery for a chosen weapon class — while staying **sidegrades**: the point is a different first minute, not a stronger one.
+
+**Spec.** A loadout = **one starting weapon + a gold delta**, passed as single-player constructor parameters. Proposed set — each maps a **real, existing** achievement id from `profile.gd` to that attack class's **Common (500 g)** weapon, with the gold delta pre-paying the exact cost (start gold 500 → 0), so a loadout is gold-neutral and the "benefit" is being armed from tick 0 plus certainty of the first buy:
+
+| Loadout | Unlock (achievement id — `profile.gd`) | Start weapon (Common, 500 g) | Gold delta |
+| --- | --- | --- | --- |
+| Marksman's Start | `purist_single` — *One-Trick Sniper* | Bow | −500 |
+| Bombardier's Start | `purist_splash` — *Boom Enthusiast* | Mortar Launcher | −500 |
+| Fusillade Start | `purist_barrage` — *Spray 'n' Pray* | Knives | −500 |
+| Warden's Start | `purist_area` — *Aura Farmer* | Thornburst | −500 |
+| Emberwake Start | `purist_wave` — *Wavy Gravy* | Immolation Aura | −500 |
+| Ricochet Start | `purist_bounce` — *Ricochet Rascal* | Seeker Axe | −500 |
+
+(Weapons referenced by catalog name, resolved to def indices at implementation time; each is the cheapest shipped Common of its attack class in `sim::content::WEAPONS`.)
+
+**Principles [design choice]:**
+- **SP-only.** Multiplayer starts stay **symmetric** — every tank opens identically; competitive integrity and the "meta is cosmetic in MP" principle (`profile.gd`'s header contract) are preserved. The MP constructor path simply never accepts a loadout parameter.
+- **Power-neutral intent.** Every loadout is cost-exact (weapon granted, cost deducted); no loadout may ship with a net-positive gold or stat delta. Sidegrade, not head start.
+- **Sim-constructor surface.** `ArenaState::new` gains optional `(start_weapon, gold_delta)` (the `RunConfig.loadout` index, [`05 §5.8`](05-data-model.md)); the granted weapon uses the normal purchase plumbing (it sets `bought_attack_mask`, counts as a bought weapon for achievements).
+- **Records**: **proposed — allowed on standard records** (they are gold-neutral sidegrades, and excluding them would punish using the meta at all) — but the run's loadout id is always recorded in the replay header so the verifier re-sims the true start. **Flagged for owner** (see OPEN QUESTIONS).
+
+**Determinism & authority.** Like mutators: pure pre-run config applied at construction; zero runtime branching, zero checksum impact by construction. SP-only means no director involvement — but the loadout id **must** ride in the replay header, or §2.10's verifier cannot reproduce the run.
+
+**Test & balance hook.** A `balance_guards`-style check per loadout: the bot on each loadout must stay within a few points of the default start's win rate across the 80-seed sweep (proposal: ±5 pts of the 17–23% band, `TUNABLE-PENDING-SWEEP`) — proving "sidegrade" empirically, not rhetorically.
+
+**OPEN QUESTIONS (owner sign-off needed):** standard-records eligibility (proposed: allowed); the six achievement→loadout pairings (alternatives: `no_economy`/`war_profiteer`-gated economy-flavored starts were considered and dropped for not fitting the one-weapon constructor shape); whether loadouts appear in the SP challenge picker UI or a separate pre-run menu.
+
+## 2.13 Synergy set bonuses
+
+**Motivation.** Build identity today comes from stacking scalers; the shop already nudges players toward damage-type/status families, but committing to a family pays out only linearly. Set bonuses add **threshold moments** — "one more Frost weapon completes the set" — that reward committed builds and make the arsenal legible as a *build*, not a pile. This is the most design-sensitive addition: it injects free power on top of a tuned envelope, so everything here is a proposal.
+
+**Source-fidelity note.** The original had **scalers, not sets** — Frost/Fire strength upgrades, Combustion, Battle Fervor are all *purchased* modifiers. Set-collection bonuses are an **E-series original addition** and must stay labeled as such (code comment + `CREDITS.md`), per the [`09`](09-rebuild-plan.md) fidelity posture.
+
+**Spec.** Six sets, keyed to **existing** damage-type/status families — membership is a pure predicate over shipped `WeaponDef` data (no new content tags), and every threshold effect **composes with an existing mechanic** (named per cell) rather than adding a new engine class. **All thresholds and magnitudes `TUNABLE-PENDING-SWEEP`; the whole table is pending owner sign-off.**
+
+| Set | Membership predicate (existing data; family size) | Pieces T1 / T2 | T1 effect (existing hook) | T2 effect (existing hook) |
+| --- | --- | --- | --- | --- |
+| **Frost** | `on_hit.frost_stacks > 0` (9 weapons) | 3 / 6 | +1 Frost stack on every frost-applying hit (the `scale_on_hit` path, like the Poison/Stun scalers) | **Deep Freeze granted** (`GrantDeepFreeze` — the E3 opt-in effect, no purchase needed) |
+| **Fire** | `on_hit.fire_stacks > 0` (12) | 3 / 6 | +25% Fire strength (`FireDamagePct`) | **+100% Combustion** (`CombustionPct`; a distinct multiplicative source, stacks with the Combustion upgrade) |
+| **Poison** | `on_hit.poison_dps > 0` (6) | 2 / 4 | +25% Poison damage (`PoisonDamagePct`) | +25% damage vs Poisoned (`DamageVsPoisonedPct`) |
+| **Piercing** | `damage_type == DMG_PIERCING` (20) | 3 / 6 | +15% Piercing damage (`DamageTypePct`) | Piercing hits add +1 **typed** vulnerability stack (the Thorn `VulnTypeOnHit` mechanic as a set rider) |
+| **Siege** | `damage_type == DMG_SIEGE` (17) | 3 / 6 | +15% Siege damage (`DamageTypePct`) | Siege hits **Stun 0.25 s** (8 ticks, through the on-hit stun path — so "+% Stun Duration" scales it) |
+| **Healing** | `WeaponDef::is_healing()` (7) | 2 / 4 | **+15% Healing** (`HealingPct`) | +25% Healing-Weapon damage (`HealingWeaponDamagePct`; distinct source from Battle Fervor) |
+
+- **Piece counting [design choice — proposed: distinct]:** a "piece" is a **distinct owned `def_id`**; extra copies never add pieces (copies already pay out via "everything stacks" — sets reward *breadth* inside a family). A weapon counts toward **every** family it qualifies for (Frost Bomb is Frost *and* Piercing; Poison Bomb is Poison *and* Siege). Thresholds are per-family (2/4 for the two small families of 6–7 members; 3/6 elsewhere).
+- **Set-bonus magnitudes are additive within the set-bonus source and multiplicative across sources**, exactly like any other modifier (§2.5) — no new stacking rule.
+- **UI expectation:** the arsenal panel (the [`09 §9.4-P5`](09-rebuild-plan.md) weapon-detail extension) shows per-set piece counts and lit/unlit threshold effects; the shop card of a set-member weapon shows its family tag(s).
+
+**Determinism & authority.** Set state is a **derived value**: recomputed in the purchase path (`buy` — weapons are never sold, so piece counts are monotonic) as a pure function of `weapons[]`, granting/revoking nothing retroactively. Effects land through the existing modifier aggregates (plus the existing `tank.deep_freeze` flag), so checksum/snapshot coverage is inherited from mechanics that already ride in them; any new derived field that becomes authoritative state enters `checksum()`/snapshot per the [`05 §5.6`](05-data-model.md) rules with one documented golden re-baseline. MP needs no new protocol: purchases are already ordered inputs; the shadow-sim derives identical set state.
+
+**Test & balance hook.** The full 80-seed archetype sweep re-runs with sets enabled and must be re-dialed back into the 17–23% win band via `RAMP_BASE` (the designated dial) **before merge**; a guard test pins that a 6-piece Frost bot build actually receives Deep Freeze and that no set grants exceed their table values.
+
+**OPEN QUESTIONS (owner sign-off needed):** every threshold and magnitude in the table (the explicit sign-off item); distinct-vs-copies piece counting; whether multi-family weapons should count everywhere (proposed: yes) or in one elected family; whether T2 Siege's stun needs a boss exemption (boss is `Clear`-only for *damage* — proposal: boss immune to set-rider stun too); whether sets apply in multiplayer at launch or SP-first.

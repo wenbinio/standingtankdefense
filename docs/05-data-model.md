@@ -212,3 +212,22 @@ Weapons/modifiers/enemies/waves are **data**, not code — declarative definitio
 > **Amended 2026-07** (flagged locked-decision drift, approved in [`09 §9.2`](09-rebuild-plan.md)): as shipped, the content catalog is **compiled Rust** — static `WeaponDef`/`ModifierDef`/`EnemyDef` tables in `sim-core/crates/sim/src/content.rs` (96 weapons / 110 modifiers / a 12-entry enemy roster — counts gated against the tables by `crates/sim/tests/doc_sync.rs`), bootstrapped from `catalog.json` by `gen_catalog.py` and then hand-curated. The **schema discipline above is retained** — the Rust structs mirror these shapes field-for-field, and drift is caught by doc-sync tests — but the "authored as JSON/TOML files" clause is not how the game is built. This has served the balance/test workflow well and is the accepted state. Two consequences:
 > - **`content_hash` is currently a placeholder** (`DEMO_CONTENT_HASH = 0xC0DE_C0DE` in the GDExtension), which defeats the version-drift gate the join handshake exists for. A **real `content_hash`** — a deterministic serialization of the compiled tables, hashed — is planned in the ship track ([`09 §9.4-P6`](09-rebuild-plan.md)).
 > - **Externalized JSON/TOML data files remain a possible future** (e.g. for modding or hot-tuning), **not a requirement**; if adopted, they load into the same schema-shaped tables and feed the same hash.
+
+## 5.8 Run-config surface — mutators & starting loadouts (proposed; docs/02 §2.11–2.12)
+
+Config-surface sketch for two **post-source additions** (owner-approved concepts, numbers pending sign-off — see [`02 §2.10–2.13`](02-game-design.md)). Both are **pre-run configuration applied once at `ArenaState` construction** — after construction the sim has no config code path, just different numbers — so determinism, snapshots, and `state_checksum` are untouched by construction.
+
+```
+RunConfig {
+  mutators: u32       // bitmask; bit i = row i of the mutator table (02 §2.11, stable order).
+                      //   0 = the standard ruleset. Deltas are integer/(num,den) Fixed ratios
+                      //   over named content constants — never floats, never mid-match.
+  loadout: u8         // SP ONLY. 0 = default start; else 1-based index into the loadout
+                      //   table (02 §2.12) ⇒ constructor params (start_weapon, gold_delta).
+}
+```
+
+**Hash / join-gate inclusion rule:**
+- The join-time comparison ([`04 §4.4.1`](04-protocol-and-messages.md)) is over `ruleset_hash = H(content_hash ‖ mutators)`: the active mutator bitmask is appended to the content-hash preimage, so a lobby member with a mismatched mutator config fails the **same gate** that catches content/version drift and can never join the match. (Until the real `content_hash` lands — §5.7 — the placeholder is what gets extended.)
+- `loadout` is **excluded from the MP gate**: it is single-player-only and the MP constructor path never accepts it, so it can't desync anything. It **is included in the replay header** alongside seed + input log, so score verification ([`07 §7.6`](07-steamworks-integration.md), [`02 §2.10`](02-game-design.md)) re-sims the exact run.
+- **Record/board keying:** standard records require `mutators == 0`; each distinct nonzero bitmask keys its own record/board namespace. Loadout runs are proposed record-eligible (sidegrades) — an open owner decision in [`02 §2.12`](02-game-design.md).
