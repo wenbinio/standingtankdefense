@@ -363,6 +363,74 @@ func shop_offers() -> Array:
 func arsenal_lines() -> PackedStringArray:
 	return _sim.arsenal_lines() if _sim != null else PackedStringArray()
 
+# --- arsenal (typed, grouped) -----------------------------------------------------
+# Decoded, cached views over arsenal_meta()/synergies_meta() (see the record
+# layouts in godot/rust/src/lib.rs). The sim's weapon list and self-scaling
+# rule list are append-only, so `arsenal_rev()` is a monotone edge: the dict
+# decode below runs only when it moves (a purchase), never per frame.
+var _ars_rev := -9223372036854775807   # sentinel: force first decode
+var _ars_entries: Array = []
+var _ars_synergies: Array = []
+
+# Monotone revision of the owned arsenal + self-scaling rules (0 for a
+# match-wrapped view, which exposes no arsenal detail).
+func arsenal_rev() -> int:
+	return _sim.arsenal_rev() if _sim != null else 0
+
+# Owned weapon stacks as typed dicts, name-sorted (the marshal order):
+#   {name, kind, count, class_id, damage_type, rarity}
+# class_id: 0 SINGLE · 1 SPLASH · 2 BARRAGE · 3 AREA · 4 WAVE · 5 BOUNCE.
+func arsenal_entries() -> Array:
+	_refresh_arsenal()
+	return _ars_entries
+
+# Owned per-weapon-count self-scalers ("+X% Piercing per Bow") as typed dicts:
+#   {name, kind, damage_type, per_milli, count, bonus_milli}
+# per_milli/bonus_milli are milli-percent (1000 = +1%); bonus = per × count,
+# already resolved against the current arsenal. Includes rules whose source
+# weapon is unowned (count 0, bonus 0) — display filters those.
+func arsenal_synergies() -> Array:
+	_refresh_arsenal()
+	return _ars_synergies
+
+func _refresh_arsenal() -> void:
+	if _sim == null:
+		return
+	var rev: int = _sim.arsenal_rev()
+	if rev == _ars_rev:
+		return
+	_ars_rev = rev
+	_ars_entries = []
+	_ars_synergies = []
+	var names: PackedStringArray = _sim.arsenal_names()
+	var meta: PackedInt64Array = _sim.arsenal_meta()
+	for i in names.size():
+		var o := i * 5
+		if o + 4 >= meta.size():
+			break
+		_ars_entries.append({
+			"name": names[i],
+			"kind": int(meta[o]),
+			"count": int(meta[o + 1]),
+			"class_id": int(meta[o + 2]),
+			"damage_type": int(meta[o + 3]),
+			"rarity": int(meta[o + 4]),
+		})
+	var sn: PackedStringArray = _sim.synergy_names()
+	var sm: PackedInt64Array = _sim.synergies_meta()
+	for i in sn.size():
+		var o := i * 5
+		if o + 4 >= sm.size():
+			break
+		_ars_synergies.append({
+			"name": sn[i],
+			"kind": int(sm[o]),
+			"damage_type": int(sm[o + 1]),
+			"per_milli": int(sm[o + 2]),
+			"count": int(sm[o + 3]),
+			"bonus_milli": int(sm[o + 4]),
+		})
+
 # --- stats -----------------------------------------------------------------------
 # stats() = [damage_dealt, gold_earned, bought_attack_mask, weapons_bought,
 # economy_purchases]. Exposed both raw-by-name and as the Profile.record_match

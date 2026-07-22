@@ -11,6 +11,7 @@
 
 use crate::content;
 use crate::state::{ArenaState, EnemyStatus};
+use determinism::Fixed;
 use std::collections::BTreeMap;
 
 /// A full render snapshot for one tick.
@@ -41,6 +42,11 @@ pub struct RenderView {
     pub shop: Vec<RenderOffer>,
     /// Owned weapons collapsed to `(name, count)`, sorted by name.
     pub arsenal: Vec<RenderArsenalEntry>,
+    /// The owned per-weapon-count self-scaling rules ("+X% Piercing per Bow"),
+    /// merged per `(source weapon, damage type)` and resolved against the
+    /// current arsenal — the HUD's SYNERGIES readout. Pure read of
+    /// `Modifiers::weapon_count_scaling` + the owned-weapon counts.
+    pub synergies: Vec<RenderSynergy>,
     /// Match scoreboard totals.
     pub stats: RenderStats,
 }
@@ -194,10 +200,51 @@ pub struct RenderOffer {
     pub rarity: u8,
 }
 
+/// One owned weapon stack: `(name, count)` plus the catalog facts the arsenal
+/// panel groups by (attack class / damage type / rarity). Pure catalog reads —
+/// nothing here is new sim state.
 #[derive(Clone, Copy, Debug)]
 pub struct RenderArsenalEntry {
     pub name: &'static str,
     pub count: u32,
+    /// Weapon catalog index (`content::WEAPONS`).
+    pub kind: u16,
+    /// Attack-class scope id (`content::attack_scope_id`): 0 Single ·
+    /// 1 Splash · 2 Barrage · 3 Area · 4 Wave · 5 Bounce.
+    pub class_id: u8,
+    /// Damage type: 0 Normal · 1 Piercing · 2 Magic · 3 Siege · 4 Chaos.
+    pub damage_type: u8,
+    /// 0 common · 1 uncommon · 2 rare · 3 epic (drives the count colour).
+    pub rarity: u8,
+}
+
+/// One owned per-weapon-count self-scaling rule (a `DamagePerWeapon`-style
+/// modifier), resolved against the current arsenal for display. The sim
+/// resolves its OWN copy live at fire time (`Modifiers::self_scaling_add`);
+/// this mirrors that arithmetic (`per × owned count`) read-only. Percentages
+/// are milli-percent integers (1000 = 1%), rounded to nearest — display-only,
+/// never fed back into anything.
+#[derive(Clone, Copy, Debug)]
+pub struct RenderSynergy {
+    /// Weapon catalog index whose owned count drives the bonus.
+    pub source_kind: u16,
+    /// That weapon's display name.
+    pub source_name: &'static str,
+    /// Damage type the bonus applies to (0..=4, as in `RenderArsenalEntry`).
+    pub damage_type: u8,
+    /// Bonus per owned copy, milli-percent (1000 ⇒ +1% per copy).
+    pub per_copy_milli_pct: i64,
+    /// Current owned count of `source_kind`.
+    pub count: u32,
+    /// Current total bonus, milli-percent (= per-copy × count).
+    pub bonus_milli_pct: i64,
+}
+
+/// Display-only conversion: a `Fixed` fraction → milli-percent (1000 = 1%),
+/// rounded to nearest. Integer math throughout; the result never feeds the
+/// checksum or any sim decision.
+fn fixed_milli_pct(f: Fixed) -> i64 {
+    (f.raw() * 100_000 + (1 << (Fixed::FRAC_BITS - 1))) >> Fixed::FRAC_BITS
 }
 
 /// Build a [`RenderView`] from current state. Read-only; allocation-light.
@@ -315,15 +362,55 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         })
         .collect();
 
-    let mut counts: BTreeMap<&'static str, u32> = BTreeMap::new();
+    // Keyed `(name, def)` so iteration stays name-sorted (the panel's order)
+    // while each stack keeps its catalog identity for grouping/synergies.
+    let mut counts: BTreeMap<(&'static str, u16), u32> = BTreeMap::new();
     for w in &s.weapons {
         *counts
-            .entry(content::WEAPONS[w.def as usize].name)
+            .entry((content::WEAPONS[w.def as usize].name, w.def))
             .or_insert(0) += 1;
     }
-    let arsenal = counts
+    let arsenal: Vec<RenderArsenalEntry> = counts
         .into_iter()
-        .map(|(name, count)| RenderArsenalEntry { name, count })
+        .map(|((name, def), count)| {
+            let w = &content::WEAPONS[def as usize];
+            RenderArsenalEntry {
+                name,
+                count,
+                kind: def,
+                class_id: content::attack_scope_id(w.attack),
+                damage_type: w.damage_type,
+                rarity: w.rarity,
+            }
+        })
+        .collect();
+
+    // Owned self-scaling rules, merged per (source weapon, damage type) —
+    // buying the same scaler twice stacks additively, exactly as
+    // `Modifiers::self_scaling_add` sums the rules at fire time. BTreeMap ⇒
+    // stable (source, type) order.
+    let mut rules: BTreeMap<(u16, u8), Fixed> = BTreeMap::new();
+    for r in &s.modifiers.weapon_count_scaling {
+        *rules
+            .entry((r.weapon_def, r.dmg_type))
+            .or_insert(Fixed::ZERO) += r.per;
+    }
+    let synergies = rules
+        .into_iter()
+        .map(|((def, ty), per)| {
+            let count = arsenal
+                .iter()
+                .find(|e| e.kind == def)
+                .map_or(0, |e| e.count);
+            RenderSynergy {
+                source_kind: def,
+                source_name: content::WEAPONS[def as usize].name,
+                damage_type: ty,
+                per_copy_milli_pct: fixed_milli_pct(per),
+                count,
+                bonus_milli_pct: fixed_milli_pct(per.mul(Fixed::from_int(count as i64))),
+            }
+        })
         .collect();
 
     RenderView {
@@ -342,6 +429,7 @@ pub fn snapshot(s: &ArenaState) -> RenderView {
         economy,
         shop,
         arsenal,
+        synergies,
         stats: RenderStats {
             damage_dealt: s.total_damage_dealt,
             gold_earned: s.total_gold_earned,
@@ -415,6 +503,75 @@ mod tests {
         let v = snapshot(&s);
         assert_eq!(v.stats.damage_dealt, 12_345);
         assert_eq!(v.stats.gold_earned, 6_789);
+    }
+
+    #[test]
+    fn arsenal_entries_carry_catalog_facts() {
+        let s = ArenaState::new(0xBEEF, 0);
+        let v = snapshot(&s);
+        // The starting weapon is owned ⇒ exactly one stack, count 1, and its
+        // catalog facts round-trip.
+        assert_eq!(v.arsenal.len(), 1);
+        let e = &v.arsenal[0];
+        let def = &content::WEAPONS[e.kind as usize];
+        assert_eq!(e.kind, content::STARTING_WEAPON);
+        assert_eq!(e.count, 1);
+        assert_eq!(e.name, def.name);
+        assert_eq!(e.class_id, content::attack_scope_id(def.attack));
+        assert_eq!(e.damage_type, def.damage_type);
+        assert_eq!(e.rarity, def.rarity);
+        assert!(e.class_id <= 5 && e.damage_type <= 4 && e.rarity <= 3);
+        // No self-scaling modifiers owned ⇒ no synergies.
+        assert!(v.synergies.is_empty());
+    }
+
+    #[test]
+    fn synergies_resolve_per_times_count() {
+        use crate::state::WeaponCountScale;
+        use determinism::Fixed;
+        let mut s = ArenaState::new(0xBEEF, 0);
+        // Own 12 copies of weapon 0 ("+1% Piercing per Bow" territory) by
+        // pushing instances directly — a view test, not a shop test.
+        s.weapons.clear();
+        for _ in 0..12 {
+            let id = s.alloc_entity_id();
+            s.weapons.push(crate::state::WeaponInstance {
+                instance_id: id,
+                def: 0,
+                next_fire_tick: 0,
+            });
+        }
+        // Two rules for the same (weapon, type) merge additively (1% + 1%);
+        // a rule for an unowned weapon resolves to count 0 / bonus 0.
+        let per_1pct = Fixed::from_ratio(1, 100);
+        s.modifiers.weapon_count_scaling.push(WeaponCountScale {
+            weapon_def: 0,
+            dmg_type: content::DMG_PIERCING,
+            per: per_1pct,
+        });
+        s.modifiers.weapon_count_scaling.push(WeaponCountScale {
+            weapon_def: 0,
+            dmg_type: content::DMG_PIERCING,
+            per: per_1pct,
+        });
+        s.modifiers.weapon_count_scaling.push(WeaponCountScale {
+            weapon_def: 1,
+            dmg_type: content::DMG_SIEGE,
+            per: per_1pct,
+        });
+        let v = snapshot(&s);
+        assert_eq!(v.synergies.len(), 2, "merged per (source, type)");
+        let bow = &v.synergies[0];
+        assert_eq!(bow.source_kind, 0);
+        assert_eq!(bow.damage_type, content::DMG_PIERCING);
+        assert_eq!(bow.count, 12);
+        // 2% per copy × 12 ≈ 24% — milli-percent; `Fixed::from_ratio` floors,
+        // so allow a few milli of quantization (the HUD rounds to whole %).
+        assert!((bow.per_copy_milli_pct - 2_000).abs() <= 2, "≈2%/copy");
+        assert!((bow.bonus_milli_pct - 24_000).abs() <= 24, "≈24%");
+        let unowned = &v.synergies[1];
+        assert_eq!((unowned.source_kind, unowned.count), (1, 0));
+        assert_eq!(unowned.bonus_milli_pct, 0);
     }
 
     #[test]

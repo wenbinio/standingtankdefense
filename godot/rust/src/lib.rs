@@ -22,6 +22,9 @@
 //!   sim.minions_pos() / minions_kind() / minions_id()
 //!   sim.shop_names() / shop_meta()  # meta: [cost,flags, cost,flags, …]
 //!   sim.arsenal_lines()
+//!   sim.arsenal_names() / arsenal_meta()   # grouped-arsenal panel (5-int recs)
+//!   sim.synergy_names() / synergies_meta() # active self-scalers (5-int recs)
+//!   sim.arsenal_rev()             # monotone; GDScript decode-cache key
 //!   sim.take_events()             # read-and-clear; see EVENT RECORD LAYOUT
 //!
 //! Perf note: ONE `RenderView` is built per `step()` and cached; every accessor
@@ -536,6 +539,83 @@ impl StSim {
             a.push(&GString::from(format!("{} x{}", e.name, e.count).as_str()));
         }
         a
+    }
+
+    /// Per owned-weapon-stack display names (name-sorted), parallel to
+    /// `arsenal_meta()`.
+    #[func]
+    fn arsenal_names(&self) -> PackedStringArray {
+        let mut a = PackedStringArray::new();
+        for e in &self.view.arsenal {
+            a.push(&GString::from(e.name));
+        }
+        a
+    }
+
+    /// Flat 5-int records per owned weapon stack, parallel to
+    /// `arsenal_names()`: `[kind, count, class_id, damage_type, rarity, …]` —
+    /// `kind` = weapon catalog index; `class_id` 0 Single · 1 Splash ·
+    /// 2 Barrage · 3 Area · 4 Wave · 5 Bounce; `damage_type` 0 Normal ·
+    /// 1 Piercing · 2 Magic · 3 Siege · 4 Chaos; `rarity` 0..=3.
+    #[func]
+    fn arsenal_meta(&self) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        for e in &self.view.arsenal {
+            for v in [
+                e.kind as i64,
+                e.count as i64,
+                e.class_id as i64,
+                e.damage_type as i64,
+                e.rarity as i64,
+            ] {
+                a.push(v);
+            }
+        }
+        a
+    }
+
+    /// Source-weapon display names per owned self-scaling rule, parallel to
+    /// `synergies_meta()`.
+    #[func]
+    fn synergy_names(&self) -> PackedStringArray {
+        let mut a = PackedStringArray::new();
+        for s in &self.view.synergies {
+            a.push(&GString::from(s.source_name));
+        }
+        a
+    }
+
+    /// Flat 5-int records per owned self-scaling rule ("+X% <type> per
+    /// <weapon>"), parallel to `synergy_names()`:
+    /// `[source_kind, damage_type, per_copy_milli_pct, count,
+    /// bonus_milli_pct, …]` — percentages in milli-percent (1000 ⇒ +1%);
+    /// `count` is the CURRENT owned count of `source_kind` and
+    /// `bonus_milli_pct` the resolved per-copy × count bonus.
+    #[func]
+    fn synergies_meta(&self) -> PackedInt64Array {
+        let mut a = PackedInt64Array::new();
+        for s in &self.view.synergies {
+            for v in [
+                s.source_kind as i64,
+                s.damage_type as i64,
+                s.per_copy_milli_pct,
+                s.count as i64,
+                s.bonus_milli_pct,
+            ] {
+                a.push(v);
+            }
+        }
+        a
+    }
+
+    /// Monotone arsenal revision: moves iff a weapon instance or a
+    /// self-scaling rule was added (both are append-only in the sim), so the
+    /// GDScript side caches its decoded arsenal/synergy dicts on this edge
+    /// instead of re-decoding per frame.
+    #[func]
+    fn arsenal_rev(&self) -> i64 {
+        ((self.state.weapons.len() as i64) << 20)
+            | self.state.modifiers.weapon_count_scaling.len() as i64
     }
 
     /// `[damage_dealt, gold_earned]` — match scoreboard totals.

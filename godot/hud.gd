@@ -164,38 +164,184 @@ func _boss_name(kind: int) -> String:
 		2: return "The Hippocrate"
 		_: return "The Hippocrate"   # single boss today; future bosses map here
 
-# C3 — Arsenal panel: a framed list (top-right) of owned weapons/mods with a
-# header and right-aligned counts pulled from `view.arsenal_lines()` ("Name xN").
+# A9 — Arsenal panel (build-identity surface): the C3 footprint (234 px wide,
+# top-right, py 12) now grouped by ATTACK CLASS with rarity-colored counts and
+# a SYNERGIES block for the owned per-weapon-count self-scalers, so a build
+# reads as a build instead of a flat name list.
+#
+# Layout budget @1280×720: the panel must clear the bottom shop bar (top =
+# vp.y − 162 = 558) and the top-center boss strip (ends x≈860; panel starts
+# x=1034). Worst case = 4 class headers + 4×(3 stacks + 1 "+N more") +
+# 1 "+N more" classes line + 1 SYNERGIES header + 3 synergy lines + 1 "+N
+# more" = 26 rows → height 26 + 8 + 26×19 + 6 = 534, bottom edge 546 < 558. ✓
+#
+# Overflow rule (documented): grouped mode shows the top M = 4 classes by
+# owned-weapon count (ties: lower class id first); within a class the top 3
+# stacks by count (ties: name order), then a dim "+N more"; if > 4 classes
+# exist, one final "+N more" line counts the hidden classes. Synergies show
+# the top 3 active self-scalers by current bonus, then "+N more".
+#
+# Early game: with fewer than 2 distinct attack classes (0–2 weapons) grouping
+# is noise, so the panel falls back to the flat "Name ×N" list (capped at 12
+# stacks) — it never renders a one-class "group" as broken half-structure.
+const ARS_MAX_CLASSES := 4     # M: classes shown, top by count
+const ARS_MAX_PER_CLASS := 3   # stacks listed per class before "+N more"
+const ARS_MAX_SYNERGY := 3     # synergy lines before "+N more"
+const ARS_MAX_FLAT := 12       # simple-mode stacks before "+N more"
+const ARS_GROUP_MIN_CLASSES := 2
+
+# Class-id → header word (index = the sim's attack_scope_id; tr()'d at build).
+const ARS_CLASS_KEYS: Array[String] = ["SINGLE", "SPLASH", "BARRAGE", "AREA", "WAVE", "BOUNCE"]
+# Damage-type id → word (tr()'d at build; "Normal" reuses the existing key).
+const ARS_DMG_KEYS: Array[String] = ["Normal", "Piercing", "Magic", "Siege", "Chaos"]
+
+# Row styles for the cached display rows.
+const ARS_ROW_ENTRY := 0     # weapon stack: name left, "×N" right (rarity color)
+const ARS_ROW_CLASS := 1     # class header: "SPLASH" left, "×7" right
+const ARS_ROW_MORE := 2      # dim "+N more" overflow line
+const ARS_ROW_SYN := 3       # synergy line (accent)
+const ARS_ROW_SYNHEAD := 4   # "SYNERGIES" subheader
+
+# Cached display rows [{t, r, s, rar}] — rebuilt ONLY when the arsenal
+# revision moves (a purchase; see SimView.arsenal_rev) or the locale changes.
+# Drawing iterates prebuilt strings: zero per-frame string allocation.
+var _ars_rows: Array = []
+var _ars_total := 0            # total weapons owned (header badge)
+var _ars_rev := -9223372036854775807
+var _ars_locale := ""
+
+# Rarity → count color (mirrors shop.gd's _rarity_color).
+func _rarity_color(r: int) -> Color:
+	match r:
+		1: return Color(0.40, 0.80, 0.45)   # uncommon
+		2: return Color(0.35, 0.60, 1.00)   # rare
+		3: return Color(0.78, 0.46, 0.96)   # epic
+		_: return Color(0.60, 0.60, 0.66)   # common
+
+# Rebuild the cached rows from the typed view dicts (purchase/locale edge only).
+func _rebuild_arsenal_rows() -> void:
+	var entries: Array = view.arsenal_entries()
+	var syn: Array = view.arsenal_synergies()
+	_ars_rows = []
+	_ars_total = 0
+	for e in entries:
+		_ars_total += int(e["count"])
+	# Bucket stacks per attack class, tallying each class's weapon count.
+	var by_class := {}   # class_id -> {"n": int, "stacks": Array}
+	for e in entries:
+		var cid := int(e["class_id"])
+		if not by_class.has(cid):
+			by_class[cid] = {"n": 0, "stacks": []}
+		by_class[cid]["n"] += int(e["count"])
+		by_class[cid]["stacks"].append(e)
+	if by_class.size() >= ARS_GROUP_MIN_CLASSES:
+		var cids: Array = by_class.keys()
+		cids.sort_custom(func(a, b) -> bool:
+			var na: int = by_class[a]["n"]
+			var nb: int = by_class[b]["n"]
+			return na > nb if na != nb else a < b)
+		for ci in mini(cids.size(), ARS_MAX_CLASSES):
+			var cid: int = cids[ci]
+			_ars_rows.append({
+				"t": tr(ARS_CLASS_KEYS[clampi(cid, 0, 5)]),
+				"r": "×%d" % int(by_class[cid]["n"]),
+				"s": ARS_ROW_CLASS, "rar": 0,
+			})
+			var stacks: Array = by_class[cid]["stacks"]
+			stacks.sort_custom(func(a, b) -> bool:
+				var na: int = a["count"]
+				var nb: int = b["count"]
+				return na > nb if na != nb else String(a["name"]) < String(b["name"]))
+			for si in mini(stacks.size(), ARS_MAX_PER_CLASS):
+				_append_stack_row(stacks[si])
+			if stacks.size() > ARS_MAX_PER_CLASS:
+				_append_more_row(stacks.size() - ARS_MAX_PER_CLASS)
+		if cids.size() > ARS_MAX_CLASSES:
+			_append_more_row(cids.size() - ARS_MAX_CLASSES)
+	else:
+		# Simple mode: the flat name-sorted list (marshal order).
+		for si in mini(entries.size(), ARS_MAX_FLAT):
+			_append_stack_row(entries[si])
+		if entries.size() > ARS_MAX_FLAT:
+			_append_more_row(entries.size() - ARS_MAX_FLAT)
+	# SYNERGIES block: only the ACTIVE self-scalers (source owned, bonus > 0).
+	var active: Array = []
+	for s in syn:
+		if int(s["count"]) > 0 and int(s["bonus_milli"]) > 0:
+			active.append(s)
+	if active.is_empty():
+		return
+	active.sort_custom(func(a, b) -> bool:
+		return int(a["bonus_milli"]) > int(b["bonus_milli"]))
+	_ars_rows.append({"t": tr("SYNERGIES"), "r": "", "s": ARS_ROW_SYNHEAD, "rar": 0})
+	for si in mini(active.size(), ARS_MAX_SYNERGY):
+		var s: Dictionary = active[si]
+		var dmg: String = tr(ARS_DMG_KEYS[clampi(int(s["damage_type"]), 0, 4)])
+		_ars_rows.append({
+			"t": tr("+%d%% %s — %s ×%d") % [
+				int(round(float(s["bonus_milli"]) / 1000.0)), dmg,
+				tr(String(s["name"])), int(s["count"])],
+			"r": "", "s": ARS_ROW_SYN, "rar": 0,
+		})
+	if active.size() > ARS_MAX_SYNERGY:
+		_append_more_row(active.size() - ARS_MAX_SYNERGY)
+
+func _append_stack_row(e: Dictionary) -> void:
+	_ars_rows.append({
+		"t": tr(String(e["name"])),
+		"r": "×%d" % int(e["count"]),
+		"s": ARS_ROW_ENTRY, "rar": int(e["rarity"]),
+	})
+
+func _append_more_row(n: int) -> void:
+	_ars_rows.append({"t": tr("+%d more") % n, "r": "", "s": ARS_ROW_MORE, "rar": 0})
+
 func _draw_arsenal(font: Font, head: Font, vp: Vector2) -> void:
-	var lines: PackedStringArray = view.arsenal_lines()
+	# Cache edge: a purchase moved the arsenal revision, or the locale changed.
+	var rev: int = view.arsenal_rev()
+	var loc := TranslationServer.get_locale()
+	if rev != _ars_rev or loc != _ars_locale:
+		_ars_rev = rev
+		_ars_locale = loc
+		_rebuild_arsenal_rows()
 	var pw := 234.0
 	var px := vp.x - pw - 12.0
 	var py := 12.0
 	var row_h := 19.0
 	var head_h := 26.0
-	var ph := head_h + 8.0 + maxf(float(lines.size()), 1.0) * row_h + 6.0
+	var ph := head_h + 8.0 + maxf(float(_ars_rows.size()), 1.0) * row_h + 6.0
 	draw_rect(Rect2(Vector2(px, py), Vector2(pw, ph)), ArtTheme.ui("panel_bg"))
 	draw_rect(Rect2(Vector2(px, py), Vector2(pw, ph)), ArtTheme.ui("panel_border"), false, 1.0)
 	draw_rect(Rect2(Vector2(px, py), Vector2(pw, head_h)), ArtTheme.ui("panel_border").darkened(0.4))
 	draw_string(head, Vector2(px + 10, py + 18), tr("ARSENAL"), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, ArtTheme.ui("header"))
-	var ct := "%d" % lines.size()
+	var ct := "%d" % _ars_total
 	var ctw := font.get_string_size(ct, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 	draw_string(font, Vector2(px + pw - ctw - 10, py + 18), ct, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("text_dim"))
 	var ay := py + head_h + 8.0
-	if lines.is_empty():
+	if _ars_rows.is_empty():
 		draw_string(font, Vector2(px + 10, ay + 12), tr("— nothing yet —"), HORIZONTAL_ALIGNMENT_LEFT, pw - 20, 13, ArtTheme.ui("text_dim"))
 		return
-	for line in lines:
-		# Split "Name xN" so the count can be right-aligned for legibility.
-		# `nm` is a Rust-sourced weapon/mod name — translate it; "xN" is scaffolding.
-		var nm := line
-		var cnt := ""
-		var sp := line.rfind(" x")
-		if sp > 0:
-			nm = line.substr(0, sp)
-			cnt = line.substr(sp + 1)   # "xN"
-		draw_string(font, Vector2(px + 10, ay + 13), tr(nm), HORIZONTAL_ALIGNMENT_LEFT, pw - 56, 14, ArtTheme.ui("text"))
-		if cnt != "":
-			var cw := font.get_string_size(cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-			draw_string(font, Vector2(px + pw - cw - 10, ay + 13), cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ArtTheme.ui("accent_dim"))
+	for row in _ars_rows:
+		var style: int = row["s"]
+		var left: String = row["t"]
+		var right: String = row["r"]
+		match style:
+			ARS_ROW_CLASS:
+				draw_string(head, Vector2(px + 10, ay + 13), left, HORIZONTAL_ALIGNMENT_LEFT, pw - 56, 13, ArtTheme.ui("header"))
+				if right != "":
+					var hw := head.get_string_size(right, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+					draw_string(head, Vector2(px + pw - hw - 10, ay + 13), right, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ArtTheme.ui("text_dim"))
+			ARS_ROW_SYNHEAD:
+				draw_string(head, Vector2(px + 10, ay + 13), left, HORIZONTAL_ALIGNMENT_LEFT, pw - 20, 13, ArtTheme.ui("header"))
+			ARS_ROW_SYN:
+				draw_string(font, Vector2(px + 10, ay + 13), left, HORIZONTAL_ALIGNMENT_LEFT, pw - 20, 12, ArtTheme.ui("accent"))
+			ARS_ROW_MORE:
+				draw_string(font, Vector2(px + 18, ay + 13), left, HORIZONTAL_ALIGNMENT_LEFT, pw - 28, 12, ArtTheme.ui("text_dim"))
+			_:
+				# Weapon stack: indented under its class header in grouped mode;
+				# count right-aligned in the stack's rarity color.
+				draw_string(font, Vector2(px + 18, ay + 13), left, HORIZONTAL_ALIGNMENT_LEFT, pw - 64, 14, ArtTheme.ui("text"))
+				if right != "":
+					var cw := font.get_string_size(right, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+					draw_string(font, Vector2(px + pw - cw - 10, ay + 13), right, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, _rarity_color(int(row["rar"])))
 		ay += row_h

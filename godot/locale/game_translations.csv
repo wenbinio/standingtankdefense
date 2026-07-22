@@ -745,3 +745,16 @@ NEW,NEW,新
 Restart Run,Restart Run,重新开始本局
 RESTART RUN?,RESTART RUN?,重新开始本局？
 This run is still live — restarting abandons it.,This run is still live — restarting abandons it.,本局仍在进行中——重新开始将放弃这局。
+SINGLE,SINGLE,单体
+SPLASH,SPLASH,溅射
+BARRAGE,BARRAGE,弹幕
+AREA,AREA,范围
+WAVE,WAVE,冲击波
+BOUNCE,BOUNCE,弹射链
+SYNERGIES,SYNERGIES,协同
++%d more,+%d more,另有 %d 项
++%d%% %s — %s ×%d,+%d%% %s — %s ×%d,+%d%% %s — %s ×%d
+Piercing,Piercing,穿刺
+Magic,Magic,魔法
+Siege,Siege,攻城
+Chaos,Chaos,混沌
