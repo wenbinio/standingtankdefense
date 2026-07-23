@@ -36,6 +36,15 @@ Tank {
 
 > **Integer/fixed-point everywhere in the hot path.** Damage, HP, gold reach very large values and must be bit-stable across machines for cheap checksums. Use `i64` for HP/gold/damage and a `Fixed` type for rates/multipliers — implemented as **Q47.16** (an `i64` with 16 fractional bits, saturating arithmetic) in `sim-core/crates/determinism`. No raw floats in anything that feeds the `state_checksum`.
 
+The sketch above is the core; as shipped, `ArenaState` carries a handful of additional authoritative fields (all snapshotted and checksummed — the versioned wire form is `SNAPSHOT_VERSION` **24**):
+
+- **`difficulty`** — the single-player preset (Easy / Normal / Hard) fixed **once at construction**; it selects the arena's starting numbers and stays constant thereafter. SP-only: the MP/director construction path is hard-coded to Normal, so it can never make two peers' arenas disagree.
+- **Per-source damage ledger** — `damage_by_weapon` (a stable `entity_id → i64` map crediting damage to the weapon source that caused it) plus **source-attribution stamps** carried on indirect damage so it credits the right weapon: `poison_src` on a poisoned enemy, `Hazard.source`, and `Minion.source`. This is **behavior-neutral bookkeeping** — it changes no outcome — but it lives in the checksum/snapshot so the client and shadow-sim stay bit-identical and the DPS meter reads the same numbers everywhere.
+- **`pending_black_market`** — a flag marking a **held, unredeemed** Black Market voucher (a deferred player choice: an Uncommon weapon-or-Spikes upgrade), true until the pick is spent.
+- **`PendingPerk.scope`** — a source-derived constraint on a pending free perk: which offer *kinds* (e.g. weapon, or weapon-or-Spikes) it is allowed to consume.
+- **`healing_weapon_healthy_dmg`** — part of the aggregated modifier state: a healing-weapon-scoped damage bonus that is active only under its condition (Battle Fervor, while at full health).
+- **`treasure_pool`** (on `Economy`) — a held Magic Treasure gold reserve awaiting its payout tick.
+
 ## 5.2 Weapon schema
 
 Directly mirrors the extracted weapon stat blocks (Appendix A.2).
@@ -203,7 +212,7 @@ To keep client == shadow so checksums match and corrections stay rare:
 - **Order-of-operations is part of the spec**: damage resolution (5.3), status application, and death checks happen in a fixed documented order each tick.
 
 ### 5.6.2 `state_checksum`
-A rolling 32/64-bit hash over the **authoritative-relevant** fields each tick-batch: `tick`, `tank` (hp/shield/cooldowns), per-enemy `(entity_id, hp, pos_fixed, status_stacks)`, `economy`, and `RngCursors`. Excludes render-only state. This is what `Digest` reports and the shadow-sim compares (see [`04 §4.4.4`](04-protocol-and-messages.md)).
+A rolling 32/64-bit hash over the **authoritative-relevant** fields each tick-batch: `tick`, `tank` (hp/shield/cooldowns), per-enemy `(entity_id, hp, pos_fixed, status_stacks)`, `economy`, `RngCursors`, and the additional authoritative fields listed in §5.1 (the SP `difficulty` preset, the per-source damage ledger and its attribution stamps, held-choice flags, and the conditional/held modifier and economy state). The damage ledger is **behavior-neutral bookkeeping**, but it is checksummed anyway so client and shadow stay bit-identical. Excludes render-only state. This is what `Digest` reports and the shadow-sim compares (see [`04 §4.4.4`](04-protocol-and-messages.md)).
 
 ## 5.7 Content authoring
 

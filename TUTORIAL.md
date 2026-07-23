@@ -40,7 +40,9 @@ That's it — you'll boot to the **Tank Select** screen.
 
 ## 2. The 60-second version
 
-1. On **Tank Select**, press **Enter** to deploy with the starter tank.
+1. On **Tank Select**, press **Enter** to deploy with the starter tank. (Press
+   **H** first to pick a single-player difficulty — Easy / Normal / Hard;
+   records and achievements only count on **Normal**.)
 2. You're now in a single arena. Enemies stream in from the ring toward your tank.
 3. A **shop bar** sits along the bottom. Press **1–8** (or click a card) to buy.
    **All 8 slots roll independently from one weighted pool** — weapons and
@@ -53,8 +55,10 @@ That's it — you'll boot to the **Tank Select** screen.
    the *only* thing that damages the boss).
 6. Survive the 15-minute ramp (enemies step up **+20% at 10:00**), then kill the
    **boss** with repeated Clears while the waves keep escalating ("swift end").
-   When your tank dies you get a **run summary** — press **Enter** to redeploy
-   and try again.
+   Landing the kill throws up a gold **"BOSS SLAIN — YOU SURVIVED THE ARC"**
+   banner and records a win; the run then continues for as long as you can hold.
+   When your tank finally dies you get a **run summary** — press **Enter** to
+   redeploy and try again.
 
 ---
 
@@ -69,6 +73,7 @@ achievement that unlocks them.
 | **Arrows / WASD** | Move selection |
 | **Enter / Space** | Deploy with the selected tank |
 | **Click** a tank | Select it (click again to deploy) |
+| **H** | Cycle **single-player difficulty** (Easy / Normal / Hard) — deploy-time choice; records & achievements are Normal-only |
 | **C** | Open the **Challenge picker** |
 | **L** | Open the **multiplayer Lobby** |
 | **M** | Open the **Multi-arena net demo** |
@@ -80,8 +85,10 @@ achievement that unlocks them.
 
 ### Single-arena play (the main game)
 Your tank sits at the center. The **HUD** (top-left) shows your **HP**, **gold**
-(and income per tick), and the **round**. Top-right is your **Arsenal** — what
-you currently own. The **shop bar** is along the bottom.
+(and income per tick), and the **round**. Top-right is your **Arsenal** — a
+build-identity panel that groups what you own **by class**, colors each entry by
+**rarity**, and reads out your **live synergies** as they come online. The
+**shop bar** is along the bottom.
 
 **Shop rules**
 - **8 offers** per round. **Every slot rolls independently** from one weighted
@@ -102,16 +109,30 @@ you currently own. The **shop bar** is along the bottom.
 | **1–8** | Buy that shop slot |
 | **R** | Reroll the shop |
 | **Space** | **Clear** — board wipe; the only thing that hurts the boss |
+| **Tab** (hold) | **DPS meter** — a ranked per-weapon damage overlay (plus Spikes / Clear / Other pseudo-rows) |
+| **B** | Reopen a held **Black Market** picker (see below) |
 | **T** | Cycle the art theme |
 | **N** | Mute / unmute sound (works on the run-summary panel too) |
 | **M** | Jump to the multi-arena net demo |
-| **Esc** | Back to Tank Select |
+| **Esc** | **Pause** (resume / Restart Run / settings / quit — the confirm-gated pause menu) |
+
+**Black Market.** Some picks hand you a **Black Market** voucher — an overlay that
+lets you *choose* an Uncommon weapon-or-Spikes upgrade instead of taking a random
+roll. It's held until you spend it; a badge by the shop marks a pending pick, and
+**B** reopens the picker if you dismissed it.
+
+**Game speed.** You can run the sim faster: the pause-menu **settings** cycle a
+single-player speed of **Normal / Fast / Faster / Hyper** (in a networked match
+the *host* sets one speed for everyone in the lobby). Speed only changes how fast
+ticks play — it never touches the outcome.
 
 **When you die:** a centered **run summary** appears (round reached, damage, gold,
-weapons bought — each with your **personal best** beside it — plus how close you
-came to the boss, what overwhelmed you, any achievements you just unlocked, and
-your **next achievement goals**). Personal bests and your last runs persist
-between sessions. The pause menu (**Esc** while alive) also offers a
+weapons bought — each with your **personal best** beside it — plus what
+overwhelmed you and how close you came to the boss, framed as an **"almost had
+it"** near-miss when you ended a hair short of a milestone). Any achievement you
+just unlocked gets its own **celebration**, and the panel shows your **next
+goals** and, for new players, a **rotating tip**. Personal bests and your last
+runs persist between sessions. The pause menu (**Esc** while alive) also offers a
 confirm-gated **Restart Run**.
 - **Enter / Space / click Redeploy** — start a fresh run immediately.
 - **Esc** — back to Tank Select.
@@ -132,7 +153,8 @@ The front door to a networked match: a **host-authoritative lobby** driven by th
 real netcode's lobby state machine (you are the host, seat 0). Simulated peers
 join, pick their own cosmetics, and ready up after a moment (until live Steam
 matchmaking lands, peers are simulated); when everyone is ready, start the match
-— it launches the multi-arena view with the lobby's seats.
+— it launches the multi-arena view with the lobby's seats, and **you actually
+play seat 0** (see below), racing the other tanks.
 
 | Key | Action |
 | --- | --- |
@@ -140,27 +162,47 @@ matchmaking lands, peers are simulated); when everyone is ready, start the match
 | **A / +** | Add a (simulated) player |
 | **X / −** | Remove the last player |
 | **R** | Ready everyone (impatience button) |
+| **F** | Cycle the **match game speed** (host — one speed for the whole lobby) |
 | **Enter** | Start the match (host-only; needs ≥2 players, all ready) |
 | **T** | Cycle the art theme |
 | **Esc** | Back to Tank Select |
 
-### Multi-arena net demo (press **M**)
+### Multi-arena net match (press **M**, or start from the Lobby)
 The headline architecture, made visible: **8 independent arenas under one
 authoritative director**, each its own player. **Your arena is the large featured
 panel**; the other seven are smaller cells around it, each rendered in **that
-player's own theme and tank skin** (so you can see everyone's cosmetics). Watch
-players get knocked out until one is left standing.
+player's own theme and tank skin** (so you can see everyone's cosmetics). This is
+the *real* netcode loop — director + clients + hub — not a canned replay.
+
+It runs in two modes:
+
+- **Spectate (press M from Tank Select):** all eight seats are bot-driven; watch
+  players get knocked out until one is left standing.
+- **Play (start a Lobby match):** **you drive seat 0** yourself. Its bot is
+  switched off and your buy / reroll / Clear / Black-Market inputs travel the same
+  authoritative client → director path as everyone else — validated, acked,
+  applied on both shadows. The other seven seats are bots racing you. Your seat
+  gets the full single-arena shop and controls (below); there is **no pause** in a
+  live net match, so **Esc asks you to confirm** before abandoning the run.
 
 | Key | Action |
 | --- | --- |
+| **1–8 / R / Space / B** | *(your seat, when playing)* buy · reroll · Clear · reopen Black Market |
 | **T** | Cycle the art theme |
-| **S / Esc** | Back to Tank Select |
+| **S / Esc** | Leave (playing: **Esc** confirms before abandoning a live run) |
 
 ### Themes & language
 Press **T** on most screens to swap the whole look between **Grimdark** and
 **Gaslamp Bulwark** — different art *and* UI colors (gold/blood vs brass/aether).
 Press **G** on Tank Select to toggle the language (English ⇄ 简体中文), and **N**
 in the arena to mute/unmute sound. Both stick between sessions.
+
+> **Localization note.** The recent additions (difficulty, DPS meter, arsenal
+> panel, Black Market, results/records text, …) ship new rows in the
+> localization CSV that need a **one-time Godot editor reimport** to compile into
+> the `.translation` files. Until you reimport (open the project in the editor
+> once), those newest strings fall back to **English** in 简体中文; everything
+> else is already translated.
 
 ---
 

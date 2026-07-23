@@ -30,17 +30,22 @@ If Godot can't find `StSim`, confirm the library exists at the path in
 
 ## Controls
 Single-arena (the main game):
-- **1–8** — buy that shop slot (1–4 weapons, 5–8 economy/passives/spikes)
+- **1–8** — buy that shop slot (all 8 roll independently from one weighted pool —
+  weapons and economy/passives/spikes appear mixed, not in fixed halves)
 - **R** — reroll the shop
 - **Space** — Clear (board wipe; the only thing that hurts the boss)
-- **T** — cycle art theme · **N** — mute/unmute · **M** — multi-arena net demo · **Esc** — Tank Select
+- **Tab** (hold) — DPS meter (ranked per-weapon damage overlay) · **B** — reopen a held Black Market pick
+- **T** — cycle art theme · **N** — mute/unmute · **M** — multi-arena net demo
+- **Esc** — pause menu (resume · **Restart Run** · settings incl. game speed · quit — confirm-gated)
 
 Tank Select (start screen):
-- **C** — challenge picker · **L** — multiplayer lobby · **M** — net demo
+- **H** — single-player difficulty (Easy/Normal/Hard) · **C** — challenge picker · **L** — multiplayer lobby · **M** — net demo
 - **G** — language toggle (English ⇄ 简体中文) · **T** — art theme
 
 Lobby: **Space/Y** ready · **A/+** add peer · **X/−** remove peer · **R** ready
-all · **Enter** start · **Esc** back. Net view: **T** theme · **S/Esc** back.
+all · **F** game speed (host) · **Enter** start · **Esc** back. Net match: **T**
+theme · **S/Esc** back (from a Lobby start you play seat 0 — Esc confirms before
+abandoning).
 
 See **[`../TUTORIAL.md`](../TUTORIAL.md)** for the full playtest guide (every
 screen, the start/challenge/net flows, and how to play well).
