@@ -104,38 +104,53 @@ Mirrors the netcode-first discipline of `[06]`, retargeted:
 
 R0–R2 are the risk. R3 onward is transcription against an oracle.
 
-## F8 — R2 throughput: first measured results
 
-Bench run standalone (`luau -O2`, Xeon @ 2.10 GHz) against the real `Fixed.luau`, not a stub. Budget is 33.33 ms/tick for all 8 arenas; the honest simulation ceiling is taken as 30% of that = 10.00 ms.
+## F8 — R2 throughput: measured results
 
-> **The absolute percentages below are provisional.** They were captured while `Fixed.luau` was still being optimized, and the exact backend is GC-bound with ±30% run-to-run variance; a re-run mid-optimization already showed the realistic case moving from 376% to 114% serial. **What is durable here is the diagnosis and the ratios, not the digits.** Treat the table as an order of magnitude and re-run the bench for current numbers.
+Bench: `roblox/bench/throughput.luau`, standalone `luau -O2`, Xeon @ 2.10 GHz, against the real `Fixed.luau`. Budget is 33.33 ms/tick for all 8 arenas; the honest simulation ceiling is 30% of that = 10.00 ms, because a Roblox server frame is not ours alone.
 
-**The workload is measured, not assumed.** Steady-state population was derived by Little's law over the real `WAVE_M0`/`BOSS_ESCORT` cadences, then checked against the actual Rust sim driven by `bot::Bot`: **peak 66–67 enemies, 70–84 projectiles, 20 weapons**. This corrects the ~300-entity figure assumed in `[09] §1.6` — pessimistic by ~4.5×.
+**The workload is measured, not assumed.** Steady-state population was derived by Little's law over the real `WAVE_M0`/`BOSS_ESCORT` cadences, then checked against the actual Rust sim driven by `bot::Bot`: **peak 66–67 enemies, 70–84 projectiles, 20 weapons**. This corrects the ~300-entity figure assumed in `[09] §1.6` — pessimistic by ~4.5×. E=300 is retained below as a stress column, not as the target.
 
-| Backend | Real peak (E≈67) | `[09] §1.6` worst case (E=300) |
-| --- | --- | --- |
-| `exact` (C2 `Fixed`) | 4.70 ms/arena — 376% serial, **47% across 8 Actors** | 19.58 ms — 1566% serial, 196% parallel (**fail**) |
-| C2 API over doubles | 0.108 ms — 8.6% | 0.600 ms — 48% |
-| Raw doubles | 0.020 ms — 1.6% | 0.088 ms — 7.1% |
+| Backend | E=68 (real peak) | E=300 (old assumption) | E=675 (extreme) |
+| --- | --- | --- | --- |
+| `exact` (C2 `Fixed`) | 0.709 ms/arena — **56.7% of budget** | 4.474 ms — 357.9% | 9.658 ms — 772.6% |
+| C2 API over doubles (F5 hatch) | 0.106 ms — 8.5% | 0.744 ms — 59.6% | 1.812 ms — 145.0% |
+| Raw doubles (floor) | 0.020 ms — 1.6% | 0.087 ms — 7.0% | 0.196 ms — 15.7% |
 
-`--codegen` (proxy for `--!native`) buys a consistent ≈2.1×.
+All three columns are the **serial** figure — 8 arenas on one thread, the pessimistic floor. Across 8 Actors these divide by up to 8, but Roblox sizes the worker pool from the host and does not guarantee 8, so serial is the honest planning number.
 
-### Read
+### Result: R2 passes at the real workload, with exact fixed-point intact
 
-**The simulation is cheap and the architecture is sound. What costs is the exact `Fixed` emulation — and that cost is algorithmic, not inherent.**
+**The exact backend fits — 56.7% of a deliberately conservative budget, serially, before `--!native`.** F5 stands as written: the seed-for-seed Rust oracle is preserved and the swap-to-doubles hatch stays shut.
 
-- Exactness tax is **33×** (221× vs raw doubles, against 6.8× for the same API over doubles).
-- `div` is the culprit at **17.7 µs/op — 14,236× native**, because `divMag` was a bit-by-bit restoring division (~80 iterations × 5-limb compare/subtract). Enemy movement alone is **72% of the tick** purely because `step_toward` does two divisions per enemy.
-- The exact backend is also **GC-bound** (a table allocated per op), giving ±30% run-to-run variance.
+That outcome was not free. The first measurement put `exact` at 4.70 ms/arena (376% of budget), and the diagnosis was that the cost was **algorithmic, not inherent**:
 
-At the *real* workload the exact backend already fits across 8 Actors (47%), so F5 is not yet in trouble. But the margin is thin and noisy, so three fixes are being applied **before** the F5 "swap to doubles" hatch is considered — all of which preserve the seed-for-seed Rust oracle:
+| op | before | after (interp) | after (`--codegen`) |
+| --- | ---: | ---: | ---: |
+| `div` | 17,700 ns | **707 ns** | 433 ns |
+| `fromRatio` | 18,700 ns | **683 ns** | 467 ns |
+| `mul` | 736 ns | **324 ns** | 167 ns |
+| `sqrt` | ~1,900 ns | **200 ns** | 116 ns |
 
-1. Replace `divMag` with Knuth Algorithm D or reciprocal-multiply (projected to move `exact` from ~470% to ~100% serial).
-2. Get `div` out of `step_toward`.
-3. Kill an `O(W×E)` rescan — **1,670 weapon-range scans/tick** at E=300/W=20, because `combat.rs::fire_weapons` deliberately does not advance cooldown when nothing is in range, so short-range weapons rescan every enemy every tick. *This one is a finding about the existing Rust sim, not the port, and is worth fixing upstream on its own merits.*
+`div` was bit-by-bit restoring division (~80 iterations × 5-limb compare/subtract); replacing it with **Knuth Algorithm D in base 2^16** bought 25×. Enemy movement had been 72% of the tick purely because `step_toward` divides twice per enemy. The exactness tax fell from 33× to ~6.7×.
 
-### Status: inconclusive as a formal gate, but not blocking
+Allocation was measured rather than assumed: pre-allocated out-params cost **72 ns against 63 ns to allocate fresh** in the standard VM — a wash. They only win under native codegen (5.5 ns vs 41 ns). So the API was not widened with `*Into` variants; that trade is available later if `--!native` is adopted for the arena, and only then.
 
-Only a Studio run settles R2 — the Actor harness has never executed against a real Roblox VM, and the standalone numbers come from a different Luau build, allocator and sandbox, on build-container hardware, with no Actor dispatch or barrier costs modelled. **Serial is the honest planning column.** Hazards, minions, auras and Fire-chains are unmodelled (all zero in the Rust profile), and population is pinned where real arenas oscillate with `Clear`.
+### Correctness, and why two test suites
 
-What the bench *does* settle is the decision R2 was gating: the 33× backend ratio is a property of the code, not the host, and will not invert on Roblox hardware. **R3 is cleared to start** once the division work lands.
+- **`roblox/test/parity.luau`** — 7,309 assertions against vectors generated by running the Rust. Anchors Luau to Rust.
+- **`roblox/test/differential.luau`** — 1,769,712 comparisons against `FixedRef.luau`, a no-fast-path reference (schoolbook multiply, binary restoring division). Anchors the *optimizations* to an obviously-correct implementation.
+
+Both are needed, and this was verified rather than assumed. Widening the `div` fast-path guard from |a| < 2^36 to |a| < 2^48 is caught by parity with **2 failing assertions out of 7,309**, and by the differential harness with **269 divergences**. Parity's coverage of fast-path boundaries is real but razor-thin — it knows nothing about guards the Rust doesn't have. Deleting the differential suite would leave optimization work effectively untested.
+
+### Caveats — what this does not prove
+
+Only a Studio run settles R2 formally. The Actor harness has never executed against a real Roblox VM; Roblox ships its own Luau build with different FFlags, allocator and sandbox; this ran on build-container hardware; Actor dispatch and barrier costs are unmodelled; and a real server frame also carries replication, physics and every other script. `--!native` is *not* applied here and typically wins another 1.5–3× on loops like these, so the Roblox figure could be materially better.
+
+Also unmodelled: hazards, minions, auras, vulnerability pulses and Fire chain explosions — all zero across the 24-seed Rust profile, but a build stacking them adds `O(H·E)` and `O(M·E)` passes. Population is pinned, where a real arena oscillates as `Clear` wipes the board.
+
+**Replication is not a constraint.** 300 entities under a 3-byte delta encoding fit one ~900-byte `UnreliableRemoteEvent` payload; ~22 KB/s per client at 15 Hz, ~176 KB/s server-side for eight, and packing all eight costs ~0.16% of one core.
+
+### Carried forward
+
+An upstream finding about the **existing Rust sim**, not the port: `combat.rs::fire_weapons` does not advance cooldown when nothing is in range, so short-range weapons rescan every enemy every tick — **1,670 weapon-range scans/tick** at E=300/W=20, turning an amortised `O(W·E/cooldown)` into a per-tick `O(W·E)`. Worth fixing on its own merits, and it would benefit both builds.
