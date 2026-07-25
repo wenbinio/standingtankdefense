@@ -11,6 +11,9 @@
 pub mod bot;
 pub mod content;
 pub mod descriptions;
+/// Build-artifact generation for the Roblox fork (`roblox/CONTRACTS.md`).
+/// Tooling only — nothing in `step()` reaches it, and it adds no dependency.
+pub mod export;
 pub mod snapshot;
 pub mod view;
 mod combat;

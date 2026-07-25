@@ -70,7 +70,7 @@ This is the strongest argument for the port being cheaper than it looks. Because
 
 That turns "did I transcribe 9.5k lines of combat and modifier rules correctly?" from a months-long QA problem into a mechanical, automatable one — provided §1.4 option 1 is taken. Nobody porting a game normally gets this. It is worth the fixed-point work to keep it.
 
-Likewise, `crates/sim/src/content.rs` (1,597 lines of hardcoded content) should be made to **emit JSON**, and the Luau side should consume that generated file rather than hand-copying 79 weapons and 87 upgrades. That keeps balance single-source across both versions and is a small, high-leverage change to the *existing* codebase.
+Likewise, `crates/sim/src/content.rs` (1,597 lines of hardcoded content) should be made to **emit JSON**, and the Luau side should consume that generated file rather than hand-copying the catalog (**86 weapons, 91 modifiers, 12 enemies** as implemented — distinct from the 79/87 figures in `[appendix-A]`, which count the raw WC3 extraction, not the shipped tables). That keeps balance single-source across both versions and is a small, high-leverage change to the *existing* codebase.
 
 ### 1.6 Hard problem #3 — replication and rendering
 
@@ -138,7 +138,7 @@ The absence of a survivors-like hit on Roblox is ambiguous evidence. It might be
 
 **Option B — Port as a funnel.** Cheap Roblox version to build audience for Steam. **Weak.** Roblox players largely do not convert to Steam purchases, cross-promotion out of Roblox is restricted, and a low-effort Roblox entry gets buried by discovery. This spends 4 months for a marketing channel that probably doesn't fire.
 
-**Option C — Fork the design for Roblox.** Keep the genuinely portable, genuinely good parts — the arena simulation, the multiplicative stacking engine, the 79-weapon/87-upgrade content catalog, the shop/reroll loop — and rebuild the shell around Roblox's actual reward structure:
+**Option C — Fork the design for Roblox.** Keep the genuinely portable, genuinely good parts — the arena simulation, the multiplicative stacking engine, the 86-weapon/91-modifier content catalog, the shop/reroll loop — and rebuild the shell around Roblox's actual reward structure:
 
 - **Add persistent collection and meta-progression.** Unlockable weapons, account-level modifiers, cosmetic tank skins (the v2 meta layer in `[02] §2.9`, promoted to v1). This is what you sell and what brings players back.
 - **Shorten and de-eliminate.** 4–6 minute runs; eliminated players re-enter the next round immediately instead of watching.

@@ -1,0 +1,864 @@
+{
+  "schema_version": 1,
+  "encoding": "i64/u64 values are 16-digit lowercase hex, two's complement, big-endian; u32 values and small counts are plain JSON integers. No floats appear anywhere in this file.",
+  "seeds": [
+    {
+      "seed": "0000000000000000",
+      "next_u64": {
+        "out": ["e220a8397b1dcdaf","6e789e6aa1b965f4","06c45d188009454f","f88bb8a8724c81ec","1b39896a51a8749b","53cb9f0c747ea2ea","2c829abe1f4532e1","c584133ac916ab3c","3ee5789041c98ac3","f3b8488c368cb0a6","657eecdd3cb13d09","c2d326e0055bdef6","8621a03fe0bbdb7b","8e1f7555983aa92f","b54e0f1600cc4d19","84bb3f97971d80ab"],
+        "state_after": "e3779b97f4a7c150"
+      },
+      "next_u32": {
+        "out": [3793791033,1853398634,113532184,4169906344,456755562,1405853452,746756798,3313767226,1055226000,4088940684,1702816989,3268617952,2250350655,2384426325,3041791766,2226864023],
+        "state_after": "e3779b97f4a7c150"
+      },
+      "below": [
+        {"n":0,"out":[0,0,0,0,0,0,0,0],"state_after":"0000000000000000"},
+        {"n":1,"out":[0,0,0,0,0,0,0,0],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":2,"out":[1,0,0,1,0,0,0,1],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":3,"out":[2,1,0,2,0,0,0,2],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":5,"out":[4,2,0,4,0,1,0,3],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":6,"out":[5,2,0,5,0,1,1,4],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":7,"out":[6,3,0,6,0,2,1,5],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":8,"out":[7,3,0,7,0,2,1,6],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":10,"out":[8,4,0,9,1,3,1,7],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":100,"out":[88,43,2,97,10,32,17,77],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":1000,"out":[883,431,26,970,106,327,173,771],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":65535,"out":[57887,28280,1732,63626,6969,21451,11394,50563],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":1073741825,"out":[463349658,1042476586,114188890,351463363,186689199,828441807,1022235171,425704247],"state_after":"cc623af8783354e7"},
+        {"n":2147483648,"out":[1896895516,926699317,56766092,2084953172,228377781,702926726,373378399,1656883613],"state_after":"f1bbcdcbfa53e0a8"},
+        {"n":2147483649,"out":[2084953172,1656883613,2044470342,851408494,1634308976,1520895883,1642564488,1417790793],"state_after":"98c475f0f066a9ce"},
+        {"n":3221225472,"out":[2845343274,1390048975,342566671,560067598,2485325419,1277112741,1687762991,1788319743],"state_after":"a708a824f612c926"},
+        {"n":4294967295,"out":[3793791032,1853398633,113532183,4169906343,456755561,1405853451,746756797,3313767225],"state_after":"f1bbcdcbfa53e0a8"}
+      ],
+      "chance": [
+        {"num":0,"den":1,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7c150"},
+        {"num":1,"den":1,"out":[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],"state_after":"e3779b97f4a7c150"},
+        {"num":1,"den":2,"out":[false,true,true,false,true,true,true,false,true,false,true,false,false,false,false,false],"state_after":"e3779b97f4a7c150"},
+        {"num":1,"den":3,"out":[false,false,true,false,true,true,true,false,true,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7c150"},
+        {"num":5,"den":200,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7c150"},
+        {"num":25,"den":100,"out":[false,false,true,false,true,false,true,false,true,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7c150"},
+        {"num":3,"den":7,"out":[false,false,true,false,true,true,true,false,true,false,true,false,false,false,false,false],"state_after":"e3779b97f4a7c150"}
+      ]
+    },
+    {
+      "seed": "0000000000000001",
+      "next_u64": {
+        "out": ["910a2dec89025cc1","beeb8da1658eec67","f893a2eefb32555e","71c18690ee42c90b","71bb54d8d101b5b9","c34d0bff90150280","e099ec6cd7363ca5","85e7bb0f12278575","491718de357e3da8","cb435c8e74616796","6775dc7701564f61","9afcd44d14cf8bfe","7476cf8a4baa5dc0","87b341d690d7a28a","6f9b6dae6f4c57a8","2ac2ce17a5794a3b"],
+        "state_after": "e3779b97f4a7c151"
+      },
+      "next_u32": {
+        "out": [2433363436,3203108257,4170425070,1908508304,1908102360,3276606463,3768183916,2246556431,1226250462,3410189454,1735777399,2600260685,1953943434,2276671958,1872457134,717409815],
+        "state_after": "e3779b97f4a7c151"
+      },
+      "below": [
+        {"n":0,"out":[0,0,0,0,0,0,0,0],"state_after":"0000000000000001"},
+        {"n":1,"out":[0,0,0,0,0,0,0,0],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":2,"out":[1,1,1,0,0,1,1,1],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":3,"out":[1,2,2,1,1,2,2,1],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":5,"out":[2,3,4,2,2,3,4,2],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":6,"out":[3,4,5,2,2,4,5,3],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":7,"out":[3,5,6,3,3,5,6,3],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":8,"out":[4,5,7,3,3,6,7,4],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":10,"out":[5,7,9,4,4,7,8,5],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":100,"out":[56,74,97,44,44,76,87,52],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":1000,"out":[566,745,971,444,444,762,877,523],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":65535,"out":[37129,48874,63634,29121,29114,49996,57497,34279],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":1073741825,"out":[608340859,800777064,1042606268,477127076,477025590,819151616,942045979,561639108],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":2147483648,"out":[1216681718,1601554128,2085212535,954254152,954051180,1638303231,1884091958,1123278215],"state_after":"f1bbcdcbfa53e0a9"},
+        {"n":2147483649,"out":[1216681718,2085212535,1884091958,1705094727,867888699,1138335979,358704907,1385845587],"state_after":"81af155173f23d66"},
+        {"n":3221225472,"out":[2402331192,3127818802,2457454847,1684917323,919687846,2557642090,1301833049,1950195513],"state_after":"6a99b4b1f77dd0fd"},
+        {"n":4294967295,"out":[2433363435,3203108256,4170425069,1908508303,1908102359,3276606462,3768183915,2246556430],"state_after":"f1bbcdcbfa53e0a9"}
+      ],
+      "chance": [
+        {"num":0,"den":1,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7c151"},
+        {"num":1,"den":1,"out":[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],"state_after":"e3779b97f4a7c151"},
+        {"num":1,"den":2,"out":[false,false,false,true,true,false,false,false,true,false,true,false,true,false,true,true],"state_after":"e3779b97f4a7c151"},
+        {"num":1,"den":3,"out":[false,false,false,false,false,false,false,false,true,false,false,false,false,false,false,true],"state_after":"e3779b97f4a7c151"},
+        {"num":5,"den":200,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7c151"},
+        {"num":25,"den":100,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true],"state_after":"e3779b97f4a7c151"},
+        {"num":3,"den":7,"out":[false,false,false,false,false,false,false,false,true,false,true,false,false,false,false,true],"state_after":"e3779b97f4a7c151"}
+      ]
+    },
+    {
+      "seed": "0000000000000002",
+      "next_u64": {
+        "out": ["975835de1c9756ce","bfc846100bfc1e42","987bbcbfdd7e532f","c3f2827affe7f664","4fc446b53f17fb29","58bc3cb37bc7b2b3","b9f24f7bae4a6586","bd34d3aef603e583","401478bc5887ccff","ba450a33ef6ff86c","56e84498e8b0e635","701560ad31bb9977","8e4858b561b10361","5fb1940eb8cbf1ae","ee979f2730a45df3","34116e681eda3219"],
+        "state_after": "e3779b97f4a7c152"
+      },
+      "next_u32": {
+        "out": [2539140574,3217573392,2558246079,3287450234,1338263221,1488731315,3119665019,3174355886,1075083452,3125086771,1458062488,1880449197,2387105973,1605473294,4002914087,873557608],
+        "state_after": "e3779b97f4a7c152"
+      },
+      "below": [
+        {"n":0,"out":[0,0,0,0,0,0,0,0],"state_after":"0000000000000002"},
+        {"n":1,"out":[0,0,0,0,0,0,0,0],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":2,"out":[1,1,1,1,0,0,1,1],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":3,"out":[1,2,1,2,0,1,2,2],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":5,"out":[2,3,2,3,1,1,3,3],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":6,"out":[3,4,3,4,1,2,4,4],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":7,"out":[4,5,4,5,2,2,5,5],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":8,"out":[4,5,4,6,2,2,5,5],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":10,"out":[5,7,5,7,3,3,7,7],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":100,"out":[59,74,59,76,31,34,72,73],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":1000,"out":[591,749,595,765,311,346,726,739],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":65535,"out":[38743,49095,39035,50161,20419,22715,47601,48436],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":1073741825,"out":[804393348,639561520,821862559,334565805,779916255,268770863,781271693,364515622],"state_after":"cc623af8783354e9"},
+        {"n":2147483648,"out":[1269570287,1608786696,1279123039,1643725117,669131610,744365657,1559832509,1587177943],"state_after":"f1bbcdcbfa53e0aa"},
+        {"n":2147483649,"out":[1269570287,1608786696,1643725117,669131610,744365657,1587177943,940224598,1132608717],"state_after":"98c475f0f066a9d0"},
+        {"n":3221225472,"out":[1904355430,1918684559,2465587675,1003697415,1116548486,2339748764,2380766914,2343815078],"state_after":"2e2ac13ef8e8d8d4"},
+        {"n":4294967295,"out":[2539140573,3217573391,2558246078,3287450233,1338263220,1488731314,3119665018,3174355885],"state_after":"f1bbcdcbfa53e0aa"}
+      ],
+      "chance": [
+        {"num":0,"den":1,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7c152"},
+        {"num":1,"den":1,"out":[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],"state_after":"e3779b97f4a7c152"},
+        {"num":1,"den":2,"out":[false,false,false,false,true,true,false,false,true,false,true,true,false,true,false,true],"state_after":"e3779b97f4a7c152"},
+        {"num":1,"den":3,"out":[false,false,false,false,true,false,false,false,true,false,false,false,false,false,false,true],"state_after":"e3779b97f4a7c152"},
+        {"num":5,"den":200,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7c152"},
+        {"num":25,"den":100,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true],"state_after":"e3779b97f4a7c152"},
+        {"num":3,"den":7,"out":[false,false,false,false,true,true,false,false,true,false,true,false,false,true,false,true],"state_after":"e3779b97f4a7c152"}
+      ]
+    },
+    {
+      "seed": "0000000000003039",
+      "next_u64": {
+        "out": ["22118258a9d111a0","346edce5f713f8ed","1e9a57bc80e6721d","2d160e7e5c3f42ca","81c2e6dc980d78eb","5647e55ad933f62e","1f6622b40cb38e42","6e7411b06820371c","7ad34039583ab917","de15eab5ce53fecf","2f43a94042571d85","61571b285c0b9816","c3e04a9344b5f864","e0b2f2ed05269a55","f871cac18ae3fd10","64415599d1caf6b6"],
+        "state_after": "e3779b97f4a7f189"
+      },
+      "next_u32": {
+        "out": [571572824,879680741,513431484,756420222,2177033948,1447552346,526787252,1853100464,2060664889,3725978293,792963392,1633098536,3286256275,3769823981,4168207041,1682003353],
+        "state_after": "e3779b97f4a7f189"
+      },
+      "below": [
+        {"n":0,"out":[0,0,0,0,0,0,0,0],"state_after":"0000000000003039"},
+        {"n":1,"out":[0,0,0,0,0,0,0,0],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":2,"out":[0,0,0,0,1,0,0,0],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":3,"out":[0,0,0,0,1,1,0,1],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":5,"out":[0,1,0,0,2,1,0,2],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":6,"out":[0,1,0,1,3,2,0,2],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":7,"out":[0,1,0,1,3,2,0,3],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":8,"out":[1,1,0,1,4,2,0,3],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":10,"out":[1,2,1,1,5,3,1,4],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":100,"out":[13,20,11,17,50,33,12,43],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":1000,"out":[133,204,119,176,506,337,122,431],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":65535,"out":[8721,13422,7834,11541,33218,22087,8038,28275],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":1073741825,"out":[219920185,189105055,544258487,361888086,463275116,515166222,408274634,821564069],"state_after":"08d12e6b76c87d4a"},
+        {"n":2147483648,"out":[285786412,439840370,256715742,378210111,1088516974,723776173,263393626,926550232],"state_after":"f1bbcdcbfa5410e1"},
+        {"n":2147483649,"out":[439840370,1088516974,1030332444,841001676,1684327943,1093413038,1742140949,807719970],"state_after":"5c55827df1d1e1dd"},
+        {"n":3221225472,"out":[659760555,567315166,1085664259,1545498666,2794483719,2464692206,2827367985,3126155280],"state_after":"454021de755d7574"},
+        {"n":4294967295,"out":[571572823,879680740,513431483,756420221,2177033947,1447552345,526787251,1853100463],"state_after":"f1bbcdcbfa5410e1"}
+      ],
+      "chance": [
+        {"num":0,"den":1,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7f189"},
+        {"num":1,"den":1,"out":[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],"state_after":"e3779b97f4a7f189"},
+        {"num":1,"den":2,"out":[true,true,true,true,false,true,true,true,true,false,true,true,false,false,false,true],"state_after":"e3779b97f4a7f189"},
+        {"num":1,"den":3,"out":[true,true,true,true,false,false,true,false,false,false,true,false,false,false,false,false],"state_after":"e3779b97f4a7f189"},
+        {"num":5,"den":200,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7f189"},
+        {"num":25,"den":100,"out":[true,true,true,true,false,false,true,false,false,false,true,false,false,false,false,false],"state_after":"e3779b97f4a7f189"},
+        {"num":3,"den":7,"out":[true,true,true,true,false,true,true,false,false,false,true,true,false,false,false,true],"state_after":"e3779b97f4a7f189"}
+      ]
+    },
+    {
+      "seed": "9e3779b97f4a7c15",
+      "next_u64": {
+        "out": ["6e789e6aa1b965f4","06c45d188009454f","f88bb8a8724c81ec","1b39896a51a8749b","53cb9f0c747ea2ea","2c829abe1f4532e1","c584133ac916ab3c","3ee5789041c98ac3","f3b8488c368cb0a6","657eecdd3cb13d09","c2d326e0055bdef6","8621a03fe0bbdb7b","8e1f7555983aa92f","b54e0f1600cc4d19","84bb3f97971d80ab","7d29825c75521255"],
+        "state_after": "81af155173f23d65"
+      },
+      "next_u32": {
+        "out": [1853398634,113532184,4169906344,456755562,1405853452,746756798,3313767226,1055226000,4088940684,1702816989,3268617952,2250350655,2384426325,3041791766,2226864023,2099872348],
+        "state_after": "81af155173f23d65"
+      },
+      "below": [
+        {"n":0,"out":[0,0,0,0,0,0,0,0],"state_after":"9e3779b97f4a7c15"},
+        {"n":1,"out":[0,0,0,0,0,0,0,0],"state_after":"8ff34785799e5cbd"},
+        {"n":2,"out":[0,0,1,0,0,0,1,0],"state_after":"8ff34785799e5cbd"},
+        {"n":3,"out":[1,0,2,0,0,0,2,0],"state_after":"8ff34785799e5cbd"},
+        {"n":5,"out":[2,0,4,0,1,0,3,1],"state_after":"8ff34785799e5cbd"},
+        {"n":6,"out":[2,0,5,0,1,1,4,1],"state_after":"8ff34785799e5cbd"},
+        {"n":7,"out":[3,0,6,0,2,1,5,1],"state_after":"8ff34785799e5cbd"},
+        {"n":8,"out":[3,0,7,0,2,1,6,1],"state_after":"8ff34785799e5cbd"},
+        {"n":10,"out":[4,0,9,1,3,1,7,2],"state_after":"8ff34785799e5cbd"},
+        {"n":100,"out":[43,2,97,10,32,17,77,24],"state_after":"8ff34785799e5cbd"},
+        {"n":1000,"out":[431,26,970,106,327,173,771,245],"state_after":"8ff34785799e5cbd"},
+        {"n":65535,"out":[28280,1732,63626,6969,21451,11394,50563,16101],"state_after":"8ff34785799e5cbd"},
+        {"n":1073741825,"out":[463349658,1042476586,114188890,351463363,186689199,828441807,1022235171,425704247],"state_after":"cc623af8783354e7"},
+        {"n":2147483648,"out":[926699317,56766092,2084953172,228377781,702926726,373378399,1656883613,527613000],"state_after":"8ff34785799e5cbd"},
+        {"n":2147483649,"out":[2084953172,1656883613,2044470342,851408494,1634308976,1520895883,1642564488,1417790793],"state_after":"98c475f0f066a9ce"},
+        {"n":3221225472,"out":[1390048975,342566671,560067598,2485325419,1277112741,1687762991,1788319743,2281343824],"state_after":"454021de755d453b"},
+        {"n":4294967295,"out":[1853398633,113532183,4169906343,456755561,1405853451,746756797,3313767225,1055225999],"state_after":"8ff34785799e5cbd"}
+      ],
+      "chance": [
+        {"num":0,"den":1,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"81af155173f23d65"},
+        {"num":1,"den":1,"out":[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],"state_after":"81af155173f23d65"},
+        {"num":1,"den":2,"out":[true,true,false,true,true,true,false,true,false,true,false,false,false,false,false,true],"state_after":"81af155173f23d65"},
+        {"num":1,"den":3,"out":[false,true,false,true,true,true,false,true,false,false,false,false,false,false,false,false],"state_after":"81af155173f23d65"},
+        {"num":5,"den":200,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"81af155173f23d65"},
+        {"num":25,"den":100,"out":[false,true,false,true,false,true,false,true,false,false,false,false,false,false,false,false],"state_after":"81af155173f23d65"},
+        {"num":3,"den":7,"out":[false,true,false,true,true,true,false,true,false,true,false,false,false,false,false,false],"state_after":"81af155173f23d65"}
+      ]
+    },
+    {
+      "seed": "deadbeefcafef00d",
+      "next_u64": {
+        "out": ["901d4f652fb472cb","a7ce246440f74527","19b40bbbb9380d34","e7a86dc5be618392","7366ce945d00e82c","0ff6905e190d8244","c13c6626abd0306b","f6c95b6ed4267a56","5047e69e4524a085","af37028b26c31cdc","82464fad85d028d0","f3173c6ef7a844af","f70bf2593b45fcc3","822ad52a3bb860de","df070a5f0e0a1320","012ee32b34424a3b"],
+        "state_after": "c2255a87bfa6b15d"
+      },
+      "next_u32": {
+        "out": [2417839973,2815304804,431229883,3886575045,1936117396,267817054,3241960998,4140391278,1346889374,2939617931,2185645997,4078386286,4144755289,2183845162,3741780575,19850027],
+        "state_after": "c2255a87bfa6b15d"
+      },
+      "below": [
+        {"n":0,"out":[0,0,0,0,0,0,0,0],"state_after":"deadbeefcafef00d"},
+        {"n":1,"out":[0,0,0,0,0,0,0,0],"state_after":"d0698cbbc552d0b5"},
+        {"n":2,"out":[1,1,0,1,0,0,1,1],"state_after":"d0698cbbc552d0b5"},
+        {"n":3,"out":[1,1,0,2,1,0,2,2],"state_after":"d0698cbbc552d0b5"},
+        {"n":5,"out":[2,3,0,4,2,0,3,4],"state_after":"d0698cbbc552d0b5"},
+        {"n":6,"out":[3,3,0,5,2,0,4,5],"state_after":"d0698cbbc552d0b5"},
+        {"n":7,"out":[3,4,0,6,3,0,5,6],"state_after":"d0698cbbc552d0b5"},
+        {"n":8,"out":[4,5,0,7,3,0,6,7],"state_after":"d0698cbbc552d0b5"},
+        {"n":10,"out":[5,6,1,9,4,0,7,9],"state_after":"d0698cbbc552d0b5"},
+        {"n":100,"out":[56,65,10,90,45,6,75,96],"state_after":"d0698cbbc552d0b5"},
+        {"n":1000,"out":[562,655,100,904,450,62,754,964],"state_after":"d0698cbbc552d0b5"},
+        {"n":65535,"out":[36892,42957,6579,59303,29542,4086,49467,63176],"state_after":"d0698cbbc552d0b5"},
+        {"n":1073741825,"out":[604459993,703826201,107807470,484029349,66954263,810490250,1035097820,336722343],"state_after":"6ea10675449d4cca"},
+        {"n":2147483648,"out":[1208919986,1407652402,215614941,1943287522,968058698,133908527,1620980499,2070195639],"state_after":"d0698cbbc552d0b5"},
+        {"n":2147483649,"out":[1407652402,215614941,1620980499,2070195639,2039193143,1091922581,9925013,944550656],"state_after":"fe944dfabe3ba987"},
+        {"n":3221225472,"out":[1813379979,323422412,2914931283,200862790,2431470748,3105293458,1010167030,2204713448],"state_after":"0cd8802ec3e7c8df"},
+        {"n":4294967295,"out":[2417839972,2815304803,431229882,3886575044,1936117395,267817053,3241960997,4140391277],"state_after":"d0698cbbc552d0b5"}
+      ],
+      "chance": [
+        {"num":0,"den":1,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"c2255a87bfa6b15d"},
+        {"num":1,"den":1,"out":[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],"state_after":"c2255a87bfa6b15d"},
+        {"num":1,"den":2,"out":[false,false,true,false,true,true,false,false,true,false,false,false,false,false,false,true],"state_after":"c2255a87bfa6b15d"},
+        {"num":1,"den":3,"out":[false,false,true,false,false,true,false,false,true,false,false,false,false,false,false,true],"state_after":"c2255a87bfa6b15d"},
+        {"num":5,"den":200,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true],"state_after":"c2255a87bfa6b15d"},
+        {"num":25,"den":100,"out":[false,false,true,false,false,true,false,false,false,false,false,false,false,false,false,true],"state_after":"c2255a87bfa6b15d"},
+        {"num":3,"den":7,"out":[false,false,true,false,false,true,false,false,true,false,false,false,false,false,false,true],"state_after":"c2255a87bfa6b15d"}
+      ]
+    },
+    {
+      "seed": "ffffffff00000000",
+      "next_u64": {
+        "out": ["219fc13d6bc5b015","4b18e50a83820b3f","776f80c8a530cba0","4d0d98906105938f","f0526ae8994bbffb","0f1ab62051a58481","9d831d410968c343","a0da88886556f991","2eb5b32b8d5fddf6","fec7b4e200891480","2830a8d8bd0e2e63","01f916dd80e173f4","9884ee7bb075d978","e04b8c1400ef030c","8795410ed6fbb620","8d549973ca614f69"],
+        "state_after": "e3779b96f4a7c150"
+      },
+      "next_u32": {
+        "out": [564117821,1259922698,2003796168,1292736656,4031933160,253408800,2642615617,2698676360,783659819,4274500834,674277592,33101533,2558848635,3763047444,2274705678,2371131763],
+        "state_after": "e3779b96f4a7c150"
+      },
+      "below": [
+        {"n":0,"out":[0,0,0,0,0,0,0,0],"state_after":"ffffffff00000000"},
+        {"n":1,"out":[0,0,0,0,0,0,0,0],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":2,"out":[0,0,0,0,1,0,1,1],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":3,"out":[0,0,1,0,2,0,1,1],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":5,"out":[0,1,2,1,4,0,3,3],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":6,"out":[0,1,2,1,5,0,3,3],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":7,"out":[0,2,3,2,6,0,4,4],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":8,"out":[1,2,3,2,7,0,4,5],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":10,"out":[1,2,4,3,9,0,6,6],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":100,"out":[13,29,46,30,93,5,61,62],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":1000,"out":[131,293,466,300,938,59,615,628],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":65535,"out":[8607,19224,30575,19725,61521,3866,40322,41177],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":1073741825,"out":[141029455,314980674,500949042,323184164,1007983290,660653904,674669090,195914954],"state_after":"8ff34784799e5cbd"},
+        {"n":2147483648,"out":[282058910,629961349,1001898084,646368328,2015966580,126704400,1321307808,1349338180],"state_after":"f1bbcdcafa53e0a8"},
+        {"n":2147483649,"out":[282058910,2015966580,1349338180,391829909,2137250417,16550766,1881523722,1137352839],"state_after":"454021dd755d453b"},
+        {"n":3221225472,"out":[423088365,944942023,1981961712,587744864,3205875625,24826149,1919136476,1706029258],"state_after":"454021dd755d453b"},
+        {"n":4294967295,"out":[564117820,1259922697,2003796167,1292736655,4031933159,253408799,2642615616,2698676359],"state_after":"f1bbcdcafa53e0a8"}
+      ],
+      "chance": [
+        {"num":0,"den":1,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b96f4a7c150"},
+        {"num":1,"den":1,"out":[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],"state_after":"e3779b96f4a7c150"},
+        {"num":1,"den":2,"out":[true,true,true,true,false,true,false,false,true,false,true,true,false,false,false,false],"state_after":"e3779b96f4a7c150"},
+        {"num":1,"den":3,"out":[true,true,false,true,false,true,false,false,true,false,true,true,false,false,false,false],"state_after":"e3779b96f4a7c150"},
+        {"num":5,"den":200,"out":[false,false,false,false,false,false,false,false,false,false,false,true,false,false,false,false],"state_after":"e3779b96f4a7c150"},
+        {"num":25,"den":100,"out":[true,false,false,false,false,true,false,false,true,false,true,true,false,false,false,false],"state_after":"e3779b96f4a7c150"},
+        {"num":3,"den":7,"out":[true,true,false,true,false,true,false,false,true,false,true,true,false,false,false,false],"state_after":"e3779b96f4a7c150"}
+      ]
+    },
+    {
+      "seed": "ffffffffffffffff",
+      "next_u64": {
+        "out": ["e4d971771b652c20","e99ff867dbf682c9","382ff84cb27281e9","6d1db36ccba982d2","b4a0472e578069ae","d31dadbda438bb33","f14f2cf802083fa5","405da438a39e8064","c4fea708156e0c84","031e50fe7bbd6e1c","03b234961e71cf15","ce755952d3025da7","01c9558bd006badb","dd90e10f6f7c1c8a","354d0df8b25878c1","aceea13ca07e34e8"],
+        "state_after": "e3779b97f4a7c14f"
+      },
+      "next_u32": {
+        "out": [3839455607,3919575143,942667852,1830663020,3030402862,3541937597,4048497912,1079878712,3305023240,52318462,62010518,3463797074,29971851,3717259535,894242296,2901319996],
+        "state_after": "e3779b97f4a7c14f"
+      },
+      "below": [
+        {"n":0,"out":[0,0,0,0,0,0,0,0],"state_after":"ffffffffffffffff"},
+        {"n":1,"out":[0,0,0,0,0,0,0,0],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":2,"out":[1,1,0,0,1,1,1,0],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":3,"out":[2,2,0,1,2,2,2,0],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":5,"out":[4,4,1,2,3,4,4,1],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":6,"out":[5,5,1,2,4,4,5,1],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":7,"out":[6,6,1,2,4,5,6,1],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":8,"out":[7,7,1,3,5,6,7,2],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":10,"out":[8,9,2,4,7,8,9,2],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":100,"out":[89,91,21,42,70,82,94,25],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":1000,"out":[893,912,219,426,705,824,942,251],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":65535,"out":[58584,59807,14383,27933,46239,54044,61774,16477],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":1073741825,"out":[959863902,979893786,457665755,1012124478,269969678,826255810,13079615,15502629],"state_after":"cc623af8783354e6"},
+        {"n":2147483648,"out":[1919727803,1959787571,471333926,915331510,1515201431,1770968798,2024248956,539939356],"state_after":"f1bbcdcbfa53e0a7"},
+        {"n":2147483649,"out":[1515201431,2024248956,1652511620,1731898537,14985925,1450659998,412461650,1011896821],"state_after":"36fbefaa6fb125e2"},
+        {"n":3221225472,"out":[2879591705,2939681357,2272802146,2656453197,39238846,46507888,2597847805,22478888],"state_after":"08d12e6b76c84d10"},
+        {"n":4294967295,"out":[3839455606,3919575142,942667851,1830663019,3030402861,3541937596,4048497911,1079878711],"state_after":"f1bbcdcbfa53e0a7"}
+      ],
+      "chance": [
+        {"num":0,"den":1,"out":[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],"state_after":"e3779b97f4a7c14f"},
+        {"num":1,"den":1,"out":[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],"state_after":"e3779b97f4a7c14f"},
+        {"num":1,"den":2,"out":[false,false,true,true,false,false,false,true,false,true,true,false,true,false,true,false],"state_after":"e3779b97f4a7c14f"},
+        {"num":1,"den":3,"out":[false,false,true,false,false,false,false,true,false,true,true,false,true,false,true,false],"state_after":"e3779b97f4a7c14f"},
+        {"num":5,"den":200,"out":[false,false,false,false,false,false,false,false,false,true,true,false,true,false,false,false],"state_after":"e3779b97f4a7c14f"},
+        {"num":25,"den":100,"out":[false,false,true,false,false,false,false,false,false,true,true,false,true,false,true,false],"state_after":"e3779b97f4a7c14f"},
+        {"num":3,"den":7,"out":[false,false,true,true,false,false,false,true,false,true,true,false,true,false,true,false],"state_after":"e3779b97f4a7c14f"}
+      ]
+    }
+  ],
+  "derive": [
+    {
+      "master": "0000000000000000",
+      "player": 0,
+      "purpose": 0,
+      "round": 0,
+      "state": "238275bc38fcbe91",
+      "next_u64": [
+        "2130748aaac80268",
+        "0cc78fb979ce5090",
+        "ab9aa3dafba6b4ac",
+        "b0c750a86b3b1dd2",
+        "4b04a99a393a7f6b",
+        "b959fd2fd8607737",
+        "500dea97e0b13700",
+        "862a05f9501c8db0"
+      ]
+    },
+    {
+      "master": "0000000000000000",
+      "player": 1,
+      "purpose": 0,
+      "round": 0,
+      "state": "80abe802ac1e182e",
+      "next_u64": [
+        "c739f5ec15a29d83",
+        "ae1d77a406c6ad8f",
+        "ceee96175ffe237a",
+        "9ce895da16893ee9",
+        "a68d1ea469c151e4",
+        "4647bb9f25bcca29",
+        "7d5e76502c4cc6b6",
+        "4e244eb64a6d970f"
+      ]
+    },
+    {
+      "master": "0000000000000000",
+      "player": 0,
+      "purpose": 1,
+      "round": 0,
+      "state": "da47fb2041b77535",
+      "next_u64": [
+        "684ebae1bba70924",
+        "461c9d94d95645b9",
+        "943cb12c658e59d8",
+        "ee79f5f67b412367",
+        "b690aee13a4571bf",
+        "ccc9ce6b68dee3b2",
+        "92f573b5c0c75f15",
+        "468ac528ca1f883d"
+      ]
+    },
+    {
+      "master": "0000000000000000",
+      "player": 0,
+      "purpose": 0,
+      "round": 1,
+      "state": "4a1be2a9d411162e",
+      "next_u64": [
+        "65fa3f6213ad8c29",
+        "6948e9f189fbbf6c",
+        "299c8ee4f31fb463",
+        "4dab4288b5b357f3",
+        "c394bdd3df8a2734",
+        "12e721347f67ea20",
+        "333db6c739535237",
+        "617750aa71a9a2c1"
+      ]
+    },
+    {
+      "master": "0000000000000000",
+      "player": 3,
+      "purpose": 2,
+      "round": 7,
+      "state": "0f92d97914681164",
+      "next_u64": [
+        "2539c252e62f7888",
+        "e092e15b1937f3c7",
+        "4ba4168c7028e359",
+        "52c12d11a837251b",
+        "0e47ca47eaf949a7",
+        "8b09e6a35c0fa807",
+        "9f049ebcd3375984",
+        "c8ed07c590e8bb07"
+      ]
+    },
+    {
+      "master": "0000000000000000",
+      "player": 7,
+      "purpose": 5,
+      "round": 29,
+      "state": "44300f876aef598c",
+      "next_u64": [
+        "38581c8c19b1cc06",
+        "14ba66df05af8dbc",
+        "d4bec8222ebbadbb",
+        "706b01d0d161c402",
+        "8913065142c4e83a",
+        "9a36fd194075e75b",
+        "f6a4647016fca01f",
+        "4c9a582cb904af15"
+      ]
+    },
+    {
+      "master": "0000000000000000",
+      "player": 4294967295,
+      "purpose": 4294967295,
+      "round": 4294967295,
+      "state": "dfc0d86866b2afc0",
+      "next_u64": [
+        "ae68a3008a388b56",
+        "dd44939d1fadd8d3",
+        "f0b44a033f2ebb36",
+        "7e4134ea85782d1c",
+        "ec6190629c66399c",
+        "ad9e3737a5fac81d",
+        "f656f9079bbbdd6d",
+        "ad0a471a2b80832d"
+      ]
+    },
+    {
+      "master": "0000000000000000",
+      "player": 2,
+      "purpose": 0,
+      "round": 1000,
+      "state": "27bfa446446bf1c0",
+      "next_u64": [
+        "f9246d588600cf43",
+        "2b03a6a04f16df2b",
+        "15863fe7ad3d3883",
+        "62d660ce3407e7ad",
+        "6ee47e09ce81fb52",
+        "da23d31cafd4d0c6",
+        "2785d24eac11311a",
+        "b62b5564cb826109"
+      ]
+    },
+    {
+      "master": "0000000000000001",
+      "player": 0,
+      "purpose": 0,
+      "round": 0,
+      "state": "b18a02f46d8d86c3",
+      "next_u64": [
+        "e28195ddd9ee4956",
+        "6735fa339a2f4459",
+        "d69887a7933b8aad",
+        "93a728c7519ce556",
+        "9b8bd6bbebb43f61",
+        "e672a86dfc7e9f3d",
+        "36a8cf9a6c2baf8d",
+        "77621f75ae51dfb4"
+      ]
+    },
+    {
+      "master": "0000000000000001",
+      "player": 1,
+      "purpose": 0,
+      "round": 0,
+      "state": "35aa233257ed720d",
+      "next_u64": [
+        "df273cabda46105d",
+        "fc1e0a6458065245",
+        "6fbf50334e489f86",
+        "be57c45f97461370",
+        "90777be20a4851e6",
+        "8c088dd52b30490a",
+        "15e6a92bb20ab058",
+        "862f0e4b33d88729"
+      ]
+    },
+    {
+      "master": "0000000000000001",
+      "player": 0,
+      "purpose": 1,
+      "round": 0,
+      "state": "4c3ddb8aef3de402",
+      "next_u64": [
+        "56341abfef26076a",
+        "e5b453e851af5166",
+        "696bb7b2a2a79051",
+        "e88d5518c40b33cf",
+        "7470d80fffec0ca5",
+        "0ea0402f39788000",
+        "0c4ca03032f21d23",
+        "028236a9732a7105"
+      ]
+    },
+    {
+      "master": "0000000000000001",
+      "player": 0,
+      "purpose": 0,
+      "round": 1,
+      "state": "e5dd105a383644f7",
+      "next_u64": [
+        "54d18b0f5427a2fa",
+        "9b6cb766545a6863",
+        "da6701dc3aad7855",
+        "f8647fa12e0c11cd",
+        "ab732160dba36033",
+        "015c6495217a51d3",
+        "9a85edbecdaec2cd",
+        "b32d4f2f3b6179d3"
+      ]
+    },
+    {
+      "master": "0000000000000001",
+      "player": 3,
+      "purpose": 2,
+      "round": 7,
+      "state": "3e00e3ae7c99db3f",
+      "next_u64": [
+        "c54227f73a098151",
+        "d9b78861414aab04",
+        "95b2c166931cf81b",
+        "0cb52cedc98637c5",
+        "b3c63ee6e6a2eb51",
+        "2a36718f35909630",
+        "758e3e84673327ca",
+        "3f7176dd5222bb7e"
+      ]
+    },
+    {
+      "master": "0000000000000001",
+      "player": 7,
+      "purpose": 5,
+      "round": 29,
+      "state": "56773f5482b3d67d",
+      "next_u64": [
+        "3df8f48b94f923aa",
+        "b31d10fd6413ce22",
+        "9d60a4bef7f4a11b",
+        "d434485835e9411b",
+        "be38a939539a8e73",
+        "a412817d0ceb5e49",
+        "15d8ce0a6bc6adc3",
+        "fcc9cc94d417c4e6"
+      ]
+    },
+    {
+      "master": "0000000000000001",
+      "player": 4294967295,
+      "purpose": 4294967295,
+      "round": 4294967295,
+      "state": "7c8a53d526fee5eb",
+      "next_u64": [
+        "c147270a7802df86",
+        "683e3c1d7e809597",
+        "cd1260b82a7e99df",
+        "f70ec6b7ab67e6f6",
+        "2177960de6689ceb",
+        "5e91feac9d012eda",
+        "1af3ad13cb68cef8",
+        "06b93d003189ecbf"
+      ]
+    },
+    {
+      "master": "0000000000000001",
+      "player": 2,
+      "purpose": 0,
+      "round": 1000,
+      "state": "3565bcc4ea752b0a",
+      "next_u64": [
+        "b820554cfc8fe663",
+        "3105c2b578e5203d",
+        "7d114e4a46f134a1",
+        "15057ebec3919fed",
+        "e9e68c1c31b8db7f",
+        "0fb21d28b269fdf4",
+        "3a17257d0845c528",
+        "7b8002025f7d7684"
+      ]
+    },
+    {
+      "master": "deadbeefcafef00d",
+      "player": 0,
+      "purpose": 0,
+      "round": 0,
+      "state": "411d1fa3cdf5b0fd",
+      "next_u64": [
+        "696f4e63d4700301",
+        "652bc02f37845785",
+        "7737095666243238",
+        "be680597fe0fa662",
+        "819940e96888fbd6",
+        "ca62d3220ffe47ee",
+        "2747c8a1d9c620ba",
+        "438e0cd471573f6e"
+      ]
+    },
+    {
+      "master": "deadbeefcafef00d",
+      "player": 1,
+      "purpose": 0,
+      "round": 0,
+      "state": "df15565466eeb39a",
+      "next_u64": [
+        "d99fba575e24aee4",
+        "0efb5f31c402ed14",
+        "935b2336d658252f",
+        "d3653c1f7871fcd6",
+        "29d8a83662efd8fa",
+        "4f2332d6fcedc637",
+        "9303f47de6110ac8",
+        "2d319d664429e592"
+      ]
+    },
+    {
+      "master": "deadbeefcafef00d",
+      "player": 0,
+      "purpose": 1,
+      "round": 0,
+      "state": "a7cd042ba510a0f3",
+      "next_u64": [
+        "0d76cb0e31789d39",
+        "23cfb035f7609e87",
+        "d78289217eec30c0",
+        "4ec35cefd4717c49",
+        "7d20d8d929dcbe6e",
+        "2aefeeba83171298",
+        "b315bcad6a3cb209",
+        "9832057fe4e7d89b"
+      ]
+    },
+    {
+      "master": "deadbeefcafef00d",
+      "player": 0,
+      "purpose": 0,
+      "round": 1,
+      "state": "8425a1d16a8c1cf9",
+      "next_u64": [
+        "0e07b6a84564e9e7",
+        "58d46cef0941ddc5",
+        "f18e3e35686ab5bc",
+        "5c09270a8cee96d5",
+        "c5db0caacb9ba180",
+        "a8b62cec2ccaaeba",
+        "251b7c5613eee3e8",
+        "fc0b5b95db9117a6"
+      ]
+    },
+    {
+      "master": "deadbeefcafef00d",
+      "player": 3,
+      "purpose": 2,
+      "round": 7,
+      "state": "fe69ed3a4317e9a6",
+      "next_u64": [
+        "83cb32453b0431c3",
+        "55c26300e110c08f",
+        "c3477e8096be4a57",
+        "c51087b75cdea76f",
+        "024968960483972d",
+        "4ba5c0d3f7d0d283",
+        "ae0e81e8764c7cff",
+        "6a94176c5d487444"
+      ]
+    },
+    {
+      "master": "deadbeefcafef00d",
+      "player": 7,
+      "purpose": 5,
+      "round": 29,
+      "state": "e0aed86c2e26c73e",
+      "next_u64": [
+        "aa7900c18d4a1fba",
+        "b26ee7df655bf737",
+        "3a09b84d8f695ef0",
+        "b7f5c85c9859b9d0",
+        "5099b7619d505208",
+        "c67675d56b93aae2",
+        "9be424fc97af698b",
+        "44bd9c28863c416a"
+      ]
+    },
+    {
+      "master": "deadbeefcafef00d",
+      "player": 4294967295,
+      "purpose": 4294967295,
+      "round": 4294967295,
+      "state": "8cf322debb763cb9",
+      "next_u64": [
+        "858e6f75c2cdb0ab",
+        "2eb61c04987a482d",
+        "bbf694c7c4ec3fa3",
+        "b4a9076ee9723d02",
+        "c9ebe05292ff9da4",
+        "bc7496da0f44ad13",
+        "6a216782e0397027",
+        "9f85d84fe38dea33"
+      ]
+    },
+    {
+      "master": "deadbeefcafef00d",
+      "player": 2,
+      "purpose": 0,
+      "round": 1000,
+      "state": "711fb114017d1054",
+      "next_u64": [
+        "edcf5fe9c78622b5",
+        "c1e811c93d32072c",
+        "b81a68e67a1138c8",
+        "82c0e4ea3dc75ed2",
+        "9085fa431be5ee4b",
+        "5d91fea64b64c2c3",
+        "c0eb331cc4ec8f57",
+        "1e7dea6c072e1962"
+      ]
+    },
+    {
+      "master": "ffffffffffffffff",
+      "player": 0,
+      "purpose": 0,
+      "round": 0,
+      "state": "fc042709560421da",
+      "next_u64": [
+        "00fc86d80b488e96",
+        "5fbe1cee5b415289",
+        "5a2cae37e2450363",
+        "d8e1f5646f5f5f9e",
+        "4f2adcf5dc25fd86",
+        "e89e1289df1adafe",
+        "4ee6148681eaf2b0",
+        "6a8f81f42fa90f9a"
+      ]
+    },
+    {
+      "master": "ffffffffffffffff",
+      "player": 1,
+      "purpose": 0,
+      "round": 0,
+      "state": "968d1ec021ff6814",
+      "next_u64": [
+        "69c1b92fea83bd41",
+        "0868076ef310ed5f",
+        "233a11bdc2170a5b",
+        "1664c572f1b68de8",
+        "5ab04d2b326f4a73",
+        "edb4412182c9dafc",
+        "4ab1383088e6d843",
+        "c413e61aee50398d"
+      ]
+    },
+    {
+      "master": "ffffffffffffffff",
+      "player": 0,
+      "purpose": 1,
+      "round": 0,
+      "state": "3ffa691cabc4a4aa",
+      "next_u64": [
+        "8fc1493e1daeade8",
+        "0c45b82ef6fbffee",
+        "34e06583178b1f36",
+        "d92c14a8499149be",
+        "f17c851ce1d2c123",
+        "a1fb256b50530419",
+        "7358b813aa2cd8cd",
+        "87f1103b2fb76617"
+      ]
+    },
+    {
+      "master": "ffffffffffffffff",
+      "player": 0,
+      "purpose": 0,
+      "round": 1,
+      "state": "0929d51c149ad548",
+      "next_u64": [
+        "451626acd2a9fda6",
+        "05428bd0a9f9cf9d",
+        "5899a44be6f5a858",
+        "bf614d2a4911f799",
+        "be1c85f6af84fa38",
+        "f75bb5a3fc74d750",
+        "4ec564e657c7767d",
+        "8843005d9450aa75"
+      ]
+    },
+    {
+      "master": "ffffffffffffffff",
+      "player": 3,
+      "purpose": 2,
+      "round": 7,
+      "state": "9257da1112d86524",
+      "next_u64": [
+        "ee76378b99210f84",
+        "1c329ad9006371f8",
+        "cd76109558b91827",
+        "a42923caecc1059f",
+        "3b15e1e92270e6a5",
+        "03930b21254d1f07",
+        "987cdb19f863c6ee",
+        "adfae230fa8c5b2d"
+      ]
+    },
+    {
+      "master": "ffffffffffffffff",
+      "player": 7,
+      "purpose": 5,
+      "round": 29,
+      "state": "2bd7f01814adda62",
+      "next_u64": [
+        "240a3100b01b29bd",
+        "cb466ad3d266d69a",
+        "913a0efad2aa544b",
+        "5bfea7e4d3ab0dd7",
+        "c9bb6ec472c94455",
+        "84378930568ecd1c",
+        "84a8add5835cfa37",
+        "444138d1fafda5d7"
+      ]
+    },
+    {
+      "master": "ffffffffffffffff",
+      "player": 4294967295,
+      "purpose": 4294967295,
+      "round": 4294967295,
+      "state": "8b6c0330ee00568f",
+      "next_u64": [
+        "5c1ade828cd978b2",
+        "c9f592542b441f63",
+        "c8b3df12deb9600b",
+        "e3819d03e237d668",
+        "45a226b7dcd7ca15",
+        "ae9128356257ad7a",
+        "6ff86504e3209c76",
+        "66eb44b857f51430"
+      ]
+    },
+    {
+      "master": "ffffffffffffffff",
+      "player": 2,
+      "purpose": 0,
+      "round": 1000,
+      "state": "26554264d3e58b2a",
+      "next_u64": [
+        "33af896ee9a482bf",
+        "0b7fe21e7e55c5d2",
+        "4530512cbb765597",
+        "8e2d1cae6348e264",
+        "e96d5c6129d0f5e5",
+        "0eae7612b4e6f7e6",
+        "e80265cd941cee25",
+        "4620c8133ab0702c"
+      ]
+    }
+  ]
+}

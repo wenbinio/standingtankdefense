@@ -8,7 +8,7 @@ This document locks the fork's design decisions. Everything else inherits from `
 
 | Layer | Shared with Steam? |
 | --- | --- |
-| Content catalog (87 weapons, 94 modifiers, 13 enemies, wave tables, damage matrix) | **Shared**, generated from one source (`[09] §1.5`) |
+| Content catalog (86 weapons, 91 modifiers, 12 enemies, wave tables, damage matrix) | **Shared**, generated from one source (`[09] §1.5`) |
 | Combat / modifier stacking / status rules | **Shared semantics**, reimplemented in Luau |
 | Arena independence, seeded RNG streams | **Shared** |
 | Run length & difficulty timeline | **Forked** (F1) |
@@ -25,10 +25,14 @@ The implemented sim runs a **30-minute** arc (`content.rs: BOSS_SPAWN_TICK = 540
 
 - Boss spawn: tick **9000** (5 min).
 - Round length: **20 s** (600 ticks), down from 30 s → **15 shop decisions per run**.
-- Ramp interval: **one round**.
+- Ramp interval: **30 s** (900 ticks) — the Steam interval under the same `/6` rescale.
 - The escalation *curve shape* is reused, compressed onto the shorter timeline — this is a **timeline rescale, not a rebalance**. The existing tuning work is preserved.
 
-All timeline constants live in one `Timeline` table so the Steam and Roblox schedules sit side by side and divergence stays visible.
+**Why the ramp interval is not the round length.** An earlier draft of F1 tied the two together. That would have been a rebalance in disguise: with a 600-tick interval the ramp compounds **15** times before the boss instead of Steam's **10**, moving the difficulty endpoint from ≈×5.56 to ≈×12.9 at the same per-interval factor. Keeping the interval at 900 preserves the compounding count, and therefore the endpoint, with **zero retuning** — which is what makes the "rescale, not rebalance" claim actually true. Shop cadence (20 s) and difficulty cadence (30 s) are simply independent; there is no reason they must agree.
+
+This invariant is machine-checked: `roblox_export.rs` asserts `ramp_intervals_to_boss` is equal on both timelines, so if anyone reties them the test fails and names the consequence.
+
+All timeline constants live in one `timeline` table in `content.json` so the Steam and Roblox schedules sit side by side and divergence stays visible.
 
 ## F2 — Elimination → instant re-entry (decouple "run" from "match")
 

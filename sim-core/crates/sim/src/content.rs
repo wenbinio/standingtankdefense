@@ -30,6 +30,35 @@ pub enum Attack {
     Bounce(u8),
 }
 
+impl Attack {
+    /// Stable `(tag, a, b, c)` encoding (the `WeaponAbility::words` pattern),
+    /// used by the `content.json` export (`roblox/CONTRACTS.md` C1). The tag is
+    /// deliberately the same number as [`attack_scope_id`], so a port needs one
+    /// mapping, not two. Lossless: `from_words(x.words()) == Some(x)`.
+    pub fn words(self) -> (u8, i64, i64, i64) {
+        match self {
+            Attack::SingleTarget => (0, 0, 0, 0),
+            Attack::Splash(radius) => (1, radius, 0, 0),
+            Attack::Barrage(n) => (2, n as i64, 0, 0),
+            Attack::Area(radius) => (3, radius, 0, 0),
+            Attack::Wave(extra) => (4, extra, 0, 0),
+            Attack::Bounce(n) => (5, n as i64, 0, 0),
+        }
+    }
+    /// Inverse of [`words`](Self::words).
+    pub fn from_words(tag: u8, a: i64, _b: i64, _c: i64) -> Option<Attack> {
+        Some(match tag {
+            0 => Attack::SingleTarget,
+            1 => Attack::Splash(a),
+            2 => Attack::Barrage(a as u8),
+            3 => Attack::Area(a),
+            4 => Attack::Wave(a),
+            5 => Attack::Bounce(a as u8),
+            _ => return None,
+        })
+    }
+}
+
 /// A weapon's signature ability (`docs/05 §5.2`), executed at each hit/fire
 /// site by `combat`. Pure data — the behavior lives in `combat`/`status`.
 /// Most weapons carry `None` and fire plain damage; the catalog attaches one of
@@ -164,6 +193,35 @@ pub enum Archetype {
     Inert,
 }
 
+impl Archetype {
+    /// Stable integer id for the `content.json` export. Plain C-like enum, so it
+    /// gets an id rather than the `(tag, a, b, c)` payload encoding.
+    pub fn id(self) -> u8 {
+        match self {
+            Archetype::Swarm => 0,
+            Archetype::Tank => 1,
+            Archetype::Fast => 2,
+            Archetype::Caster => 3,
+            Archetype::Ranged => 4,
+            Archetype::Boss => 5,
+            Archetype::Inert => 6,
+        }
+    }
+    /// Inverse of [`id`](Self::id).
+    pub fn from_id(id: u8) -> Option<Archetype> {
+        Some(match id {
+            0 => Archetype::Swarm,
+            1 => Archetype::Tank,
+            2 => Archetype::Fast,
+            3 => Archetype::Caster,
+            4 => Archetype::Ranged,
+            5 => Archetype::Boss,
+            6 => Archetype::Inert,
+            _ => return None,
+        })
+    }
+}
+
 /// An enemy's special ability (`docs/05 §5.4` `abilities[]`). Kept deliberately
 /// small and ENEMY-only — this is NOT the weapon ability path. Static content,
 /// so it lives entirely on `EnemyDef` and never feeds the snapshot/checksum.
@@ -182,6 +240,44 @@ pub enum EnemyAbility {
         damage: i64,
         damage_type: u8,
     },
+}
+
+/// `EnemyAbility::RangedAttack` carries FOUR fields but the `(tag, a, b, c)`
+/// encoding has room for three operands, so `cooldown_ticks` (u32) and
+/// `damage_type` (u8) share operand `b`:
+/// `b = cooldown_ticks | (damage_type << ENEMY_RANGED_DTYPE_SHIFT)`.
+/// Lossless for every `(u32, u8)` pair, and cheap to unpack in a port
+/// (`dtype = b >> 32`, `cooldown = b & 0xFFFFFFFF`).
+pub const ENEMY_RANGED_DTYPE_SHIFT: u32 = 32;
+
+impl EnemyAbility {
+    /// Stable `(tag, a, b, c)` encoding (the `WeaponAbility::words` pattern),
+    /// used by the `content.json` export (`roblox/CONTRACTS.md` C1).
+    /// Lossless: `from_words(x.words()) == Some(x)`.
+    pub fn words(self) -> (u8, i64, i64, i64) {
+        match self {
+            EnemyAbility::None => (0, 0, 0, 0),
+            EnemyAbility::RangedAttack { range, cooldown_ticks, damage, damage_type } => (
+                1,
+                range,
+                (cooldown_ticks as i64) | ((damage_type as i64) << ENEMY_RANGED_DTYPE_SHIFT),
+                damage,
+            ),
+        }
+    }
+    /// Inverse of [`words`](Self::words).
+    pub fn from_words(tag: u8, a: i64, b: i64, c: i64) -> Option<EnemyAbility> {
+        Some(match tag {
+            0 => EnemyAbility::None,
+            1 => EnemyAbility::RangedAttack {
+                range: a,
+                cooldown_ticks: (b & 0xFFFF_FFFF) as u32,
+                damage: c,
+                damage_type: ((b >> ENEMY_RANGED_DTYPE_SHIFT) & 0xFF) as u8,
+            },
+            _ => return None,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1393,9 +1489,13 @@ pub const WARN_TICKS: u32 = RAMP_INTERVAL - GENTLE_TICKS; // 900 — final 30 s
 /// genuinely harder (denser, tankier, deadlier) without any one-number absurdity.
 /// `G·W·J = 1.025·1.016·1.14` (Fixed product ≈ 1.1872). Pure `(num,den)` Fixed
 /// ratios — no floats, integer-parametrized, feeds `state_checksum`.
-const RAMP_GENTLE: (i64, i64) = (41, 40); //  G = +2.5% gentle climb (1.025)
-const RAMP_WARN: (i64, i64) = (127, 125); //  W = +1.6% over the short warning window (1.016)
-const RAMP_JUMP: (i64, i64) = (57, 50); //    J = +14% per-interval step (1.14) — the overall-scale dial
+/// (`pub` only so the `content.json` exporter can ship the curve's parameters —
+/// a Luau port cannot reproduce `enemy_hp_mult` without them. Value unchanged.)
+pub const RAMP_GENTLE: (i64, i64) = (41, 40); //  G = +2.5% gentle climb (1.025)
+/// See [`RAMP_GENTLE`].
+pub const RAMP_WARN: (i64, i64) = (127, 125); //  W = +1.6% over the short warning window (1.016)
+/// See [`RAMP_GENTLE`]. J = +14% per-interval step (1.14) — the overall-scale dial.
+pub const RAMP_JUMP: (i64, i64) = (57, 50);
 
 /// Enemy HP scaling at `tick` (also scales contact/ranged damage — see
 /// `combat::move_enemies` / `enemy_ranged_attacks`). The shape is a STEPPED "RAMP"
