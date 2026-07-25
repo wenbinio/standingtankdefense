@@ -76,7 +76,9 @@ Likewise, `crates/sim/src/content.rs` (1,597 lines of hardcoded content) should 
 
 Each client only ever sees **its own arena**, so replication is 1 arena per client, not 8 — a large win the architecture hands you for free.
 
-Still, ~300 enemy positions at 30 Hz is over budget. `UnreliableRemoteEvent` caps at ~900 bytes per payload (dropped above 1000), and Luau numbers serialize at ~9 bytes each. So: pack positions into `buffer`s (which compress on the wire), replicate at 10–15 Hz, and interpolate client-side. If §1.4 option 1 is taken, the client can instead *predict* enemy motion from the seed and receive only periodic corrections — the determinism work paying for itself a second time.
+**Corrected after measurement:** this section originally assumed ~300 entities per arena. Profiling the real Rust sim under the bot puts the actual peak at **66–67 enemies and 70–84 projectiles** — pessimistic by roughly 4.5×. The replication budget is consequently *not* a problem: 300 entities at a 3-byte delta encoding fits in a single ~900-byte payload, and the real ~67 fits with room to spare (~22 KB/s per client at 15 Hz, ~176 KB/s server-side for eight). Packing cost is ~0.16% of one core for all eight arenas. The paragraph below is kept because the encoding constraints it describes still bind.
+
+`UnreliableRemoteEvent` caps at ~900 bytes per payload (dropped above 1000), and Luau numbers serialize at ~9 bytes each. So: pack positions into `buffer`s (which compress on the wire), replicate at 10–15 Hz, and interpolate client-side. If §1.4 option 1 is taken, the client can instead *predict* enemy motion from the seed and receive only periodic corrections — the determinism work paying for itself a second time.
 
 Rendering hundreds of sprites is its own problem: no Parts per enemy. Either a 2D `ScreenGui` presentation (closest to the current Godot front-end, and the `RenderView` contract in `crates/sim/src/view.rs` already exposes exactly the flat integer arrays this needs) or instanced billboards.
 

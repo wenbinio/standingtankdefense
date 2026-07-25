@@ -115,4 +115,6 @@ roblox/
   test/                       parity runner + vectors
 ```
 
+**Rojo namespacing (pinned centrally):** `src/shared` maps to **`ReplicatedStorage.Shared`**, not to the root of `ReplicatedStorage`. Every component resolves shared modules as `ReplicatedStorage.Shared.<Module>`. `src/server`, `src/client` and `test` are optional paths so the project syncs before those milestones exist.
+
 Luau modules are plain `ModuleScript`-style returns and must **not** reference any Roblox global (`game`, `workspace`, `task`, `Instance`) in `src/shared/` — that layer runs unchanged under a standalone `luau` interpreter, which is how it gets tested in CI. This is the Luau restatement of the standing invariant that the sim core stays engine-independent.

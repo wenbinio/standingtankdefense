@@ -96,10 +96,46 @@ Mirrors the netcode-first discipline of `[06]`, retargeted:
 | --- | --- |
 | **R0** Numeric core | `Fixed.luau` + `Rng.luau` bit-identical to Rust across generated parity vectors |
 | **R1** Content pipeline | `content.json` generated from `content.rs`; Luau loads it and round-trips every def |
-| **R2** Throughput spike | 8 arenas × worst-case wave × 30 Hz inside one server budget, measured (`[09] §1.3`) — **this gates the rest** |
+| **R2** Throughput spike | 8 arenas × worst-case wave × 30 Hz inside one server budget, measured (`[09] §1.3`) — **this gates the rest**. First results in §F8 |
 | **R3** Single arena | One arena simulating in Luau, diffed against the Rust oracle on shared seeds |
 | **R4** Shell | Shop UI, run loop, instant retry (F2) |
 | **R5** Multiplayer | Director, rolling leaderboard, rival spectating (F4) |
 | **R6** Meta | Unlocks, chassis, cosmetics (F3) |
 
 R0–R2 are the risk. R3 onward is transcription against an oracle.
+
+## F8 — R2 throughput: first measured results
+
+Bench run standalone (`luau -O2`, Xeon @ 2.10 GHz) against the real `Fixed.luau`, not a stub. Budget is 33.33 ms/tick for all 8 arenas; the honest simulation ceiling is taken as 30% of that = 10.00 ms.
+
+> **The absolute percentages below are provisional.** They were captured while `Fixed.luau` was still being optimized, and the exact backend is GC-bound with ±30% run-to-run variance; a re-run mid-optimization already showed the realistic case moving from 376% to 114% serial. **What is durable here is the diagnosis and the ratios, not the digits.** Treat the table as an order of magnitude and re-run the bench for current numbers.
+
+**The workload is measured, not assumed.** Steady-state population was derived by Little's law over the real `WAVE_M0`/`BOSS_ESCORT` cadences, then checked against the actual Rust sim driven by `bot::Bot`: **peak 66–67 enemies, 70–84 projectiles, 20 weapons**. This corrects the ~300-entity figure assumed in `[09] §1.6` — pessimistic by ~4.5×.
+
+| Backend | Real peak (E≈67) | `[09] §1.6` worst case (E=300) |
+| --- | --- | --- |
+| `exact` (C2 `Fixed`) | 4.70 ms/arena — 376% serial, **47% across 8 Actors** | 19.58 ms — 1566% serial, 196% parallel (**fail**) |
+| C2 API over doubles | 0.108 ms — 8.6% | 0.600 ms — 48% |
+| Raw doubles | 0.020 ms — 1.6% | 0.088 ms — 7.1% |
+
+`--codegen` (proxy for `--!native`) buys a consistent ≈2.1×.
+
+### Read
+
+**The simulation is cheap and the architecture is sound. What costs is the exact `Fixed` emulation — and that cost is algorithmic, not inherent.**
+
+- Exactness tax is **33×** (221× vs raw doubles, against 6.8× for the same API over doubles).
+- `div` is the culprit at **17.7 µs/op — 14,236× native**, because `divMag` was a bit-by-bit restoring division (~80 iterations × 5-limb compare/subtract). Enemy movement alone is **72% of the tick** purely because `step_toward` does two divisions per enemy.
+- The exact backend is also **GC-bound** (a table allocated per op), giving ±30% run-to-run variance.
+
+At the *real* workload the exact backend already fits across 8 Actors (47%), so F5 is not yet in trouble. But the margin is thin and noisy, so three fixes are being applied **before** the F5 "swap to doubles" hatch is considered — all of which preserve the seed-for-seed Rust oracle:
+
+1. Replace `divMag` with Knuth Algorithm D or reciprocal-multiply (projected to move `exact` from ~470% to ~100% serial).
+2. Get `div` out of `step_toward`.
+3. Kill an `O(W×E)` rescan — **1,670 weapon-range scans/tick** at E=300/W=20, because `combat.rs::fire_weapons` deliberately does not advance cooldown when nothing is in range, so short-range weapons rescan every enemy every tick. *This one is a finding about the existing Rust sim, not the port, and is worth fixing upstream on its own merits.*
+
+### Status: inconclusive as a formal gate, but not blocking
+
+Only a Studio run settles R2 — the Actor harness has never executed against a real Roblox VM, and the standalone numbers come from a different Luau build, allocator and sandbox, on build-container hardware, with no Actor dispatch or barrier costs modelled. **Serial is the honest planning column.** Hazards, minions, auras and Fire-chains are unmodelled (all zero in the Rust profile), and population is pinned where real arenas oscillate with `Clear`.
+
+What the bench *does* settle is the decision R2 was gating: the 33× backend ratio is a property of the code, not the host, and will not invert on Roblox hardware. **R3 is cleared to start** once the division work lands.

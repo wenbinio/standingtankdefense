@@ -1,0 +1,52 @@
+{
+  "name": "StandingTankDefense",
+  "globIgnorePaths": ["**/*.md", "**/.DS_Store"],
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": {
+        "$path": { "optional": "src/shared" }
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "Server": {
+        "$path": { "optional": "src/server" }
+      },
+      "Bench": {
+        "$path": "bench"
+      }
+    },
+
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "Test": {
+        "$path": { "optional": "test" }
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Client": {
+          "$path": { "optional": "src/client" }
+        }
+      }
+    },
+
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "StreamingEnabled": false
+      }
+    },
+
+    "Lighting": {
+      "$className": "Lighting"
+    }
+  }
+}
