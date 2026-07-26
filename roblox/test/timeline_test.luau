@@ -21,7 +21,7 @@
 	  3. THE WAVE GATES RESCALE. The `start_tick` gates in `content.json` ship at
 	     STEAM scale (up to 45000) so one catalog serves both timelines, and
 	     `Waves.gateTick` divides them by `tick_scale_num/den`. Without it, 7 of
-	     the 17 roster entries never open before a 9000-tick boss and the roster
+	     the 41 roster entries never open before a 9000-tick boss and the roster
 	     silently collapses to its opening mix — no error, anywhere. §4 asserts
 	     that 7 both as arithmetic and as an observed spawn deficit, by running
 	     the real `Waves.spawn` with the rescale disabled.
@@ -93,7 +93,7 @@ eq("steam.round_ticks", STEAM.round_ticks, 900)
 eq("steam.boss_spawn_tick", STEAM.boss_spawn_tick, 54000)
 eq("roblox.round_ticks", ROBLOX.round_ticks, 600)
 eq("roblox.boss_spawn_tick", ROBLOX.boss_spawn_tick, 9000)
-eq("wave table is the 17-entry roster", #WAVES, 17)
+eq("wave table is the 41-entry roster", #WAVES, 41)
 -- F1's load-bearing invariant: the ramp interval is NOT the round length, so the
 -- ramp compounds the same number of times on both timelines and the rescale
 -- stays a rescale rather than a rebalance.
@@ -128,7 +128,7 @@ do
 			firstFailures[#firstFailures + 1] = "steam gate rescaled at entry " .. i
 		end
 	end
-	check("steam gate rescale is the identity on all 17 entries", identical)
+	check("steam gate rescale is the identity on all 41 entries", identical)
 end
 
 -- ==================== 3. selecting the Roblox timeline ====================
@@ -192,8 +192,8 @@ do
 		end
 	end
 	check("every roblox gate rescale is exact (no flooring loss)", exact)
-	eq("all 17 gates open before the roblox boss", openWith, 17)
-	eq("without the rescale, 7 gates would never open", shutWithout, 7)
+	eq("all 41 gates open before the roblox boss", openWith, 41)
+	eq("without the rescale, 21 gates would never open", shutWithout, 21)
 end
 
 -- ==================== 5. observed spawns: the gates really fire ====================
@@ -249,7 +249,7 @@ do
 	end
 	check("roblox per-def spawn counts match the gate schedule", perDef)
 
-	-- Every enemy def the 17-entry roster can produce must actually appear
+	-- Every enemy def the 41-entry roster can produce must actually appear
 	-- before the boss. This is the "all gates open" claim as behavior, not
 	-- arithmetic: a shut gate for a def no other entry produces shows up here.
 	local rosterDefs = {}
@@ -269,13 +269,28 @@ do
 	-- late-roster defs go missing.
 	local without, withoutTotal = sweep(NO_RESCALE, BOSS_T)
 	check("without the rescale the roster is strictly poorer", withoutTotal < gotTotal)
+	-- This used to assert that dropping the rescale made at least one enemy TYPE
+	-- vanish. That was true of the old 17-entry roster, whose late gates
+	-- introduced new defs. The rebuilt roster front-loads every type before tick
+	-- 9000, so the loss now shows up as VOLUME rather than as a missing type --
+	-- the property got stronger, not weaker, and the assertion had quietly become
+	-- vacuous-but-failing. Assert the real thing instead: without the rescale a
+	-- Roblox run faces a small fraction of the intended enemies.
 	local lost = 0
 	for def in rosterDefs do
 		if (without[def] or 0) == 0 and (got[def] or 0) > 0 then
 			lost += 1
 		end
 	end
-	check("without the rescale at least one enemy type never appears", lost > 0)
+	check(
+		string.format(
+			"without the rescale the roster collapses in volume (%d -> %d spawns, %d type(s) also lost)",
+			gotTotal,
+			withoutTotal,
+			lost
+		),
+		withoutTotal * 2 < gotTotal
+	)
 end
 
 -- ==================== 6. the boss, and the shop cadence ====================

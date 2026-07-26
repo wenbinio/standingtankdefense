@@ -383,7 +383,7 @@ end
 do
 	local e = Content.ENEMIES[0 + 1] -- Squeakzilla
 	eq(e.name, "Squeakzilla", "ENEMIES[0].name")
-	eq(e.base_hp, 200, "Squeakzilla.base_hp")
+	eq(e.base_hp, 300, "Squeakzilla.base_hp")
 	eq(e.move_speed, 8, "Squeakzilla.move_speed")
 	eq(e.contact_damage, 500, "Squeakzilla.contact_damage")
 	eq(e.bounty, 10, "Squeakzilla.bounty")
@@ -395,7 +395,7 @@ end
 do
 	local e = Content.ENEMIES[1 + 1] -- Fanged Death
 	eq(e.name, "Fanged Death", "ENEMIES[1].name")
-	eq(e.base_hp, 1200, "FangedDeath.base_hp")
+	eq(e.base_hp, 3000, "FangedDeath.base_hp")
 	eq(e.move_speed, 4, "FangedDeath.move_speed")
 	eq(e.contact_damage, 1500, "FangedDeath.contact_damage")
 	eq(e.bounty, 40, "FangedDeath.bounty")
@@ -413,7 +413,7 @@ do
 	--                                          damage: 250, damage_type: DMG_MAGIC }
 	local e = Content.ENEMIES[7 + 1]
 	eq(e.name, "Nope Rope", "ENEMIES[7].name")
-	eq(e.base_hp, 320, "NopeRope.base_hp")
+	eq(e.base_hp, 800, "NopeRope.base_hp")
 	eq(e.move_speed, 6, "NopeRope.move_speed")
 	eq(e.contact_damage, 200, "NopeRope.contact_damage")
 	eq(e.bounty, 30, "NopeRope.bounty")
@@ -581,10 +581,10 @@ do
 	eq(w0.enemy, 0, "WAVE_M0[0].enemy")
 	eq(w0.cadence_ticks, Content.EARLY_GRUNT_CADENCE, "WAVE_M0[0].cadence_ticks")
 	eq(w0.start_tick, 0, "WAVE_M0[0].start_tick")
-	local w1 = Content.WAVES[1 + 1] -- Fanged Death, cadence 95, ungated
+	local w1 = Content.WAVES[1 + 1] -- Fanged Death, cadence 300, gated at 1800
 	eq(w1.enemy, 1, "WAVE_M0[1].enemy")
-	eq(w1.cadence_ticks, 95, "WAVE_M0[1].cadence_ticks")
-	eq(w1.start_tick, 0, "WAVE_M0[1].start_tick")
+	eq(w1.cadence_ticks, 300, "WAVE_M0[1].cadence_ticks")
+	eq(w1.start_tick, 1800, "WAVE_M0[1].start_tick")
 	local b0 = Content.BOSS_ESCORT[0 + 1] -- Squeakzilla @ 4, gated on the boss tick
 	eq(b0.enemy, 0, "BOSS_ESCORT[0].enemy")
 	eq(b0.cadence_ticks, 4, "BOSS_ESCORT[0].cadence_ticks")
@@ -612,25 +612,26 @@ local HP_STEAM = {
 	{ 4500, "0000000000010666" },
 	{ 4501, "0000000000010667" },
 	{ 5399, "0000000000010a96" },
-	{ 5400, "0000000000012fea" },
-	{ 5401, "0000000000012fea" },
-	{ 10799, "0000000000013c7b" },
-	{ 10800, "00000000000168cb" },
-	{ 16200, "000000000001ac51" },
-	{ 18000, "000000000001b098" },
-	{ 21600, "000000000001fc7b" },
-	{ 27000, "0000000000025ba6" },
-	{ 32400, "000000000002cca1" },
-	{ 36000, "000000000002daf4" },
-	{ 37800, "00000000000352c3" },
-	{ 43200, "000000000003f1ff" },
-	{ 45000, "000000000003fc17" },
-	{ 48600, "000000000004af0b" },
-	{ 53999, "000000000004e0a4" },
-	{ 54000, "0000000000058f79" },
-	{ 54001, "0000000000058f79" },
-	{ 60000, "0000000000058f79" },
-	{ 100000, "0000000000058f79" },}
+	{ 5400, "000000000001553d" },
+	{ 5401, "000000000001553d" },
+	{ 10799, "0000000000016359" },
+	{ 10800, "000000000001c6da" },
+	{ 16200, "0000000000025e4c" },
+	{ 18000, "000000000002645b" },
+	{ 21600, "000000000003282c" },
+	{ 27000, "0000000000043544" },
+	{ 32400, "0000000000059bf5" },
+	{ 36000, "000000000005b8aa" },
+	{ 37800, "0000000000077a15" },
+	{ 43200, "000000000009f769" },
+	{ 45000, "00000000000a10ea" },
+	{ 48600, "00000000000d48f3" },
+	{ 53999, "00000000000dd5a1" },
+	{ 54000, "000000000011b55c" },
+	{ 54001, "000000000011b55c" },
+	{ 60000, "000000000011b55c" },
+	{ 100000, "000000000011b55c" },
+}
 local HP_ROBLOX = {
 	{ 0, "0000000000010000" },
 	{ 1, "0000000000010002" },
@@ -641,24 +642,25 @@ local HP_ROBLOX = {
 	{ 750, "0000000000010666" },
 	{ 751, "000000000001066d" },
 	{ 899, "0000000000010a90" },
-	{ 900, "0000000000012fea" },
-	{ 901, "0000000000012fec" },
-	{ 1799, "0000000000013c74" },
-	{ 1800, "00000000000168cb" },
-	{ 2700, "000000000001ac51" },
-	{ 3000, "000000000001b098" },
-	{ 3600, "000000000001fc7b" },
-	{ 4500, "0000000000025ba6" },
-	{ 5400, "000000000002cca1" },
-	{ 6000, "000000000002daf4" },
-	{ 6300, "00000000000352c3" },
-	{ 7200, "000000000003f1ff" },
-	{ 7500, "000000000003fc17" },
-	{ 8100, "000000000004af0b" },
-	{ 8999, "000000000004e088" },
-	{ 9000, "0000000000058f79" },
-	{ 9001, "0000000000058f79" },
-	{ 12000, "0000000000058f79" },}
+	{ 900, "000000000001553d" },
+	{ 901, "000000000001553f" },
+	{ 1799, "0000000000016351" },
+	{ 1800, "000000000001c6da" },
+	{ 2700, "0000000000025e4c" },
+	{ 3000, "000000000002645b" },
+	{ 3600, "000000000003282c" },
+	{ 4500, "0000000000043544" },
+	{ 5400, "0000000000059bf5" },
+	{ 6000, "000000000005b8aa" },
+	{ 6300, "0000000000077a15" },
+	{ 7200, "000000000009f769" },
+	{ 7500, "00000000000a10ea" },
+	{ 8100, "00000000000d48f3" },
+	{ 8999, "00000000000dd551" },
+	{ 9000, "000000000011b55c" },
+	{ 9001, "000000000011b55c" },
+	{ 12000, "000000000011b55c" },
+}
 
 for _, row in ipairs(HP_STEAM) do
 	eqFixed(Content.enemyHpMult(row[1], Content.TIMELINE.steam), row[2], "enemyHpMult(steam, " .. row[1] .. ")")
