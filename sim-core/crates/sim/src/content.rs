@@ -1272,7 +1272,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 0 — Squeakzilla: the baseline swarm melee.
     EnemyDef {
         name: "Squeakzilla",
-        base_hp: 200,
+        base_hp: 300,
         move_speed: 8,
         contact_damage: 500,
         bounty: 10,
@@ -1284,7 +1284,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 1 — Fanged Death: slow, medium-armored bruiser.
     EnemyDef {
         name: "Fanged Death",
-        base_hp: 1200,
+        base_hp: 3000,
         move_speed: 4,
         contact_damage: 1500,
         bounty: 40,
@@ -1294,22 +1294,28 @@ pub static ENEMIES: &[EnemyDef] = &[
         boss: false,
     },
     // 2 — The Hippocrate: a doctor-hippo who swore to "first, do no harm" — he lied.
-    //     The 30-min END-GAME boss. Fixed huge HP,
-    // immune to weapon fire; only `Clear` hurts it (CLEAR_DAMAGE = 3M/use ⇒ ~11
-    // Clears to kill its 33M HP). It does NOT self-destruct: when it reaches the
-    // tank it PLANTS and grinds with a CADENCED contact hit (every
-    // `BOSS_CONTACT_CADENCE` ticks, ×11 tier ⇒ ~0.33M/hit, dodge/armor/shield
-    // honored) — see `combat::move_enemies`. That makes the climax a sustained
-    // multi-Clear RACE: the player must out-Clear the boss's DPS (while the dense
-    // escort piles on) before being ground down, instead of the old single
-    // dodge-coin-flip on one 1.1M burst. After 30 min of player scaling this is the
-    // real climax wall MOST runs end at, not a pushover. (Const id stays BOSS;
-    // sprite key unchanged.)
+    //     The 30-min END-GAME boss. Fixed huge HP, immune to weapon fire; only
+    // `Clear` hurts it (CLEAR_DAMAGE = 3M/use ⇒ 11 Clears at a 300-tick cooldown ⇒ a
+    // ~110 s minimum fight). It does NOT self-destruct: when it reaches the tank it
+    // PLANTS and grinds with a CADENCED contact hit every `BOSS_CONTACT_CADENCE`
+    // ticks (dodge/armor/shield honored) — see `combat::move_enemies`.
+    //
+    // `docs/11` BALANCE PASS — `contact_damage` 45000 → 1900. THE most consequential
+    // number in the old build. At 45000 it rode the ramp to ≈250k per hit at 1.5
+    // hits/s, which deletes any tank under ~10M effective HP within seconds of the
+    // boss walking into contact. That is not a fight, it is an HP CHECK: measured,
+    // 82% of ALL deaths in a 240-seed sweep landed inside a ~13 s window at 30:13,
+    // winners always took exactly 11 Clears and losers almost always exactly 1. The
+    // 30-minute run had no difficulty curve at all — it had a plateau and a wall.
+    // At 1900 (≈34k per hit at the ×17.7 endpoint, ≈7M over the minimum fight) the
+    // climax is a genuine multi-Clear RACE with partial progress: ≈70% of the runs
+    // that reach the boss now win it, and the boss holds ≈15% of deaths instead of
+    // 82%. (Const id stays BOSS; sprite key unchanged.)
     EnemyDef {
         name: "The Hippocrate",
         base_hp: 33_000_000,
         move_speed: 3,
-        contact_damage: 45_000,
+        contact_damage: 1900,
         bounty: 0,
         armor_class: ARMOR_LIGHT,
         archetype: Archetype::Boss,
@@ -1319,7 +1325,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 3 — Doomduck: cheapest, weakest chaff — early swarm filler.
     EnemyDef {
         name: "Doomduck",
-        base_hp: 120,
+        base_hp: 200,
         move_speed: 8,
         contact_damage: 350,
         bounty: 6,
@@ -1331,7 +1337,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 4 — Bacon: fast melee rusher (reaches the tank quickly).
     EnemyDef {
         name: "Bacon",
-        base_hp: 260,
+        base_hp: 600,
         move_speed: 16,
         contact_damage: 700,
         bounty: 16,
@@ -1343,7 +1349,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 5 — Honk: even faster, glassier melee.
     EnemyDef {
         name: "Honk",
-        base_hp: 180,
+        base_hp: 400,
         move_speed: 22,
         contact_damage: 600,
         bounty: 18,
@@ -1355,7 +1361,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 6 — Bonk: very tanky, Fortified armor (only Siege bites hard).
     EnemyDef {
         name: "Bonk",
-        base_hp: 4000,
+        base_hp: 16_000,
         move_speed: 3,
         contact_damage: 2200,
         bounty: 80,
@@ -1368,7 +1374,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // tank with magic bolts.
     EnemyDef {
         name: "Nope Rope",
-        base_hp: 320,
+        base_hp: 800,
         move_speed: 6,
         contact_damage: 200,
         bounty: 30,
@@ -1380,7 +1386,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 8 — Croak: ranged spitter; light, frequent piercing spit.
     EnemyDef {
         name: "Croak",
-        base_hp: 300,
+        base_hp: 700,
         move_speed: 6,
         contact_damage: 200,
         bounty: 22,
@@ -1392,7 +1398,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 9 — Spicy: ranged breather; harder-hitting chaos breath at standoff.
     EnemyDef {
         name: "Spicy",
-        base_hp: 600,
+        base_hp: 2000,
         move_speed: 5,
         contact_damage: 300,
         bounty: 34,
@@ -1404,7 +1410,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 10 — Popsicle: slow, durable ranged breather with siege breath.
     EnemyDef {
         name: "Popsicle",
-        base_hp: 900,
+        base_hp: 3000,
         move_speed: 4,
         contact_damage: 350,
         bounty: 40,
@@ -1473,29 +1479,28 @@ pub const WARN_TICKS: u32 = RAMP_INTERVAL - GENTLE_TICKS; // 900 — final 30 s
 /// So each interval multiplies difficulty by `G·W·J`, and over 10 intervals that
 /// compounds to the boss endpoint `base(10)` (the boss tick rides the same value).
 ///
-/// BALANCE PASS (`docs/06`): this REPLACES the interim ×413863 late-game hack. The
-/// old hack set `J = 3.5` (+250%), compounding to an absurd ≈ ×413863 at the boss —
-/// a meaningless number that piled ALL difficulty into one boss wall. The principled
-/// curve keeps the same gentle→warning→step SHAPE and the strict 3-min cadence, but
-/// the per-interval factors are tuned so the WHOLE 30-min run escalates smoothly to a
-/// SANE endpoint:
+/// `docs/11` BALANCE PASS — the multiplier is no longer the primary difficulty
+/// lever. It used to be the ONLY one (the roster was flat from 6 min to 20 min), and
+/// a single geometric curve cannot both bite early and stay sane late: pinned at ×1
+/// at t=0, it is necessarily shallow exactly where the player needs to be threatened.
+/// So escalation is now carried mostly by `WAVE_M0` — a stream added at every 3-min
+/// boundary — and this curve supplies a steady per-interval squeeze on top:
 ///   • `G = +2.5%` gentle climb, `W = +1.6%` warning ramp (UNCHANGED), and
-///   • `J = +14%` step (was +250%) — the cliff is now a felt-but-modest step, not a
-///     cliff-edge, so the curve rises ≈ ×1 → ×5.56 across the match (factor ≈ 1.1872
-///     per interval; `base(10) ≈ 5.56`).
-/// `J` is the OVERALL-SCALE / win-rate dial: with the diversified, finite bot
-/// (`bot.rs`) this lands the 80-seed sweep at ~19% wins (target 20%, band 17–23%).
-/// Both enemy HP *and* contact damage scale on this curve, so the late game is
-/// genuinely harder (denser, tankier, deadlier) without any one-number absurdity.
-/// `G·W·J = 1.025·1.016·1.14` (Fixed product ≈ 1.1872). Pure `(num,den)` Fixed
+///   • `J = +28%` step (was +14%) — the curve rises ×1 → ≈ ×17.7 across the match
+///     (factor ≈ 1.3331 per interval; `base(10) ≈ 17.7`).
+/// `J` is still the overall-scale dial, but it is now a MID-game dial rather than a
+/// win-rate dial: the win rate is set by the wave schedule and the boss stat line.
+/// Enemy HP at the boss tier stays legible (Squeakzilla ≈ 5.3k, Bonk ≈ 283k).
+/// Both enemy HP *and* contact damage scale on this curve.
+/// `G·W·J = 1.025·1.016·1.28` (Fixed product ≈ 1.3331). Pure `(num,den)` Fixed
 /// ratios — no floats, integer-parametrized, feeds `state_checksum`.
 /// (`pub` only so the `content.json` exporter can ship the curve's parameters —
-/// a Luau port cannot reproduce `enemy_hp_mult` without them. Value unchanged.)
+/// a Luau port cannot reproduce `enemy_hp_mult` without them.)
 pub const RAMP_GENTLE: (i64, i64) = (41, 40); //  G = +2.5% gentle climb (1.025)
 /// See [`RAMP_GENTLE`].
 pub const RAMP_WARN: (i64, i64) = (127, 125); //  W = +1.6% over the short warning window (1.016)
-/// See [`RAMP_GENTLE`]. J = +14% per-interval step (1.14) — the overall-scale dial.
-pub const RAMP_JUMP: (i64, i64) = (57, 50);
+/// See [`RAMP_GENTLE`]. J = +28% per-interval step (1.28) — the overall-scale dial.
+pub const RAMP_JUMP: (i64, i64) = (32, 25);
 
 /// Enemy HP scaling at `tick` (also scales contact/ranged damage — see
 /// `combat::move_enemies` / `enemy_ranged_attacks`). The shape is a STEPPED "RAMP"
@@ -1504,13 +1509,12 @@ pub const RAMP_JUMP: (i64, i64) = (57, 50);
 ///   • a CALM smooth rise for the first ~2.5 min (`RAMP_GENTLE`, +2.5% total),
 ///   • a perceptibly steeper sub-ramp over the final ~30 s (`RAMP_WARN`, +1.6%) —
 ///     the telegraph that a step is coming,
-///   • an instantaneous +14% step up AT the 3-min boundary (`RAMP_JUMP`).
+///   • an instantaneous +28% step up AT the 3-min boundary (`RAMP_JUMP`).
 /// Steps land at 3,6,…,30 min. The function is monotonic non-decreasing, CONTINUOUS
 /// within each interval (the only instantaneous jumps are the steps at the
-/// boundaries), and lands at ≈ ×5.56 at the 30-min boss (tick 54000) — the BALANCE-
-/// PASS endpoint (`base(10)`), which replaces the old interim ×413863 hack. A smooth,
-/// sane escalation over the whole match; `RAMP_JUMP` is the overall-scale / win-rate
-/// dial. Integer/fixed-point only.
+/// boundaries), and lands at ≈ ×17.7 at the 30-min boss (tick 54000), i.e. `base(10)`.
+/// It is one of TWO escalation sources; the other — and the larger — is the `WAVE_M0`
+/// schedule. Integer/fixed-point only.
 pub fn enemy_hp_mult(tick: u32) -> Fixed {
     let g = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_GENTLE.0, RAMP_GENTLE.1));
     let w = |x: Fixed| x.mul(Fixed::from_ratio(RAMP_WARN.0, RAMP_WARN.1));
@@ -1571,10 +1575,12 @@ const MIN: u32 = 60 * 30;
 /// cycling (every Clear also chips the Clear-only boss). Tuned so the boss phase is
 /// the wall MOST runs end at — survivable only by a genuinely prepared snowball.
 pub static BOSS_ESCORT: &[WaveSpawn] = &[
-    WaveSpawn { enemy: 0, cadence_ticks: 4, start_tick: BOSS_SPAWN_TICK },  // Squeakzilla — dense floor (was 5)
-    WaveSpawn { enemy: 4, cadence_ticks: 12, start_tick: BOSS_SPAWN_TICK }, // Bacon — fast pressure (was 18)
-    WaveSpawn { enemy: 5, cadence_ticks: 15, start_tick: BOSS_SPAWN_TICK }, // Honk — very fast (was 22)
-    WaveSpawn { enemy: 1, cadence_ticks: 45, start_tick: BOSS_SPAWN_TICK }, // Fanged Death — periodic bruiser (was 60)
+    WaveSpawn { enemy: 0, cadence_ticks: 4, start_tick: BOSS_SPAWN_TICK },   // Squeakzilla — dense floor
+    WaveSpawn { enemy: 4, cadence_ticks: 10, start_tick: BOSS_SPAWN_TICK },  // Bacon — fast pressure
+    WaveSpawn { enemy: 5, cadence_ticks: 10, start_tick: BOSS_SPAWN_TICK },  // Honk — very fast
+    WaveSpawn { enemy: 1, cadence_ticks: 10, start_tick: BOSS_SPAWN_TICK },  // Fanged Death — periodic bruiser
+    WaveSpawn { enemy: 6, cadence_ticks: 30, start_tick: BOSS_SPAWN_TICK },  // Bonk — Fortified anchor
+    WaveSpawn { enemy: 10, cadence_ticks: 8, start_tick: BOSS_SPAWN_TICK },  // Popsicle — standoff breath
 ];
 
 /// Match wave schedule: an ESCALATING mix. Early ticks are the original Grunt +
@@ -1591,10 +1597,16 @@ pub static BOSS_ESCORT: &[WaveSpawn] = &[
 /// within what even a small arsenal can hold. These are the PRIMARY early-game knob;
 /// raising any cadence (slower spawns) gentles the opening, lowering it makes it
 /// deadlier. Integer ticks — deterministic, no floats. (Balance pass: see `docs/06`.)
-pub const EARLY_GRUNT_CADENCE: u32 = 18; // Squeakzilla swarm floor (was 6)
-pub const EARLY_PEON_CADENCE: u32 = 45; // Doomduck trickle (was 18)
-pub const EARLY_RAIDER_CADENCE: u32 = 95; // Bacon rush (was 55)
-pub const EARLY_BANDIT_CADENCE: u32 = 130; // Honk rush (was 100)
+/// NOTE (`docs/11` balance pass): the roster's `base_hp` was raised ≈1.5–4× so that
+/// late escalation can be carried by a THICKENING BOARD rather than by one inflating
+/// multiplier. These opening cadences were lengthened in the same proportion, so the
+/// FIRST TWO MINUTES present essentially the same hp-per-tick (≈24 → ≈34) as before
+/// the pass — the design window pinned by `tests/balance_guards.rs` is deliberately
+/// left where it was. Everything that got harder got harder from 2 min onward.
+pub const EARLY_GRUNT_CADENCE: u32 = 20; // Squeakzilla swarm floor (was 18 @ 200 hp)
+pub const EARLY_PEON_CADENCE: u32 = 75; // Doomduck trickle (was 45 @ 120 hp)
+pub const EARLY_RAIDER_CADENCE: u32 = 220; // Bacon rush (was 95 @ 260 hp)
+pub const EARLY_BANDIT_CADENCE: u32 = 290; // Honk rush (was 130 @ 180 hp)
 
 pub static WAVE_M0: &[WaveSpawn] = &[
     // --- baseline (from the start) ---
@@ -1607,7 +1619,9 @@ pub static WAVE_M0: &[WaveSpawn] = &[
     // cooldown, so leak accumulates. Cadences come from the `EARLY_*_CADENCE`
     // constants above (the primary early-game knob).
     WaveSpawn { enemy: 0, cadence_ticks: EARLY_GRUNT_CADENCE, start_tick: 0 }, // Squeakzilla — swarm floor
-    WaveSpawn { enemy: 1, cadence_ticks: 95, start_tick: 0 }, // Fanged Death — periodic bruiser (slow, 1500 contact)
+    // The bruiser is no longer present at tick 0: at 3000 hp it is a real
+    // time-to-kill sink, and a fresh tank needs its first shop before meeting one.
+    WaveSpawn { enemy: 1, cadence_ticks: 300, start_tick: MIN }, // Fanged Death — periodic bruiser
     // --- early escalation (≈12s+): cheap chaff streams in early ---
     WaveSpawn { enemy: 3, cadence_ticks: EARLY_PEON_CADENCE, start_tick: MIN / 5 }, // Doomduck
     WaveSpawn { enemy: 11, cadence_ticks: 600, start_tick: MIN / 2 }, // Dodo (rare, inert)
@@ -1616,7 +1630,7 @@ pub static WAVE_M0: &[WaveSpawn] = &[
     //     the Clear cooldown and a weaponless tank can't keep them off. ---
     WaveSpawn { enemy: 4, cadence_ticks: EARLY_RAIDER_CADENCE, start_tick: 5 * MIN / 12 }, // Bacon
     // --- ≈1 min: a second chaff trickle thickens the wall ---
-    WaveSpawn { enemy: 3, cadence_ticks: 70, start_tick: MIN }, // Doomduck (second stream from 1 min)
+    WaveSpawn { enemy: 3, cadence_ticks: 240, start_tick: MIN }, // Doomduck (second stream from 1 min)
     // --- ≈45 s: even faster bandit rushers pile on (pulled early — fastest enemy,
     //     arrives inside the Clear cooldown, so it's the main eco-rush punisher) ---
     WaveSpawn { enemy: 5, cadence_ticks: EARLY_BANDIT_CADENCE, start_tick: 3 * MIN / 4 }, // Honk (very fast)
@@ -1625,24 +1639,79 @@ pub static WAVE_M0: &[WaveSpawn] = &[
     //     weaponless tank can't kill it between Clears) is what closes the eco-rush
     //     stalemate — it breaks the "Clear keeps the board empty forever" loophole
     //     so a naked tank reliably dies by ≤3600, while a real build just shoots it. ---
-    WaveSpawn { enemy: 8, cadence_ticks: 120, start_tick: 3 * MIN / 2 }, // Croak (ranged, early standoff)
-    // --- ≈4 min: casters + heavier ranged breath ---
-    WaveSpawn { enemy: 7, cadence_ticks: 180, start_tick: 4 * MIN }, // Nope Rope (caster)
-    WaveSpawn { enemy: 9, cadence_ticks: 200, start_tick: 4 * MIN }, // Spicy (ranged)
-    // --- ≈6 min: fortified bruisers + slow ice breath, the late-game wall ---
-    WaveSpawn { enemy: 6, cadence_ticks: 300, start_tick: 6 * MIN }, // Bonk (Fortified)
-    WaveSpawn { enemy: 10, cadence_ticks: 240, start_tick: 6 * MIN }, // Popsicle (ranged)
-    // --- POST-15 CLIFF SURGES: discrete roster jumps coinciding with the HP cliffs
-    //     so each step is felt as MORE enemies AND tougher enemies, not just an HP
-    //     bump. Telegraphed by the HP ramp in `enemy_hp_mult` landing at the same
-    //     tick. These keep a snowballing player pressured between/at the cliffs.
-    // Cliff #2 @20 min: a heavy fortified surge + extra fast rushers.
-    WaveSpawn { enemy: 6, cadence_ticks: 150, start_tick: CLIFF_20_TICK }, // Bonk (surge, was 300)
-    WaveSpawn { enemy: 5, cadence_ticks: 60, start_tick: CLIFF_20_TICK },  // Honk (fast surge)
-    // Cliff #3 @25 min: relentless breathers + a swarm flood into the boss.
-    WaveSpawn { enemy: 9, cadence_ticks: 90, start_tick: CLIFF_25_TICK },  // Spicy (surge)
-    WaveSpawn { enemy: 10, cadence_ticks: 100, start_tick: CLIFF_25_TICK }, // Popsicle (surge)
-    WaveSpawn { enemy: 0, cadence_ticks: 8, start_tick: CLIFF_25_TICK },   // Squeakzilla (pre-boss flood)
+    WaveSpawn { enemy: 8, cadence_ticks: 560, start_tick: 3 * MIN / 2 }, // Croak (ranged, early standoff)
+    // === THE RAMP PROPER (`docs/11` §11.2) =====================================
+    // THE FIX FOR "you cannot lose". Before this pass the roster was FLAT from 6 min
+    // to 20 min — fourteen minutes in which nothing new arrived while the player
+    // compounded — and the only escalation was a ×5.56 HP multiplier. The result was
+    // a 30-minute plateau followed by a single wall at the boss.
+    //
+    // Now a new stream opens at EVERY difficulty boundary (every 3 min) and at the
+    // half-boundaries through the opening ramp, so wave throughput climbs smoothly
+    // from ≈34 hp/tick at 2 min to ≈3300 hp/tick at 27 min. Escalation is carried
+    // mostly by the BOARD, not by the multiplier: `enemy_hp_mult` is a comparatively
+    // shallow ×17.7 over the match, which is what keeps the last two intervals from
+    // becoming a cliff again. Every gate divides evenly by 6, so the `docs/10` F1
+    // Roblox rescale stays exact.
+    //
+    // Design rule: the first TWO MINUTES stay at pre-pass throughput (a modest opener
+    // must hold the board — `tests/balance_guards.rs`); everything that got harder,
+    // got harder from 2 min onward.
+    // --- 2 min: the grace period ends ---
+    WaveSpawn { enemy: 0, cadence_ticks: 25, start_tick: 2 * MIN }, // Squeakzilla (second stream)
+    WaveSpawn { enemy: 4, cadence_ticks: 50, start_tick: 2 * MIN }, // Bacon (second rush)
+    // --- 2.5 min ---
+    WaveSpawn { enemy: 1, cadence_ticks: 150, start_tick: 5 * MIN / 2 }, // Fanged Death
+    WaveSpawn { enemy: 5, cadence_ticks: 27, start_tick: 5 * MIN / 2 },  // Honk
+    // --- 3 min (k=1 boundary): casters + heavier ranged breath ---
+    WaveSpawn { enemy: 7, cadence_ticks: 40, start_tick: 3 * MIN }, // Nope Rope (caster)
+    WaveSpawn { enemy: 9, cadence_ticks: 80, start_tick: 3 * MIN }, // Spicy (ranged)
+    // --- 3.5 min ---
+    WaveSpawn { enemy: 0, cadence_ticks: 12, start_tick: 7 * MIN / 2 }, // Squeakzilla
+    WaveSpawn { enemy: 8, cadence_ticks: 28, start_tick: 7 * MIN / 2 }, // Croak
+    // --- 4 min: the first Fortified bruisers — an ARMOR-TYPE check, not just mass.
+    //     A build with no Siege damage starts falling behind here, which is the
+    //     mechanism that spreads deaths across BUILDS rather than bunching them in
+    //     time: different arsenals fail at different gates. ---
+    WaveSpawn { enemy: 6, cadence_ticks: 400, start_tick: 4 * MIN }, // Bonk (Fortified)
+    WaveSpawn { enemy: 4, cadence_ticks: 30, start_tick: 4 * MIN },  // Bacon
+    // --- 4.5 min ---
+    WaveSpawn { enemy: 1, cadence_ticks: 75, start_tick: 9 * MIN / 2 },  // Fanged Death
+    WaveSpawn { enemy: 10, cadence_ticks: 100, start_tick: 9 * MIN / 2 }, // Popsicle (ranged)
+    // --- 5 min ---
+    WaveSpawn { enemy: 0, cadence_ticks: 6, start_tick: 5 * MIN },  // Squeakzilla (flood)
+    WaveSpawn { enemy: 5, cadence_ticks: 13, start_tick: 5 * MIN }, // Honk
+    // --- 5.5 min: Fortified pressure doubles ---
+    WaveSpawn { enemy: 6, cadence_ticks: 250, start_tick: 11 * MIN / 2 }, // Bonk
+    WaveSpawn { enemy: 9, cadence_ticks: 55, start_tick: 11 * MIN / 2 },  // Spicy
+    // --- 6 min (k=2 boundary) ---
+    WaveSpawn { enemy: 1, cadence_ticks: 40, start_tick: 6 * MIN }, // Fanged Death
+    WaveSpawn { enemy: 8, cadence_ticks: 15, start_tick: 6 * MIN }, // Croak
+    // --- 7.5 min (the first quarter of the run ends here) ---
+    WaveSpawn { enemy: 6, cadence_ticks: 100, start_tick: 15 * MIN / 2 }, // Bonk
+    WaveSpawn { enemy: 10, cadence_ticks: 25, start_tick: 15 * MIN / 2 }, // Popsicle
+    // --- 9 min (k=3 boundary) ---
+    WaveSpawn { enemy: 1, cadence_ticks: 20, start_tick: 9 * MIN }, // Fanged Death
+    WaveSpawn { enemy: 9, cadence_ticks: 20, start_tick: 9 * MIN }, // Spicy
+    // --- 12 min (k=4 boundary) ---
+    WaveSpawn { enemy: 6, cadence_ticks: 65, start_tick: 12 * MIN }, // Bonk
+    WaveSpawn { enemy: 9, cadence_ticks: 13, start_tick: 12 * MIN }, // Spicy
+    // --- 15 min (k=5 boundary) — the old `SCALE_STEP_2_TICK` ---
+    WaveSpawn { enemy: 6, cadence_ticks: 52, start_tick: SCALE_STEP_2_TICK }, // Bonk
+    WaveSpawn { enemy: 1, cadence_ticks: 16, start_tick: SCALE_STEP_2_TICK }, // Fanged Death
+    // --- 18 min (k=6 boundary) ---
+    WaveSpawn { enemy: 10, cadence_ticks: 15, start_tick: 18 * MIN }, // Popsicle
+    WaveSpawn { enemy: 9, cadence_ticks: 14, start_tick: 18 * MIN },  // Spicy
+    // --- 21 min (k=7 boundary) — the old `CLIFF_20_TICK` surge, spread out ---
+    WaveSpawn { enemy: 6, cadence_ticks: 60, start_tick: 21 * MIN },  // Bonk
+    WaveSpawn { enemy: 10, cadence_ticks: 45, start_tick: 21 * MIN }, // Popsicle
+    // --- 24 min (k=8 boundary) ---
+    WaveSpawn { enemy: 1, cadence_ticks: 15, start_tick: 24 * MIN },  // Fanged Death
+    WaveSpawn { enemy: 6, cadence_ticks: 240, start_tick: 24 * MIN }, // Bonk
+    // --- 27 min (k=9 boundary) — the old `CLIFF_25_TICK` surge, spread out. The
+    //     last pre-boss step is deliberately MILD: the climax should be the boss
+    //     fight, not a board that has already decided the run before it starts. ---
+    WaveSpawn { enemy: 6, cadence_ticks: 55, start_tick: 27 * MIN }, // Bonk
 ];
 
 /// Enemies spawn on this ring and march toward the tank. The eight angular

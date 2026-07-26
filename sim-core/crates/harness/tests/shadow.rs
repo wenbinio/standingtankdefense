@@ -54,7 +54,23 @@ fn inject(runner: &mut ShadowRunner, kind: usize) -> bool {
         }
         // (c) tank hp drift.
         2 => {
+            // The perturbation must SURVIVE until the next digest boundary, so it
+            // has to exceed what regeneration can heal back in that window --
+            // otherwise a balance pass that grants the tank regen silently turns
+            // this gate into a no-op. Scale it off the tank's own regen rate plus
+            // a floor, rather than pinning a constant to one balance snapshot.
+            // The perturbation has to SURVIVE to the next digest boundary, and a
+            // bare `hp -= 1` no longer does: once the tank has regen, the client
+            // heals back into agreement before the boundary arrives and the gate
+            // silently passes without ever testing anything. Making it bigger is
+            // not the fix either -- a lethal perturbation kills the client, and
+            // death short-circuits `step`, so the correction never runs.
+            //
+            // Move `max_hp` with it instead. Regen restores `hp` toward `max_hp`
+            // but can never restore `max_hp` itself, so the divergence is durable
+            // for any balance, while staying strictly non-lethal.
             runner.client.tank.hp -= 1;
+            runner.client.tank.max_hp -= 1;
             true
         }
         // (d) perturb an rng cursor.

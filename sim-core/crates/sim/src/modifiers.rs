@@ -12,14 +12,172 @@ use crate::content::{self, ModEffect, ModifierDef, WeaponDef};
 use crate::state::{ArenaState, Economy, Modifiers, Tank};
 use determinism::Fixed;
 
-/// Overflow guard for the compounding percentage riders (`MaxHpPct` / `HpRegenPct`
-/// / `ManaRegenPct`). Each such rider multiplies its stat by ~1.25 per purchase,
-/// so a pathological repeat-buy stack would otherwise run a stat to i64 overflow
-/// and poison every downstream `hp + x`. 1e12 sits orders of magnitude above any
-/// reachable real build (max HP tops out in the low millions even on a full
-/// snowball) yet leaves ~7 orders of headroom under i64::MAX for downstream adds,
-/// so the clamp is bit-stable across platforms and never trips in normal play.
+/// Hard i64 backstop for the compounding percentage riders (`MaxHpPct` /
+/// `HpRegenPct` / `ManaRegenPct`). Each such rider multiplies its stat by ~1.25 per
+/// purchase, so before the soft caps below a pathological repeat-buy stack could run
+/// a stat to i64 overflow and poison every downstream `hp + x`. Since the soft caps
+/// landed this is belt-and-braces: the measured max Max HP over 80 seeds is now
+/// ~434k, seven orders of magnitude under this ceiling, so the clamp never trips.
+/// Kept anyway — it is free, bit-stable across platforms, and guards any future
+/// effect that writes these stats without going through [`add_soft_capped`].
 const STAT_CEIL: i64 = 1_000_000_000_000;
+
+// ===================== Power-curve bounding (docs/11 §11.2) =====================
+//
+// Multiplicative stacking is the intended engine (`[02] §2.1`) — the problem was
+// never that it is strong, it is that it was UNBOUNDED, and specifically that it is
+// unbounded in the TAIL. Measured over 80 seeds (35-min horizon) the distribution
+// of peak Max HP is:
+//
+//     p50  24,000   (the STARTING value — over half of all runs never buy Max HP)
+//     p90 117,000
+//     p99  3.72e9   ← the whole problem lives here
+//
+// So this is a tail problem, not a central-tendency problem. A flat nerf or a low
+// hard cap would flatten a fantasy that the median run is not even having. What is
+// wanted is something invisible at p50–p90 and brutal at p99. Hence a SOFT CAP with
+// a CUBIC tail, with every knee placed just above the measured p90:
+//
+//     effective_increment = raw_increment                        while stat ≤ SOFT
+//     effective_increment = raw_increment × (SOFT / stat)³        while stat > SOFT
+//
+// Properties that matter here:
+//   * CONTINUOUS at the knee (the factor is exactly 1 when `stat == SOFT`), so the
+//     curve flattens rather than cliffs — no purchase ever becomes worthless, and
+//     more is always strictly more.
+//   * Below the knee NOTHING changes, bit for bit. Nine runs in ten are unaffected.
+//   * Above the knee the stat grows like `SOFT × (1 + ¾n)^⅓` in the number of
+//     purchases instead of `×1.25ⁿ`. Sixty compounding buys move Max HP from 130k
+//     to ~470k rather than to 3.7 billion.
+//
+// Pure integer / Fixed math with an i128 intermediate — no floats, bit-stable
+// across platforms, and it feeds `state_checksum`.
+
+/// Falloff exponent above a knee. 3 = cubic. Raising it bites the tail harder
+/// without moving anything below the knee; the i128 intermediates below are sized
+/// for 3 (see [`soft_capped_inc`]).
+const SOFT_FALLOFF_POW: u32 = 3;
+
+/// Soft-cap knee for **Max HP**, flat and `%` sources alike. Measured p90 is
+/// 117,000, so this sits just clear of nine runs in ten while cutting the p99 tail
+/// (3.72e9) by four orders of magnitude.
+const MAX_HP_SOFT: i64 = 130_000;
+/// Soft-cap knee for **HP regen**, in HP per tick. Measured p90 is 14,670/tick;
+/// the p99 was 284,428/tick (8.5M HP/s), which is unloseable by construction.
+const HP_REGEN_SOFT: i64 = 16_000;
+/// Soft-cap knee for **Mana-Shield regen**, in shield per tick. Measured p90 1,720,
+/// p99 569,275.
+const MANA_REGEN_SOFT: i64 = 2_000;
+/// Soft-cap knee for the **Mana-Shield pool** — a second HP bar, so it gets the
+/// same treatment as Max HP. Measured p90 94,000, p99 970,200.
+const MANA_SHIELD_SOFT: i64 = 100_000;
+/// Soft-cap knee for **Armor**. Armor is flat subtraction, so an unbounded value is
+/// literal invulnerability. Measured p90 660, p99 17,240.
+const ARMOR_SOFT: i64 = 1_000;
+/// Soft-cap knee for the multiplicative damage product `mul_global`, as a raw
+/// `Fixed` (×8). Measured p90 is ×1.0 — nine runs in ten never buy a single
+/// multiplicative damage source — while p99 reached ×4.18e8. Nine `+25% Damage
+/// (Epic)` purchases land at the knee at full value; past it each further
+/// multiplicative source contributes a shrinking factor.
+const DAMAGE_MUL_SOFT: Fixed = Fixed::from_raw(8 << 16);
+
+/// `raw_inc × (soft / |stat|)^SOFT_FALLOFF_POW`, returned unchanged below the knee.
+/// Integer only (i128 intermediate; the result is always ≤ `raw_inc` in magnitude,
+/// so narrowing back to `i64` cannot overflow). `soft` must be > 0.
+///
+/// Worst-case intermediate: `|raw_inc| ≤ 0.25·STAT_CEIL = 2.5e11` and the largest
+/// knee is 1e5, so the numerator peaks near `2.5e11 × 1e15 = 2.5e26`, twelve orders
+/// of magnitude under `i128::MAX`.
+fn soft_capped_inc(raw_inc: i64, stat: i64, soft: i64) -> i64 {
+    let mag = i128::from(stat.unsigned_abs());
+    let s = soft as i128;
+    if mag <= s {
+        return raw_inc;
+    }
+    let mut num = raw_inc as i128;
+    let mut den: i128 = 1;
+    for _ in 0..SOFT_FALLOFF_POW {
+        num *= s;
+        den *= mag;
+    }
+    (num / den) as i64
+}
+
+/// Apply `raw_inc` to `stat` through the soft cap, clamp to the `STAT_CEIL`
+/// backstop, and return the increment that was actually applied (so a caller can
+/// keep a paired value — current HP behind max HP, current shield behind its pool
+/// — exactly in step). Reductions (`raw_inc < 0`) are attenuated the same way,
+/// which keeps the function monotone and its inverse well behaved.
+fn add_soft_capped(stat: &mut i64, raw_inc: i64, soft: i64) -> i64 {
+    let inc = soft_capped_inc(raw_inc, *stat, soft);
+    let next = stat.saturating_add(inc).clamp(-STAT_CEIL, STAT_CEIL);
+    let applied = next - *stat;
+    *stat = next;
+    applied
+}
+
+/// `Fixed` twin of [`soft_capped_inc`], for the multiplicative damage product.
+/// Attenuates the *added* factor (the `+25%` of a `×1.25` source), never the
+/// product already banked, so the curve is monotone and continuous at the knee.
+fn soft_capped_factor(factor: Fixed, current: Fixed, soft: Fixed) -> Fixed {
+    if current <= soft {
+        return factor;
+    }
+    let s = soft.raw() as i128;
+    let c = current.raw() as i128;
+    let mut num = factor.raw() as i128;
+    let mut den: i128 = 1;
+    for _ in 0..SOFT_FALLOFF_POW {
+        num *= s;
+        den *= c;
+    }
+    Fixed::from_raw((num / den) as i64)
+}
+
+// ===================== Arsenal breadth synergy (docs/11 §11.2) =====================
+//
+// Measured failure: a sampled run's arsenal was `Magic Bolt ×14` — one weapon
+// bought fourteen times. Copies stacked cleanly and NOTHING rewarded breadth, so
+// an 86-weapon catalog collapsed to "find the best, buy it repeatedly".
+//
+// Note the shape of the old incentive: an extra copy and an extra DISTINCT weapon
+// were exactly equivalent — both just add one more firing unit. Breadth was not
+// worse, it was *neutral*, and a tie is decided by whichever weapon happens to be
+// cheapest or strongest. So the cheapest possible thumb on the scale flips it.
+//
+// This is deliberately a BONUS, not a nerf on copies: your fourteenth Magic Bolt is
+// worth exactly what it always was. A build that covers more damage types / attack
+// classes / distinct weapons simply gets a global additive damage bonus on top.
+// The bonus is derived LIVE from the owned arsenal (never baked at purchase), so
+// selling into or growing out of breadth tracks immediately.
+//
+//   synergy% = 10% × (distinct damage types − 1)            capped at 4 extra (+40%)
+//            +  8% × (distinct attack classes − 1)          capped at 5 extra (+40%)
+//            +  5% × (distinct weapon defs − 1)             capped at 8 extra (+40%)
+//
+// Maximum +120%, reached only by a genuinely wide build (all 5 damage types, all 6
+// attack classes, 9+ distinct weapons). `Magic Bolt ×14` scores exactly +0%.
+// It is GLOBAL ADDITIVE and folds in through `self_scaling_add` — i.e. it lands in
+// the same additive pool as `add_global`/`add_self`/`add_dyn` and is then multiplied
+// by `mul_global`, exactly like every other additive source (`[02] §2.1`). The
+// composition ORDER is unchanged.
+
+/// Additive % per distinct damage type beyond the first, as `(num, den)`.
+const SYNERGY_PER_TYPE: (i64, i64) = (10, 100);
+/// Max extra damage types counted (5 types ⇒ 4 beyond the first).
+const SYNERGY_TYPE_CAP: i64 = 4;
+/// Additive % per distinct attack class beyond the first, as `(num, den)`.
+const SYNERGY_PER_CLASS: (i64, i64) = (8, 100);
+/// Max extra attack classes counted (6 classes ⇒ 5 beyond the first).
+const SYNERGY_CLASS_CAP: i64 = 5;
+/// Additive % per distinct weapon def beyond the first, as `(num, den)`.
+const SYNERGY_PER_DEF: (i64, i64) = (5, 100);
+/// Max extra distinct weapon defs counted.
+const SYNERGY_DEF_CAP: i64 = 8;
+/// Bitset width for the distinct-weapon-def count (86 defs today; the guard below
+/// keeps the count exact as the catalog grows and is a no-op if it ever exceeds
+/// this, which would only under-count, never panic).
+const DEF_BITSET_WORDS: usize = 4;
 
 /// Phase: apply each active time-scaling ramp whose interval has elapsed
 /// (`docs/06`). Deterministic — fixed ticks, fixed order (ramps are append-only,
@@ -98,11 +256,70 @@ impl Modifiers {
         (Fixed::ONE + add).mul(self.mul_global)
     }
 
+    /// GLOBAL additive damage % earned by covering multiple damage types / attack
+    /// classes / distinct weapons — the breadth incentive (`docs/11 §11.2`). A pure
+    /// function of the owned arsenal: no state, no RNG, resolved live at fire time
+    /// exactly like [`Modifiers::self_scaling_add`].
+    ///
+    /// ```text
+    /// synergy = 0.10 × min(distinct_damage_types  − 1, 4)
+    ///         + 0.08 × min(distinct_attack_classes − 1, 5)
+    ///         + 0.05 × min(distinct_weapon_defs    − 1, 8)
+    /// ```
+    ///
+    /// An empty arsenal scores `ZERO` (each `distinct − 1` term is clamped at 0).
+    /// Deliberately a bonus and never a penalty: stacking copies is worth exactly
+    /// what it always was; breadth is simply worth more.
+    pub fn arsenal_synergy_add(weapons: &[crate::state::WeaponInstance]) -> Fixed {
+        if weapons.is_empty() {
+            return Fixed::ZERO;
+        }
+        let mut type_mask: u32 = 0;
+        let mut class_mask: u32 = 0;
+        let mut def_mask = [0u64; DEF_BITSET_WORDS];
+        for w in weapons {
+            let wd = content::WEAPONS[w.def as usize];
+            type_mask |= 1u32 << (wd.damage_type as u32 % 5);
+            class_mask |= 1u32 << (content::attack_scope_id(wd.attack) as u32 % 6);
+            let bit = w.def as usize;
+            if bit < DEF_BITSET_WORDS * 64 {
+                def_mask[bit / 64] |= 1u64 << (bit % 64);
+            }
+        }
+        let types = i64::from(type_mask.count_ones());
+        let classes = i64::from(class_mask.count_ones());
+        let defs: i64 = def_mask.iter().map(|w| i64::from(w.count_ones())).sum();
+
+        let extra = |n: i64, cap: i64| (n - 1).clamp(0, cap);
+        let mut add = Fixed::ZERO;
+        add += Fixed::from_ratio(
+            SYNERGY_PER_TYPE.0 * extra(types, SYNERGY_TYPE_CAP),
+            SYNERGY_PER_TYPE.1,
+        );
+        add += Fixed::from_ratio(
+            SYNERGY_PER_CLASS.0 * extra(classes, SYNERGY_CLASS_CAP),
+            SYNERGY_PER_CLASS.1,
+        );
+        add += Fixed::from_ratio(
+            SYNERGY_PER_DEF.0 * extra(defs, SYNERGY_DEF_CAP),
+            SYNERGY_PER_DEF.1,
+        );
+        add
+    }
+
     /// Additive self-scaling % for a weapon of `dmg_type`, given the owned
     /// weapons: `Σ rule.per × (count of rule.weapon_def)` over rules matching the
-    /// type. Resolved live at fire time (it depends on the current arsenal).
+    /// type, PLUS the arsenal-breadth synergy (global, type-independent — see
+    /// [`Modifiers::arsenal_synergy_add`]). Resolved live at fire time (it depends
+    /// on the current arsenal).
+    ///
+    /// Both terms are ADDITIVE and land in the caller's single additive pool before
+    /// the `× mul_global` step, so the composition order is exactly as before:
+    /// `(1 + add_static + add_self + add_dyn) × mul_global`. The synergy rides here
+    /// (rather than in `weapon_damage_mult`) because this is the only fire-time hook
+    /// that is handed the owned arsenal.
     pub fn self_scaling_add(&self, dmg_type: u8, weapons: &[crate::state::WeaponInstance]) -> Fixed {
-        let mut add = Fixed::ZERO;
+        let mut add = Self::arsenal_synergy_add(weapons);
         for rule in &self.weapon_count_scaling {
             if rule.dmg_type != dmg_type {
                 continue;
@@ -145,23 +362,40 @@ impl Modifiers {
             ModEffect::DamageTypePct(t, n, d) => {
                 self.add_by_type[t as usize % 5] += Fixed::from_ratio(n, d)
             }
+            // SOFT-CAPPED multiplicative source. The added factor (the `+0.25` of a
+            // `×1.25` source) is attenuated by `(DAMAGE_MUL_SOFT / mul_global)²` once
+            // the banked product passes ×8; below that it is untouched. Continuous at
+            // the knee, monotone, and pure integer (see `soft_capped_factor`).
             ModEffect::DamageMulPct(n, d) => {
-                self.mul_global = self.mul_global.mul(Fixed::ONE + Fixed::from_ratio(n, d))
+                let f = soft_capped_factor(
+                    Fixed::from_ratio(n, d),
+                    self.mul_global,
+                    DAMAGE_MUL_SOFT,
+                );
+                self.mul_global = self.mul_global.mul(Fixed::ONE + f)
             }
             ModEffect::AttackSpeedPct(n, d) => self.attack_speed += Fixed::from_ratio(n, d),
             ModEffect::BountyPct(n, d) => economy.bounty_mult += Fixed::from_ratio(n, d),
             ModEffect::IncomeFlat(f) => economy.income_per_tick += f,
+            // Flat Max HP goes through the SAME soft cap as the % rider, so the knee
+            // is a property of the STAT, not of one effect. Below it a `+2000 Max HP`
+            // is exactly +2000; above it the round-ramping `+500/round` sources stop
+            // compounding into the millions.
             ModEffect::MaxHp(f) => {
-                tank.max_hp += f;
-                tank.hp += f;
+                let inc = add_soft_capped(&mut tank.max_hp, f, MAX_HP_SOFT);
+                tank.hp += inc;
             }
-            ModEffect::Armor(a) => tank.armor += a,
+            ModEffect::Armor(a) => {
+                add_soft_capped(&mut tank.armor, a, ARMOR_SOFT);
+            }
             ModEffect::ManaShield(pool, regen) => {
-                tank.mana_shield_max += pool;
-                tank.mana_shield += pool;
-                tank.mana_regen_per_tick += regen;
+                let inc = add_soft_capped(&mut tank.mana_shield_max, pool, MANA_SHIELD_SOFT);
+                tank.mana_shield += inc;
+                add_soft_capped(&mut tank.mana_regen_per_tick, regen, MANA_REGEN_SOFT);
             }
-            ModEffect::HpRegen(r) => tank.hp_regen_per_tick += r,
+            ModEffect::HpRegen(r) => {
+                add_soft_capped(&mut tank.hp_regen_per_tick, r, HP_REGEN_SOFT);
+            }
             ModEffect::Dodge(n) => {
                 // Additive, but HARD-CAPPED at 70% of `dodge_den` (integer math:
                 // `dodge_den * 7 / 10`). This is a deliberate nerf: at the old
@@ -229,18 +463,23 @@ impl Modifiers {
             // across platforms and never trips in normal play. Same spirit as the
             // Dodge hard-cap. The inc itself is also derived from the clamped stat,
             // so it stays bounded.
+            // Each of the three is additionally SOFT-CAPPED (see `soft_capped_inc`):
+            // below the knee the rider applies at full strength (so no ordinary build
+            // changes at all), above it the increment decays as `(SOFT/stat)²` and the
+            // stat grows ~√n instead of exponentially. `STAT_CEIL` stays as the hard
+            // i64 backstop but is now unreachable in practice.
             ModEffect::MaxHpPct(n, d) => {
-                let inc = Fixed::from_ratio(n, d).scale_i64(tank.max_hp);
-                tank.max_hp = (tank.max_hp + inc).min(STAT_CEIL);
+                let raw = Fixed::from_ratio(n, d).scale_i64(tank.max_hp);
+                let inc = add_soft_capped(&mut tank.max_hp, raw, MAX_HP_SOFT);
                 tank.hp += inc;
             }
             ModEffect::HpRegenPct(n, d) => {
-                let inc = Fixed::from_ratio(n, d).scale_i64(tank.hp_regen_per_tick);
-                tank.hp_regen_per_tick = (tank.hp_regen_per_tick + inc).clamp(-STAT_CEIL, STAT_CEIL);
+                let raw = Fixed::from_ratio(n, d).scale_i64(tank.hp_regen_per_tick);
+                add_soft_capped(&mut tank.hp_regen_per_tick, raw, HP_REGEN_SOFT);
             }
             ModEffect::ManaRegenPct(n, d) => {
-                let inc = Fixed::from_ratio(n, d).scale_i64(tank.mana_regen_per_tick);
-                tank.mana_regen_per_tick = (tank.mana_regen_per_tick + inc).clamp(-STAT_CEIL, STAT_CEIL);
+                let raw = Fixed::from_ratio(n, d).scale_i64(tank.mana_regen_per_tick);
+                add_soft_capped(&mut tank.mana_regen_per_tick, raw, MANA_REGEN_SOFT);
             }
             // EXPANSION E2 — plain tank-field setters (no aggregate; integer only).
             // Shield-break stun (Energy Pulse): arm the pulse range/duration. Keep the
@@ -618,5 +857,169 @@ mod tests {
         assert_eq!(s.tank.aura_poison_dps, 2);
         assert_eq!(s.tank.aura_poison_ticks, 90);
         assert_eq!(s.tank.aura_tick, 0, "cadence counter starts at 0");
+    }
+
+    // ---- Power-curve soft caps (docs/11 §11.2) -------------------------------
+
+    #[test]
+    fn soft_cap_is_identity_below_the_knee() {
+        // The knee is placed above the measured p90 of every stat, so ordinary
+        // play must be bit-for-bit unchanged.
+        assert_eq!(soft_capped_inc(500, 0, MAX_HP_SOFT), 500);
+        assert_eq!(soft_capped_inc(2000, MAX_HP_SOFT - 1, MAX_HP_SOFT), 2000);
+        // Exactly AT the knee the factor is 1 — the curve is continuous there.
+        assert_eq!(soft_capped_inc(2000, MAX_HP_SOFT, MAX_HP_SOFT), 2000);
+    }
+
+    #[test]
+    fn soft_cap_decays_cubically_above_the_knee() {
+        let s = MAX_HP_SOFT;
+        // At 2× the knee the rider is worth 1/8 (cubic); at 4×, 1/64.
+        assert_eq!(soft_capped_inc(8000, 2 * s, s), 1000);
+        assert_eq!(soft_capped_inc(64000, 4 * s, s), 1000);
+        // Monotone: a bigger raw increment is still a bigger effective increment.
+        assert!(soft_capped_inc(9000, 2 * s, s) > soft_capped_inc(8000, 2 * s, s));
+        // And more stat always still means more, never less.
+        assert!(soft_capped_inc(8000, 2 * s, s) > 0);
+    }
+
+    #[test]
+    fn max_hp_stops_running_away_but_never_stops_growing() {
+        // 200 repeat buys of the `[+2000 flat, +25%]` Imbued Masonry bundle. Before
+        // the soft cap this compounded to ~1e12 (the STAT_CEIL backstop); now it has
+        // to land in a range a player can still reason about.
+        let (mut m, mut e, mut t) = parts();
+        let mut prev = t.max_hp;
+        for _ in 0..200 {
+            m.apply_effect(ModEffect::MaxHp(2000), &mut e, &mut t);
+            m.apply_effect(ModEffect::MaxHpPct(25, 100), &mut e, &mut t);
+            assert!(t.max_hp > prev, "every purchase is still strictly an upgrade");
+            prev = t.max_hp;
+        }
+        assert!(
+            t.max_hp < 1_000_000,
+            "200 compounding Max-HP buys stay under 1e6, got {}",
+            t.max_hp
+        );
+        assert!(t.max_hp > MAX_HP_SOFT, "and they do get well past the knee");
+        assert_eq!(t.hp, t.max_hp, "current HP tracked every applied increment");
+    }
+
+    #[test]
+    fn damage_mul_product_is_bounded_but_monotone() {
+        let (mut m, mut e, mut t) = parts();
+        let mut prev = m.mul_global;
+        for _ in 0..250 {
+            m.apply_effect(ModEffect::DamageMulPct(1, 4), &mut e, &mut t); // ×1.25 each
+            assert!(m.mul_global > prev, "each multiplicative source still helps");
+            prev = m.mul_global;
+        }
+        let v = m.mul_global.scale_i64(1000);
+        // Was ×4.2e8 in the measured tail; the soft cap lands it in the tens.
+        assert!((8_000..200_000).contains(&v), "expected ×8..×200, got ×{}", v as f64 / 1000.0);
+    }
+
+    #[test]
+    fn first_nine_multiplicative_sources_are_untouched() {
+        // Below the ×8 knee the product must be exactly the old `Π(1 + f)`.
+        let (mut m, mut e, mut t) = parts();
+        let mut expect = Fixed::ONE;
+        for _ in 0..9 {
+            m.apply_effect(ModEffect::DamageMulPct(1, 4), &mut e, &mut t);
+            expect = expect.mul(Fixed::ONE + Fixed::from_ratio(1, 4));
+            if expect > DAMAGE_MUL_SOFT {
+                break;
+            }
+            assert_eq!(m.mul_global, expect, "unchanged below the knee");
+        }
+    }
+
+    // ---- Arsenal breadth synergy (docs/11 §11.2) -----------------------------
+
+    fn arsenal(defs: &[u16]) -> Vec<crate::state::WeaponInstance> {
+        defs.iter()
+            .enumerate()
+            .map(|(i, &def)| crate::state::WeaponInstance {
+                instance_id: crate::EntityId(i as u32 + 1),
+                def,
+                next_fire_tick: 0,
+            })
+            .collect()
+    }
+
+    /// A weapon def for each of the five damage types (first match in the catalog).
+    fn one_per_damage_type() -> Vec<u16> {
+        (0..5u8)
+            .filter_map(|t| {
+                content::WEAPONS.iter().position(|w| w.damage_type == t).map(|i| i as u16)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn stacked_copies_earn_no_synergy() {
+        let empty = Modifiers::arsenal_synergy_add(&arsenal(&[]));
+        assert_eq!(empty, Fixed::ZERO, "no arsenal, no synergy");
+        // `Magic Bolt ×14` — the measured degenerate build — scores exactly zero.
+        let mono = arsenal(&[content::STARTING_WEAPON; 14]);
+        assert_eq!(
+            Modifiers::arsenal_synergy_add(&mono),
+            Fixed::ZERO,
+            "one weapon copied N times is one type, one class, one def"
+        );
+        // ...and one copy is worth exactly as much as it was: the bonus is never
+        // negative, so stacking is not taxed.
+        assert_eq!(Modifiers::arsenal_synergy_add(&arsenal(&[content::STARTING_WEAPON])), Fixed::ZERO);
+    }
+
+    #[test]
+    fn synergy_grows_with_breadth_and_is_capped() {
+        let defs = one_per_damage_type();
+        assert_eq!(defs.len(), 5, "the catalog covers all five damage types");
+        let mut last = Fixed::ZERO;
+        for k in 1..=defs.len() {
+            let add = Modifiers::arsenal_synergy_add(&arsenal(&defs[..k]));
+            assert!(add >= last, "synergy is monotone in breadth");
+            last = add;
+        }
+        assert!(last > Fixed::ZERO, "a five-type arsenal earns a real bonus");
+        // Cap: adding a tenth, eleventh… distinct def cannot grow the def term past
+        // SYNERGY_DEF_CAP, so the bonus is bounded no matter how wide the build.
+        let wide: Vec<u16> = (0..30u16).collect();
+        let a = Modifiers::arsenal_synergy_add(&arsenal(&wide));
+        let wider: Vec<u16> = (0..60u16).collect();
+        let b = Modifiers::arsenal_synergy_add(&arsenal(&wider));
+        assert_eq!(a, b, "synergy saturates — it cannot itself become a runaway");
+        let max = Fixed::from_ratio(SYNERGY_PER_TYPE.0 * SYNERGY_TYPE_CAP, SYNERGY_PER_TYPE.1)
+            + Fixed::from_ratio(SYNERGY_PER_CLASS.0 * SYNERGY_CLASS_CAP, SYNERGY_PER_CLASS.1)
+            + Fixed::from_ratio(SYNERGY_PER_DEF.0 * SYNERGY_DEF_CAP, SYNERGY_PER_DEF.1);
+        assert!(a <= max, "never exceeds the documented ceiling");
+    }
+
+    #[test]
+    fn synergy_rides_the_additive_pool_at_fire_time() {
+        // It must reach damage through `self_scaling_add` (the only fire-time hook
+        // handed the arsenal), additively — so the composition order is unchanged.
+        let m = Modifiers::new();
+        let defs = one_per_damage_type();
+        let wide = arsenal(&defs);
+        let mono = arsenal(&[defs[0]; 5]);
+        let wide_add = m.self_scaling_add(content::WEAPONS[defs[0] as usize].damage_type, &wide);
+        let mono_add = m.self_scaling_add(content::WEAPONS[defs[0] as usize].damage_type, &mono);
+        assert_eq!(mono_add, Fixed::ZERO);
+        assert_eq!(wide_add, Modifiers::arsenal_synergy_add(&wide));
+        assert!(wide_add > mono_add, "breadth beats stacking in the additive pool");
+    }
+
+    #[test]
+    fn synergy_is_global_not_per_damage_type() {
+        // Every weapon in the arsenal benefits, whatever it fires — otherwise the
+        // bonus would just be another per-type modifier.
+        let m = Modifiers::new();
+        let w = arsenal(&one_per_damage_type());
+        let base = m.self_scaling_add(0, &w);
+        for t in 1..5u8 {
+            assert_eq!(m.self_scaling_add(t, &w), base);
+        }
     }
 }

@@ -30,7 +30,7 @@ fn golden_final_checksum_is_stable() {
     let sc = m0_scenario();
     assert_eq!(
         final_checksum(&sc),
-        0x436067271f1956d8, // re-baselined (BALANCE PASS): the enemy HP/contact CURVE (`enemy_hp_mult`) was reshaped — the interim ×413863 hack replaced by a smooth integer-parametrized ramp to a ≈ ×5.56 boss endpoint (`RAMP_JUMP` 3.5→1.14) — and the early wave cadences + the staggered SPAWN_RING radii changed. All of these feed enemy HP/contact, which changes the scripted M0 trace's tank HP / kills / economy → the checksum. The Fixed arithmetic is now SATURATING (a deterministic, platform-stable clamp) but that is bit-identical for every in-range value, so it does NOT contribute to this drift. No item/weapon EFFECT changed; the M0 scenario inputs are unchanged. (Previous baseline 0x7f221f1dd37b0233 was the E2 expansion.)
+        0x1712c0e6eea71024, // re-baselined (FUN PASS, `docs/11-fun.md`): four balance changes landed together — rarity-weighted shop draws (Epic ~2% early / ~21% late, replacing a flat ~12%), a rebuilt WAVE_M0 that removes the flat 6-20 min plateau, boss contact_damage 45000 -> 1900 (it was an HP check, not a fight), RAMP_JUMP 1.14 -> 1.28, roster base_hp x1.5-4, and soft caps + an arsenal-breadth synergy in `modifiers`. All of these feed enemy HP/contact, offer identity and damage scaling, so the scripted M0 trace's tank HP / kills / economy move and the checksum with them. No determinism property changed: the sim is still integer/fixed-point, seeded, and bit-identical across machines — this constant is re-captured, not weakened. (Previous baseline 0x436067271f1956d8 was the interim balance pass.)
         "M0 golden checksum drift — determinism broke OR content/scenario changed intentionally"
     );
 }

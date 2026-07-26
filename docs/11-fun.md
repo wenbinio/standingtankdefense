@@ -77,3 +77,49 @@ The content tables are the **shared** source of truth (`[10] F0`). Changing them
 - changes both the Steam and Roblox builds at once, which is the intent — this is balance, not a fork-only concern.
 
 That is an acceptable cost and the pipeline handles it (`export-content`, then `export-traces`, then `trace_test`). But it means balance work must land as a deliberate, reviewed batch rather than as a trickle, and the gate must be green again before anything is called done.
+
+
+## 11.5 Result of the first balance pass
+
+Four changes landed together (rarity weighting, difficulty redistribution, magnitude soft caps + breadth synergy, a value-aware reference bot). Measured with the rebuilt harness, 80 seeds, win = boss killed:
+
+| metric | before | after | target | |
+| --- | --- | --- | --- | --- |
+| Win rate | 16.2% | **40.0%** | 25–40% | ✅ |
+| Largest death decile | 81.8% | **29.2%** | <25% | close |
+| Deaths in first quarter | 0.0% | **23.8%** | 10–20% | slightly high |
+| Peak max HP (worst run) | 3.72 B | **447.7k** | <500k | ✅ |
+| Distinct weapons, winners | 3.2 | **4.7** (6.6 with the value-aware bot) | ≥5 | ✅ with bot |
+
+**Deaths now occur in all eleven deciles** — min 0:55, median 12:09, max 30:44. The 30-minute plateau and the 13-second wall are both gone.
+
+### The root causes, which were not what anyone assumed
+
+- **Boss `contact_damage` was 45,000**, riding the ramp to ~250k per hit. That is what made the boss binary: it was an HP check, not a fight. At 1,900 the climax is a multi-Clear race with partial progress, and boss survival among arrivals went 19% → 91%.
+- **`WAVE_M0` was flat from 6 to 20 minutes** — fourteen minutes with no new enemy type while the player compounds. *That* plateau was the "you cannot lose" bug, not the scaling factor.
+- **The old shop draw put Epic at ~15% per slot**, so essentially every opening shop contained one. That is precisely why nothing ever felt like a hit.
+- **`bot.rs` picked weapons with `cheapest_where(kind == Weapon)`**, and weapon cost is a pure function of rarity — so the reference bot was *rarity-sorting from the bottom*. Every build-shape conclusion drawn before this was an artifact of that.
+
+### Still open
+
+1. **The boss is immune to weapon fire** (`combat.rs`) — only `Clear` damages it, always exactly 11 Clears. So arsenal breadth has **no path to the win condition**; weapons only buy survival *to* the boss. This is the structural reason concentration keeps winning, and it survives a competent bot: winners are 6.60 distinct vs losers 7.21. Fixing "make the boss a fight" means giving weapons a way to matter there.
+2. **Two balance guards now fail**: `naked_eco_rush_*` — only 14/24 seeds die by the deadline against a ≥75% requirement. A no-weapon economy build is under-punished. The difficulty pass deliberately restored opening throughput to keep `modest_opener_survives_past_the_deadline` green, and those two guards are now in direct tension; the opening cannot currently satisfy both as written.
+3. **The trace corpus no longer covers six behaviours** (`vulnpulse`, `perk`, `freeze`, `aura`, `revive`, `shield`) because the new bot buys differently. A 240-seed scan shows two of them unreachable with the default bot — the corpus needs re-picking, probably with challenge bots.
+4. **The Luau port is out of sync.** See §11.6.
+
+## 11.6 The cost this pass incurred: Luau parity is broken
+
+The R3 gate now fails at tick 0. This is expected and was accepted going in, but it must not be left implicit.
+
+`content.json` regenerates automatically, so wave tables, enemy stats and timeline constants flow to the Luau side for free. **Code does not.** Four of the changes are Rust *logic* that the Luau port transcribes independently:
+
+| Rust change | Luau module needing re-transcription |
+| --- | --- |
+| Rarity-weighted two-stage offer draw | `sim/Shop.luau` |
+| Soft caps + arsenal-breadth synergy | `sim/Modifiers.luau` |
+| Rebuilt `WAVE_M0` gating | `sim/Waves.luau` (mostly data; verify) |
+| Value-aware weapon valuation | `sim/Bot.luau` |
+
+Until those are re-transcribed, the Roblox build runs the **old** balance. The oracle still works — it is doing exactly its job by failing loudly at tick 0 rather than letting the two builds drift apart silently — but the R3 milestone is not green again until the four modules are updated and the gate passes.
+
+**This is the recurring lesson of the fun pass, in its third form:** balance is shared, but only *data* is single-source. Logic is duplicated across two languages, and every logic-level balance change costs a transcription. That is the standing tax `[09] §1.8` predicted, now being paid for the first time.

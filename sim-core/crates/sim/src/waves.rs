@@ -79,18 +79,18 @@ mod tests {
 
     #[test]
     fn spawns_on_cadence_for_first_wave_entry() {
-        // WAVE_M0[0]: Squeakzilla at `EARLY_GRUNT_CADENCE` (18); WAVE_M0[1]: Fanged
-        // Death at 95. The swarm cadence fires only the swarm entry (all gated entries
-        // — chaff/rusher/etc — start well after, and 18 % 95 != 0).
+        // WAVE_M0[0] is the ungated Squeakzilla swarm floor at `EARLY_GRUNT_CADENCE`.
+        // Every other entry is gated at `MIN/5` or later, so one swarm-cadence tick
+        // inside the first six seconds fires exactly that entry and nothing else.
         let g = content::EARLY_GRUNT_CADENCE;
         let mut s = blank_state();
-        s.tick = g; // g % g == 0, g % 95 != 0
+        s.tick = g;
         let before = s.enemies.len();
         spawn(&mut s);
         assert_eq!(s.enemies.len(), before + 1, "exactly one enemy (entry 0)");
         assert_eq!(s.enemies[0].def, 0);
-        // hp from EnemyDef::base_hp (Squeakzilla = 200).
-        assert_eq!(s.enemies[0].hp, 200);
+        // hp from EnemyDef::base_hp, unscaled at ×1 this early.
+        assert_eq!(s.enemies[0].hp, content::ENEMIES[0].base_hp);
     }
 
     #[test]
@@ -102,15 +102,22 @@ mod tests {
     }
 
     #[test]
-    fn tick_zero_spawns_both_entries() {
-        // 0 % anything == 0 → both wave entries fire on tick 0.
+    fn tick_zero_spawns_only_the_ungated_swarm_floor() {
+        // Only WAVE_M0[0] is ungated (`start_tick == 0`), so tick 0 — divisible by
+        // every cadence — still spawns exactly one enemy. The bruiser now arrives at
+        // 1 min rather than at tick 0: a fresh tank meets its first shop before its
+        // first 3000-hp Fanged Death (`tests/balance_guards.rs` design window).
         let mut s = blank_state();
         s.tick = 0;
         spawn(&mut s);
-        assert_eq!(s.enemies.len(), 2);
+        assert_eq!(s.enemies.len(), 1);
         assert_eq!(s.enemies[0].def, 0);
-        assert_eq!(s.enemies[1].def, 1);
-        assert_eq!(s.enemies[1].hp, 1200); // Fanged Death base_hp
+        assert_eq!(s.enemies[0].hp, content::ENEMIES[0].base_hp);
+        assert_eq!(
+            content::WAVE_M0.iter().filter(|w| w.start_tick == 0).count(),
+            1,
+            "exactly one ungated wave entry"
+        );
     }
 
     #[test]
@@ -131,18 +138,25 @@ mod tests {
 
     #[test]
     fn ids_are_monotonic_and_ordered() {
+        // Tick 1800 (1 min) opens the bruiser gate and is a multiple of several
+        // cadences, so more than one enemy spawns on it.
         let mut s = blank_state();
-        s.tick = 0;
+        s.tick = 1800;
         spawn(&mut s);
-        assert!(s.enemies[0].id < s.enemies[1].id, "ids allocated in order");
+        assert!(s.enemies.len() >= 2, "need multiple spawns to check id order");
+        for w in s.enemies.windows(2) {
+            assert!(w[0].id < w[1].id, "ids allocated in order");
+        }
     }
 
     #[test]
     fn hp_curve_is_a_3min_stepped_ramp() {
-        // BALANCE PASS: the curve is a STEPPED "RAMP" on a strict 3-min cadence —
-        // every 5400-tick interval is `gentle climb → warning → step`, with steps at
-        // k*5400 for k=1..=10. The old ×413863 hack is gone; the curve now escalates
-        // SMOOTHLY to a sane ≈ ×5.56 boss endpoint. This test pins the new shape.
+        // The curve is a STEPPED "RAMP" on a strict 3-min cadence — every 5400-tick
+        // interval is `gentle climb → warning → step`, with steps at k*5400 for
+        // k=1..=10. `docs/11` balance pass: the endpoint moved ×5.56 → ≈ ×17.7. The
+        // multiplier is NOT the main difficulty lever any more (the wave schedule
+        // is); it is kept shallow enough that the last two intervals do not become a
+        // cliff, which is what turned the old curve into a single wall at the boss.
         use determinism::Fixed;
         let m = content::enemy_hp_mult;
         let interval = content::RAMP_INTERVAL; // 5400
@@ -161,28 +175,28 @@ mod tests {
         }
 
         // (2) Exact post-step multipliers at each 3-min boundary (×10000),
-        //     compounding ×1.1872 per interval up to ≈ ×5.56 at the boss. These are
-        //     the exact `Fixed` values of the balance-pass curve (`G·W·J` with
-        //     J = 1.14); the boss clamp returns `base(10)`.
+        //     compounding ×1.3331 per interval up to ≈ ×17.7 at the boss. These are
+        //     the exact `Fixed` values of the curve (`G·W·J` with J = 1.28); the boss
+        //     clamp returns `base(10)`.
         let post: [(u32, i64); 11] = [
             (0, 10000),
-            (5400, 11871),
-            (10800, 14093),
-            (16200, 16731),
-            (21600, 19862),
-            (27000, 23580),
-            (32400, 27993),
-            (37800, 33232),
-            (43200, 39452),
-            (48600, 46837),
-            (54000, 55604), // the 30-min boss tier — the ≈ ×5.56 endpoint.
+            (5400, 13329),
+            (10800, 17767),
+            (16200, 23683),
+            (21600, 31569),
+            (27000, 42080),
+            (32400, 56092),
+            (37800, 74768),
+            (43200, 99664),
+            (48600, 132849),
+            (54000, 177084), // the 30-min boss tier — the ≈ ×17.7 endpoint.
         ];
         for (tick, mult10k) in post {
             assert_eq!(m(tick).scale_i64(10000), mult10k, "post-step mult at {tick}");
         }
-        // The boss phase HOLDS the endpoint `base(10)` (≈ ×5.56).
+        // The boss phase HOLDS the endpoint `base(10)` (≈ ×17.7).
         let boss = m(content::BOSS_SPAWN_TICK);
-        assert_eq!(boss.scale_i64(10000), 55604);
+        assert_eq!(boss.scale_i64(10000), 177084);
         assert_eq!(m(content::BOSS_SPAWN_TICK + 5000), boss, "boss phase holds the endpoint");
 
         // (3) Within an interval: a gentle region, then a STEEPER warning region.
@@ -211,10 +225,10 @@ mod tests {
         let post_step = m(lo + interval); //   tick 10800, post-step
         let step = post_step.scale_i64(1_000_000) - pre_step.scale_i64(1_000_000);
         assert!(step > warn_slope * 50, "boundary step must dwarf a single warning tick");
-        // +14% (J): post ≈ pre × 1.14 (within rounding, ×1000).
+        // +28% (J): post ≈ pre × 1.28 (within rounding, ×1000).
         assert_eq!(
             post_step.scale_i64(1000),
-            pre_step.mul(Fixed::from_ratio(57, 50)).scale_i64(1000)
+            pre_step.mul(Fixed::from_ratio(content::RAMP_JUMP.0, content::RAMP_JUMP.1)).scale_i64(1000)
         );
     }
 
@@ -230,10 +244,10 @@ mod tests {
         spawn(&mut s);
         let grunt_base = content::ENEMIES[0].base_hp;
         assert_eq!(s.enemies[0].def, 0, "first spawn this tick is the grunt (entry 0)");
-        // hp should be scaled up (BALANCE PASS: the curve is ~×2.06 here — k4 warning
-        // region, just before the 15-min step — a smooth escalation, not the old hack).
-        assert!(s.enemies[0].hp > grunt_base * 2, "late enemy HP must be scaled up");
-        assert!(s.enemies[0].hp <= grunt_base * 3);
+        // hp should be scaled up (the curve is ≈ ×3.29 here — the k=4 warning region,
+        // just before the 15-min step — a smooth escalation, not a cliff).
+        assert!(s.enemies[0].hp > grunt_base * 3, "late enemy HP must be scaled up");
+        assert!(s.enemies[0].hp <= grunt_base * 4);
     }
 
     #[test]
@@ -296,6 +310,60 @@ mod tests {
         bs.tick = content::BOSS_SPAWN_TICK;
         spawn(&mut bs);
         assert_eq!(bs.enemies[0].def, content::BOSS);
+    }
+
+    #[test]
+    fn every_wave_gate_rescales_exactly_onto_the_roblox_timeline() {
+        // `docs/10` F1: wave `start_tick` gates ship at STEAM scale and are rescaled
+        // by `tick_scale_num/den` = 9000/54000 = 1/6. The rescale is only exact if
+        // every gate divides evenly by 6 — otherwise a gate silently lands a tick
+        // early/late on the Roblox timeline. This pass added ~15 new gates, so the
+        // rule is now pinned rather than merely documented.
+        const SCALE_DEN: u32 = 6;
+        for w in content::WAVE_M0.iter().chain(content::BOSS_ESCORT) {
+            assert_eq!(
+                w.start_tick % SCALE_DEN,
+                0,
+                "wave gate {} (enemy {}) does not divide by {SCALE_DEN}",
+                w.start_tick,
+                w.enemy
+            );
+            assert!(w.cadence_ticks > 0, "a zero cadence would never spawn");
+        }
+        assert_eq!(content::BOSS_SPAWN_TICK % content::RAMP_INTERVAL, 0);
+        assert_eq!(
+            content::BOSS_SPAWN_TICK / content::RAMP_INTERVAL,
+            10,
+            "F1 keeps `ramp_intervals_to_boss` at 10 on BOTH timelines"
+        );
+    }
+
+    #[test]
+    fn wave_schedule_escalates_monotonically_after_the_grace_period() {
+        // The core `docs/11` fix: the roster used to be FLAT from 6 min to 20 min.
+        // Assert that hp-per-tick throughput now RISES at every 3-min boundary from
+        // 3 min to the boss — no plateau anywhere in the middle of the run.
+        let tput = |tick: u32| -> i64 {
+            // Scaled by 1000 to keep this integer-only, like the sim itself.
+            content::WAVE_M0
+                .iter()
+                .filter(|w| tick >= w.start_tick && w.cadence_ticks > 0)
+                .map(|w| content::ENEMIES[w.enemy as usize].base_hp * 1000 / w.cadence_ticks as i64)
+                .sum()
+        };
+        let mut prev = tput(content::RAMP_INTERVAL);
+        let mut k = 2;
+        while k * content::RAMP_INTERVAL < content::BOSS_SPAWN_TICK {
+            let cur = tput(k * content::RAMP_INTERVAL);
+            assert!(
+                cur > prev,
+                "wave throughput must rise at every 3-min boundary; k={k} gave {cur} <= {prev}"
+            );
+            prev = cur;
+            k += 1;
+        }
+        // And the escalation is substantial, not cosmetic: ≥10× from 3 min to 27 min.
+        assert!(prev >= tput(content::RAMP_INTERVAL) * 10, "escalation is only {prev}");
     }
 
     #[test]
