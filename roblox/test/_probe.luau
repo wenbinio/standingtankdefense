@@ -1,0 +1,8 @@
+local C = require("../src/shared/Content")
+print("BOSS", C.BOSS, "num_weapons", C.constants.num_weapons, "NUM_WEAPONS", C.NUM_WEAPONS)
+print("ring1", type(C.SPAWN_RING[1]), C.SPAWN_RING[1] and typeof and "", C.SPAWN_RING[1].x)
+print("#W", #C.WEAPONS, "#M", #C.MODIFIERS, "#E", #C.ENEMIES, "#waves", #C.WAVE_M0, "#esc", #C.BOSS_ESCORT, "#ring", #C.SPAWN_RING)
+print("W0cost", C.WEAPONS[1].cost, "E2hp", C.ENEMIES[3].base_hp)
+print("tl", C.TIMELINE.steam.boss_spawn_tick, C.TIMELINE.roblox.boss_spawn_tick)
+print("hpmult0 raw", require("../src/shared/Fixed").raw(C.enemyHpMult(0)))
+print("mod effects", C.MODIFIERS[1].effects[1].tag, C.MODIFIERS[1].effects[1].a)
