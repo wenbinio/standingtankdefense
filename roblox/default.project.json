@@ -7,14 +7,14 @@
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Shared": {
-        "$path": { "optional": "src/shared" }
+        "$path": "dist/shared"
       }
     },
 
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "Server": {
-        "$path": { "optional": "src/server" }
+        "$path": { "optional": "dist/server" }
       },
       "Bench": {
         "$path": "bench"
@@ -33,7 +33,7 @@
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
         "Client": {
-          "$path": { "optional": "src/client" }
+          "$path": { "optional": "dist/client" }
         }
       }
     },

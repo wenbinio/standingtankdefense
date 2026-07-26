@@ -64,7 +64,9 @@ local function eq(a, b, msg: string)
 	check(a == b, msg .. "  (got " .. tostring(a) .. ", want " .. tostring(b) .. ")")
 end
 
-local function rejects(ok: boolean, why: string?, want: string, msg: string)
+--- Assert a refusal. `want`/`msg` come FIRST so the call being checked can be
+--- the last argument and keep both of its return values.
+local function rejects(want: string, msg: string, ok: boolean, why: string?)
 	check(not ok and why == want, msg .. "  (got " .. tostring(ok) .. "/" .. tostring(why) .. ", want false/" .. want .. ")")
 end
 
@@ -179,17 +181,17 @@ Director.join(d2, 201)
 Director.join(d2, 202)
 Director.advance(d2, 5) -- let the round-0 shop generate
 
-rejects(Director.submitInput(d2, 999, Input.NOOP), "no_such_player", "unseated player is refused")
-rejects(Director.submitInput(d2, 201, "1"), "code_not_a_number", "a string code is refused (not coerced)")
-rejects(Director.submitInput(d2, 201, 1.5), "code_not_an_integer", "a fractional code is refused")
-rejects(Director.submitInput(d2, 201, 0 / 0), "code_not_an_integer", "NaN is refused")
-rejects(Director.submitInput(d2, 201, -1), "code_negative", "a negative code is refused")
-rejects(Director.submitInput(d2, 201, 4 * 256), "unknown_input_kind", "kind 4 (no such ids::Input) is refused")
-rejects(Director.submitInput(d2, 201, 255 * 256), "unknown_input_kind", "a garbage high byte is refused")
-rejects(Director.submitInput(d2, 201, Input.buyOffer(8)), "buy_slot_out_of_range", "BuyOffer slot 8 (only 0..7 exist) is refused, not clamped")
-rejects(Director.submitInput(d2, 201, Input.buyOffer(200)), "buy_slot_out_of_range", "BuyOffer slot 200 is refused")
-rejects(Director.submitInput(d2, 201, Input.REROLL + 1), "slot_on_slotless_kind", "a slot smuggled onto Reroll is refused")
-rejects(Director.submitInput(d2, 201, Input.CLEAR + 7), "slot_on_slotless_kind", "a slot smuggled onto Clear is refused")
+rejects("no_such_player", "unseated player is refused", Director.submitInput(d2, 999, Input.NOOP))
+rejects("code_not_a_number", "a string code is refused (not coerced)", Director.submitInput(d2, 201, "1"))
+rejects("code_not_an_integer", "a fractional code is refused", Director.submitInput(d2, 201, 1.5))
+rejects("code_not_an_integer", "NaN is refused", Director.submitInput(d2, 201, 0 / 0))
+rejects("code_negative", "a negative code is refused", Director.submitInput(d2, 201, -1))
+rejects("unknown_input_kind", "kind 4 (no such ids::Input) is refused", Director.submitInput(d2, 201, 4 * 256))
+rejects("unknown_input_kind", "a garbage high byte is refused", Director.submitInput(d2, 201, 255 * 256))
+rejects("buy_slot_out_of_range", "BuyOffer slot 8 (only 0..7 exist) is refused, not clamped", Director.submitInput(d2, 201, Input.buyOffer(8)))
+rejects("buy_slot_out_of_range", "BuyOffer slot 200 is refused", Director.submitInput(d2, 201, Input.buyOffer(200)))
+rejects("slot_on_slotless_kind", "a slot smuggled onto Reroll is refused", Director.submitInput(d2, 201, Input.REROLL + 1))
+rejects("slot_on_slotless_kind", "a slot smuggled onto Clear is refused", Director.submitInput(d2, 201, Input.CLEAR + 7))
 
 check(select(1, Director.submitInput(d2, 201, Input.NOOP)), "Noop is accepted")
 check(select(1, Director.submitInput(d2, 201, Input.REROLL)), "Reroll is accepted")
@@ -277,7 +279,7 @@ eq(Director.runClock(d3, victim).dead, false, "the fresh run is alive")
 local restarted = Director.snapshotFor(d3, victim)
 eq(restarted.run_index, 2, "the restart is run #2")
 check(Director.issueSeed(d3, restarted.seat, 1).lo ~= Director.issueSeed(d3, restarted.seat, 2).lo, "the retry got a fresh seed, not a rewind")
-rejects(Director.startRun(d3, victim), "run_in_progress", "a second restart while running is refused")
+rejects("run_in_progress", "a second restart while running is refused", Director.startRun(d3, victim))
 
 Director.advance(d3, 10)
 eq(Director.runClock(d3, victim).tick, 10, "the restarted arena advances normally")
@@ -459,8 +461,8 @@ end
 check(bots_distinct, "each bot arena has its own state")
 
 -- F4: the same view path, pointed at a different arena.
-rejects(Director.spectate(d6, 601, 0), "cannot_spectate_self", "you cannot spectate your own seat")
-rejects(Director.spectate(d6, 601, 99), "bad_seat", "an out-of-range seat is refused")
+rejects("cannot_spectate_self", "you cannot spectate your own seat", Director.spectate(d6, 601, 0))
+rejects("bad_seat", "an out-of-range seat is refused", Director.spectate(d6, 601, 99))
 check(select(1, Director.spectate(d6, 601, bots[1].seat)), "spectating a rival seat is allowed")
 local snap = Director.snapshotFor(d6, 601)
 check(snap.view ~= nil, "the spectator still receives their own arena view")
@@ -484,7 +486,7 @@ for _, p in Director.cohort(d6) do
 end
 eq(humans, 2, "both humans are seated")
 eq(Director.snapshotFor(d6, 601).spectating, nil, "spectating the emptied seat was cleared")
-rejects(Director.join(d6, 601), "already_joined", "double-joining is refused")
+rejects("already_joined", "double-joining is refused", Director.join(d6, 601))
 check(select(1, Director.leave(d6, 602)), "a player can leave")
 eq(Director.checksum(d6, 602), nil, "the leaver's arena is torn down")
 Director.step(d6)

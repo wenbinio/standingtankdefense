@@ -121,10 +121,11 @@ local function newStats(): Stats
 	}
 end
 
---- A brand-new account. Note what is NOT here: no unlocks are materialized.
---- A fresh profile's offer pool is whatever `Meta` says 0 XP entitles it to, so
---- retuning the starter pool changes every existing account, including the ones
---- already in the DataStore.
+--- A brand-new account. Note what is NOT here: no unlocks are materialized. A
+--- fresh profile's offer pool is whatever `Meta` says 0 XP entitles it to.
+--- `Meta.syncProfile` writes those ids in on the first award, and from then on
+--- they are permanent — retuning the schedule upward can never take back an
+--- unlock a live account already had.
 function Profile.new(user_id: string): Profile
 	return {
 		v = SCHEMA_VERSION,

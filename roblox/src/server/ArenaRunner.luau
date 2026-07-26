@@ -338,12 +338,15 @@ end
 local function finish(self: Runner, reason: string, now: number): RunResult
 	local s = self.state
 	local ticks = if s.dead and s.death_tick ~= nil then s.death_tick + 1 else s.tick
+	-- The seed in the canonical u64 wire form: 16 lowercase hex digits, NO `0x`
+	-- prefix (`CONTRACTS.md` C4 — the same form `Arena.checksum` returns).
+	-- `Rng.toHex` prefixes, which is a rendering helper, not the wire form.
 	local hi, lo = Rng.seedParts(self.seed)
 	local result: RunResult = {
 		player_id = self.player_id,
 		is_bot = self.is_bot,
 		run_index = self.run_index,
-		seed = Rng.toHex(hi, lo),
+		seed = string.format("%08x%08x", hi, lo),
 		reason = reason,
 		started_at = self.started_at,
 		ended_at = now,

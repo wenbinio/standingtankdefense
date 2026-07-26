@@ -1,3 +1,9 @@
 # Transient per-agent git worktrees (subagent isolation). Never commit these —
 # they are throwaway workspaces created/removed by the agent harness.
 .claude/worktrees/
+
+# Roblox build output — regenerate with `python3 roblox/build/build.py`.
+# Committing it would double every module in the diff and let a stale copy
+# drift from src/, which is exactly the failure ContentData.luau was fixed for.
+roblox/dist/
+roblox/build/__pycache__/
