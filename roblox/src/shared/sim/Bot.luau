@@ -13,6 +13,22 @@
 	seeded with that value, so it is implemented by that reuse rather than by a
 	second copy of the constants.
 
+	WEAPON SELECTION is a VALUE heuristic, not a price rule (see the "weapon
+	valuation" section below). `bot.rs` replaced `cheapest_where(kind == Weapon)`
+	with `Bot::best_weapon`: weapon-power estimation (damage-per-second × estimated
+	simultaneous targets, adjusted for utility and reach), marginal value including
+	the breadth SYNERGY a purchase grants the arsenal already owned, per-copy
+	target SATURATION, a gold-dependent PRICE sensitivity, and a PATIENCE rule that
+	declines a weak buy when something far better is on the board — every knob
+	differing per archetype so the four build identities stay apart. All integer,
+	no RNG, no wall-clock, stable slot iteration order.
+
+	`Bot` is NOT part of `Arena.step`, and the R3 trace corpus carries a recorded
+	input log rather than re-deriving decisions, so nothing here can move a
+	checksum. It is graded by matching `bot.rs` decision-for-decision (which it
+	does: verified against a Rust decision dump over 12 seeds × 9000 ticks and all
+	nine challenge codes) and by the quality of lobby backfill in `Director`.
+
 	No Roblox global is referenced; runs unchanged under a bare `luau`.
 ]]
 
@@ -36,7 +52,65 @@ local MODIFIER_BUY_CAP = 250
 --- Hard cap on WEAPON instances for the default bot — a realistic arsenal.
 local WEAPON_BUY_CAP = 40
 
+-- ── weapon-valuation constants (`bot.rs` tail) ──────────────────────────────
+--- Ceiling on the estimated simultaneous-target count (in tenths) any attack
+--- class may claim. A `Barrage(12)` needs twelve enemies in range to be worth
+--- twelve targets; crediting it in full would let the catalog's widest weapon
+--- outrank everything on a board that rarely holds that many.
+local MAX_TARGETS10 = 50
+--- Mirror of `Modifiers::arsenal_synergy_add`: +10% per damage type beyond the
+--- first, +8% per attack class beyond the first, +5% per distinct weapon def
+--- beyond the first, each axis capped at +40% and the total at +120%. Copies are
+--- neither rewarded nor taxed. Kept here as constants (rather than read from
+--- `Modifiers.luau`) exactly as `bot.rs` keeps them out of `modifiers.rs`, so
+--- the bot's MODEL of the incentive is explicit and reviewable; they must be
+--- updated in lockstep if the shipped magnitudes move.
+local SYN_PER_DAMAGE_TYPE_PCT = 10
+local SYN_PER_ATTACK_CLASS_PCT = 8
+local SYN_PER_DISTINCT_DEF_PCT = 5
+local SYN_AXIS_CAP_PCT = 40
+local SYN_TOTAL_CAP_PCT = 120
+--- Upper bound on the gold-on-hand reference in the value/price trade-off. Four
+--- times the priciest weapon (5000g), so once the bot holds ~80k gold price has
+--- effectively stopped mattering — which is the intended behavior — while the
+--- comparison stays in a small integer range as gold snowballs into the billions.
+local PRICE_REF_CAP = 20000
+
 local U32_MAX = 4294967295
+
+-- ============================ integer arithmetic ============================
+
+--- Rust's `/` on integers — truncates TOWARD ZERO, **not** toward negative
+--- infinity (`SIM-SPEC.md` §S4 requires matching the Rust at every site, and
+--- `range_pct` below divides a NEGATIVE numerator, where `math.floor` and Rust
+--- disagree). The float quotient is corrected by an exact integer multiply, so a
+--- 1-ulp division error on a large numerator cannot survive either.
+local function idiv(a: number, b: number): number
+	local neg = false
+	if a < 0 then
+		a, neg = -a, true
+	end
+	if b < 0 then
+		b, neg = -b, not neg
+	end
+	local q = math.floor(a / b)
+	if q * b > a then
+		q -= 1
+	elseif (q + 1) * b <= a then
+		q += 1
+	end
+	return if neg then -q else q
+end
+
+--- `u32::count_ones` over the small masks the arsenal builds (bits 0..7).
+local function countOnes(mask: number): number
+	local n = 0
+	while mask ~= 0 do
+		mask = bit32.band(mask, mask - 1)
+		n += 1
+	end
+	return n
+end
 
 -- ============================ catalog access ============================
 
@@ -212,6 +286,179 @@ local function weaponClass(def)
 	return Content.attackScopeId(weaponDef(def).attack)
 end
 
+-- ============================ weapon valuation ============================
+--
+-- The bot used to choose weapons with `cheapest_where(kind == Weapon)`. Because
+-- a weapon's `cost` is a pure function of its RARITY (500 / 1500 / 3000 / 5000),
+-- "cheapest" meant "lowest-rarity offer, ties to the lowest slot index" — the
+-- bot never looked at damage, cooldown, attack class or what it already owned.
+-- That made it blind on the single most important decision in the game, so every
+-- build-shape number measured through it described the PRICE TABLE rather than
+-- the game. Everything below replaces that with a value estimate.
+--
+-- The model is deliberately a competent player's heuristic, not an optimizer:
+--   value(offer) = own marginal power (with the synergy it would then enjoy)
+--                + the synergy uplift it grants the arsenal ALREADY owned
+-- ranked against price with a gold-dependent weight. All integer, no RNG, no
+-- wall-clock, stable slot iteration order — it cannot perturb determinism.
+
+--- `Attack` payload tags (C1: the tag IS `attack_scope_id`).
+local ATTACK_SINGLE_TARGET = 0
+local ATTACK_SPLASH = 1
+local ATTACK_BARRAGE = 2
+local ATTACK_AREA = 3
+local ATTACK_WAVE = 4
+local ATTACK_BOUNCE = 5
+
+--- Estimated number of enemies one volley connects with, in TENTHS (10 == one
+--- enemy). This is the single biggest thing price hides: a `Barrage(8)` and a
+--- `SingleTarget` of equal damage-per-second are not equally good, and an
+--- `Area`/`Wave` weapon that sweeps the pack camped on the tank is worth several
+--- single-target weapons during the swarm phases the run actually dies to.
+---
+--- The numbers are a player's rule of thumb ("this one hits the whole pack"),
+--- not a simulation: multi-target classes are credited generously but capped, so
+--- a 12-projectile barrage cannot claim twelve simultaneous targets that rarely
+--- all exist.
+local function estTargets10(w): number
+	local atk = w.attack
+	local tag, a = atk.tag, atk.a
+	if tag == ATTACK_SINGLE_TARGET then
+		return 10
+	elseif tag == ATTACK_SPLASH then
+		-- Splash: the primary target plus whatever the radius catches.
+		return 10 + math.clamp(idiv(a, 50), 0, 20)
+	elseif tag == ATTACK_BARRAGE then
+		-- Barrage/Bounce hit N DISTINCT enemies — the strongest honest multiplier
+		-- in the catalog, capped because N enemies must actually be in range.
+		return math.min(10 * a, MAX_TARGETS10)
+	elseif tag == ATTACK_BOUNCE then
+		return math.min(9 * a, MAX_TARGETS10)
+	elseif tag == ATTACK_AREA then
+		-- Instant pulses centred on the tank: they hit exactly the enemies that
+		-- are about to deal contact damage, which is what kills the tank.
+		return math.min(15 + idiv(a, 20), MAX_TARGETS10)
+	end
+	-- ATTACK_WAVE, `a` = extra reach beyond the listed range.
+	return math.min(15 + idiv(w.range + a, 25), MAX_TARGETS10)
+end
+
+--- `WeaponAbility` payload tags.
+local ABILITY_UTILITY_PCT = {
+	[0] = 0, -- None
+	-- Sustain: healing per enemy hit is survival, which is what the run is
+	-- graded on.
+	[1] = 25, -- LifeDrain
+	[2] = 10, -- ManaDrain
+	[3] = 12, -- Knockback
+	[4] = 25, -- Root
+	-- 5 VulnOnHit is `min(stacks * 2, 20)`, handled inline below: Vulnerability
+	-- amplifies the WHOLE arsenal, not just this weapon.
+	[6] = 20, -- Hazard
+	[7] = 20, -- Summon
+}
+local ABILITY_VULN_ON_HIT = 5
+
+--- Percentage uplift for everything a weapon does BESIDES its listed damage:
+--- damage-over-time, crowd control, and its signature ability. Expressed as a
+--- percent of the weapon's base power so it scales with the weapon rather than
+--- swamping it. Bounded per-source so no single flag can dominate the ranking.
+local function utilityPct(w): number
+	local pct = 0
+	local oh = w.on_hit
+	-- Poison / fire keep dealing damage between shots.
+	if oh.poison_dps > 0 then
+		pct += math.min(oh.poison_dps * 2, 40)
+	end
+	if oh.fire_stacks > 0 then
+		pct += math.min(idiv(oh.fire_stacks, 4), 30)
+	end
+	-- Frost slows the pack; stun removes attackers outright. Both convert into
+	-- contact damage the tank never takes.
+	if oh.frost_stacks > 0 then
+		pct += math.min(oh.frost_stacks * 2, 15)
+	end
+	if oh.stun_ticks > 0 then
+		pct += math.min(idiv(oh.stun_ticks, 3), 30)
+	end
+	local ab = w.ability
+	if ab.tag == ABILITY_VULN_ON_HIT then
+		pct += math.min(ab.a * 2, 20)
+	else
+		pct += ABILITY_UTILITY_PCT[ab.tag] or 0
+	end
+	return pct
+end
+
+--- Percentage adjustment for reach. A long-range projectile weapon starts hurting
+--- the wave earlier and keeps firing while the tank is not yet swarmed; a
+--- 300-range single-target weapon only fires once things are already on top of
+--- you. Does not apply to `Area`/`Wave`, whose short listed range is inherent to
+--- the class and already priced into `estTargets10`.
+local function rangePct(w): number
+	local tag = w.attack.tag
+	if tag == ATTACK_AREA or tag == ATTACK_WAVE then
+		return 0
+	end
+	return math.clamp(idiv(w.range - 600, 30), -15, 20)
+end
+
+--- Standalone power estimate for one instance of `def`, ignoring synergy — the
+--- weapon's damage-per-second times how many enemies it lands on, adjusted for
+--- utility and reach. `utilityWeightPct` lets an archetype care more or less
+--- about the non-damage half (see `WeaponBias`).
+local function weaponPower(def: number, utilityWeightPct: number): number
+	local w = weaponDef(def)
+	-- Tenths of damage-per-second: damage * TICK_HZ / cooldown, ×10.
+	local dps10 = idiv(w.damage * 300, math.max(w.cooldown_ticks, 1))
+	local base = idiv(dps10 * estTargets10(w), 10)
+	local pct = math.max(100 + idiv(utilityPct(w) * utilityWeightPct, 100) + rangePct(w), 20)
+	return math.max(idiv(base * pct, 100), 1)
+end
+
+--- The breadth incentive, mirrored from `Modifiers::arsenal_synergy_add`: +10%
+--- per damage type beyond the first (cap +40%), +8% per attack class beyond the
+--- first (cap +40%), +5% per distinct weapon def beyond the first (cap +40%),
+--- total capped at +120%. Copies are neither rewarded nor taxed.
+---
+--- This is a MODEL of a rule the sim owns, kept here as constants so the bot
+--- survives any revision of `Modifiers.luau` (which this module does not own).
+--- If the shipped magnitudes change, the four constants must follow — the bot
+--- would otherwise be optimizing a game it is no longer playing.
+local function arsenalSynergyPct(damageTypes: number, attackClasses: number, distinctDefs: number): number
+	local function axis(n: number, per: number): number
+		-- `u32::saturating_sub(1)`.
+		return math.min(math.max(n - 1, 0) * per, SYN_AXIS_CAP_PCT)
+	end
+	return math.min(
+		axis(damageTypes, SYN_PER_DAMAGE_TYPE_PCT)
+			+ axis(attackClasses, SYN_PER_ATTACK_CLASS_PCT)
+			+ axis(distinctDefs, SYN_PER_DISTINCT_DEF_PCT),
+		SYN_TOTAL_CAP_PCT
+	)
+end
+
+--- What the `n`-th EXTRA copy of a weapon is actually worth, given `unit` is what
+--- the first one is worth: `unit × SAT / (SAT + n)`.
+---
+--- This is target saturation, and it is the difference between a bot that can
+--- weigh "another copy" against "something new" and one that cannot. Identical
+--- weapons share a damage type, a range, a cooldown and a target pool, so the
+--- tenth copy spends much of its output overkilling what the first nine already
+--- killed, while a different weapon reaches targets, ranges and armor classes the
+--- stack does not. A player estimates this instinctively ("I have enough of
+--- those"); the bot needs it stated.
+---
+--- It is deliberately an ESTIMATE and not a claim about the rules: the sim does
+--- not tax copies, and neither does the breadth synergy. Without it the
+--- stack/spread choice is a cliff — copies score identically forever — and
+--- whichever side of the cliff the bot lands on is an artifact of the shop it
+--- happened to be rich in rather than of what the weapons are worth.
+local function saturatedCopyPower(unit: number, alreadyOwned: number, saturation: number): number
+	local sat = math.max(saturation, 1)
+	return math.max(idiv(unit * sat, sat + math.max(alreadyOwned, 0)), 1)
+end
+
 -- ============================ Input construction ============================
 -- `Input` is a packed integer code (`Input.luau`): 0 Noop, 2 Reroll, 3 Clear,
 -- `1 + slot*256` BuyOffer. Nothing here builds one by hand.
@@ -380,6 +627,159 @@ local function axisWeights(arch)
 	return 5, 5
 end
 
+--- How one archetype reads a weapon. These knobs are what keep the four build
+--- identities apart now that all of them can see value: without them a
+--- value-aware bot converges on one "best" line and the strategy-diversity
+--- measurement dies.
+---
+---   `synergy_weight_pct`  How much of the breadth synergy this archetype
+---     believes in. A glass-cannon discounts it (it wants the single biggest
+---     hitter stacked); an eco-pivot, which buys late with a full wallet, leans
+---     into it.
+---   `utility_weight_pct`  How much the non-damage half (crowd control, sustain,
+---     DoT) counts. Tanky builds pay up for stuns, slows and life-drain;
+---     glass-cannons want numbers.
+---   `price_divisor`  Price sensitivity: the gold-on-hand reference is
+---     `gold / price_divisor`, so a LARGER divisor means a smaller reference,
+---     which means price keeps mattering for longer (see `priceRef`).
+---   `patience_pct`  Save-up discipline: decline to buy when the best AFFORDABLE
+---     weapon is worth less than this percentage of the best weapon on the board
+---     (see `bestWeapon`). Higher = more willing to sit on gold and wait.
+---   `copy_saturation`  Copy tolerance: the saturation constant in
+---     `saturatedCopyPower`. This is the axis that actually separates a STACKER
+---     from a COVERAGE build, so it is per-archetype rather than global. Larger =
+---     flatter = happier to buy the eleventh copy of its best weapon.
+export type WeaponBias = {
+	synergy_weight_pct: number,
+	utility_weight_pct: number,
+	price_divisor: number,
+	patience_pct: number,
+	copy_saturation: number,
+}
+
+-- Stack the biggest hitter; breadth is a distraction, utility is fluff, and it
+-- will hold out (and overpay) for a top-end weapon.
+local BIAS_GLASS_CANNON: WeaponBias = table.freeze({
+	synergy_weight_pct = 60,
+	utility_weight_pct = 50,
+	price_divisor = 2,
+	patience_pct = 55,
+	copy_saturation = 30,
+})
+-- Buys crowd control and sustain: damage it never takes is damage it never has
+-- to out-heal. Wants boards filled sooner, so less patient.
+local BIAS_TANKY: WeaponBias = table.freeze({
+	synergy_weight_pct = 100,
+	utility_weight_pct = 175,
+	price_divisor = 4,
+	patience_pct = 30,
+	copy_saturation = 5,
+})
+-- The value shopper: most price-sensitive, keenest on breadth (its whole plan is
+-- to convert a big wallet into a broad board), and content to sit on gold while
+-- the wallet does the work.
+local BIAS_ECO_PIVOT: WeaponBias = table.freeze({
+	synergy_weight_pct = 130,
+	utility_weight_pct = 100,
+	price_divisor = 8,
+	patience_pct = 45,
+	copy_saturation = 9,
+})
+local BIAS_BALANCED: WeaponBias = table.freeze({
+	synergy_weight_pct = 100,
+	utility_weight_pct = 100,
+	price_divisor = 4,
+	patience_pct = 40,
+	copy_saturation = 8,
+})
+
+--- `Archetype::weapon_bias`.
+local function archWeaponBias(arch): WeaponBias
+	if arch == ARCH_GLASS_CANNON then
+		return BIAS_GLASS_CANNON
+	elseif arch == ARCH_TANKY then
+		return BIAS_TANKY
+	elseif arch == ARCH_ECO_PIVOT then
+		return BIAS_ECO_PIVOT
+	end
+	return BIAS_BALANCED
+end
+
+--- `Archetype::weapon_bias` — exposed read-only (the Rust keeps it private) so
+--- tests and tooling can inspect an archetype's identity without re-deriving the
+--- table. The returned tables are frozen; nothing here reads back through it.
+Bot.weaponBiasFor = archWeaponBias
+
+-- ============================ Arsenal ============================
+
+--- What the bot currently owns, summarized once per decision so each offer can be
+--- priced against it in O(1). Built by scanning `s.weapons` in index order.
+---
+---   `type_mask`/`class_mask`  bit per damage type / attack class present.
+---   `total_power`  sum of the SATURATED power of every owned instance — the base
+---     that a synergy uplift would multiply.
+---   `defs`  `{def, copies}` in first-seen order. Small (≤ the weapon cap), so a
+---     linear scan beats any bitset over a catalog whose size is content-owned
+---     and free to grow.
+export type Arsenal = {
+	type_mask: number,
+	class_mask: number,
+	damage_types: number,
+	attack_classes: number,
+	distinct_defs: number,
+	total_power: number,
+	defs: { { def: number, copies: number } },
+}
+
+--- `Arsenal::scan`.
+local function scanArsenal(s, bias: WeaponBias): Arsenal
+	local defs: { { def: number, copies: number } } = {}
+	local typeMask, classMask = 0, 0
+	local weapons = s.weapons
+	for i = 1, #weapons do
+		local w = weaponDef(weapons[i].def)
+		typeMask = bit32.bor(typeMask, bit32.lshift(1, w.damage_type))
+		classMask = bit32.bor(classMask, bit32.lshift(1, Content.attackScopeId(w.attack)))
+		local found = false
+		for k = 1, #defs do
+			if defs[k].def == weapons[i].def then
+				defs[k].copies += 1
+				found = true
+				break
+			end
+		end
+		if not found then
+			defs[#defs + 1] = { def = weapons[i].def, copies = 1 }
+		end
+	end
+	local totalPower = 0
+	for k = 1, #defs do
+		local unit = weaponPower(defs[k].def, bias.utility_weight_pct)
+		for i = 0, defs[k].copies - 1 do
+			totalPower += saturatedCopyPower(unit, i, bias.copy_saturation)
+		end
+	end
+	return {
+		type_mask = typeMask,
+		class_mask = classMask,
+		damage_types = countOnes(typeMask),
+		attack_classes = countOnes(classMask),
+		distinct_defs = #defs,
+		total_power = totalPower,
+		defs = defs,
+	}
+end
+
+--- `Arsenal::copies_of`.
+local function copiesOf(ars: Arsenal, def: number): number
+	for k = 1, #ars.defs do
+		if ars.defs[k].def == def then
+			return ars.defs[k].copies
+		end
+	end
+	return 0
+end
+
 -- ============================ Bot ============================
 
 --- Greedy survivor policy: clear when swarmed, otherwise keep buying.
@@ -489,8 +889,10 @@ local function priciestWhere(b, s, pred)
 	return bestIdx
 end
 
---- Cheapest affordable slot whose offer matches `pred`, if any. NOTE: unlike
---- `priciestWhere`, the Rust does NOT apply `allowed` here — transcribed as is.
+--- Cheapest affordable slot whose offer matches `pred`, if any. Still the rule
+--- for MODIFIERS in the generic fallback; weapons go through `bestWeapon`.
+--- NOTE: unlike `priciestWhere`, the Rust does NOT apply `allowed` here — its one
+--- caller folds `allowed` into `pred`. Transcribed as is.
 local function cheapestWhere(s, pred)
 	local bestIdx, bestCost = nil, nil
 	local offers = s.shop.offers
@@ -505,27 +907,143 @@ local function cheapestWhere(s, pred)
 	return bestIdx
 end
 
---- Cheapest affordable slot holding a weapon this challenge wants, if any. For
---- Purist that's the target class; for JackOfAll an attack-class we don't own
---- yet; otherwise nil (generic buying handles the default bot).
-local function wantedWeapon(b, s)
-	local pickIdx, pickCost = nil, nil
+--- The weapon bias for this match: the archetype's for a default run, the
+--- balanced profile for a challenge run (which has no archetype identity — its
+--- identity is the challenge).
+local function weaponBias(b): WeaponBias
+	if b.challenge.kind == "None" and b.archetype ~= nil then
+		return archWeaponBias(b.archetype)
+	end
+	return BIAS_BALANCED
+end
+
+--- The gold-on-hand reference used to trade value off against price. Ranking is
+--- by `value / (cost + ref)`:
+---   * `ref ≈ 0` (broke) → the ranking is value-PER-GOLD, so a 500g weapon that
+---     is half as good as a 5000g one wins, which is correct when the next
+---     purchase is the only one you can afford;
+---   * `ref` large (rich) → `cost` is noise beside it and the ranking becomes
+---     value outright, which is also correct: when gold has stopped being the
+---     constraint, buy the best thing on the board.
+---
+--- Capped so the comparison stays in a small integer range once the bot's economy
+--- snowballs (gold reaches the billions late).
+local function priceRef(s, bias: WeaponBias): number
+	return math.clamp(idiv(s.economy.gold, math.max(bias.price_divisor, 1)), 0, PRICE_REF_CAP)
+end
+
+--- The valuation, for one offer, against an already-summarized arsenal:
+---
+---   value = own_power × (1 + synergy_after)          ← what it adds itself
+---         + owned_power × Δsynergy                   ← what it adds to the rest
+---
+--- The second term is the whole point of the breadth incentive and the thing the
+--- price-first policy could not see. Worked example with the shipped magnitudes:
+--- holding 14 copies of one def, a new DISTINCT def moves the synergy by +5%,
+--- worth `0.05 × 14p = 0.7p` on the existing stack alone — so a new weapon only
+--- needs ~30% of a stacked weapon's raw power to be the better buy, and if it also
+--- brings a new damage type or attack class (+10% / +8%) almost nothing beats it.
+--- Once every axis is capped (+120%) Δ falls to zero and the bot correctly goes
+--- back to stacking its strongest weapon.
+local function weaponValue(ars: Arsenal, bias: WeaponBias, def: number): number
+	local w = weaponDef(def)
+	local copies = copiesOf(ars, def)
+	-- What THIS copy adds, not what the first one was worth.
+	local own = saturatedCopyPower(weaponPower(def, bias.utility_weight_pct), copies, bias.copy_saturation)
+
+	local addsType = bit32.band(ars.type_mask, bit32.lshift(1, w.damage_type)) == 0
+	local addsClass = bit32.band(ars.class_mask, bit32.lshift(1, Content.attackScopeId(w.attack))) == 0
+	local addsDef = copies == 0
+
+	local before = arsenalSynergyPct(ars.damage_types, ars.attack_classes, ars.distinct_defs)
+	local after = arsenalSynergyPct(
+		ars.damage_types + (if addsType then 1 else 0),
+		ars.attack_classes + (if addsClass then 1 else 0),
+		ars.distinct_defs + (if addsDef then 1 else 0)
+	)
+	-- The archetype's belief in breadth scales only the MARGIN, never the synergy
+	-- the arsenal already has — that part is a fact, not an opinion.
+	local delta = idiv((after - before) * bias.synergy_weight_pct, 100)
+	return idiv(own * (100 + before + delta), 100) + idiv(ars.total_power * delta, 100)
+end
+
+--- Best affordable, allowed WEAPON offer by value-for-money, or nil. Returns a
+--- 1-BASED shop index. `extra` narrows the candidate set (challenge runs use it to
+--- require a class); pass `nil` for "any weapon".
+---
+--- `patiencePct` is the SAVE-UP rule. The bot declines to buy at all when the best
+--- thing it can currently afford is worth less than `patiencePct`% of the best
+--- weapon visible on the board — i.e. "there is something much better here, keep
+--- the gold". Pass `0` to disable it (the weapon floor does, because board control
+--- is not negotiable).
+---
+--- This is the other half of the fix, and it matters as much as the valuation.
+--- Early on the bot earns ~500 gold a round and the shop shows one 500g Common
+--- beside three 1500–3000g weapons worth five to nine times as much. Buying the
+--- affordable one on repeat is how the arsenal used to become eleven copies of a
+--- Common before the first shop ever refreshed — and no valuation can prevent
+--- that, because when exactly one offer is affordable "cheapest" and "best" are
+--- the same offer. Patience converts income into FEWER, BETTER weapons bought
+--- LATER, which is both what a competent player does and what lets shop variety
+--- reach the build at all.
+---
+--- Ties resolve to the LOWEST slot index (strict `>` improvement over an in-order
+--- scan), so the choice is a pure, reproducible function of state.
+local function bestWeapon(b, s, bias: WeaponBias, patiencePct: number, extra): number?
+	local ars = scanArsenal(s, bias)
+	local r = priceRef(s, bias)
+	local bestIdx, bestValue, bestCost = nil, nil, nil
+	local bestAffordableValue = 0
+	local bestVisibleValue = 0
 	local offers = s.shop.offers
 	for i = 1, #offers do
 		local off = offers[i]
-		if off.cost <= s.economy.gold and isWeaponOffer(off) then
-			local want = false
-			if b.challenge.kind == "Purist" then
-				want = weaponClass(off.def) == b.challenge.class
-			elseif b.challenge.kind == "JackOfAll" then
-				want = bit32.band(s.bought_attack_mask, bit32.lshift(1, weaponClass(off.def))) == 0
+		if isWeaponOffer(off) and allowed(b, off) and (extra == nil or extra(off)) then
+			local v = weaponValue(ars, bias, off.def)
+			-- The patience yardstick counts every weapon on the board, including
+			-- the ones gold cannot reach yet — those are exactly what it saves for.
+			if v > bestVisibleValue then
+				bestVisibleValue = v
 			end
-			if want and (pickCost == nil or off.cost < pickCost) then
-				pickIdx, pickCost = i, off.cost
+			if off.cost <= s.economy.gold then
+				local better
+				if bestIdx == nil then
+					better = true
+				else
+					-- value_i / (cost_i + r) > value_b / (cost_b + r), cross-multiplied.
+					better = v * (bestCost + r) > bestValue * (off.cost + r)
+				end
+				if better then
+					bestIdx, bestValue, bestCost = i, v, off.cost
+					bestAffordableValue = v
+				end
 			end
 		end
 	end
-	return pickIdx
+	if patiencePct > 0 and bestAffordableValue * 100 < bestVisibleValue * patiencePct then
+		return nil -- hold the gold; something much better is on the board.
+	end
+	return bestIdx
+end
+
+--- Best affordable slot holding a weapon this challenge wants, if any. For Purist
+--- that's the target class; for JackOfAll an attack-class we don't own yet;
+--- otherwise nil (generic buying handles the default bot). Within the wanted set
+--- the pick is by VALUE-for-money, same as everywhere else — a challenge
+--- constrains WHICH weapons are legal, it is not a reason to then take the worst
+--- of them.
+local function wantedWeapon(b, s)
+	local challenge = b.challenge
+	-- Patience 0: a challenge run's job is to ACQUIRE its class (that is what the
+	-- achievement checks), so it takes what it can get rather than saving.
+	return bestWeapon(b, s, weaponBias(b), 0, function(off)
+		if challenge.kind == "Purist" then
+			return weaponClass(off.def) == challenge.class
+		elseif challenge.kind == "JackOfAll" then
+			return bit32.band(s.bought_attack_mask, bit32.lshift(1, weaponClass(off.def))) == 0
+		end
+		return false
+	end)
 end
 
 --- Can we reroll to fish for a wanted weapon (free, or affordable paid)?
@@ -588,12 +1106,18 @@ function Bot.decide(b, s)
 	local arch_target_weapons = b.target_weapons
 	if b.challenge.kind == "None" then
 		local arch = archetype(b, s)
-		arch_target_weapons = targetWeapons(arch)
 		local round = (s.round == U32_MAX) and 0 or s.round
+		-- The generic fallback below honors the same PACE, so no path can dump the
+		-- whole arsenal budget into a single early shop.
+		arch_target_weapons = targetWeapons(arch)
 		local floor = weaponFloor(arch, round)
-		-- (1) Weapon floor.
+		local bias = archWeaponBias(arch)
+		-- (1) Weapon floor — the BEST weapon on the board for the money, not the
+		-- cheapest one (see the valuation block above). Patience 0 here: below the
+		-- floor the tank has no board control, and a weapon now beats a better
+		-- weapon later.
 		if #s.weapons < floor then
-			local idx = cheapestWhere(s, isWeaponOffer)
+			local idx = bestWeapon(b, s, bias, 0, nil)
 			if idx ~= nil then
 				b.cooldown = 6
 				return buyOffer(idx - 1)
@@ -608,9 +1132,12 @@ function Bot.decide(b, s)
 				return buyMod(b, idx, AXIS_ECONOMY)
 			end
 		end
-		-- (3) Keep the arsenal topped up toward the archetype's weapon target.
+		-- (3) Keep the arsenal topped up toward the archetype's weapon target. How
+		-- fast that happens is governed by PATIENCE, not by a quota: the bot buys
+		-- when the board has something worth its gold (see `bestWeapon`), which
+		-- spreads acquisition across shops and a growing wallet on its own.
 		if canBuyWeapon(s) and #s.weapons < arch_target_weapons then
-			local idx = cheapestWhere(s, isWeaponOffer)
+			local idx = bestWeapon(b, s, bias, bias.patience_pct, nil)
 			if idx ~= nil then
 				b.cooldown = 6
 				return buyOffer(idx - 1)
@@ -646,10 +1173,17 @@ function Bot.decide(b, s)
 	end
 
 	-- Generic fallback: buy the best affordable, challenge-allowed offer. Prefer a
-	-- weapon while under the target arsenal size; among same-kind, cheapest. For
-	-- the default bot, weapons stop at the ARCHETYPE target (not the hard cap), so
-	-- a tanky build keeps a lean arsenal and a glass-cannon a fat one.
-	-- (`WEAPON_BUY_CAP` remains the absolute safety ceiling for challenge runs.)
+	-- weapon while under the target arsenal size. For the default bot, weapons stop
+	-- at the ARCHETYPE target (not the hard cap), so a tanky build keeps a lean
+	-- arsenal and a glass-cannon a fat one — i.e. the archetype's weapon count is
+	-- preserved instead of every build draining its leftover gold into the same
+	-- 40-weapon ceiling. (`WEAPON_BUY_CAP` remains the absolute safety ceiling for
+	-- challenge runs / edge cases.)
+	--
+	-- Weapons are ranked by VALUE-for-money here too, so no path — floor, top-up,
+	-- or this fallback — can quietly reintroduce the price-first pick. Modifiers
+	-- keep the cheapest-first rule (their axis preference is handled above, and
+	-- modifier valuation is out of scope).
 	local want_weapon = #s.weapons < arch_target_weapons
 	local mods_ok = canBuyMod(b) or b.challenge.kind ~= "None"
 	local weapons_ok
@@ -658,33 +1192,25 @@ function Bot.decide(b, s)
 	else
 		weapons_ok = canBuyWeapon(s)
 	end
-	local bestIdx, bestCost, bestWeapon = nil, nil, nil
+	local bias = weaponBias(b)
+	local weaponPick = if weapons_ok then bestWeapon(b, s, bias, bias.patience_pct, nil) else nil
+	local modPick = if mods_ok
+		then cheapestWhere(s, function(o)
+			return isModifierOffer(o) and allowed(b, o)
+		end)
+		else nil
+	-- Kind preference wins outright; the other kind is the fallback.
+	local ordered = if want_weapon then { weaponPick, modPick } else { modPick, weaponPick }
 	local offers = s.shop.offers
-	for i = 1, #offers do
-		local off = offers[i]
-		local is_weapon = isWeaponOffer(off)
-		local kind_ok = is_weapon and weapons_ok or (not is_weapon and mods_ok)
-		if off.cost <= s.economy.gold and allowed(b, off) and kind_ok then
-			local better
-			if bestIdx == nil then
-				better = true
-			elseif is_weapon ~= bestWeapon then
-				-- Kind preference wins outright.
-				better = (is_weapon == want_weapon)
-			else
-				better = off.cost < bestCost
+	for k = 1, 2 do
+		local idx = ordered[k]
+		if idx ~= nil then
+			if isWeaponOffer(offers[idx]) then
+				b.cooldown = 6
+				return buyOffer(idx - 1)
 			end
-			if better then
-				bestIdx, bestCost, bestWeapon = i, off.cost, is_weapon
-			end
+			return buyMod(b, idx, modAxis(offers[idx].def))
 		end
-	end
-	if bestIdx ~= nil then
-		if bestWeapon then
-			b.cooldown = 6
-			return buyOffer(bestIdx - 1)
-		end
-		return buyMod(b, bestIdx, modAxis(offers[bestIdx].def))
 	end
 
 	-- Nothing affordable/allowed — spend a free reroll to fish for options.

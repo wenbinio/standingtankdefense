@@ -23,6 +23,9 @@
 	* Content ids are 0-based; Luau arrays are 1-indexed (§S3). Every such
 	  boundary is spelled out with an explicit `+ 1`.
 	* No Roblox global is referenced.
+	* The soft caps' `SOFT^3 / mag^3` intermediates are i128 in the Rust and run
+	  to ~2.5e26, far past 2^53. They are carried here as base-2^16 limb
+	  magnitudes (see "exact wide integers" below) — never as raw Luau numbers.
 ]]
 
 local Fixed = require("../Fixed")
@@ -31,13 +34,15 @@ local Content = require("../Content")
 local Modifiers = {}
 
 --[[
-	Overflow guard for the compounding percentage riders (`MaxHpPct` / `HpRegenPct`
-	/ `ManaRegenPct`). Each such rider multiplies its stat by ~1.25 per purchase,
-	so a pathological repeat-buy stack would otherwise run a stat to i64 overflow
-	and poison every downstream `hp + x`. 1e12 sits orders of magnitude above any
-	reachable real build (max HP tops out in the low millions even on a full
-	snowball) yet leaves ~7 orders of headroom under i64::MAX for downstream adds,
-	so the clamp is bit-stable across platforms and never trips in normal play.
+	Hard i64 backstop for the compounding percentage riders (`MaxHpPct` /
+	`HpRegenPct` / `ManaRegenPct`). Each such rider multiplies its stat by ~1.25
+	per purchase, so before the soft caps below a pathological repeat-buy stack
+	could run a stat to i64 overflow and poison every downstream `hp + x`. Since
+	the soft caps landed this is belt-and-braces: the measured max Max HP over 80
+	seeds is now ~434k, seven orders of magnitude under this ceiling, so the clamp
+	never trips. Kept anyway — it is free, bit-stable across platforms, and guards
+	any future effect that writes these stats without going through
+	`addSoftCapped`.
 ]]
 local STAT_CEIL = 1000000000000
 
@@ -63,6 +68,456 @@ end
 
 local function isZero(f): boolean
 	return Fixed.eq(f, ZERO)
+end
+
+--[[
+	==================== exact wide integers (soft-cap intermediates) ====================
+
+	The soft caps below form `raw_inc × SOFT^3` over `|stat|^3`. In the Rust both
+	live in an `i128`: the numerator peaks near 2.5e26 (~2^88, per the comment on
+	`soft_capped_inc`) and the denominator, with `|stat|` allowed all the way up to
+	`STAT_CEIL`, reaches 1e36 (~2^120). Both are far past 2^53, so NOTHING in that
+	computation may touch a raw Luau number — a plain `a * b` would silently drop
+	low bits and the truncating divide would then land on the wrong integer.
+
+	`Fixed` cannot carry them either: it is an i64 with *saturating* narrowing, and
+	these intermediates need 128 bits of headroom before the divide brings them
+	back into i64 range. So magnitudes are carried here as little-endian base-2^16
+	limb arrays — the same representation, and the same reasoning, as `Fixed.luau`
+	itself: a limb×limb product is < 2^32 and a whole accumulation column stays
+	under 2^34, so every partial product is an exact double. Nothing below ever
+	forms a Luau number larger than 2^34.
+
+	These are magnitudes (unsigned). Sign is handled by the callers, which mirror
+	Rust's TRUNCATE-TOWARD-ZERO integer division by dividing magnitudes and
+	reapplying the sign afterwards.
+]]
+
+local BIG_BASE = 65536
+
+-- Drop leading zero limbs. Magnitudes are kept normalized so `magCmp` may compare
+-- lengths first; the empty array is zero.
+local function magTrim(t)
+	local n = #t
+	while n > 0 and t[n] == 0 do
+		t[n] = nil
+		n -= 1
+	end
+	return t
+end
+
+--- A non-negative integral Luau number (|v| <= 2^53) as limbs.
+local function magFromInt(v: number)
+	local t = {}
+	local n = 0
+	while v > 0 do
+		local l = v % BIG_BASE
+		n += 1
+		t[n] = l
+		v = (v - l) / BIG_BASE
+	end
+	return t
+end
+
+--- Schoolbook multiply. Each `ai * b[j]` is < 2^32 and each accumulator holds one
+--- such product plus a limb plus a carry, so every `t` here is < 2^34 — exact.
+local function magMul(a, b)
+	local la, lb = #a, #b
+	if la == 0 or lb == 0 then
+		return {}
+	end
+	local p = table.create(la + lb, 0)
+	for i = 1, la do
+		local ai = a[i]
+		if ai ~= 0 then
+			local carry = 0
+			for j = 1, lb do
+				local k = i + j - 1
+				local t = p[k] + ai * b[j] + carry
+				local r = t % BIG_BASE
+				p[k] = r
+				carry = (t - r) / BIG_BASE
+			end
+			-- The product of `la + lb` limbs never needs a `la + lb + 1`st, so this
+			-- propagation always terminates inside `p`.
+			local k = i + lb
+			while carry ~= 0 do
+				local t = p[k] + carry
+				local r = t % BIG_BASE
+				p[k] = r
+				carry = (t - r) / BIG_BASE
+				k += 1
+			end
+		end
+	end
+	return magTrim(p)
+end
+
+--- `m ^ k` for a small non-negative `k`. Mirrors the Rust's `for _ in
+--- 0..SOFT_FALLOFF_POW { num *= s; den *= mag }` — same product, same exponent
+--- constant, so raising the exponent needs no change here.
+local function magPow(m, k: number)
+	local r = { 1 }
+	for _ = 1, k do
+		r = magMul(r, m)
+	end
+	return r
+end
+
+--- Unsigned compare: -1 / 0 / 1. Operands must be normalized.
+local function magCmp(a, b)
+	local la, lb = #a, #b
+	if la ~= lb then
+		return la < lb and -1 or 1
+	end
+	for i = la, 1, -1 do
+		if a[i] ~= b[i] then
+			return a[i] < b[i] and -1 or 1
+		end
+	end
+	return 0
+end
+
+--- `floor(num / den)` for magnitudes; `den` must be non-zero.
+---
+--- Restoring binary long division: the remainder takes one bit of the numerator at
+--- a time and is compared against (and conditionally reduced by) the divisor. The
+--- only numbers this forms are single limbs doubled plus a carry bit (< 2^17), so
+--- it is exact at ANY operand width — which is the point, since `den` here can be
+--- 120 bits wide. Knuth-D would be faster; this runs only when a stat is past its
+--- knee, i.e. on a purchase, never in a per-tick loop, so clarity wins.
+local function magDiv(num, den)
+	if magCmp(num, den) < 0 then
+		return {}
+	end
+	local n = #num
+	local dn = #den
+	local q = table.create(n, 0)
+	local r = {}
+	local rn = 0
+	for i = n, 1, -1 do
+		local limb = num[i]
+		local qd = 0
+		for b = 15, 0, -1 do
+			-- r = r * 2 + bit b of limb
+			local carry = bit32.band(bit32.rshift(limb, b), 1)
+			for k = 1, rn do
+				local t = r[k] * 2 + carry
+				if t >= BIG_BASE then
+					r[k] = t - BIG_BASE
+					carry = 1
+				else
+					r[k] = t
+					carry = 0
+				end
+			end
+			if carry ~= 0 then
+				rn += 1
+				r[rn] = carry
+			end
+			qd *= 2
+			if rn > dn or (rn == dn and magCmp(r, den) >= 0) then
+				-- r -= den
+				local borrow = 0
+				for k = 1, rn do
+					local t = r[k] - (den[k] or 0) - borrow
+					if t < 0 then
+						r[k] = t + BIG_BASE
+						borrow = 1
+					else
+						r[k] = t
+						borrow = 0
+					end
+				end
+				while rn > 0 and r[rn] == 0 do
+					r[rn] = nil
+					rn -= 1
+				end
+				qd += 1
+			end
+		end
+		q[i] = qd
+	end
+	return magTrim(q)
+end
+
+--- A magnitude back to a plain Luau number, ERRORING above 2^53 rather than
+--- rounding — the `Fixed.toInt` discipline (§S4): a loud failure beats a silently
+--- wrong stat. The range check runs on the LIMBS, because composing first would
+--- already have rounded. Every quotient that reaches here is bounded in magnitude
+--- by its own `raw_inc`, which arrived as an exact Luau number, so this is
+--- belt-and-braces.
+local function magToInt(m): number
+	local n = #m
+	if n > 4 or (n == 4 and (m[4] > 32 or (m[4] == 32 and (m[1] ~= 0 or m[2] ~= 0 or m[3] ~= 0)))) then
+		error("Modifiers: soft-cap quotient exceeds 2^53 and is not exactly representable", 2)
+	end
+	local v = 0
+	for i = n, 1, -1 do
+		v = v * BIG_BASE + m[i]
+	end
+	return v
+end
+
+--- Exact decimal rendering of a magnitude, for handing a wide result back to
+--- `Fixed.fromRaw` (which parses the full i64 range from a string). Short division
+--- by 10: the remainder is < 10, so `rem * 2^16 + limb < 10 * 2^16` and each
+--- quotient limb stays < 2^16 — every intermediate exact.
+local function magToDecimal(m): string
+	local n = #m
+	if n == 0 then
+		return "0"
+	end
+	local t = table.create(n, 0)
+	for i = 1, n do
+		t[i] = m[i]
+	end
+	local digits = {}
+	repeat
+		local rem = 0
+		for i = #t, 1, -1 do
+			local cur = rem * BIG_BASE + t[i]
+			rem = cur % 10
+			t[i] = (cur - rem) / 10
+		end
+		digits[#digits + 1] = string.char(48 + rem)
+		magTrim(t)
+	until #t == 0
+	-- digits came out least-significant first
+	local out = table.create(#digits, "")
+	local n2 = #digits
+	for i = 1, n2 do
+		out[i] = digits[n2 + 1 - i]
+	end
+	return table.concat(out)
+end
+
+--- The limbs of a `Fixed`'s raw i64 MAGNITUDE, plus its sign. Goes through the
+--- sanctioned `Fixed.hi`/`Fixed.lo` accessors, so the opaque value is never
+--- indexed (§S4) and no intermediate exceeds 2^32. `i64::MIN` is special-cased
+--- because `Fixed.neg` saturates there (it would report 2^63 - 1, one short) —
+--- unreachable for any real factor, but the Rust's `as i128` widening is exact and
+--- this keeps the transcription exact too.
+local function fixedRawMag(f)
+	if Fixed.eq(f, Fixed.I64_MIN) then
+		return { 0, 0, 0, 32768 }, true -- 2^63
+	end
+	local neg = Fixed.lt(f, ZERO)
+	local v = neg and Fixed.neg(f) or f
+	local hi = Fixed.hi(v)
+	local lo = Fixed.lo(v)
+	local l1 = lo % BIG_BASE
+	local l3 = hi % BIG_BASE
+	return magTrim({ l1, (lo - l1) / BIG_BASE, l3, (hi - l3) / BIG_BASE }), neg
+end
+
+--[[
+	========================= Power-curve bounding (docs/11 §11.2) =========================
+
+	Multiplicative stacking is the intended engine (`[02] §2.1`) — the problem was
+	never that it is strong, it is that it was UNBOUNDED, and specifically unbounded
+	in the TAIL. Measured over 80 seeds (35-min horizon) the distribution of peak
+	Max HP was p50 24,000 (the STARTING value — over half of all runs never buy Max
+	HP), p90 117,000, p99 3.72e9. So this is a tail problem, not a central-tendency
+	problem: a flat nerf or a low hard cap would flatten a fantasy the median run is
+	not even having. What is wanted is something invisible at p50–p90 and brutal at
+	p99. Hence a SOFT CAP with a CUBIC tail, every knee placed just above the
+	measured p90:
+
+	    effective_increment = raw_increment                     while stat <= SOFT
+	    effective_increment = raw_increment × (SOFT / stat)^3    while stat >  SOFT
+
+	Properties that matter:
+	  * CONTINUOUS at the knee (the factor is exactly 1 when `stat == SOFT`), so the
+	    curve flattens rather than cliffs — no purchase ever becomes worthless, and
+	    more is always strictly more.
+	  * Below the knee NOTHING changes, bit for bit. Nine runs in ten are unaffected.
+	  * Above the knee the stat grows like `SOFT × (1 + ¾n)^⅓` in the number of
+	    purchases instead of `×1.25^n`. Sixty compounding buys move Max HP from 130k
+	    to ~470k rather than to 3.7 billion.
+
+	Pure integer math on the limb magnitudes above — no floats, bit-stable, and it
+	feeds `state_checksum`.
+]]
+
+--- Falloff exponent above a knee. 3 = cubic. Raising it bites the tail harder
+--- without moving anything below the knee.
+local SOFT_FALLOFF_POW = 3
+
+--- Soft-cap knee for **Max HP**, flat and `%` sources alike. Measured p90 is
+--- 117,000, so this sits just clear of nine runs in ten while cutting the p99 tail
+--- (3.72e9) by four orders of magnitude.
+local MAX_HP_SOFT = 130000
+--- Soft-cap knee for **HP regen**, in HP per tick. Measured p90 is 14,670/tick;
+--- the p99 was 284,428/tick (8.5M HP/s), which is unloseable by construction.
+local HP_REGEN_SOFT = 16000
+--- Soft-cap knee for **Mana-Shield regen**, in shield per tick. Measured p90
+--- 1,720, p99 569,275.
+local MANA_REGEN_SOFT = 2000
+--- Soft-cap knee for the **Mana-Shield pool** — a second HP bar, so it gets the
+--- same treatment as Max HP. Measured p90 94,000, p99 970,200.
+local MANA_SHIELD_SOFT = 100000
+--- Soft-cap knee for **Armor**. Armor is flat subtraction, so an unbounded value
+--- is literal invulnerability. Measured p90 660, p99 17,240.
+local ARMOR_SOFT = 1000
+--- Soft-cap knee for the multiplicative damage product `mul_global`, as a raw
+--- `Fixed` (×8). Measured p90 is ×1.0 — nine runs in ten never buy a single
+--- multiplicative damage source — while p99 reached ×4.18e8. Nine `+25% Damage
+--- (Epic)` purchases land at the knee at full value; past it each further
+--- multiplicative source contributes a shrinking factor.
+local DAMAGE_MUL_SOFT = Fixed.fromRaw(8 * 65536) -- Rust: `Fixed::from_raw(8 << 16)`
+
+--- `raw_inc × (soft / |stat|)^SOFT_FALLOFF_POW`, returned unchanged below the
+--- knee. `soft` must be > 0. The result is always <= `raw_inc` in magnitude, so
+--- the Rust's narrowing back to i64 cannot overflow and neither can this.
+---
+--- Rust's `i128` `/` TRUNCATES TOWARD ZERO, so the division runs on magnitudes and
+--- the sign is reapplied afterwards (`//` would floor toward negative infinity and
+--- be off by one for every inexact reduction — §S4).
+local function softCappedInc(rawInc: number, stat: number, soft: number): number
+	local mag = stat < 0 and -stat or stat
+	if mag <= soft then
+		return rawInc
+	end
+	if rawInc == 0 then
+		return 0
+	end
+	local neg = rawInc < 0
+	local ar = neg and -rawInc or rawInc
+	local num = magMul(magFromInt(ar), magPow(magFromInt(soft), SOFT_FALLOFF_POW))
+	local den = magPow(magFromInt(mag), SOFT_FALLOFF_POW)
+	local q = magToInt(magDiv(num, den))
+	return neg and -q or q
+end
+
+--- Apply `raw_inc` to `t[key]` through the soft cap, clamp to the `STAT_CEIL`
+--- backstop, and return the increment that was ACTUALLY applied (so a caller can
+--- keep a paired value — current HP behind max HP, current shield behind its pool
+--- — exactly in step). Reductions (`raw_inc < 0`) are attenuated the same way,
+--- which keeps the function monotone and its inverse well behaved.
+---
+--- The Rust's `saturating_add` is unreachable here and so is not emulated: `stat`
+--- is bounded by `STAT_CEIL` (1e12) and `|inc| <= |raw_inc|`, which arrived as an
+--- exact Luau number, so the sum is exact and the clamp is what actually binds.
+local function addSoftCapped(t, key: string, rawInc: number, soft: number): number
+	local stat = t[key]
+	local inc = softCappedInc(rawInc, stat, soft)
+	local nextStat = stat + inc
+	if nextStat > STAT_CEIL then
+		nextStat = STAT_CEIL
+	elseif nextStat < -STAT_CEIL then
+		nextStat = -STAT_CEIL
+	end
+	t[key] = nextStat
+	return nextStat - stat
+end
+
+--- `Fixed` twin of `softCappedInc`, for the multiplicative damage product.
+--- Attenuates the *added* factor (the `+25%` of a `×1.25` source), never the
+--- product already banked, so the curve is monotone and continuous at the knee.
+---
+--- The quotient is handed back through an exact decimal string rather than a Luau
+--- number, because a `Fixed` raw spans the full i64 range. Rust's `as i64` here is
+--- a WRAPPING cast; it cannot fire (the quotient's magnitude is bounded by
+--- `factor`'s own raw), and `Fixed.fromRaw` would error rather than wrap if it
+--- somehow did.
+local function softCappedFactor(factor, current, soft)
+	if Fixed.le(current, soft) then
+		return factor
+	end
+	local fMag, fNeg = fixedRawMag(factor)
+	if #fMag == 0 then
+		return factor
+	end
+	local num = magMul(fMag, magPow((fixedRawMag(soft)), SOFT_FALLOFF_POW))
+	local den = magPow((fixedRawMag(current)), SOFT_FALLOFF_POW)
+	local dec = magToDecimal(magDiv(num, den))
+	return Fixed.fromRaw(fNeg and ("-" .. dec) or dec)
+end
+
+--[[
+	======================= Arsenal breadth synergy (docs/11 §11.2) =======================
+
+	Measured failure: a sampled run's arsenal was `Magic Bolt ×14` — one weapon
+	bought fourteen times. Copies stacked cleanly and NOTHING rewarded breadth, so
+	an 86-weapon catalog collapsed to "find the best, buy it repeatedly".
+
+	Note the shape of the old incentive: an extra copy and an extra DISTINCT weapon
+	were exactly equivalent — both just add one more firing unit. Breadth was not
+	worse, it was *neutral*, and a tie is decided by whichever weapon happens to be
+	cheapest or strongest. So the cheapest possible thumb on the scale flips it.
+
+	This is deliberately a BONUS, not a nerf on copies: your fourteenth Magic Bolt
+	is worth exactly what it always was. A build that covers more damage types /
+	attack classes / distinct weapons simply gets a global additive damage bonus on
+	top. The bonus is derived LIVE from the owned arsenal (never baked at purchase),
+	so selling into or growing out of breadth tracks immediately.
+
+	  synergy% = 10% × (distinct damage types  − 1)   capped at 4 extra (+40%)
+	           +  8% × (distinct attack classes − 1)   capped at 5 extra (+40%)
+	           +  5% × (distinct weapon defs    − 1)   capped at 8 extra (+40%)
+
+	Maximum +120%, reached only by a genuinely wide build (all 5 damage types, all 6
+	attack classes, 9+ distinct weapons). `Magic Bolt ×14` scores exactly +0%. It is
+	GLOBAL ADDITIVE and folds in through `selfScalingAdd` — i.e. it lands in the
+	same additive pool as `add_global`/`add_self`/`add_dyn` and is then multiplied by
+	`mul_global`, exactly like every other additive source (`[02] §2.1`). The
+	composition ORDER is unchanged.
+]]
+
+--- Additive % per distinct damage type beyond the first, over 100.
+local SYNERGY_PER_TYPE = 10
+--- Max extra damage types counted (5 types => 4 beyond the first).
+local SYNERGY_TYPE_CAP = 4
+--- Additive % per distinct attack class beyond the first, over 100.
+local SYNERGY_PER_CLASS = 8
+--- Max extra attack classes counted (6 classes => 5 beyond the first).
+local SYNERGY_CLASS_CAP = 5
+--- Additive % per distinct weapon def beyond the first, over 100.
+local SYNERGY_PER_DEF = 5
+--- Max extra distinct weapon defs counted.
+local SYNERGY_DEF_CAP = 8
+--- Bitset width for the distinct-weapon-def count: Rust `DEF_BITSET_WORDS * 64`
+--- (4 × u64). A def id at or beyond it is not counted, which can only ever
+--- UNDER-count — never error — exactly as the Rust's guard does.
+local DEF_BITSET_BITS = 256
+--- Same set, as 32-bit `bit32` words.
+local DEF_BITSET_WORDS32 = DEF_BITSET_BITS // 32
+
+-- `Fixed::from_ratio(per × extra, 100)` for every reachable `extra`, memoised at
+-- module scope. This is a cache of a pure function of two constants, so every
+-- entry is bit-identical to the Rust's — and it keeps the fire-time path free of
+-- `Fixed` division. NOTE the Rust multiplies the NUMERATOR by `extra` before
+-- forming the ratio (`from_ratio(10 * extra, 100)`); `extra × from_ratio(10, 100)`
+-- is a DIFFERENT number once the ratio is inexact, so the memo is built the same
+-- way round.
+local function synergyTable(per: number, cap: number)
+	local t = table.create(cap + 1, ZERO)
+	for extra = 0, cap do
+		t[extra + 1] = fromRatio(per * extra, 100)
+	end
+	return t
+end
+
+local SYNERGY_TYPE_ADD = synergyTable(SYNERGY_PER_TYPE, SYNERGY_TYPE_CAP)
+local SYNERGY_CLASS_ADD = synergyTable(SYNERGY_PER_CLASS, SYNERGY_CLASS_CAP)
+local SYNERGY_DEF_ADD = synergyTable(SYNERGY_PER_DEF, SYNERGY_DEF_CAP)
+
+-- Scratch for the distinct-weapon-def bitset, cleared on entry to
+-- `arsenalSynergyAdd`. Module scope so the fire-time path allocates nothing;
+-- `arsenalSynergyAdd` runs straight through without calling back into itself, so
+-- there is no re-entrancy hazard.
+local defWords = table.create(DEF_BITSET_WORDS32, 0)
+
+--- Rust's `(n - 1).clamp(0, cap)`.
+local function synergyExtra(n: number, cap: number): number
+	local e = n - 1
+	if e < 0 then
+		return 0
+	elseif e > cap then
+		return cap
+	end
+	return e
 end
 
 -- ============================ construction ============================
@@ -155,11 +610,82 @@ function Modifiers.weaponDamageMult(m, w)
 	return mul(add(ONE, acc), m.mul_global)
 end
 
---- Additive self-scaling % for a weapon of `dmgType`, given the owned
---- weapons: `Σ rule.per × (count of rule.weapon_def)` over rules matching the
---- type. Resolved live at fire time (it depends on the current arsenal).
+--[[
+	GLOBAL additive damage % earned by covering multiple damage types / attack
+	classes / distinct weapons — the breadth incentive (`docs/11 §11.2`). A pure
+	function of the owned arsenal: no state, no RNG, resolved live at fire time
+	exactly like `selfScalingAdd`.
+
+	    synergy = 0.10 × min(distinct_damage_types  − 1, 4)
+	            + 0.08 × min(distinct_attack_classes − 1, 5)
+	            + 0.05 × min(distinct_weapon_defs    − 1, 8)
+
+	An empty arsenal scores `ZERO` (each `distinct − 1` term is clamped at 0).
+	Deliberately a bonus and never a penalty: stacking copies is worth exactly what
+	it always was; breadth is simply worth more.
+
+	TRANSCRIPTION NOTE: the Rust builds three bitsets and takes `count_ones()` at
+	the end. This counts DISTINCT-ON-INSERT instead — identical by construction
+	(the popcount of a union IS the number of distinct bits inserted) and it skips a
+	256-bit popcount on a per-fire path. Iteration order is irrelevant either way,
+	which is what makes the value stable.
+]]
+function Modifiers.arsenalSynergyAdd(weapons)
+	local n = #weapons
+	if n == 0 then
+		return ZERO
+	end
+	for i = 1, DEF_BITSET_WORDS32 do
+		defWords[i] = 0
+	end
+	local typeMask, classMask = 0, 0
+	local types, classes, defs = 0, 0, 0
+	local WEAPONS = Content.WEAPONS
+	for i = 1, n do
+		local def = weapons[i].def
+		local wd = WEAPONS[def + 1] -- Rust: WEAPONS[w.def as usize]
+		local tb = bit32.lshift(1, wd.damage_type % 5)
+		if bit32.band(typeMask, tb) == 0 then
+			typeMask = bit32.bor(typeMask, tb)
+			types += 1
+		end
+		local cb = bit32.lshift(1, Content.attackScopeId(wd.attack) % 6)
+		if bit32.band(classMask, cb) == 0 then
+			classMask = bit32.bor(classMask, cb)
+			classes += 1
+		end
+		if def < DEF_BITSET_BITS then
+			local w = def // 32 + 1
+			local db = bit32.lshift(1, def % 32)
+			local word = defWords[w]
+			if bit32.band(word, db) == 0 then
+				defWords[w] = bit32.bor(word, db)
+				defs += 1
+			end
+		end
+	end
+	-- The three terms are summed in the Rust's order: `Fixed` adds saturate, so
+	-- reordering is observable.
+	local acc = add(ZERO, SYNERGY_TYPE_ADD[synergyExtra(types, SYNERGY_TYPE_CAP) + 1])
+	acc = add(acc, SYNERGY_CLASS_ADD[synergyExtra(classes, SYNERGY_CLASS_CAP) + 1])
+	acc = add(acc, SYNERGY_DEF_ADD[synergyExtra(defs, SYNERGY_DEF_CAP) + 1])
+	return acc
+end
+
+--- Additive self-scaling % for a weapon of `dmgType`, given the owned weapons:
+--- `Σ rule.per × (count of rule.weapon_def)` over rules matching the type, PLUS
+--- the arsenal-breadth synergy (global, type-independent — see
+--- `Modifiers.arsenalSynergyAdd`). Resolved live at fire time (it depends on the
+--- current arsenal).
+---
+--- Both terms are ADDITIVE and land in the caller's single additive pool before
+--- the `× mul_global` step, so the composition order is exactly as before:
+--- `(1 + add_static + add_self + add_dyn) × mul_global`. The synergy rides here
+--- (rather than in `weaponDamageMult`) because this is the only fire-time hook
+--- that is handed the owned arsenal. It is the FIRST term of the accumulator, as
+--- in the Rust.
 function Modifiers.selfScalingAdd(m, dmgType: number, weapons)
-	local acc = ZERO
+	local acc = Modifiers.arsenalSynergyAdd(weapons)
 	local rules = m.weapon_count_scaling
 	for i = 1, #rules do
 		local rule = rules[i]
@@ -242,8 +768,14 @@ end
 -- 2: DamageMulPct(n, d) — a multiplicative damage factor: ×(1 + n/d).
 -- THIS is the "multiplicative across sources" half of the stacking rule: each
 -- purchase compounds into `mul_global` rather than summing with the additives.
+--
+-- SOFT-CAPPED multiplicative source. The added factor (the `+0.25` of a `×1.25`
+-- source) is attenuated by `(DAMAGE_MUL_SOFT / mul_global)^3` once the banked
+-- product passes ×8; below that it is untouched. Continuous at the knee, monotone,
+-- and pure integer (see `softCappedFactor`).
 EFFECTS[2] = function(m, n, d, _c, _economy, _tank)
-	m.mul_global = mul(m.mul_global, add(ONE, fromRatio(n, d)))
+	local f = softCappedFactor(fromRatio(n, d), m.mul_global, DAMAGE_MUL_SOFT)
+	m.mul_global = mul(m.mul_global, add(ONE, f))
 end
 
 -- 3: AttackSpeedPct(n, d)
@@ -262,26 +794,30 @@ EFFECTS[5] = function(_m, f, _b, _c, economy, _tank)
 end
 
 -- 6: MaxHp(f) — +flat max HP (and current HP).
+-- Flat Max HP goes through the SAME soft cap as the % rider, so the knee is a
+-- property of the STAT, not of one effect. Below it a `+2000 Max HP` is exactly
+-- +2000; above it the round-ramping `+500/round` sources stop compounding into the
+-- millions. Current HP tracks the APPLIED increment, not the raw one.
 EFFECTS[6] = function(_m, f, _b, _c, _economy, tank)
-	tank.max_hp += f
-	tank.hp += f
+	local inc = addSoftCapped(tank, "max_hp", f, MAX_HP_SOFT)
+	tank.hp += inc
 end
 
 -- 7: Armor(a)
 EFFECTS[7] = function(_m, a, _b, _c, _economy, tank)
-	tank.armor += a
+	addSoftCapped(tank, "armor", a, ARMOR_SOFT)
 end
 
 -- 8: ManaShield(pool, regen)
 EFFECTS[8] = function(_m, pool, regen, _c, _economy, tank)
-	tank.mana_shield_max += pool
-	tank.mana_shield += pool
-	tank.mana_regen_per_tick += regen
+	local inc = addSoftCapped(tank, "mana_shield_max", pool, MANA_SHIELD_SOFT)
+	tank.mana_shield += inc
+	addSoftCapped(tank, "mana_regen_per_tick", regen, MANA_REGEN_SOFT)
 end
 
 -- 9: HpRegen(r)
 EFFECTS[9] = function(_m, r, _b, _c, _economy, tank)
-	tank.hp_regen_per_tick += r
+	addSoftCapped(tank, "hp_regen_per_tick", r, HP_REGEN_SOFT)
 end
 
 --[[
@@ -435,24 +971,34 @@ end
 	effect runs — NOT from a base snapshot — which is exactly why effect order
 	inside a bundle is load-bearing and why `Modifiers.apply` walks
 	`def.effects` in slice order.
+
+	Each of the three is additionally SOFT-CAPPED (see `softCappedInc`): below the
+	knee the rider applies at full strength (so no ordinary build changes at all),
+	above it the increment decays as `(SOFT/stat)^3` and the stat grows ~n^⅓ instead
+	of exponentially. `STAT_CEIL` stays as the hard i64 backstop but is now
+	unreachable in practice.
+
+	ORDER: the raw increment is computed from the CURRENT stat FIRST, and only then
+	fed through the cap — `raw = (n/d) × stat`, then `applied = cap(raw)`. And it is
+	the APPLIED amount, never the raw one, that `tank.hp` follows.
 ]]
 -- 35: MaxHpPct(n, d)
 EFFECTS[35] = function(_m, n, d, _c, _economy, tank)
-	local inc = scaleToInt(fromRatio(n, d), tank.max_hp)
-	tank.max_hp = math.min(tank.max_hp + inc, STAT_CEIL)
+	local raw = scaleToInt(fromRatio(n, d), tank.max_hp)
+	local inc = addSoftCapped(tank, "max_hp", raw, MAX_HP_SOFT)
 	tank.hp += inc
 end
 
 -- 36: HpRegenPct(n, d)
 EFFECTS[36] = function(_m, n, d, _c, _economy, tank)
-	local inc = scaleToInt(fromRatio(n, d), tank.hp_regen_per_tick)
-	tank.hp_regen_per_tick = math.max(-STAT_CEIL, math.min(tank.hp_regen_per_tick + inc, STAT_CEIL))
+	local raw = scaleToInt(fromRatio(n, d), tank.hp_regen_per_tick)
+	addSoftCapped(tank, "hp_regen_per_tick", raw, HP_REGEN_SOFT)
 end
 
 -- 37: ManaRegenPct(n, d)
 EFFECTS[37] = function(_m, n, d, _c, _economy, tank)
-	local inc = scaleToInt(fromRatio(n, d), tank.mana_regen_per_tick)
-	tank.mana_regen_per_tick = math.max(-STAT_CEIL, math.min(tank.mana_regen_per_tick + inc, STAT_CEIL))
+	local raw = scaleToInt(fromRatio(n, d), tank.mana_regen_per_tick)
+	addSoftCapped(tank, "mana_regen_per_tick", raw, MANA_REGEN_SOFT)
 end
 
 -- 38: ShieldActiveDrPct(n, d)
