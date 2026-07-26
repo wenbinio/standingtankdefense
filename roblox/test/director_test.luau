@@ -369,11 +369,21 @@ eq(Director.placement(d4, 401), nil, "placement lapses with the window")
 
 heading("5. Last Stand goes to the only player still alive on their run")
 
--- Four seats, no bots, runs capped at 900 ticks. Three seats idle (their tanks
--- die to the wave escalation around tick 735-775); the fourth is played through
--- the public client path, survives them all, and is therefore the sole survivor
--- for the rest of the window.
-local d5 = Director.new({ master_seed = MASTER, cohort_size = 4, bot_fill = false, run_tick_limit = 900 })
+-- Four seats, no bots. Three seats idle; the fourth is played through the public
+-- client path, survives them all, and is therefore the sole survivor for the
+-- rest of the window.
+--
+-- The cap is MEASURED, not guessed. This fixture originally used 900 ticks on
+-- the assumption that idle tanks die "around tick 735-775". The `[11]` fun pass
+-- moved that: an idle tank now dies at roughly tick 1084-1129 (Bonk's contact
+-- damage came down 2200 -> 1620 and the wave gates shifted), so at 900 every run
+-- ended by the cap before anyone could be a sole survivor and Last Stand was
+-- never awarded. Kept generously above the measured band so a further balance
+-- nudge does not silently re-break it -- and if it does break, the failure means
+-- "idle survival moved a long way", which is worth knowing.
+local IDLE_DEATH_BAND_START = 1084 -- measured across seeds (band 1084-1129); see above
+local D5_TICKS = 1500
+local d5 = Director.new({ master_seed = MASTER, cohort_size = 4, bot_fill = false, run_tick_limit = D5_TICKS })
 for i = 1, 4 do
 	Director.join(d5, 500 + i)
 end
@@ -412,7 +422,7 @@ local function playOneTick(d, pid)
 end
 
 local events5 = {}
-for _ = 1, 900 do
+for _ = 1, D5_TICKS do
 	playOneTick(d5, PLAYED)
 	Director.step(d5)
 	drain(d5, events5)
@@ -425,6 +435,16 @@ for _, e in events5 do
 	end
 end
 eq(#stands, 1, "Last Stand was awarded exactly once")
+-- Pin the assumption the cap rests on: the award must land at or after the START
+-- of the measured idle-death band, i.e. the survivor genuinely outlived the idle
+-- seats rather than the cap happening to fall somewhere convenient. Observed at
+-- server tick 1126 against a band of 1084-1129.
+if #stands == 1 then
+	check(
+		stands[1].tick >= IDLE_DEATH_BAND_START,
+		"Last Stand landed at/after the idle seats began dying (tick " .. stands[1].tick .. ")"
+	)
+end
 if #stands == 1 then
 	eq(stands[1].player_id, PLAYED, "it went to the sole survivor")
 	print(string.format("     last stand: player %d, run %d, server tick %d", stands[1].player_id, stands[1].run_index, stands[1].tick))
