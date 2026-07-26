@@ -197,7 +197,16 @@ export type Runner = typeof(setmetatable(
 
 --- A runner for one seat. It starts `idle`; the director calls `start` to open a
 --- run. `opts`:
----   `player_id`   u32, checksummed by the sim — must be a non-negative integer.
+---   `player_id`   THE SIM'S player id, and it is a **u32 that the checksum
+---                 hashes** (`state.rs`). A Roblox `UserId` must NOT be passed
+---                 here: `UserId` is an i64 and live account ids already exceed
+---                 `u32::MAX`, so feeding one in would silently truncate the
+---                 value the digest is taken over. The director passes the SEAT
+---                 (0..cohort-1), which also makes a run reproducible from
+---                 `(master_seed, seat, run_index)` alone.
+---   `owner_id`    the director's key for whoever occupies the seat (the Roblox
+---                 `UserId`, or a synthetic bot id). Carried on results and never
+---                 touched by the sim. Defaults to `player_id`.
 ---   `is_bot`      backfill seat: the runner drives itself via `Bot.decide`.
 ---   `tick_limit`  run tick at which a surviving run is `completed` (nil = only
 ---                 death ends it).
@@ -208,11 +217,18 @@ export type Runner = typeof(setmetatable(
 ---   `max_queued`  input FIFO depth (defaults to `MAX_QUEUED_INPUTS`).
 function ArenaRunner.new(opts): Runner
 	local player_id = opts.player_id
-	if type(player_id) ~= "number" or player_id % 1 ~= 0 or player_id < 0 then
-		error("ArenaRunner.new: player_id must be a u32", 2)
+	if type(player_id) ~= "number" or player_id % 1 ~= 0 or player_id < 0 or player_id > 4294967295 then
+		error("ArenaRunner.new: player_id must be a u32 (pass the SEAT, not a Roblox UserId)", 2)
+	end
+	local owner_id = opts.owner_id
+	if owner_id == nil then
+		owner_id = player_id
+	elseif type(owner_id) ~= "number" or owner_id % 1 ~= 0 or owner_id < 0 then
+		error("ArenaRunner.new: owner_id must be a non-negative integer", 2)
 	end
 	return setmetatable({
 		player_id = player_id,
+		owner_id = owner_id,
 		is_bot = opts.is_bot == true,
 		status = ArenaRunner.Status.Idle,
 		state = nil,
@@ -348,7 +364,8 @@ local function finish(self: Runner, reason: string, now: number): RunResult
 	-- `Rng.toHex` prefixes, which is a rendering helper, not the wire form.
 	local hi, lo = Rng.seedParts(self.seed)
 	local result: RunResult = {
-		player_id = self.player_id,
+		player_id = self.owner_id,
+		seat = self.player_id,
 		is_bot = self.is_bot,
 		run_index = self.run_index,
 		seed = string.format("%08x%08x", hi, lo),

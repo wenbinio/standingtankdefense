@@ -86,10 +86,11 @@ Director.LAST_STAND_MIN_COHORT = 2
 --- later cannot silently start reusing it.
 local PURPOSE_RUN_SEED = 0x5244 -- "RD"
 
---- Synthetic player ids for backfill bots. `player_id` is a checksummed u32, so
---- it must be a real non-negative integer; bots take a high block that cannot
---- collide with a Roblox `UserId` in practice and is trivially recognizable.
-local BOT_ID_BASE = 0xB0700000
+--- Synthetic OWNER ids for backfill bots. These are director keys only (never
+--- the sim's `player_id`, which is the seat), so they only have to be
+--- recognizable and never collide with a Roblox `UserId`. `UserId`s are i64 and
+--- allocated upward from 1, so a block far above the issued range is safe.
+local BOT_ID_BASE = 1e15
 
 export type Seed = ArenaRunner.Seed
 
@@ -245,7 +246,14 @@ local function seatParticipant(self, player_id: number, seat: number, is_bot: bo
 		seat = seat,
 		is_bot = is_bot,
 		runner = ArenaRunner.new({
-			player_id = player_id,
+			-- THE SIM'S player id is the SEAT, not the account id. `player_id` is
+			-- hashed into `state_checksum` as a u32, and a Roblox `UserId` is an
+			-- i64 whose live values already exceed `u32::MAX` — passing one
+			-- through would truncate inside the digest. Seat ids also make a run
+			-- reproducible from `(master_seed, seat, run_index)`, which is what
+			-- `issueSeed` promises.
+			player_id = seat,
+			owner_id = player_id,
 			is_bot = is_bot,
 			tick_limit = runLimit(self),
 			timeline = self.timeline,
@@ -279,7 +287,9 @@ local function unseat(self, p: Participant)
 	end
 end
 
---- Seat a real player and open their first run. Returns the participant, or
+--- Seat a real player and open their first run. `player_id` is the caller's
+--- account key — a Roblox `UserId` — and is NOT bounded to a u32 (it is never
+--- the sim's player id; see `seatParticipant`). Returns the participant, or
 --- `nil, reason`. A human displaces a backfill bot when the lobby is nominally
 --- full — bots exist to make a thin lobby feel populated, never to keep a
 --- player out.

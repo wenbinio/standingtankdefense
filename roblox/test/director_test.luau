@@ -170,6 +170,24 @@ for i = 1, 4 do
 end
 check(replay_ok, "replay director built four arenas")
 
+-- A Roblox `UserId` is an i64 and live ids already exceed `u32::MAX`, while the
+-- sim's `player_id` is a checksummed u32. The director must therefore seat by
+-- SEAT and keep the account id as a key only.
+local duid = Director.new({ master_seed = MASTER, cohort_size = 2, bot_fill = false, run_tick_limit = 5 })
+local BIG_USER_ID = 8123456789
+local pbig = Director.join(duid, BIG_USER_ID)
+check(pbig ~= nil, "a Roblox-scale UserId (" .. BIG_USER_ID .. ") can be seated")
+Director.join(duid, 7)
+Director.advance(duid, 6)
+local big_entry = nil
+for _, e in Director.leaderboard(duid) do
+	if e.player_id == BIG_USER_ID then
+		big_entry = e
+	end
+end
+check(big_entry ~= nil, "their result is keyed by the full UserId, untruncated")
+eq(Director.placement(duid, BIG_USER_ID) ~= nil, true, "and they are placeable on the board")
+
 -- The timeline is the director's runtime choice (P3 / F1), never a constant in
 -- this layer: the default is Steam and naming `"roblox"` rescales the schedule.
 eq(Director.runClock(d1, 101).round_ticks, 900, "the default timeline is Steam (900-tick rounds)")

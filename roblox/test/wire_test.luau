@@ -18,20 +18,24 @@
 	message. Re-run it after touching the codec; do not copy its numbers
 	forward by hand.
 
+	THE DRIFT GUARD IS `testRealSim`. `Wire` re-declares `View`'s render types
+	rather than requiring `View`, so it stays dependency-free. That mirroring
+	could rot silently, so `testRealSim` drives the REAL sim (`Arena.step` under
+	`Bot.decide`), snapshots real `View.snapshot` output every replication frame
+	and round-trips it field-for-field. If `View` gains, drops or renames a
+	field, that test fails — a type-level assertion would not, because this file
+	runs `--!nonstrict` where annotated assignments are not checked.
+
 	P0: this file and `src/shared/net/Wire.luau` are the only two files this
-	task owns. Nothing under `src/shared/sim/` is written to; `View.luau` is
-	required read-only, and only to type-check that `Wire`'s mirrored type
-	declarations still match the ones the sim actually produces.
+	task owns. Nothing under `src/shared/sim/` is written to — `View`, `Arena`,
+	`Input` and `Bot` are required read-only.
 ]]
 
 local Wire = require("../src/shared/net/Wire")
 local View = require("../src/shared/sim/View")
-
--- Type-level drift guard. `Wire` re-declares `View`'s render types so it can
--- stay dependency-free; these two assignments make `luau-analyze` fail if the
--- two definitions stop being structurally identical in either direction.
-local _viewToWire: Wire.RenderView = (nil :: any) :: View.RenderView
-local _wireToView: View.RenderView = (nil :: any) :: Wire.RenderView
+local Arena = require("../src/shared/sim/Arena")
+local Input = require("../src/shared/sim/Input")
+local Bot = require("../src/shared/sim/Bot")
 
 local mode = (...) or "all"
 
@@ -768,7 +772,87 @@ local function testMalformed()
 	end, "non-negative", "malformed [negative tick]")
 end
 
--- ============================ 7. size report ============================
+-- ============================ 7. the real sim ============================
+
+--- Drive the actual arena and replicate it. `View.snapshot` output is the only
+--- thing this codec ever has to carry, so the strongest available test is to
+--- carry the real thing: real ids with real churn, real catalog names, real
+--- boss hp magnitudes, real shop rerolls and arsenal growth.
+---
+--- Returns the per-frame delta sizes and the peak population reached.
+local function realSimRun(seed: number, ticks: number, verify: boolean)
+	local s = Arena.newState(seed, 0)
+	local bot = Bot.new()
+
+	local truth = View.snapshot(s)
+	local keyframe = Wire.packView(truth)
+	local client = Wire.unpackView(keyframe)
+	if verify then
+		same(client, truth, "real sim [initial keyframe]")
+	end
+
+	local sizes = {}
+	local peakE, peakP, keyframeMax = 0, 0, buffer.len(keyframe)
+	local spawnFrames, despawnFrames = 0, 0
+
+	for tick = 0, ticks - 1 do
+		Arena.step(s, Bot.decide(bot, s) or Input.NOOP)
+		-- Replicate at 15 Hz: every second 30 Hz tick.
+		if tick % 2 == 1 then
+			local nxt = View.snapshot(s)
+			if #nxt.enemies > #truth.enemies then
+				spawnFrames += 1
+			elseif #nxt.enemies < #truth.enemies then
+				despawnFrames += 1
+			end
+			local d = Wire.packDelta(truth, nxt)
+			sizes[#sizes + 1] = buffer.len(d)
+			client = Wire.applyDelta(client, d)
+			if verify then
+				same(client, nxt, `real sim [seed {seed} tick {tick}]`)
+			end
+			peakE = math.max(peakE, #nxt.enemies)
+			peakP = math.max(peakP, #nxt.projectiles)
+			keyframeMax = math.max(keyframeMax, buffer.len(Wire.packView(nxt)))
+			truth = nxt
+		end
+	end
+
+	if verify then
+		-- A keyframe taken now must reproduce the delta-walked client exactly.
+		same(Wire.unpackView(Wire.packView(truth)), client, `real sim [seed {seed} keyframe agrees after {ticks} ticks]`)
+		ok(spawnFrames > 0, `real sim [seed {seed} exercised spawns]`)
+		ok(despawnFrames > 0, `real sim [seed {seed} exercised despawns]`)
+	end
+
+	return sizes, peakE, peakP, keyframeMax
+end
+
+local function testRealSim()
+	-- Three seeds, long enough to clear several waves, buy weapons, reroll the
+	-- shop and churn hundreds of enemies through spawn and death.
+	for _, seed in { 0, 5, 67 } do
+		realSimRun(seed, 3000, true)
+	end
+
+	-- Chunk and reassemble a real keyframe end to end.
+	local s = Arena.newState(14, 0)
+	local bot = Bot.new()
+	for _ = 1, 4000 do
+		Arena.step(s, Bot.decide(bot, s) or Input.NOOP)
+	end
+	local v = View.snapshot(s)
+	local chunks = Wire.chunk(Wire.packView(v), 1234)
+	local r = Wire.newReassembler()
+	local msg = nil
+	for _, c in chunks do
+		msg = r:push(c) or msg
+	end
+	ok(msg ~= nil, "real sim [keyframe reassembles]")
+	same(Wire.unpackView(msg), v, "real sim [reassembled real keyframe matches]")
+end
+
+-- ============================ 8. size report ============================
 
 local function stats(list: { number })
 	local mn, mx, sum = math.huge, -math.huge, 0
@@ -921,6 +1005,27 @@ local function sizeReport()
 				.. (r.kbps <= 22 and "OK" or "OVER")
 		)
 	end
+	-- The real thing: the actual sim, the actual `View.snapshot`, actual sizes.
+	local REAL_TICKS = 12000
+	local rs, peakE, peakP, keyMax = realSimRun(0, REAL_TICKS, false)
+	local rmin, ravg, rmax = stats(rs)
+	local realOver = 0
+	for _, n in rs do
+		if n > Wire.MAX_CHUNK_BYTES then
+			realOver += 1
+		end
+	end
+	print(
+		`  real sim (seed 0, {REAL_TICKS} ticks = {#rs} frames): peak {peakE} enemies / {peakP} projectiles`
+	)
+	print(
+		`    delta bytes/frame  min {rmin}  avg {string.format("%.0f", ravg)}  max {rmax}`
+			.. `  ({realOver} frame(s) over the {Wire.MAX_CHUNK_BYTES} B cap)`
+	)
+	print(
+		`    largest keyframe {keyMax} B = {math.ceil(keyMax / (Wire.MAX_CHUNK_BYTES - Wire.CHUNK_HEADER_BYTES))} chunk(s)`
+			.. ` · {string.format("%.1f", ravg * HZ / 1024)} KB/s per client at {HZ} Hz`
+	)
 	print("")
 	print(
 		`  server-side for 8 arenas at the real peak: {string.format("%.1f", rows[1].kbps * 8)} KB/s `
@@ -939,6 +1044,7 @@ if mode ~= "size" then
 	testRebase()
 	testChunking()
 	testMalformed()
+	testRealSim()
 	print(`wire_test: {checks} checks, {failures} failure(s)`)
 end
 
