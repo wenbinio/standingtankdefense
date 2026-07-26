@@ -27,6 +27,10 @@ local Rng = require("../src/shared/Rng")
 local Content = require("../src/shared/Content")
 local State = require("../src/shared/sim/State")
 local Combat = require("../src/shared/sim/Combat")
+-- Only for the boss `Clear` chunk / breach seam: `Input.apply`'s per-enemy chunk
+-- and `Combat`'s breach window are two halves of one mechanism, so the end-to-end
+-- check belongs next to the plate tests.
+local Input = require("../src/shared/sim/Input")
 
 local Vec2 = State.Vec2
 
@@ -333,26 +337,406 @@ test("damage matrix multiplies by (damage_type, armor_class)", function()
 	eq(s2.enemies[1].hp, 100000 - expected, "piercing vs Fortified uses the matrix entry")
 end)
 
-test("bosses are immune to weapon fire and to its abilities", function()
+-- ============================ the boss encounter ============================
+-- ADAPTIVE ARMOR PLATES (`content.rs`, the BOSS ENCOUNTER block; `docs/11 §11.5`
+-- #1). The boss is no longer immune to weapon fire, it is PLATED.
+--
+-- EVERY NUMBER BELOW WAS REGENERATED FROM THE RUST — a throwaway crate with a
+-- path dep on `sim-core/crates/sim` that calls `content::boss_damage_mult`,
+-- `boss_exposed_type`, `boss_enrage_mult`, `arsenal_coverage` and
+-- `enemy_hp_mult` directly and prints the products. They are deliberately NOT
+-- the round numbers the ratios suggest (`2/5` of 1e6 is 399993, not 400000,
+-- because `Fixed::from_ratio(2, 5)` floors to 26214/65536), which is exactly why
+-- they must come from the Rust rather than from arithmetic done here — or, worse,
+-- from whatever this port happens to print.
+
+local BOSS_SPAWN_TICK = 54000 -- Content.BOSS_SPAWN_TICK, asserted below
+local BOSS_PLATE_TICKS = 150
+local BOSS_BREACH_TICKS = 45
+local CLEAR_COOLDOWN_TICKS = 300
+local BOSS_CLEAR_DAMAGE = 280000
+--- The probe magnitude every plate expectation below is quoted against.
+local PROBE = 1000000
+--- `boss_damage_mult(exposed, …, coverage=k).mul(ONE).scale_i64(PROBE)`, k = 1..5.
+local BOSS_EXPOSED = { 799987, 1599990, 2399993, 3199996, 4000000 }
+--- `boss_damage_mult(armored, …).mul(ONE).scale_i64(PROBE)` — coverage-independent.
+local BOSS_ARMORED = 399993
+--- A boss HP pool large enough that no probe kills it, so the raw hit is readable.
+local BOSS_PROBE_HP = 100000000000
+
+--- The first catalog weapon of each damage type, mirroring the Rust test helper
+--- `weapon_of_type` (which is also a first-match scan over `WEAPONS`).
+local function weaponOfType(dt: number): number
+	return findWeapon(function(w)
+		return w.damage_type == dt
+	end)
+end
+
+--- Fire one `damage` projectile of `damageType` into a boss standing next to the
+--- tank at `tick`, with an arsenal covering exactly the damage types in `types`,
+--- and return the HP it removed. `clearCooldownEnd` drives the breach window.
+--- A transcription of the Rust's `boss_hit_with` helper.
+local function bossHitWith(tick: number, damageType: number, damage: number, types: { number }, clearCooldownEnd: number): number
 	local s = blankState()
+	for _, dt in types do
+		mkWeapon(s, weaponOfType(dt), 0)
+	end
+	s.tick = tick
+	s.tank.clear_cooldown_end = clearCooldownEnd
 	local pos = at(10, 0)
-	local eid = mkEnemy(s, BOSS_DEF, 33000000, pos)
+	local eid = mkEnemy(s, BOSS_DEF, BOSS_PROBE_HP, pos)
 	mkProjectile(s, {
 		pos = at(0, 0),
 		target = eid,
 		last_target_pos = pos,
-		damage = 1000000,
-		damage_type = 4, -- chaos: 1x against everything
+		damage = damage,
+		damage_type = damageType,
 		splash_radius = Fixed.ZERO,
 		speed = Fixed.fromInt(1000),
-		on_hit = { poison_dps = 50, poison_ticks = 60, frost_stacks = 0, fire_stacks = 0, stun_ticks = 30 },
-		ability = { tag = 3, a = 300, b = 0, c = 0 }, -- knockback
 	})
 	Combat.advanceProjectiles(s)
-	eq(s.enemies[1].hp, 33000000, "boss hp untouched")
-	eq(s.enemies[1].status.poison_ticks, 0, "boss takes no on-hit status")
-	eq(s.total_damage_dealt, 0, "no damage recorded against a boss")
-	feq(s.enemies[1].pos.x, Fixed.fromInt(10), "boss not knocked back")
+	return BOSS_PROBE_HP - s.enemies[1].hp
+end
+
+local ALL_TYPES = { 0, 1, 2, 3, 4 } -- Normal, Piercing, Magic, Siege, Chaos
+
+test("every boss/Clear constant is READ from the C1 artifact, not hardcoded", function()
+	-- `Combat.luau` and `Input.luau` reimplement the plate/breach/enrage arithmetic
+	-- (those `content.rs` FUNCTIONS are not part of the exported catalog), so their
+	-- NUMBERS have to come from `content.json` or they drift silently the first time
+	-- the encounter is retuned. This pins the foundation contract both modules lean
+	-- on: every name must exist BOTH as a flattened UPPER_SNAKE alias and under
+	-- `Content.constants`, and the two must agree.
+	local names = {
+		"BOSS_PLATE_TICKS",
+		"BOSS_BREACH_TICKS",
+		"BOSS_EXPOSED_NUM",
+		"BOSS_EXPOSED_DEN",
+		"BOSS_ARMORED_NUM",
+		"BOSS_ARMORED_DEN",
+		"BOSS_CLEAR_DAMAGE",
+		"BOSS_ENRAGE_INTERVAL",
+		"BOSS_ENRAGE_STEP_NUM",
+		"BOSS_ENRAGE_STEP_DEN",
+		"CLEAR_DAMAGE",
+		"CLEAR_COOLDOWN_TICKS",
+		"BOSS_CONTACT_CADENCE",
+		"BOSS_SPAWN_TICK",
+	}
+	for _, n in names do
+		local flat = Content[n]
+		check(type(flat) == "number", "Content." .. n .. " (flat alias) is a number, got " .. tostring(flat))
+		-- `BOSS_SPAWN_TICK` comes from the STEAM timeline, everything else from
+		-- `constants`; either way the flat alias must be present.
+		local snake = Content.constants[string.lower(n)]
+		if snake ~= nil then
+			eq(flat, snake, "Content." .. n .. " agrees with constants." .. string.lower(n))
+		end
+	end
+end)
+
+test("boss fixtures agree with the shipped catalog", function()
+	-- The expectations further down are quoted against these; if the catalog is
+	-- retuned they fail HERE, next to the reason, rather than as a bare number
+	-- mismatch three tests later.
+	eq(Content.BOSS_SPAWN_TICK, BOSS_SPAWN_TICK, "boss spawn tick")
+	eq(Content.BOSS_PLATE_TICKS, BOSS_PLATE_TICKS, "plate rotation period")
+	eq(Content.BOSS_BREACH_TICKS, BOSS_BREACH_TICKS, "breach window")
+	eq(Content.CLEAR_COOLDOWN_TICKS, CLEAR_COOLDOWN_TICKS, "Clear cooldown")
+	eq(Content.BOSS_CLEAR_DAMAGE, BOSS_CLEAR_DAMAGE, "Clear's boss chunk")
+	eq(Content.CLEAR_DAMAGE, 3000000, "Clear's board chunk")
+	eq(Content.BOSS_EXPOSED_NUM, 4, "exposed numerator")
+	eq(Content.BOSS_EXPOSED_DEN, 5, "exposed denominator")
+	eq(Content.BOSS_ARMORED_NUM, 2, "armored numerator")
+	eq(Content.BOSS_ARMORED_DEN, 5, "armored denominator")
+	eq(Content.BOSS_ENRAGE_INTERVAL, 900, "enrage interval")
+	eq(Content.ENEMIES[BOSS_DEF + 1].base_hp, 6300000, "boss base_hp (33M -> 6.3M)")
+	eq(Content.ENEMIES[BOSS_DEF + 1].contact_damage, 1620, "boss contact_damage")
+	eq(Content.BOSS_CONTACT_CADENCE, 16, "boss contact cadence")
+end)
+
+test("the boss takes weapon damage, gated by the exposed plate", function()
+	-- The old rule ("immune to weapon fire, only `Clear` hurts it") is gone. At the
+	-- boss tick plate 0 (Normal) is exposed; with full coverage it takes 4/5x5 = 4x
+	-- and every other plate takes 2/5x.
+	local t = BOSS_SPAWN_TICK
+	eq(bossHitWith(t, 0, PROBE, ALL_TYPES, 0), BOSS_EXPOSED[5], "exposed plate (Normal at t0)")
+	for _, dt in { 1, 2, 3, 4 } do
+		eq(bossHitWith(t, dt, PROBE, ALL_TYPES, 0), BOSS_ARMORED, "armored plate (" .. dt .. ")")
+	end
+	check(BOSS_ARMORED < BOSS_EXPOSED[5], "the open plate must be the soft spot")
+	-- Damage against the boss is a player source (scoreboard / Bloodmoney), which
+	-- the old immunity suppressed entirely.
+	local s = blankState()
+	for _, dt in ALL_TYPES do
+		mkWeapon(s, weaponOfType(dt), 0)
+	end
+	s.tick = t
+	local pos = at(10, 0)
+	local eid = mkEnemy(s, BOSS_DEF, BOSS_PROBE_HP, pos)
+	mkProjectile(s, {
+		pos = at(0, 0),
+		target = eid,
+		last_target_pos = pos,
+		damage = PROBE,
+		damage_type = 0,
+		splash_radius = Fixed.ZERO,
+		speed = Fixed.fromInt(1000),
+	})
+	Combat.advanceProjectiles(s)
+	eq(s.total_damage_dealt, BOSS_EXPOSED[5], "boss damage is scored")
+end)
+
+test("the boss's plates rotate through all five damage types", function()
+	-- One plate per BOSS_PLATE_TICKS, in damage-type order, cycling every 5. Probed
+	-- through the damage numbers, since `bossExposedType` is internal to Combat.
+	for k = 0, 9 do
+		local t = BOSS_SPAWN_TICK + k * BOSS_PLATE_TICKS
+		local open = k % 5
+		eq(bossHitWith(t, open, PROBE, ALL_TYPES, 0), BOSS_EXPOSED[5], "plate " .. k .. " is open")
+		eq(bossHitWith(t, (open + 1) % 5, PROBE, ALL_TYPES, 0), BOSS_ARMORED, "plate " .. k .. ": next type is shut")
+		-- The whole window exposes the same type.
+		local last = t + BOSS_PLATE_TICKS - 1
+		eq(bossHitWith(last, open, PROBE, ALL_TYPES, 0), BOSS_EXPOSED[5], "plate " .. k .. " holds to its last tick")
+	end
+	-- SATURATING subtraction: before the boss tick the rotation clamps to plate 0
+	-- rather than running negative.
+	eq(bossHitWith(0, 0, PROBE, ALL_TYPES, 0), BOSS_EXPOSED[5], "plate 0 before BOSS_SPAWN_TICK")
+	eq(bossHitWith(0, 1, PROBE, ALL_TYPES, 0), BOSS_ARMORED, "…and only plate 0")
+end)
+
+test("exposed-plate damage scales with arsenal coverage (1..5 distinct types)", function()
+	-- `coverage` = distinct damage types owned, clamped to 1..=5; the open plate's
+	-- multiplier is `4/5 x coverage`. This is the term that makes BREADTH pay —
+	-- a plate rotation on its own provably cannot (see the content.rs block).
+	local t = BOSS_SPAWN_TICK
+	local last = 0
+	for k = 1, 5 do
+		local types = {}
+		for i = 1, k do
+			types[i] = ALL_TYPES[i]
+		end
+		local hit = bossHitWith(t, 0, PROBE, types, 0)
+		eq(hit, BOSS_EXPOSED[k], "coverage " .. k)
+		check(hit > last, "more coverage must crack the plate harder")
+		last = hit
+	end
+	-- A weaponless tank (aura / hazard damage only) clamps to coverage 1, so the
+	-- open plate is never weaker than the armored ones.
+	eq(bossHitWith(t, 0, PROBE, {}, 0), BOSS_EXPOSED[1], "no weapons clamps coverage to 1")
+	-- Duplicate types do not widen coverage: three Piercing weapons still count 1.
+	eq(bossHitWith(t, 0, PROBE, { 1, 1, 1 }, 0), BOSS_EXPOSED[1], "duplicates are one type")
+end)
+
+test("a Clear breaches every plate for BOSS_BREACH_TICKS", function()
+	-- `Clear` at `t0` sets `clear_cooldown_end = t0 + CLEAR_COOLDOWN_TICKS`. For the
+	-- next BOSS_BREACH_TICKS ticks EVERY damage type lands at the exposed rate; then
+	-- the plates close. The window is DERIVED from `clear_cooldown_end` — there is no
+	-- breach field in the state, and none must be added.
+	local t0 = BOSS_SPAWN_TICK
+	local endTick = t0 + CLEAR_COOLDOWN_TICKS
+	-- Piercing is NOT the open plate at t0, so it is the honest probe.
+	eq(bossHitWith(t0, 1, PROBE, ALL_TYPES, 0), BOSS_ARMORED, "fixture: piercing is shut at t0")
+	eq(bossHitWith(t0, 1, PROBE, ALL_TYPES, endTick), BOSS_EXPOSED[5], "breach opens on the Clear tick")
+	eq(
+		bossHitWith(t0 + BOSS_BREACH_TICKS - 1, 1, PROBE, ALL_TYPES, endTick),
+		BOSS_EXPOSED[5],
+		"breach holds to its last tick"
+	)
+	eq(
+		bossHitWith(t0 + BOSS_BREACH_TICKS, 1, PROBE, ALL_TYPES, endTick),
+		BOSS_ARMORED,
+		"plates close after the window"
+	)
+	-- A tank that has never Cleared (`clear_cooldown_end == 0`) is never breached —
+	-- the `end > tick` guard also keeps the u32 subtraction from underflowing.
+	eq(bossHitWith(t0, 1, PROBE, ALL_TYPES, 0), BOSS_ARMORED, "no Clear => no breach")
+end)
+
+test("Clear chips the boss for the reduced boss chunk and opens the breach", function()
+	-- `input.rs`: the per-enemy chunk is BOSS_CLEAR_DAMAGE for a boss and the full
+	-- CLEAR_DAMAGE for everything else. End to end with the breach it arms.
+	local s = blankState()
+	for _, dt in ALL_TYPES do
+		mkWeapon(s, weaponOfType(dt), 0)
+	end
+	s.tick = BOSS_SPAWN_TICK
+	s.tank.clear_cooldown_end = 0
+	local bossHp = Content.ENEMIES[BOSS_DEF + 1].base_hp
+	local pos = at(10, 0)
+	local bid = mkEnemy(s, BOSS_DEF, bossHp, pos)
+	mkEnemy(s, SQUEAK, 200, at(20, 0))
+	Input.apply(s, Input.CLEAR)
+	eq(#s.enemies, 1, "chaff wiped, boss survives")
+	eq(s.enemies[1].def, BOSS_DEF, "the survivor is the boss")
+	eq(s.enemies[1].hp, bossHp - BOSS_CLEAR_DAMAGE, "boss took only the reduced chunk")
+	eq(s.tank.clear_cooldown_end, BOSS_SPAWN_TICK + CLEAR_COOLDOWN_TICKS, "cooldown armed")
+
+	-- …and that Clear has now BREACHED the plates: a shut damage type lands at the
+	-- exposed rate this tick.
+	mkProjectile(s, {
+		pos = at(0, 0),
+		target = bid,
+		last_target_pos = pos,
+		damage = PROBE,
+		damage_type = 1, -- piercing: shut at t0 when unbreached
+		splash_radius = Fixed.ZERO,
+		speed = Fixed.fromInt(1000),
+	})
+	local hpBefore = s.enemies[1].hp
+	Combat.advanceProjectiles(s)
+	eq(hpBefore - s.enemies[1].hp, BOSS_EXPOSED[5], "the Clear's breach opened every plate")
+end)
+
+test("the boss stays immune to status and to weapon abilities", function()
+	-- Damage yes, control no. A stun-on-hit weapon must not pin the boss (a 60-tick
+	-- stun on an 18-tick cooldown would switch the climax off), a knockback must not
+	-- shove it off the tank, and a life-drain hit must not heal off it.
+	local s = blankState()
+	s.tick = BOSS_SPAWN_TICK
+	s.tank.hp = 1 -- so any heal would be visible
+	local pos = at(10, 0)
+	local eid = mkEnemy(s, BOSS_DEF, BOSS_PROBE_HP, pos)
+	mkProjectile(s, {
+		pos = at(0, 0),
+		target = eid,
+		last_target_pos = pos,
+		damage = PROBE,
+		damage_type = 0, -- the exposed plate at t0
+		splash_radius = Fixed.ZERO,
+		speed = Fixed.fromInt(1000),
+		on_hit = { poison_dps = 500, poison_ticks = 90, frost_stacks = 5, fire_stacks = 40, stun_ticks = 60 },
+		ability = { tag = 1, a = 5000, b = 0, c = 0 }, -- life drain
+	})
+	Combat.advanceProjectiles(s)
+	local b = s.enemies[1]
+	-- coverage clamps to 1 (no weapons owned), so this is the cov-1 exposed rate.
+	eq(BOSS_PROBE_HP - b.hp, BOSS_EXPOSED[1], "the boss still takes the damage")
+	eq(b.status.stun_ticks, 0, "boss cannot be stunned")
+	eq(b.status.poison_ticks, 0, "boss cannot be poisoned")
+	eq(b.status.poison_dps, 0, "…and carries no DoT")
+	eq(b.status.frost_stacks, 0, "boss cannot be chilled")
+	eq(b.status.fire_stacks, 0, "boss cannot be set alight")
+	eq(b.status.vuln_stacks, 0, "boss takes no vulnerability stacks")
+	eq(s.tank.hp, 1, "no life-drain off the boss")
+
+	-- Knockback likewise: the boss does not move off its position.
+	local s2 = blankState()
+	s2.tick = BOSS_SPAWN_TICK
+	local p2 = at(100, 0)
+	local eid2 = mkEnemy(s2, BOSS_DEF, BOSS_PROBE_HP, p2)
+	mkProjectile(s2, {
+		pos = at(0, 0),
+		target = eid2,
+		last_target_pos = p2,
+		damage = PROBE,
+		damage_type = 0,
+		splash_radius = Fixed.ZERO,
+		speed = Fixed.fromInt(1000),
+		ability = { tag = 3, a = 300, b = 0, c = 0 }, -- knockback
+	})
+	Combat.advanceProjectiles(s2)
+	feq(s2.enemies[1].pos.x, Fixed.fromInt(100), "boss not knocked back")
+	check(s2.enemies[1].hp < BOSS_PROBE_HP, "…but still damaged")
+end)
+
+test("weapons FOCUS the boss over the escort, in place of the random draw", function()
+	-- A single-target weapon with the boss and a crowd of chaff in range picks the
+	-- BOSS every time. This is what gives the arsenal a path to the win condition at
+	-- all: random picking gave the boss ~1/N of the fire, which measured as under 1M
+	-- of its HP across a 290 s fight even with mitigation switched off entirely.
+	--
+	-- CRITICALLY the focus REPLACES the `below` draw — it does not precede it — so a
+	-- focused fire consumes NO `rng_targeting` word. That is a change to the stream
+	-- sequence, and getting it wrong desynchronizes every later draw.
+	local s = blankState()
+	mkWeapon(s, BOW, 0)
+	local bid = mkEnemy(s, BOSS_DEF, BOSS_PROBE_HP, at(400, 0))
+	for i = 0, 39 do
+		mkEnemy(s, SQUEAK, 300, at(100 + i, i))
+	end
+	local before = Rng.state(s.rng_targeting)
+	Combat.fireWeapons(s)
+	eq(#s.projectiles, 1, "one projectile")
+	eq(s.projectiles[1].target, bid, "the boss is the focus target")
+	eq(Rng.state(s.rng_targeting), before, "boss focus consumes NO targeting draw")
+
+	-- Out of range the boss is not a candidate, and "attack at random" resumes
+	-- untouched — one draw, and never the boss.
+	local s2 = blankState()
+	mkWeapon(s2, BOW, 0)
+	local far = mkEnemy(s2, BOSS_DEF, BOSS_PROBE_HP, at(5000, 0))
+	mkEnemy(s2, SQUEAK, 300, at(100, 0))
+	local oracle = Rng.clone(s2.rng_targeting)
+	local _ = Rng.below(oracle, 1)
+	Combat.fireWeapons(s2)
+	eq(#s2.projectiles, 1, "one projectile")
+	check(s2.projectiles[1].target ~= far, "an out-of-range boss is not focused")
+	eq(Rng.state(s2.rng_targeting), Rng.state(oracle), "…and the random draw is back")
+
+	-- Splash focuses too, and also skips its draw.
+	local s3 = blankState()
+	mkWeapon(s3, W_SPLASH, 0)
+	local bid3 = mkEnemy(s3, BOSS_DEF, BOSS_PROBE_HP, at(100, 0))
+	mkEnemy(s3, SQUEAK, 300, at(120, 0))
+	local before3 = Rng.state(s3.rng_targeting)
+	Combat.fireWeapons(s3)
+	eq(s3.projectiles[1].target, bid3, "splash focuses the boss")
+	eq(Rng.state(s3.rng_targeting), before3, "splash focus consumes no draw")
+
+	-- Bounce focuses its FIRST target on the boss, and skips its one draw.
+	local s4 = blankState()
+	mkWeapon(s4, W_BOUNCE, 0)
+	local wb = Content.WEAPONS[W_BOUNCE + 1]
+	mkEnemy(s4, BOSS_DEF, BOSS_PROBE_HP, at(10, 0))
+	for i = 1, 4 do
+		mkEnemy(s4, SQUEAK, 1000000, at(10 + 10 * i, 0))
+	end
+	check(wb.range > 60, "fixture: the whole line is inside bounce range")
+	local before4 = Rng.state(s4.rng_targeting)
+	s4.tick = BOSS_SPAWN_TICK
+	Combat.fireWeapons(s4)
+	eq(Rng.state(s4.rng_targeting), before4, "bounce focus consumes no draw")
+	check(s4.enemies[1].hp < BOSS_PROBE_HP, "the boss is the bounce origin and is hit")
+end)
+
+test("barrage gives the boss the first bolt and scatters the rest", function()
+	-- With the boss in range it claims bolt 0 with NO draw; the remaining shots run
+	-- the SAME partial Fisher-Yates, starting from k = 1 over a pool whose slot 0 has
+	-- been swapped with the boss's. So the volley consumes `shots - 1` words, not
+	-- `shots`.
+	local s = blankState()
+	mkWeapon(s, W_BARRAGE, 0)
+	local n = Content.WEAPONS[W_BARRAGE + 1].attack.a
+	local ids = {}
+	ids[1] = mkEnemy(s, BOSS_DEF, BOSS_PROBE_HP, at(40, 0)) -- candidate index 1
+	for i = 2, 6 do
+		ids[i] = mkEnemy(s, SQUEAK, 200, at(40 * i, 0))
+	end
+	local shots = math.min(n, 6)
+	check(shots >= 2, "fixture: the barrage fires more than one bolt")
+
+	-- Reproduce the Rust: swap the boss into pool slot 0, fire it, then shuffle
+	-- from k = 1.
+	local oracle = Rng.clone(s.rng_targeting)
+	local pool = { 1, 2, 3, 4, 5, 6 }
+	local expected = { ids[pool[1]] }
+	for k = 1, shots - 1 do
+		local j = k + Rng.below(oracle, #pool - k)
+		pool[k + 1], pool[j + 1] = pool[j + 1], pool[k + 1]
+		expected[k + 1] = ids[pool[k + 1]]
+	end
+
+	Combat.fireWeapons(s)
+	eq(#s.projectiles, shots, "one projectile per shot")
+	eq(Rng.state(s.rng_targeting), Rng.state(oracle), "shots - 1 draws (the boss bolt draws nothing)")
+	eq(s.projectiles[1].target, ids[1], "the boss takes the first bolt")
+	local seen = {}
+	for i = 1, shots do
+		eq(s.projectiles[i].target, expected[i], "barrage shot " .. i)
+		check(seen[s.projectiles[i].target] == nil, "barrage targets are distinct")
+		seen[s.projectiles[i].target] = true
+	end
 end)
 
 test("fire/vuln stacks and target-conditional bonuses multiply in", function()
@@ -869,29 +1253,69 @@ end)
 test("boss plants on the tank and grinds only on its cadence", function()
 	local cadence = Content.BOSS_CONTACT_CADENCE
 	local raw = Content.ENEMIES[BOSS_DEF + 1].contact_damage
+	local bossHp = Content.ENEMIES[BOSS_DEF + 1].base_hp
 
 	-- Off-cadence tick: boss arrives, plants, deals nothing.
 	local off = blankState()
 	off.tick = 54001
 	check(off.tick % cadence ~= 0, "fixture: off-cadence tick")
 	local hpOff = off.tank.hp
-	mkEnemy(off, BOSS_DEF, 33000000, at(2, 0))
+	mkEnemy(off, BOSS_DEF, bossHp, at(2, 0))
 	Combat.moveEnemies(off)
 	eq(#off.enemies, 1, "boss persists on contact (no self-destruct)")
 	check(Fixed.eq(off.enemies[1].pos.x, Fixed.ZERO) and Fixed.eq(off.enemies[1].pos.y, Fixed.ZERO), "planted")
 	eq(off.tank.hp, hpOff, "no damage on an off-cadence tick")
 
-	-- On-cadence tick: still planted, now lands one scaled hit.
+	-- On-cadence tick: still planted, now lands one scaled hit. At BOSS_SPAWN_TICK
+	-- the enrage multiplier is exactly 1, so this is the un-enraged base hit.
 	local on = blankState()
 	on.tick = 54000
 	check(on.tick % cadence == 0, "fixture: on-cadence tick")
 	local expected = Fixed.toInt(Fixed.scaleI64(Content.enemyHpMult(on.tick), raw))
 	local hpOn = on.tank.hp
-	mkEnemy(on, BOSS_DEF, 33000000, at(2, 0))
+	mkEnemy(on, BOSS_DEF, bossHp, at(2, 0))
 	Combat.moveEnemies(on)
 	eq(#on.enemies, 1, "boss still present after a contact hit")
 	eq(on.tank.hp, hpOn - expected, "cadence tick deals one scaled boss hit")
 	eq(#on.pending_kills, 0, "boss contact grants no bounty")
+end)
+
+test("the planted boss's contact hit ENRAGES over the fight", function()
+	-- Every BOSS_ENRAGE_INTERVAL (900) the planted boss's hit grows by 1/2 of its
+	-- base, so a long fight is a losing race. `enemy_hp_mult` is FLAT across the boss
+	-- phase, so the only thing moving here is the enrage multiplier.
+	--
+	-- (tick, expected tank damage) at the first cadence tick of enrage steps 0/1/2/4,
+	-- REGENERATED from the Rust: `boss_enrage_mult(t).scale_i64(enemy_hp_mult(t)
+	-- .scale_i64(1620))`. Note the TWO successive truncating `scale_i64`s — folding
+	-- them into one multiply does not round the same way.
+	local cases = { { 54000, 28687 }, { 54912, 43030 }, { 55808, 57374 }, { 57600, 86061 } }
+	local bossHp = Content.ENEMIES[BOSS_DEF + 1].base_hp
+	for _, case in cases do
+		local t, want = case[1], case[2]
+		check(t % Content.BOSS_CONTACT_CADENCE == 0, "fixture: tick " .. t .. " is on cadence")
+		local s = blankState()
+		s.tick = t
+		s.tank.max_hp = 1000000000
+		s.tank.hp = s.tank.max_hp
+		mkEnemy(s, BOSS_DEF, bossHp, at(2, 0))
+		Combat.moveEnemies(s)
+		eq(#s.enemies, 1, "the boss plants, it does not self-destruct")
+		eq(s.tank.max_hp - s.tank.hp, want, "enraged contact hit at tick " .. t)
+	end
+	-- 1x, 1.5x, 2x, 3x of the base hit — the ramp, stated as a ratio.
+	eq(cases[3][2], cases[1][2] * 2, "two intervals in: 1 + 2*(1/2) = 2x")
+	eq(cases[4][2], cases[1][2] * 3, "four intervals in: 3x")
+
+	-- SATURATING subtraction: before BOSS_SPAWN_TICK there is no enrage at all.
+	local early = blankState()
+	early.tick = 0
+	early.tank.max_hp = 1000000000
+	early.tank.hp = early.tank.max_hp
+	mkEnemy(early, BOSS_DEF, bossHp, at(2, 0))
+	Combat.moveEnemies(early)
+	local unscaled = Fixed.toInt(Fixed.scaleI64(Content.enemyHpMult(0), Content.ENEMIES[BOSS_DEF + 1].contact_damage))
+	eq(early.tank.max_hp - early.tank.hp, unscaled, "no enrage before the boss tick")
 end)
 
 -- ============================ tickHazards ============================

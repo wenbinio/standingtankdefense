@@ -27,6 +27,7 @@
 	ENGINE INDEPENDENCE: no Roblox global is referenced.
 ]]
 
+local Content = require("../Content")
 local State = require("./State")
 local Shop = require("./Shop")
 
@@ -68,12 +69,35 @@ end
 -- input.rs
 --=============================================================================
 
---- Damage dealt to every enemy by a `Clear`. Large but FINITE: it wipes normal
---- enemies instantly, but the boss (The Hippocrate, ~33M HP) takes ~11 Clears —
---- and `Clear` is the ONLY thing that can hurt the boss.
-local CLEAR_DAMAGE = 3000000
---- Cooldown (in ticks) imposed after a `Clear`.
-local CLEAR_COOLDOWN_TICKS = 300
+--- `CLEAR_DAMAGE`, `BOSS_CLEAR_DAMAGE` and `CLEAR_COOLDOWN_TICKS` all live in
+--- `content.rs` now (next to the boss plate constants they are balanced against)
+--- and ship in the C1 artifact, so they are READ, never pinned here — a local copy
+--- of a balance number drifts silently the first time it is retuned. `Content.luau`
+--- exposes them both as flattened UPPER_SNAKE names and under `constants`; hedge
+--- the same way the sim modules do, and error loudly if neither is present.
+local function contentConst(name: string, snake: string): number
+	local v = Content[name]
+	if v == nil and Content.constants ~= nil then
+		v = Content.constants[snake]
+	end
+	if v == nil then
+		error("Input: Content is missing " .. name, 2)
+	end
+	return v
+end
+
+--- Damage dealt to every NON-boss enemy by a `Clear`. Large but FINITE: it wipes
+--- the board instantly.
+local CLEAR_DAMAGE = contentConst("CLEAR_DAMAGE", "clear_damage")
+--- Damage a `Clear` deals to a BOSS — a deliberately MINORITY share of its bar
+--- (280k against 6.3M HP; the 11 Clears a clean ~110 s fight affords come to 3.08M),
+--- because `Clear` is no longer the only thing that can hurt it. Its real boss value
+--- is now the BREACH it opens (`Combat`'s `bossBreached`, derived from
+--- `clear_cooldown_end` — nothing extra is stored here for it).
+local BOSS_CLEAR_DAMAGE = contentConst("BOSS_CLEAR_DAMAGE", "boss_clear_damage")
+--- Cooldown (in ticks) imposed after a `Clear`. Read by `Combat` as well: the
+--- breach window is `clear_cooldown_end` minus this constant.
+local CLEAR_COOLDOWN_TICKS = contentConst("CLEAR_COOLDOWN_TICKS", "clear_cooldown_ticks")
 --- Gold increment added to `reroll_cost` after a paid reroll.
 local REROLL_COST_STEP = 100
 
@@ -84,9 +108,12 @@ local REROLL_COST_STEP = 100
 --- - `Reroll`: if `rerolls_remaining > 0`, decrement then `shop::generate_offers`;
 ---   else if `gold >= reroll_cost`, deduct, regenerate, and raise `reroll_cost`.
 ---   Otherwise ignore.
---- - `Clear`: if `tick >= tank.clear_cooldown_end`, damage ALL enemies by a large
----   amount (killed ones push their `def` to `pending_kills` and are removed) and
----   set `clear_cooldown_end = tick + 300`. Else ignore.
+--- - `Clear`: if `tick >= tank.clear_cooldown_end`, damage ALL enemies —
+---   `CLEAR_DAMAGE` for the board, the much smaller `BOSS_CLEAR_DAMAGE` for a boss
+---   (killed ones push their `def` to `pending_kills` and are removed) — and set
+---   `clear_cooldown_end = tick + CLEAR_COOLDOWN_TICKS`. Else ignore. That cooldown
+---   field is ALSO what `Combat`'s breach window is derived from, so a `Clear`
+---   opens the boss's armor plates without storing any new state.
 ---
 --- Consumes NO RNG directly. `Reroll` draws only through `Shop.generateOffers`
 --- (`s.rng_shop`), and only on the branches where the Rust calls it — an ignored
@@ -149,8 +176,12 @@ function Input.apply(s: State.ArenaState, inp: number)
 			local cleared_damage = 0
 			for i = 1, #enemies do
 				local e = enemies[i]
+				-- The boss takes a much smaller chunk than the board does: 280k vs
+				-- 3M. `Clear`'s real boss value is now the BREACH it opens
+				-- (`Combat`'s `bossBreached`), not this chip.
+				local chunk = if Content.ENEMIES[e.def + 1].boss then BOSS_CLEAR_DAMAGE else CLEAR_DAMAGE
 				local before = if e.hp > 0 then e.hp else 0
-				e.hp -= CLEAR_DAMAGE -- `saturating_sub`; see the i64 note in State.luau
+				e.hp -= chunk -- `saturating_sub`; see the i64 note in State.luau
 				local after = if e.hp > 0 then e.hp else 0
 				-- Actual HP removed (clamped: no credit past the kill).
 				cleared_damage += before - after

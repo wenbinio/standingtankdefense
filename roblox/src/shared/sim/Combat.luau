@@ -148,24 +148,6 @@ local function contentConst(name: string, snake: string): number
 	return v
 end
 
---- A `content.rs` scalar that the C1 artifact does not (yet) EXPORT.
---- `content.json` carries `boss_contact_cadence` and the timeline's
---- `boss_spawn_tick`, but NOT the BOSS ENCOUNTER block (`BOSS_PLATE_TICKS`,
---- `BOSS_EXPOSED_*`, `BOSS_ARMORED_*`, `BOSS_BREACH_TICKS`, the enrage ramp) nor
---- `CLEAR_COOLDOWN_TICKS`. Those are pinned here against `content.rs`, but
---- `Content` STILL WINS whenever it has the name — so once `export::constants`
---- carries them, the artifact can never be shadowed by a stale literal here.
-local function contentConstOr(name: string, snake: string, pinned: number): number
-	local v = Content[name]
-	if v == nil and Content.constants ~= nil then
-		v = Content.constants[snake]
-	end
-	if v == nil then
-		return pinned
-	end
-	return v
-end
-
 local BOSS_CONTACT_CADENCE = contentConst("BOSS_CONTACT_CADENCE", "boss_contact_cadence")
 local DMG_MAGIC = contentConst("DMG_MAGIC", "dmg_magic")
 local BOSS_SPAWN_TICK = contentConst("BOSS_SPAWN_TICK", "boss_spawn_tick")
@@ -176,16 +158,22 @@ local NUM_DAMAGE_TYPES = contentConst("NUM_DAMAGE_TYPES", "num_damage_types")
 -- plate is exposed at a time and takes `BOSS_EXPOSED_NUM/DEN × coverage`, every
 -- other plate takes `BOSS_ARMORED_NUM/DEN`, and a `Clear` BREACHES all five for
 -- `BOSS_BREACH_TICKS`.
-local BOSS_PLATE_TICKS = contentConstOr("BOSS_PLATE_TICKS", "boss_plate_ticks", 150)
-local BOSS_EXPOSED_NUM = contentConstOr("BOSS_EXPOSED_NUM", "boss_exposed_num", 4)
-local BOSS_EXPOSED_DEN = contentConstOr("BOSS_EXPOSED_DEN", "boss_exposed_den", 5)
-local BOSS_ARMORED_NUM = contentConstOr("BOSS_ARMORED_NUM", "boss_armored_num", 2)
-local BOSS_ARMORED_DEN = contentConstOr("BOSS_ARMORED_DEN", "boss_armored_den", 5)
-local BOSS_BREACH_TICKS = contentConstOr("BOSS_BREACH_TICKS", "boss_breach_ticks", 45)
-local CLEAR_COOLDOWN_TICKS = contentConstOr("CLEAR_COOLDOWN_TICKS", "clear_cooldown_ticks", 300)
-local BOSS_ENRAGE_INTERVAL = contentConstOr("BOSS_ENRAGE_INTERVAL", "boss_enrage_interval", 900)
-local BOSS_ENRAGE_STEP_NUM = contentConstOr("BOSS_ENRAGE_STEP_NUM", "boss_enrage_step_num", 1)
-local BOSS_ENRAGE_STEP_DEN = contentConstOr("BOSS_ENRAGE_STEP_DEN", "boss_enrage_step_den", 2)
+--
+-- Every one of these is read from the C1 artifact, never pinned here. This module
+-- reimplements the plate/breach/enrage ARITHMETIC (the `content.rs` functions are
+-- not part of the exported catalog), so a local copy of a BALANCE NUMBER would
+-- drift silently the first time the encounter is retuned — precisely the failure
+-- class the export pipeline exists to prevent. A missing name errors loudly.
+local BOSS_PLATE_TICKS = contentConst("BOSS_PLATE_TICKS", "boss_plate_ticks")
+local BOSS_EXPOSED_NUM = contentConst("BOSS_EXPOSED_NUM", "boss_exposed_num")
+local BOSS_EXPOSED_DEN = contentConst("BOSS_EXPOSED_DEN", "boss_exposed_den")
+local BOSS_ARMORED_NUM = contentConst("BOSS_ARMORED_NUM", "boss_armored_num")
+local BOSS_ARMORED_DEN = contentConst("BOSS_ARMORED_DEN", "boss_armored_den")
+local BOSS_BREACH_TICKS = contentConst("BOSS_BREACH_TICKS", "boss_breach_ticks")
+local CLEAR_COOLDOWN_TICKS = contentConst("CLEAR_COOLDOWN_TICKS", "clear_cooldown_ticks")
+local BOSS_ENRAGE_INTERVAL = contentConst("BOSS_ENRAGE_INTERVAL", "boss_enrage_interval")
+local BOSS_ENRAGE_STEP_NUM = contentConst("BOSS_ENRAGE_STEP_NUM", "boss_enrage_step_num")
+local BOSS_ENRAGE_STEP_DEN = contentConst("BOSS_ENRAGE_STEP_DEN", "boss_enrage_step_den")
 
 -- Content ids are 0-based (array position IS identity, §C1/§S3); Luau arrays
 -- are 1-indexed. These two accessors are the ONLY place that offset lives.
@@ -1011,6 +999,7 @@ function Combat.tickHazards(s)
 		return
 	end
 	local cond = condOf(s)
+	local boss = bossVulnOf(s)
 	local tankPos = s.tank.pos
 	local total = 0
 	local any = false
@@ -1035,6 +1024,7 @@ function Combat.tickHazards(s)
 					h.damage_type,
 					ONE,
 					cond,
+					boss,
 					STATUS_ON_HIT_NONE,
 					NO_ABILITY,
 					tankPos,
@@ -1088,6 +1078,7 @@ function Combat.tickAura(s)
 	local range = fromInt(s.tank.aura_range)
 	local r2 = fmul(range, range)
 	local cond = condOf(s)
+	local boss = bossVulnOf(s)
 	local tankPos = s.tank.pos
 	local poison
 	if s.tank.aura_poison_dps > 0 and s.tank.aura_poison_ticks > 0 then
@@ -1108,7 +1099,7 @@ function Combat.tickAura(s)
 	for ei = 1, #s.enemies do
 		local e = s.enemies[ei]
 		if fle(vecDistSq(tankPos, e.pos), r2) then
-			total += applyWeaponHit(e, dmg, DMG_MAGIC, ONE, cond, poison, NO_ABILITY, tankPos, accum)
+			total += applyWeaponHit(e, dmg, DMG_MAGIC, ONE, cond, boss, poison, NO_ABILITY, tankPos, accum)
 			any = true
 		end
 	end
@@ -1185,6 +1176,7 @@ function Combat.tickMinions(s)
 	-- Resolve strikes (deterministic: minion id order). A minion strike carries
 	-- no on-hit status and no chained ability.
 	local cond = condOf(s)
+	local boss = bossVulnOf(s)
 	local tankPos = s.tank.pos
 	local accum = newAccum()
 	local total = 0
@@ -1194,7 +1186,7 @@ function Combat.tickMinions(s)
 		for ei = 1, #s.enemies do
 			local e = s.enemies[ei]
 			if e.id == tid then
-				total += applyWeaponHit(e, dmg, dtype, ONE, cond, STATUS_ON_HIT_NONE, NO_ABILITY, tankPos, accum)
+				total += applyWeaponHit(e, dmg, dtype, ONE, cond, boss, STATUS_ON_HIT_NONE, NO_ABILITY, tankPos, accum)
 				break
 			end
 		end

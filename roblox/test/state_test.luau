@@ -35,6 +35,7 @@ local State = require("../src/shared/sim/State")
 local Input = require("../src/shared/sim/Input")
 local Fixed = require("../src/shared/Fixed")
 local Rng = require("../src/shared/Rng")
+local Content = require("../src/shared/Content")
 
 local failures = 0
 local checks = 0
@@ -629,8 +630,12 @@ eq("cooldown re-armed", c3.tank.clear_cooldown_end, 600)
 
 G("input.rs::clear_chips_the_boss_over_several_uses")
 local BOSS = 2
-local BOSS_HP = 33000000 -- content.json enemies[2].base_hp
-local CLEAR_DAMAGE = 3000000
+-- Sourced from the artifact rather than hardcoded: the fun pass moved boss HP
+-- 33M -> 6300000 and gave the boss its own Clear chunk (`BOSS_CLEAR_DAMAGE`),
+-- separate from the 3M every other enemy takes. Hardcoding either meant this
+-- block asserted against a boss that no longer exists.
+local BOSS_HP = Content.ENEMIES[BOSS + 1].base_hp
+local CLEAR_DAMAGE = Content.BOSS_CLEAR_DAMAGE or Content.constants.boss_clear_damage
 local c4 = fresh()
 c4.tick = 0
 c4.tank.clear_cooldown_end = 0

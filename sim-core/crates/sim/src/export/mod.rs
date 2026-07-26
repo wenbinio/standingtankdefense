@@ -288,6 +288,23 @@ fn constants() -> Value {
         ("frost_max_stacks", int(c::FROST_MAX_STACKS as i64)),
         ("ramp_per_round", int(c::RAMP_PER_ROUND as i64)),
         ("boss_contact_cadence", int(c::BOSS_CONTACT_CADENCE as i64)),
+        // The boss encounter's constants (`docs/11` §11.7). These MUST be
+        // exported rather than left for the port to hardcode: the Luau side
+        // reimplements the plate/breach/enrage arithmetic, and a hardcoded copy
+        // of a balance number drifts silently the first time it is retuned --
+        // which is precisely the failure class this pipeline exists to prevent.
+        ("boss_plate_ticks", int(c::BOSS_PLATE_TICKS as i64)),
+        ("boss_breach_ticks", int(c::BOSS_BREACH_TICKS as i64)),
+        ("boss_exposed_num", int(c::BOSS_EXPOSED_NUM)),
+        ("boss_exposed_den", int(c::BOSS_EXPOSED_DEN)),
+        ("boss_armored_num", int(c::BOSS_ARMORED_NUM)),
+        ("boss_armored_den", int(c::BOSS_ARMORED_DEN)),
+        ("boss_clear_damage", int(c::BOSS_CLEAR_DAMAGE)),
+        ("boss_enrage_interval", int(c::BOSS_ENRAGE_INTERVAL as i64)),
+        ("boss_enrage_step_num", int(c::BOSS_ENRAGE_STEP_NUM)),
+        ("boss_enrage_step_den", int(c::BOSS_ENRAGE_STEP_DEN)),
+        ("clear_damage", int(c::CLEAR_DAMAGE)),
+        ("clear_cooldown_ticks", int(c::CLEAR_COOLDOWN_TICKS as i64)),
         // Named ids (C1: "Named ids go in constants").
         ("starting_weapon", int(c::STARTING_WEAPON as i64)),
         ("death_engine", int(c::DEATH_ENGINE as i64)),
