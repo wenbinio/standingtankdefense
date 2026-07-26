@@ -67,14 +67,34 @@ if #fileText == 0 then
 		0
 	)
 end
+-- Shell command substitution (`-a "$(cat ...)"`) strips trailing newlines, so
+-- the comparison is made modulo a trailing newline on either side. Nothing else
+-- is normalised: every other byte must match.
+local function stripTrailingNewlines(s: string): string
+	while #s > 0 and string.sub(s, -1) == "\n" do
+		s = string.sub(s, 1, -2)
+	end
+	return s
+end
+local embedded = stripTrailingNewlines(Content.RAW_JSON)
+local onDisk = stripTrailingNewlines(fileText)
 checks += 1
-if Content.RAW_JSON ~= fileText then
+if embedded ~= onDisk then
+	local at = 0
+	for i = 1, math.min(#embedded, #onDisk) do
+		if string.sub(embedded, i, i) ~= string.sub(onDisk, i, i) then
+			at = i
+			break
+		end
+	end
 	fail(
-		"Content.RAW_JSON is NOT byte-identical to src/shared/content.json ("
-			.. #Content.RAW_JSON
+		"Content.RAW_JSON is NOT identical to src/shared/content.json ("
+			.. #embedded
 			.. " vs "
-			.. #fileText
-			.. " bytes) — the embedded catalog is stale, re-embed it"
+			.. #onDisk
+			.. " bytes, first difference at byte "
+			.. (if at > 0 then tostring(at) else "end-of-file")
+			.. ") — the embedded catalog is stale, re-embed it"
 	)
 end
 

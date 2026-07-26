@@ -4,18 +4,20 @@
 
 	HOW TO RUN
 	----------
-	Standalone Luau has no file I/O, so the JSON is handed in on the command
-	line, exactly as `parity.luau` does it. From `roblox/test`:
+	    cd roblox/test && luau -O2 waves_test.luau
 
-	    tmp=$(mktemp -d)
-	    split -b 100000 ../src/shared/content.json "$tmp/c."
-	    args=(); for f in "$tmp"/c.*; do args+=("$(cat "$f")"); done
+	No arguments needed: `Content.luau` self-loads its embedded `content.json`,
+	and the oracle vectors are embedded below. Exits non-zero on any failure.
+
+	OPTIONALLY, a wider oracle dump can be handed in on argv. Standalone Luau has
+	no file I/O, so it arrives as text, exactly as `parity.luau` does it: every
+	trailing argument after `-a` is concatenated and parsed as a sequence of JSON
+	documents, and the one carrying `hp_mult` is taken as the dump. Chunk it
+	under the OS per-argument limit:
+
+	    split -C 50000 dump.json /tmp/z.
+	    args=(); for f in /tmp/z.*; do args+=("$(cat "$f")"); done
 	    luau -O2 waves_test.luau -a "${args[@]}"
-
-	Every trailing argument after `-a` is concatenated and parsed as a sequence
-	of JSON documents. `content.json` is REQUIRED. An optional second document —
-	the oracle dump described below — widens the oracle sweep; without it the
-	embedded oracle vectors below still run.
 
 	THE ORACLE
 	----------
