@@ -41,7 +41,12 @@
 
 	NUMBER ENCODINGS
 	  uvarint   LEB128, 7 bits/byte, little-endian groups. 0 .. 2^53-1.
-	  svarint   zigzag (n >= 0 -> 2n, n < 0 -> -2n-1) then uvarint.
+	  svarint   zigzag (n >= 0 -> 2n, n < 0 -> -2n-1) then uvarint. The zigzag
+	            doubling is what bounds the signed range at +/-(2^52-1): beyond
+	            that the doubled value stops being exactly representable as a
+	            double and the round-trip would silently lose the low bit. Every
+	            i64 field a `RenderView` actually carries is orders of magnitude
+	            inside that, and anything outside raises instead of rounding.
 	  Counts, lengths and table indices are uvarint; every *value* field is
 	  svarint, so a negative anywhere in a view is a size cost and never a bug.
 

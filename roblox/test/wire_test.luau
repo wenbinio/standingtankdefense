@@ -374,8 +374,8 @@ local function testKeyframeRoundTrip()
 	big.enemies[1].hp = 33000000
 	big.enemies[1].base_hp = 33000000
 	big.enemies[1].boss = true
-	big.stats.damage_dealt = 9007199254740991
-	big.stats.gold_earned = -4503599627370496
+	big.stats.damage_dealt = 4503599627370495
+	big.stats.gold_earned = -4503599627370495
 	same(Wire.unpackView(Wire.packView(big)), big, "keyframe round-trip [extreme magnitudes]")
 
 	-- Empty and unicode-ish names must survive byte-for-byte.
@@ -858,6 +858,12 @@ local function sizeReport()
 			{ enemies = 8, projectiles = 4, minions = 0, weapons = 3, offers = 5 },
 			200,
 			{ step = 4, churn = 1 }
+		),
+		measure(
+			"300 entities total 216E/84P",
+			{ enemies = 216, projectiles = 84, minions = 0, weapons = 20, offers = 5 },
+			200,
+			{ step = 4, churn = 4 }
 		),
 		measure(
 			"stress 300E/300P/20M",

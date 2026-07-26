@@ -12,25 +12,84 @@ The Roblox build is a **fork, not a port** (`docs/09` Part 3 Option C, locked in
 
 ```
 roblox/
-  default.project.json   Rojo project
+  default.project.json   Rojo project — maps dist/, never src/
   CONTRACTS.md           the seams — owned centrally
   README.md              this file
+  build/                 the require-rewriting build step (see below)
   src/shared/            Fixed.luau, Rng.luau, Content.luau, content.json   -> ReplicatedStorage.Shared
   src/server/            Arena, Director                                     -> ServerScriptService.Server
   src/client/            render + UI                                         -> StarterPlayerScripts.Client
+  dist/                  GENERATED Roblox-shaped copy of src/ — what Rojo syncs
   bench/                 R2 throughput harness                               -> ServerScriptService.Bench
   test/                  parity runner + vectors                             -> ServerStorage.Test
 ```
 
-`src/server`, `src/client` and `test` are declared **optional** in the Rojo project, so the place builds before those milestones land. `bench/` is not optional.
+`dist/server`, `dist/client` and `test` are declared **optional** in the Rojo project, so the place builds before those milestones land. `bench/` and `dist/shared` are not optional — a missing `dist/shared` is Rojo telling you that you forgot to run the build.
 
 Per `CONTRACTS.md` §C5, nothing in `src/shared/` may reference a Roblox global (`game`, `workspace`, `task`, `Instance`). That layer — and the measurement core of the bench — runs unmodified under a bare `luau` interpreter, which is how both are tested in CI.
 
-## Building and syncing
+---
+
+## The build step: `src/` → `dist/`
+
+`src/**` is written for the **standalone Luau interpreter**, which resolves modules by relative string path:
+
+```lua
+local Fixed = require("../Fixed")
+```
+
+That is the only form the bare interpreter accepts, and Roblox accepts none of it — Roblox needs an *instance reference*, `require(script.Parent.Parent.Fixed)`.
+
+Both have to keep working, and the sources are not negotiable: bare-interpreter execution is how the whole test suite and the R3 correctness oracle run (`test/trace_test.luau` proves the Luau sim reproduces the Rust bit-for-bit for 55,200 ticks). Editing the modules to use Roblox requires would forfeit that guarantee. So the sources are never touched. A build step reads `src/**` and emits Roblox-shaped **copies** into `dist/**`, rewriting each require into the instance reference implied by the file's position in the Rojo tree. **Rojo syncs `dist/`, never `src/`.**
+
+```bash
+python3 roblox/build/build.py                 # build + verify   <- the one you want
+python3 roblox/build/build.py --exec-check    # + run the emitted graph (needs `luau`)
+python3 roblox/build/build.py --check         # CI: fail if dist/ is stale
+python3 roblox/build/selftest.py              # tests for the rewriter itself
+```
+
+Python 3.8+, standard library only, no install step. `luau` / `luau-analyze` are found on `PATH` or via `$LUAU` / `$LUAU_ANALYZE`.
+
+**Run it after every edit under `src/`.** `--check` is the CI gate that catches a forgotten rebuild.
+
+### What it rewrites
+
+| source | emitted |
+| --- | --- |
+| `require("./State")` | `require(script.Parent.State)` |
+| `require("../Fixed")` | `require(script.Parent.Parent.Fixed)` |
+| `pcall(require, "../Content")` | `pcall(require, script.Parent.Parent.Content)` |
+| `require("../shared/sim/Arena")` from `src/server/` | `require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("sim"):WaitForChild("Arena"))` |
+
+Within one Rojo root the emitted reference is relative (`script.Parent…`). Crossing services it names the service and `WaitForChild`s each step down, because a client script can run before `ReplicatedStorage`'s children have replicated. Instance names that are not valid identifiers are bracket-indexed. The instance layout is read out of `default.project.json` itself, so the build step and the Rojo project cannot drift apart.
+
+Everything else is copied verbatim (`content.json`, `.meta.json` sidecars). Line numbers shift by the three-line generated banner; `--!strict` / `--!native` directives are kept on line 1 where Luau requires them.
+
+### What it refuses to do
+
+The failure mode worth preventing is a require that survives the rewrite and only explodes inside Studio, so nothing is trusted:
+
+- Every rewritten require must resolve to a module that was **actually emitted**. Unresolvable, or resolving outside every build root — the build fails with `file:line`.
+- After emitting, every generated require expression is **re-parsed out of the emitted text** by an independent evaluator and walked against an instance tree rebuilt from the emitted files. Correct by construction, then checked anyway.
+- A relative-path string literal that is *not* in a require position fails the build rather than being emitted as something that silently breaks.
+- A require whose path is computed (`require("./v/" .. name)`) fails the build. It cannot be resolved statically and will not be guessed at.
+- Every emitted file is parsed by `luau-analyze`. Any `SyntaxError` fails. Diagnostics are compared **differentially against the source file**, so a pre-existing lint is not laundered into a build failure and a newly-introduced one cannot hide. The only tolerated new diagnostics are the unknown-type family that necessarily follows from an instance require the analyzer cannot resolve without a Rojo sourcemap.
+- `--exec-check` goes further and *executes* every emitted module under the standalone interpreter against an emulated instance tree, proving the rewritten graph actually loads. It separates "the rewrite named something that does not exist" (fatal) from "this module needs a real Roblox runtime" (reported, not fatal).
+
+Requires that are already instance references are passed through untouched and reported in the summary — never silently.
+
+### `dist/` is generated
+
+Treat it as build output: **do not edit it, and do not commit it.** `roblox/dist/` is in the repo `.gitignore`. It is a byte-for-byte function of `src/` plus `default.project.json`, `--check` proves that in CI, and committing it would double every sim diff and let a stale copy drift from `src/`.
+
+## Syncing to Studio
 
 Requires [Rojo](https://rojo.space) 7.3+ (the `{"optional": ...}` path form) and Roblox Studio.
 
 ```bash
+python3 roblox/build/build.py              # ALWAYS first — Rojo reads dist/
+
 # live sync into an open Studio place
 rojo serve roblox/default.project.json     # then connect from the Rojo Studio plugin
 

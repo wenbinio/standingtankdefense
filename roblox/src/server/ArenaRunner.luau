@@ -95,7 +95,11 @@ ArenaRunner.EndReason = table.freeze({
 export type Seed = { hi: number, lo: number }
 
 export type RunResult = {
+	--- The OWNER — the director's key for whoever played this run (a Roblox
+	--- `UserId`, or a synthetic id for a backfill bot). Not the sim's id.
 	player_id: number,
+	--- The sim's `player_id` for the arena, i.e. the seat. See `ArenaRunner.new`.
+	seat: number,
 	is_bot: boolean,
 	run_index: number,
 	seed: string,
@@ -116,7 +120,6 @@ export type RunResult = {
 -- input validation (P5) — structural, stateless, rejecting
 -- =========================================================================
 
-local KIND_NOOP = Input.Kind.Noop
 local KIND_BUY = Input.Kind.BuyOffer
 local KIND_CLEAR = Input.Kind.Clear
 local OFFER_SLOTS = Shop.OFFER_SLOTS
@@ -169,10 +172,12 @@ end
 export type Runner = typeof(setmetatable(
 	{} :: {
 		player_id: number,
+		owner_id: number,
 		is_bot: boolean,
 		status: string,
 		state: any,
 		bot: any,
+		challenge: any,
 		queue: { number },
 		queue_head: number,
 		run_index: number,

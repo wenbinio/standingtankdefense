@@ -518,6 +518,25 @@ Render.POOL_LIMITS = table.freeze({
 	minions = 64,
 })
 
+--[[
+	The pooling arithmetic, factored out so the "no `Instance` per enemy" claim is
+	machine-checked rather than asserted in a comment. Given how many markers a
+	frame wants, how big the pool already is, and the pool ceiling, it returns:
+
+	    want — how many pooled frames to make visible this frame
+	    grow — how many NEW frames to create (0 once the pool has seen its peak)
+
+	The properties the test pins: `grow` is 0 whenever demand is at or below the
+	existing pool, the pool is monotonically non-decreasing, and neither `want`
+	nor the resulting pool size ever exceeds `limit`. Together those are exactly
+	"instances plateau at the high-water mark and never track live enemy count".
+]]
+function Render.poolFit(count: number, poolSize: number, limit: number): (number, number)
+	local want = math.min(math.max(count, 0), limit)
+	local grow = math.max(want - poolSize, 0)
+	return want, grow
+end
+
 local ShellImpl = {}
 ShellImpl.__index = ShellImpl
 
@@ -540,8 +559,8 @@ end
 --- first `#markers` of them and hide the rest. This is the ONLY place a pooled
 --- `Instance` is ever created, and it is never destroyed until `destroy()`.
 local function applyPool(pool: { any }, parent: any, markers: { Marker }, limit: number, zIndex: number)
-	local want = math.min(#markers, limit)
-	while #pool < want do
+	local want, grow = Render.poolFit(#markers, #pool, limit)
+	for _ = 1, grow do
 		pool[#pool + 1] = makeMarkerFrame(parent, zIndex, true)
 	end
 	for i = 1, want do

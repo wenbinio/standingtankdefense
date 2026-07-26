@@ -44,6 +44,7 @@ if (nil :: any) then
 	UDim = (nil :: any)
 	Vector2 = (nil :: any)
 	Enum = (nil :: any)
+	warn = (nil :: any)
 end
 
 local Env = {}
@@ -60,6 +61,9 @@ Env.UDim2 = UDim2
 Env.UDim = UDim
 Env.Vector2 = Vector2
 Env.Enum = Enum
+
+--- Roblox's `warn`; a no-op off-Roblox so a diagnostic path never crashes a test.
+Env.warn = warn or function(...) end
 
 --- `game:GetService(name)`, or `nil` off-Roblox. Never raises, so a caller can
 --- probe for a service without guarding twice.

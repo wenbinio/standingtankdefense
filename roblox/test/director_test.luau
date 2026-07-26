@@ -170,6 +170,15 @@ for i = 1, 4 do
 end
 check(replay_ok, "replay director built four arenas")
 
+-- The timeline is the director's runtime choice (P3 / F1), never a constant in
+-- this layer: the default is Steam and naming `"roblox"` rescales the schedule.
+eq(Director.runClock(d1, 101).round_ticks, 900, "the default timeline is Steam (900-tick rounds)")
+eq(Director.runClock(d1, 101).boss_tick, 54000, "…with the Steam boss tick")
+local dfork = Director.new({ master_seed = MASTER, cohort_size = 1, bot_fill = false, timeline = "roblox" })
+Director.join(dfork, 190)
+eq(Director.runClock(dfork, 190).round_ticks, 600, "a director may run the F1 Roblox timeline (600-tick rounds)")
+eq(Director.runClock(dfork, 190).boss_tick, 9000, "…with the 5-minute boss tick")
+
 --=============================================================================
 -- 2. input authority (P5)
 --=============================================================================
@@ -275,7 +284,7 @@ local restart_tick = d3.tick
 local ok3, why3 = Director.startRun(d3, victim)
 check(ok3, "the dead player restarts on the very same server tick" .. (ok3 and "" or " (" .. tostring(why3) .. ")"))
 eq(Director.runClock(d3, victim).tick, 0, "the fresh run starts at run tick 0")
-eq(Director.runClock(d3, victim).dead, false, "the fresh run is alive")
+eq(Director.runClock(d3, victim).dead, false, "the fresh run is alive (not dead)")
 local restarted = Director.snapshotFor(d3, victim)
 eq(restarted.run_index, 2, "the restart is run #2")
 check(Director.issueSeed(d3, restarted.seat, 1).lo ~= Director.issueSeed(d3, restarted.seat, 2).lo, "the retry got a fresh seed, not a rewind")
@@ -406,7 +415,10 @@ eq(Director.awards(d5, PLAYED).last_stand, 1, "the award is on the survivor's re
 for i = 1, 3 do
 	eq(Director.awards(d5, 500 + i).last_stand, 0, "player " .. (500 + i) .. " has no Last Stand")
 end
-eq(Director.runClock(d5, PLAYED), nil, "the played run finished (its 900-tick limit)")
+local played_snap = Director.snapshotFor(d5, PLAYED)
+eq(played_snap.alive, false, "the played run finished (it hit its 900-tick limit)")
+eq(played_snap.can_retry, true, "and the player may start a fresh run at once")
+eq(Director.runClock(d5, PLAYED).dead, false, "the final clock is still readable for the results screen, and the tank did not die")
 local played_entry = nil
 for _, e in Director.leaderboard(d5) do
 	if e.player_id == PLAYED then
@@ -459,6 +471,7 @@ for _, p in bots do
 	bot_sums[sum] = true
 end
 check(bots_distinct, "each bot arena has its own state")
+rejects("bot_seat", "a backfill seat is not client-drivable", Director.submitInput(d6, bots[1].player_id, Input.NOOP))
 
 -- F4: the same view path, pointed at a different arena.
 rejects("cannot_spectate_self", "you cannot spectate your own seat", Director.spectate(d6, 601, 0))

@@ -140,7 +140,7 @@ if net then
 				onView(Wire.unpackView(payload))
 			elseif not warned then
 				warned = true
-				warn("[client] packed view received but Shared.net.Wire is not present; dropping.")
+				Env.warn("[client] packed view received but Shared.net.Wire is not present; dropping.")
 			end
 		end)
 	end
