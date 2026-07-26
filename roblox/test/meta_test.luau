@@ -428,12 +428,69 @@ do -- `bindShop`: the wiring seam, feature-detected
 	Meta.bindShop(fakeShop, poolFresh)
 	eq(captured, poolFresh, "bindShop hands the pool to a pool-aware Shop")
 
-	-- Against today's real Shop (no `setPool`): a full pool is a no-op...
+	-- The real Shop now carries `Shop.setPool` (added centrally; the hook this
+	-- test previously proved ABSENT). So bind against the real module and assert
+	-- the behaviour that actually matters: a restricted pool restricts, and an
+	-- unrestricted one leaves the verified draw untouched.
 	local okFull = pcall(Meta.bindShop, Shop, Meta.fullPool())
-	ok(okFull, "bindShop accepts an unrestricted pool against the stock Shop")
-	-- ...and a restricted one must fail LOUDLY rather than silently not restrict.
+	ok(okFull, "bindShop accepts an unrestricted pool against the real Shop")
+	-- `bindShop` hands the full listing through rather than clearing to nil, so
+	-- assert the property that actually protects the R3 oracle: a full pool must
+	-- draw IDENTICALLY to an unrestricted Shop -- same offers, and the same
+	-- `rng_shop` cursor afterwards.
+	do
+		local a, b = State.new(9001, 0), State.new(9001, 0)
+		Shop.setPool(nil)
+		for _ = 1, 12 do
+			Shop.generateOffers(a)
+		end
+		Meta.bindShop(Shop, Meta.fullPool())
+		for _ = 1, 12 do
+			Shop.generateOffers(b)
+		end
+		eq(#a.shop.offers, #b.shop.offers, "full pool: same offer count")
+		local same = true
+		for i, off in a.shop.offers do
+			local o2 = b.shop.offers[i]
+			if o2 == nil or o2.kind ~= off.kind or o2.def ~= off.def or o2.cost ~= off.cost then
+				same = false
+			end
+		end
+		ok(same, "a full pool draws exactly what an unrestricted Shop draws")
+		local ahi, alo = Rng.state(a.rng_shop)
+		local bhi, blo = Rng.state(b.rng_shop)
+		ok(ahi == bhi and alo == blo, "full pool leaves rng_shop on the identical cursor")
+	end
+
 	local okRestricted = pcall(Meta.bindShop, Shop, poolFresh)
-	ok(not okRestricted, "bindShop refuses to pretend it restricted a stock Shop")
+	ok(okRestricted, "bindShop restricts the real Shop")
+	eq(Shop.getPool(), poolFresh, "the restricted pool reached Shop")
+
+	-- And it must actually bite: every offer drawn under a fresh profile's pool
+	-- has to be an unlocked id. This is the property meta-progression exists for.
+	do
+		local s = State.new(4242, 0)
+		local locked = 0
+		for _ = 1, 40 do
+			Shop.generateOffers(s)
+			for _, off in s.shop.offers do
+				local ids = if off.kind == Shop.OfferKind.Weapon then poolFresh.weapons else poolFresh.modifiers
+				local found = false
+				for _, id in ids do
+					if id == off.def then
+						found = true
+						break
+					end
+				end
+				if not found then
+					locked += 1
+				end
+			end
+		end
+		eq(locked, 0, "no restricted draw ever yields a locked id")
+	end
+	Shop.setPool(nil)
+	eq(Shop.getPool(), nil, "pool cleared after the test")
 end
 
 --=============================================================================

@@ -123,6 +123,24 @@ local function onView(view)
 	pumpEvents(flow:observe(view, now))
 end
 
+--[[
+	THE UNPACK SEAM. P4 packs a view into a `buffer` before it goes on the
+	`UnreliableRemoteEvent`, and `Wire.luau` does not exist yet, so this file
+	accepts a plain `RenderView` table and refuses anything else with one warning.
+
+	Wiring the packed path is a two-line change once `Wire` lands, deliberately
+	left undone rather than guessed at:
+
+	    local Wire = require(script.Parent.Parent.Parent.Shared.net.Wire)  -- top
+	    ...
+	    onView(Wire.unpackView(payload))                                   -- here
+
+	It is spelled out rather than done dynamically because the build step
+	(`roblox/build/build.py`) can only verify a require it can resolve statically;
+	a `require(<expression>)` would survive the rewrite unchecked and only fail
+	inside Studio, which is exactly the failure mode that build step exists to
+	prevent.
+]]
 if net then
 	local viewRemote = net:FindFirstChild(VIEW_REMOTE)
 	if viewRemote then
@@ -130,17 +148,9 @@ if net then
 		viewRemote.OnClientEvent:Connect(function(payload)
 			if type(payload) == "table" then
 				onView(payload)
-				return
-			end
-			local wireModule = ReplicatedStorage:FindFirstChild("Shared")
-			wireModule = wireModule and wireModule:FindFirstChild("net")
-			wireModule = wireModule and wireModule:FindFirstChild("Wire")
-			if wireModule then
-				local Wire = require(wireModule)
-				onView(Wire.unpackView(payload))
 			elseif not warned then
 				warned = true
-				Env.warn("[client] packed view received but Shared.net.Wire is not present; dropping.")
+				Env.warn("[client] packed view received but the Wire unpack seam is not wired; dropping.")
 			end
 		end)
 	end

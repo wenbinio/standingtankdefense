@@ -51,6 +51,39 @@ local Rng = require("../Rng")
 
 local Shop = {}
 
+-- ============================ offer pool (R6) ============================
+-- Meta-progression restricts WHICH content ids the shop may draw (`docs/10` F3:
+-- unlocks WIDEN the pool, they never reroll it). `nil` = unrestricted.
+--
+-- This has to live inside the draw and not outside it, for two reasons that
+-- both bite silently:
+--   * `Arena.step` generates the round's offers in phase 1 and applies input in
+--     phase 2 of the SAME tick, so there is no point outside `step` at which a
+--     caller could rewrite `s.shop.offers` before a `BuyOffer` reads them.
+--     Post-step remapping is a race, not an integration.
+--   * Restriction must happen in ID space, never by handing `Shop` a trimmed
+--     catalog: the draw index is written straight into `offer.def`, and
+--     `State.grantOffer` resolves that def against the FULL catalog. Subset
+--     indices would grant the wrong weapon.
+--
+-- With `pool == nil` the branches below collapse to the pre-R6 code exactly --
+-- same 8 draws, same ranges, same `rng_shop` cursor -- so the R3 oracle gate is
+-- unaffected. Under F6 each arena is its own Actor (its own module instance),
+-- so a per-arena pool does not leak across shards.
+local pool = nil
+
+--- Restrict the draw pool to these 0-based content ids. `nil` clears it.
+--- Shape: `{ weapons = {id, ...}, modifiers = {id, ...} }`.
+function Shop.setPool(p)
+	pool = p
+end
+
+--- The active pool (`nil` when unrestricted).
+function Shop.getPool()
+	return pool
+end
+
+
 --- Number of purchasable slots presented each round / reroll.
 local OFFER_SLOTS = 8
 --- Of those, the first `WEAPON_SLOTS` are always weapons; the remainder are
@@ -166,12 +199,17 @@ function Shop.generateOffers(s)
 	for slot = 0, OFFER_SLOTS - 1 do
 		local offer
 		if slot < WEAPON_SLOTS then
-			-- `r` is a 0-based content id.
-			local r = Rng.below(s.rng_shop, nw)
-			offer = { kind = kind.Weapon, def = r, cost = weapons.get(r).cost }
+			-- `r` is a 0-based DRAW index; `def` is a 0-based content id. They are
+			-- the same number only when the pool is unrestricted.
+			local ids = pool and pool.weapons
+			local r = Rng.below(s.rng_shop, if ids then #ids else nw)
+			local def = if ids then ids[r + 1] else r
+			offer = { kind = kind.Weapon, def = def, cost = weapons.get(def).cost }
 		else
-			local r = Rng.below(s.rng_shop, nm)
-			offer = { kind = kind.Modifier, def = r, cost = modifiers.get(r).cost }
+			local ids = pool and pool.modifiers
+			local r = Rng.below(s.rng_shop, if ids then #ids else nm)
+			local def = if ids then ids[r + 1] else r
+			offer = { kind = kind.Modifier, def = def, cost = modifiers.get(def).cost }
 		end
 		offers[slot + 1] = offer
 	end

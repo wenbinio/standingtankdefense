@@ -991,6 +991,9 @@ local function sizeReport()
 		)
 	end
 	print("")
+	print("rows 1-3 are the measured population (docs/10 F8); rows 4-6 are the retired")
+	print("~300-entity assumption from docs/09 §1.6, kept as a stress column, not a target.")
+	print("")
 	print("keyfrm = full keyframe bytes · kchk = chunks a keyframe needs")
 	print("dmin/davg/dmax = delta bytes per 15 Hz frame · B/ent = davg / live entities")
 	print("chunks = chunks the WORST delta frame needs · KB/s = davg x 15 Hz, one client")
@@ -1006,7 +1009,7 @@ local function sizeReport()
 		)
 	end
 	-- The real thing: the actual sim, the actual `View.snapshot`, actual sizes.
-	local REAL_TICKS = 12000
+	local REAL_TICKS = 56000
 	local rs, peakE, peakP, keyMax = realSimRun(0, REAL_TICKS, false)
 	local rmin, ravg, rmax = stats(rs)
 	local realOver = 0

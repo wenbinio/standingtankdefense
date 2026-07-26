@@ -386,7 +386,10 @@ local function backfill(self)
 		-- master seed and the seat keeps a lobby's bot personalities stable and
 		-- reproducible instead of wall-clock random.
 		local r = Rng.derive(self.master_seed, seat, PURPOSE_RUN_SEED, 0xB07)
-		local challenge = Bot.challengeFromCode(Rng.below(r, 10))
+		-- Codes 0..8 only: 9 is `EcoOnly`, which `Bot.luau` marks MEASUREMENT
+		-- ONLY (it buys no weapons at all and dies almost immediately). A live
+		-- lobby should not be backfilled with a probe.
+		local challenge = Bot.challengeFromCode(Rng.below(r, 9))
 		local p = seatParticipant(self, id, seat, true, challenge)
 		emit(self, { kind = "joined", player_id = id, seat = p.seat, tick = self.tick, is_bot = true })
 		Director.startRun(self, id)

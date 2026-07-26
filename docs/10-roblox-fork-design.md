@@ -151,7 +151,9 @@ Only a Studio run settles R2 formally. The Actor harness has never executed agai
 
 Also unmodelled: hazards, minions, auras, vulnerability pulses and Fire chain explosions — all zero across the 24-seed Rust profile, but a build stacking them adds `O(H·E)` and `O(M·E)` passes. Population is pinned, where a real arena oscillates as `Clear` wipes the board.
 
-**Replication is not a constraint.** 300 entities under a 3-byte delta encoding fit one ~900-byte `UnreliableRemoteEvent` payload; ~22 KB/s per client at 15 Hz, ~176 KB/s server-side for eight, and packing all eight costs ~0.16% of one core.
+**Replication is not a constraint.** *(Numbers below corrected once `Wire.luau` was built and measured — the original estimate was optimistic by about one payload at the 300-entity figure.)* At the **real** peak (67 enemies / 84 projectiles) a delta frame is **325–423 bytes** — a single ~900-byte `UnreliableRemoteEvent` payload, **5.3 KB/s** per client at 15 Hz and **42.6 KB/s** server-side for eight, against a ~22 KB/s per-client budget. Across a full 56,000-tick run on the real sim the worst frame observed was **981 bytes**, still one payload.
+
+At 300 entities — the figure `[09] §1.6` originally assumed — the average delta is 858 B but the **worst case is 1024 B, i.e. two chunks**, so the earlier "300 entities fit one payload" claim does not hold. It holds comfortably at the workload the sim actually produces, which is what matters. Only a deliberately absurd 300-entities-all-moving case exceeds the bandwidth budget (29.8 KB/s).
 
 ### Carried forward
 
