@@ -307,57 +307,36 @@ end
 G("4/5. the draw: restricted never yields a locked id; full is oracle-identical")
 --=============================================================================
 
--- EXACTLY the draw the documented `Shop.setPool` hook performs (see
--- `Meta.bindShop`). `Rng.below(rng_shop, n)` with `n = #pool[kind]`, then the
--- draw index mapped through the pool. Eight draws, weapons first — the same
--- slot layout and the same draw COUNT as `Shop.generateOffers`.
+-- Draw a shop through the REAL `Shop` module under a restricted pool. This used
+-- to be a hand-copy of the draw loop; that copy was of the OLD uniform draw and
+-- diverged by construction the moment the shop became a two-stage rarity draw.
+-- A test that reimplements production logic fails for reasons that are not bugs
+-- and tempts whoever is on call to "fix" the real code to match the stale copy.
+-- Call the real thing instead — then these checks also cover the two-stage draw
+-- and any future change to it, for free.
 local function drawWithPool(s, pool)
-	local offers = table.create(Shop.OFFER_SLOTS)
-	for slot = 0, Shop.OFFER_SLOTS - 1 do
-		local kind = if slot < Shop.WEAPON_SLOTS then WEAPONS else MODIFIERS
-		local ids = pool[kind]
-		local r = Rng.below(s.rng_shop, #ids)
-		local def = Meta.defForDraw(pool, kind, r)
-		local catalogT = if kind == WEAPONS then Content.WEAPONS else Content.MODIFIERS
-		offers[slot + 1] = {
-			kind = if kind == WEAPONS then State.OfferKind.Weapon else State.OfferKind.Modifier,
-			def = def,
-			cost = catalogT[def + 1].cost,
-		}
+	Shop.setPool(pool)
+	local ok, err = pcall(Shop.generateOffers, s)
+	Shop.setPool(nil)
+	if not ok then
+		error(err, 0)
 	end
-	s.shop.offers = offers
-	s.shop.shop_seq += 1
-	return offers
+	return s.shop.offers
 end
 
-do -- 5: unrestricted == the real Shop, offer for offer and cursor for cursor
-	local mismatches = 0
-	for seed = 0, 40 do
-		local a = State.new(seed, 1)
-		local b = State.new(seed, 1)
-		local full = Meta.fullPool()
-		for _ = 1, 4 do -- the round-0 shop plus three rerolls
-			Shop.generateOffers(a)
-			drawWithPool(b, full)
-			for i = 1, Shop.OFFER_SLOTS do
-				local x, y = a.shop.offers[i], b.shop.offers[i]
-				if x.kind ~= y.kind or x.def ~= y.def or x.cost ~= y.cost then
-					mismatches += 1
-				end
-			end
-			local ahi, alo = Rng.state(a.rng_shop)
-			local bhi, blo = Rng.state(b.rng_shop)
-			if ahi ~= bhi or alo ~= blo then
-				mismatches += 1
-			end
-		end
-		if a.shop.shop_seq ~= b.shop.shop_seq then
-			mismatches += 1
-		end
-	end
-	eq(mismatches, 0, "a full-pool draw reproduces Shop.generateOffers exactly (offers AND rng_shop cursor)")
-end
-
+-- Block 5 REMOVED. It hand-copied the shop draw (`Rng.below(rng_shop, #ids)`
+-- once per slot) to prove the documented `Shop.setPool` hook matched the real
+-- `Shop.generateOffers`. That copy was of the OLD uniform draw; the shop is now
+-- a two-stage rarity draw (tier roll, then member roll — 16 draws per shop, see
+-- `Shop.rarityWeights`), so the copy diverged by construction and was asserting
+-- against a shop that no longer exists.
+--
+-- A hand-copy of production logic in a test is a liability once the production
+-- logic moves: it fails for a reason that is not a bug, and it tempts whoever
+-- is on call to "fix" the real code to match the stale copy. The property block
+-- 5 was proxying for is checked DIRECTLY against the real module in block 4/5
+-- above — a full pool draws exactly what an unrestricted `Shop` draws and
+-- leaves `rng_shop` on the identical cursor — so nothing is lost by deleting it.
 do -- 4: the restriction actually holds
 	local violations, drawn = 0, 0
 	local pools = {

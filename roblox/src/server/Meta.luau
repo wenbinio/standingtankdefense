@@ -394,11 +394,23 @@ function Meta.isOffered(p: Profile.Profile, kind: Kind, id: number): boolean
 	return p.xp >= need or Profile.isUnlocked(p, kind, id)
 end
 
---- The def id for draw index `r` (0-based, `r < #pool[kind]`). THIS IS THE
---- WHOLE INTEGRATION: a pool-aware shop draws `r = Rng.below(rng_shop, n)` with
---- `n = #pool[kind]` instead of the catalog size, then maps `r` through here.
---- Exactly 8 draws per `generateOffers` either way — the draw COUNT is
---- unchanged, only its range.
+--- The def id for draw index `r` (0-based, `r < #pool[kind]`) — a plain
+--- pool-position lookup.
+---
+--- STALE-DOC WARNING, corrected: this used to claim it was "the whole
+--- integration", describing a pool-aware shop as one `Rng.below(rng_shop, n)`
+--- per slot with `n = #pool[kind]`, 8 draws per `generateOffers`. That was true
+--- of the uniform draw and is no longer. `Shop` now performs a **two-stage
+--- rarity draw** — a tier roll against `Shop.rarityWeights(round)`, then a
+--- member roll within that tier, so **16 draws per shop** — and it applies pool
+--- restriction itself, by narrowing the candidate set the tier counts and member
+--- roll run over (`Shop.setPool`).
+---
+--- So this function is no longer on the draw path. It remains a correct and
+--- useful pool-position helper; it is simply not how an offer's def is chosen.
+--- Restriction lives in `Shop`, because `Arena.step` generates offers in phase 1
+--- and applies input in phase 2 of the same tick, leaving no point outside
+--- `step` where a caller could rewrite offers first.
 function Meta.defForDraw(pool: Pool, kind: Kind, r: number): number
 	local ids = (pool :: any)[kind] :: { number }?
 	if ids == nil then
