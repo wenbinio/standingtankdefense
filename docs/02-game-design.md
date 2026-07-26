@@ -15,7 +15,7 @@ Design spec for **Standing Tank Defense**, grounded in the extracted Tower Survi
 - **Stationary**, fixed in its personal arena. (The source calls it "Survivor's Tower"; we re-skin to a tank.)
 - **Has HP** plus optional defensive layers: **Armor**, **HP Regen** (with retroactive multipliers), **Dodge** (diminishing returns), and a **Mana Shield** absorb-pool subsystem. At 0 HP the tank dies and the player is eliminated with a recorded placement.
 - **Auto-fires** every equipped weapon on its own cadence at a **randomly selected** valid target (no armor-type preference — see RNG, §2.8).
-- **One manual ability — `Clear`.** A long-cooldown burst that is also the **only** thing that can damage the end boss. Manual `Clear` is the single real-time combat input a player makes; everything else is a menu action. It is therefore a first-class networked input (see [`04-protocol-and-messages.md`](04-protocol-and-messages.md)).
+- **One manual ability — `Clear`.** A long-cooldown burst. *(Superseded by the `[11]` fun pass: `Clear` was once the **only** thing that could damage the end boss. It no longer is — see `docs/11` §11.7. It remains the strongest single hit and it opens the boss's armor plates.)* Manual `Clear` is the single real-time combat input a player makes; everything else is a menu action. It is therefore a first-class networked input (see [`04-protocol-and-messages.md`](04-protocol-and-messages.md)).
 
 ## 2.3 Match structure & clock
 
@@ -25,7 +25,7 @@ Design spec for **Standing Tank Defense**, grounded in the extracted Tower Survi
 | Countdown | ~5 s **[design choice]** | Time-sync converges here |
 | Rounds | **~30 s each**, a new **shop every round** | ~15 min of escalating waves |
 | Scaling steps | at **10 min** and **15 min** | enemy HP/damage jump; 15-min step "brings the game to a swift end" |
-| Boss | after ~15 min | **Samwise** spawns; **fixed** HP/damage (does not scale); shop "flees in fear"; only `Clear` damages it |
+| Boss | after ~15 min | the boss spawns; **fixed** HP (does not scale); shop "flees in fear"; weapons damage it through rotating armor plates (`docs/11` §11.7) |
 | Resolution | — | placement + Last Stand awarded |
 
 - **Round number and global clock are server-authoritative** and identical for everyone, so "round N" / "minute N" are comparable across the leaderboard.

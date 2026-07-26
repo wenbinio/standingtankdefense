@@ -1294,28 +1294,42 @@ pub static ENEMIES: &[EnemyDef] = &[
         boss: false,
     },
     // 2 — The Hippocrate: a doctor-hippo who swore to "first, do no harm" — he lied.
-    //     The 30-min END-GAME boss. Fixed huge HP, immune to weapon fire; only
-    // `Clear` hurts it (CLEAR_DAMAGE = 3M/use ⇒ 11 Clears at a 300-tick cooldown ⇒ a
-    // ~110 s minimum fight). It does NOT self-destruct: when it reaches the tank it
-    // PLANTS and grinds with a CADENCED contact hit every `BOSS_CONTACT_CADENCE`
-    // ticks (dodge/armor/shield honored) — see `combat::move_enemies`.
+    //     The 30-min END-GAME boss. FIXED stats: its HP never rides `enemy_hp_mult`,
+    // and it does NOT self-destruct — on reaching the tank it PLANTS and grinds with a
+    // CADENCED contact hit every `BOSS_CONTACT_CADENCE` ticks (dodge/armor/shield
+    // honored, and ENRAGING over the fight) — see `combat::move_enemies`.
     //
-    // `docs/11` BALANCE PASS — `contact_damage` 45000 → 1900. THE most consequential
-    // number in the old build. At 45000 it rode the ramp to ≈250k per hit at 1.5
-    // hits/s, which deletes any tank under ~10M effective HP within seconds of the
-    // boss walking into contact. That is not a fight, it is an HP CHECK: measured,
-    // 82% of ALL deaths in a 240-seed sweep landed inside a ~13 s window at 30:13,
-    // winners always took exactly 11 Clears and losers almost always exactly 1. The
-    // 30-minute run had no difficulty curve at all — it had a plateau and a wall.
-    // At 1900 (≈34k per hit at the ×17.7 endpoint, ≈7M over the minimum fight) the
-    // climax is a genuine multi-Clear RACE with partial progress: ≈70% of the runs
-    // that reach the boss now win it, and the boss holds ≈15% of deaths instead of
-    // 82%. (Const id stays BOSS; sprite key unchanged.)
+    // ADAPTIVE ARMOR PLATES (`docs/11 §11.5` #1) — the boss is NO LONGER immune to
+    // weapon fire. Full rationale and arithmetic in the BOSS ENCOUNTER block above
+    // `BOSS_PLATE_TICKS`; in brief it exposes one damage-type plate at a time, cracks
+    // for `4/5 × arsenal coverage` there and `2/5` elsewhere, is BREACHED by a `Clear`
+    // for `BOSS_BREACH_TICKS`, and takes only `BOSS_CLEAR_DAMAGE` from a Clear. It
+    // stays immune to STATUS and weapon ABILITIES (no poison/fire/frost/stun/root).
+    //
+    // `base_hp` 33M → 6.3M and `contact_damage` 45000 → 1620, both measured.
+    //
+    //   * 33M was a CLEAR-DENOMINATED number: 11 uses of a 3M ability, nothing else.
+    //     A 30-minute arsenal's NOMINAL per-target DPS is ~30k/s (its ~900k/s output
+    //     is that number times the ~30 escort enemies an AoE pulse covers), so 33M was
+    //     ~1100 seconds of arsenal fire — measured, with boss mitigation switched OFF
+    //     ENTIRELY the arsenal still contributed under 1M of it across a 290 s fight.
+    //     Weapons could not matter at 33M no matter what multiplier they were given.
+    //     6.3M is denominated in what the player's guns can actually chew through:
+    //     the arsenal now supplies ~40-60% of the bar and its rate varies 45× between
+    //     builds, which is where the fight's texture comes from.
+    //   * 45000 rode the ramp to ≈250k per hit at 1.9 hits/s, deleting any tank under
+    //     ~10M effective HP within seconds — an HP CHECK, not a fight. Measured, 82%
+    //     of ALL deaths landed inside a ~13 s window at 30:13. The `docs/11` pass cut
+    //     it to 1900, which overcorrected the other way (boss = 6.2% of runs' deaths).
+    //     1620 plus the ENRAGE ramp lands at ~13% of runs and, more importantly, makes
+    //     the failure TIME continuous instead of a threshold.
+    //
+    // (Const id stays BOSS; sprite key unchanged.)
     EnemyDef {
         name: "The Hippocrate",
-        base_hp: 33_000_000,
+        base_hp: 6_300_000,
         move_speed: 3,
-        contact_damage: 1900,
+        contact_damage: 1620,
         bounty: 0,
         armor_class: ARMOR_LIGHT,
         archetype: Archetype::Boss,
@@ -1363,7 +1377,7 @@ pub static ENEMIES: &[EnemyDef] = &[
         name: "Bonk",
         base_hp: 16_000,
         move_speed: 3,
-        contact_damage: 2200,
+        contact_damage: 1620,
         bounty: 80,
         armor_class: ARMOR_FORTIFIED,
         archetype: Archetype::Tank,
@@ -1452,12 +1466,177 @@ pub const CLIFF_25_TICK: u32 = 25 * 60 * 30; // 45000 — 25 min (roster surge g
 pub const BOSS_SPAWN_TICK: u32 = 30 * 60 * 30; // 54000 — 30 min
 
 /// While the boss is planted on the tank it lands a contact hit every this many
-/// ticks (a PERSISTENT attrition attack, not a one-shot self-destruct). 20 ticks
-/// @30 Hz ⇒ 1.5 hits/s; with the ×11 boss-phase multiplier each hit is ~0.33M
-/// (dodge/armor/shield apply). Tuned so the boss is a multi-Clear RACE the player
-/// must win, deadly to an unprepared snowball but survivable by a strong build.
+/// ticks (a PERSISTENT attrition attack, not a one-shot self-destruct). 16 ticks
+/// @30 Hz ⇒ 1.875 hits/s; at the ×17.7 boss-phase endpoint each hit is ≈28.7k before
+/// ENRAGE, rising to ≈115k by the four-minute mark (dodge/armor/shield still apply).
 /// Pure function of `s.tick` — deterministic, no new RNG/state. (`combat::move_enemies`.)
 pub const BOSS_CONTACT_CADENCE: u32 = 16;
+
+// ---------------------------------------------------------------------------
+// THE BOSS ENCOUNTER — ADAPTIVE ARMOR PLATES (`docs/11 §11.5` "still open" #1)
+// ---------------------------------------------------------------------------
+// The old rule was "the boss is immune to weapon fire; only `Clear` hurts it".
+// `docs/02 §2.6` records that rule as a CARRIED-OVER DESIGN ASSUMPTION, never
+// confirmed from the source map, and `docs/11` measured what it cost: at
+// `CLEAR_DAMAGE` 3M against 33M HP the fight was EXACTLY 11 Clears for every
+// winner and exactly 1 for almost every loser — no partial progress, no comeback,
+// and (the structural bug) NO PATH from the arsenal to the win condition. Thirty
+// minutes of build decisions were settled by the one ability nobody bought.
+//
+// The replacement, in one sentence: **The Hippocrate wears five armor plates, one
+// per damage type, exposes one at a time, and ADAPTS to a monotonous attacker —
+// the more damage types your arsenal brings, the harder the open plate cracks.
+// `Clear` blows every plate open for a moment.**
+//
+//   * Weapon / hazard / aura damage now lands on the boss, mitigated by
+//     [`boss_damage_mult`] in place of the normal armor matrix.
+//   * Which plate is exposed rotates Normal → Piercing → Magic → Siege → Chaos
+//     every `BOSS_PLATE_TICKS`; it is a pure function of the tick.
+//   * A hit on the EXPOSED plate lands at `BOSS_EXPOSED_NUM/DEN × coverage`,
+//     where `coverage` (1..=5) is the number of distinct damage types among the
+//     player's owned weapons. Everything else lands at `BOSS_ARMORED_NUM/DEN`.
+//   * A `Clear` BREACHES the boss for `BOSS_BREACH_TICKS`: every damage type
+//     counts as exposed. That is what makes `Clear` INTERACTIVE at the boss — a
+//     burst window your arsenal pours into — rather than a flat chunk of HP.
+//   * `Clear` also chips it directly, but only for `BOSS_CLEAR_DAMAGE`, a
+//     deliberate minority of the bar (11 Clears ≈ 44% of it).
+//   * The boss ENRAGES (see `BOSS_ENRAGE_INTERVAL`), so the fight is a race.
+//
+// WHY `coverage` IS IN HERE, WITH THE ARITHMETIC — this is the subtle part and it
+// cost a measurement to find. A rotation *alone* does NOT reward breadth. If the
+// multiplier depends only on (damage type, tick), then over one full rotation the
+// expected multiplier is
+//       (1/5)·EXPOSED + (4/5)·ARMORED
+// for EVERY build, no matter how its DPS is split: exactly one plate is open at a
+// time, so a build with `k` types spends `k/5` of the rotation amplifying `1/k` of
+// its DPS — and those cancel exactly. Rotation buys RHYTHM (damage visibly pulses,
+// and the breach has something to open), not a breadth incentive. ANY rule linear
+// in the build's composition is invariant to it, so the incentive has to read the
+// BUILD. Hence `coverage`:
+//       expected multiplier(k) = (1/5)·(4/5)·k + (4/5)·(2/5)
+//                              = 0.16·k + 0.32
+//   k=1 → 0.48   k=2 → 0.64   k=3 → 0.80   k=4 → 0.96   k=5 → 1.12
+// A five-type arsenal has 2.33× the boss DPS of a single-type stack holding
+// NOMINAL DPS EQUAL. It is framed as upside (`docs/11 §11.3` #4 — "add upside for
+// covering damage types rather than taxing copies"): breadth does not reduce the
+// boss's armor, it lets you crack the open plate harder, because he cannot adapt
+// to punishment he has not seen.
+//
+// The boss stays immune to STATUS and to weapon ABILITIES (poison / fire / frost /
+// stun / root / knockback / life-drain / summon). That is load-bearing: a 60-tick
+// stun on an 18-tick cooldown (Shocker) would pin the boss forever and delete the
+// climax outright.
+//
+// Determinism: integer ratios, a `tick`-derived plate index, and a count over the
+// already-existing `weapons` vec. The breach is derived from the existing
+// `tank.clear_cooldown_end`, so NOTHING new enters the snapshot or
+// `state_checksum`.
+
+/// Ticks each of the boss's five armor plates stays exposed. 150 @30 Hz = 5 s per
+/// plate ⇒ a 25 s full rotation, i.e. ~5 rotations across a median ~120 s fight.
+/// Long enough to read on screen, short enough that no build idles for a quarter
+/// of the encounter.
+pub const BOSS_PLATE_TICKS: u32 = 150;
+
+/// Damage multiplier against the boss's EXPOSED plate, PER DAMAGE TYPE the arsenal
+/// covers: `4/5 × coverage`. A full five-type arsenal therefore hits the open plate
+/// for 4×; a single-type stack for 0.8×. (Also the rate every type lands at while
+/// breached.)
+pub const BOSS_EXPOSED_NUM: i64 = 4;
+pub const BOSS_EXPOSED_DEN: i64 = 5;
+
+/// Damage multiplier against a plate that is NOT exposed: 2/5. Not zero — that is
+/// deliberate. A steady trickle means a narrow build still makes visible progress
+/// and still lands somewhere in the "boss HP left on failure" spread instead of
+/// flat-lining at full.
+pub const BOSS_ARMORED_NUM: i64 = 2;
+pub const BOSS_ARMORED_DEN: i64 = 5;
+
+/// How long a `Clear` keeps ALL five plates open: 45 @30 Hz = 1.5 s out of the
+/// 300-tick Clear cooldown ⇒ 15% uptime. Deliberately short — a long breach hands
+/// a mono-stack most of the coverage bonus for free.
+pub const BOSS_BREACH_TICKS: u32 = 45;
+
+/// Damage a `Clear` deals to a BOSS (normal enemies take the full [`CLEAR_DAMAGE`],
+/// ~10.7× more). At 280k against 6.3M HP, the 11 Clears a clean ~110 s fight affords
+/// come to 3.08M — 49% of the bar, and the ceiling only if you land every cooldown —
+/// so the arsenal has to supply the rest. This is the number that demotes `Clear`
+/// from "the only damage source" to "the opener, the board-wipe, and the
+/// plate-breaker".
+pub const BOSS_CLEAR_DAMAGE: i64 = 280_000;
+
+/// Damage a `Clear` deals to every NON-boss enemy: enough to wipe the board.
+/// (Lives here rather than in `input.rs` so all of the Clear/boss arithmetic sits
+/// in one place, next to the plate constants it is balanced against.)
+pub const CLEAR_DAMAGE: i64 = 3_000_000;
+
+/// Cooldown (in ticks) imposed after a `Clear` — 10 s @30 Hz. Read by `combat` as
+/// well as `input`: the breach window is derived from `tank.clear_cooldown_end`
+/// minus this constant, so the window needs no state of its own.
+pub const CLEAR_COOLDOWN_TICKS: u32 = 300;
+
+/// ENRAGE. Every `BOSS_ENRAGE_INTERVAL` ticks the boss has been alive, its contact
+/// hit gains `BOSS_ENRAGE_STEP_NUM/BOSS_ENRAGE_STEP_DEN` of its base on top
+/// (`1 + steps·step`, uncapped). 900 ticks = 30 s per step at +1/2, so a fight
+/// dragging to three minutes is taking quadruple hits by the end.
+///
+/// This is what turns the boss from a THRESHOLD into a RACE. With a flat contact
+/// hit, boss DPS is constant, so whether you survive is decided in the first ten
+/// seconds and every failure looks identical — measured, failures died with 87% of
+/// the boss's HP still up regardless of build. An escalating hit makes the failure
+/// TIME a continuous function of how fast you are killing it, so failures land all
+/// across the fight and "I got it to 30%" becomes a real outcome. It also caps the
+/// fight: a grind you cannot close kills you instead of running to the clock.
+///
+/// Deterministic: a pure integer function of `tick - BOSS_SPAWN_TICK`.
+pub const BOSS_ENRAGE_INTERVAL: u32 = 900;
+pub const BOSS_ENRAGE_STEP_NUM: i64 = 1;
+pub const BOSS_ENRAGE_STEP_DEN: i64 = 2;
+
+/// Number of distinct damage types across the player's owned weapons, clamped to
+/// `1..=5`. The `coverage` term of [`boss_damage_mult`]. Counted into a fixed
+/// 5-slot bitmap, so it is O(n) and independent of iteration order. Clamped at 1 so
+/// a weaponless tank's aura/hazard damage can never end up with the exposed plate
+/// weaker than the armored ones.
+pub fn arsenal_coverage(weapon_defs: impl Iterator<Item = u16>) -> i64 {
+    let mut seen = [false; 5];
+    for def in weapon_defs {
+        seen[(WEAPONS[def as usize].damage_type % 5) as usize] = true;
+    }
+    (seen.iter().filter(|b| **b).count() as i64).max(1)
+}
+
+/// The boss's enrage multiplier at `tick` — `1 + steps·(STEP_NUM/STEP_DEN)` where
+/// `steps = (tick - BOSS_SPAWN_TICK) / BOSS_ENRAGE_INTERVAL`. `Fixed`, so it
+/// composes with `enemy_hp_mult` the way the base contact scaling does.
+pub fn boss_enrage_mult(tick: u32) -> Fixed {
+    let steps = (tick.saturating_sub(BOSS_SPAWN_TICK) / BOSS_ENRAGE_INTERVAL) as i64;
+    Fixed::ONE + Fixed::from_ratio(steps * BOSS_ENRAGE_STEP_NUM, BOSS_ENRAGE_STEP_DEN)
+}
+
+/// Which of the boss's five plates is exposed at `tick`: the damage type
+/// (`DMG_NORMAL`..`DMG_CHAOS`) that takes the amplified rate. Rotates every
+/// [`BOSS_PLATE_TICKS`] from [`BOSS_SPAWN_TICK`]. Pure integer function of the
+/// tick — no state, no RNG. (`saturating_sub` so a test placing a boss before the
+/// boss tick gets plate 0 rather than underflowing.)
+pub fn boss_exposed_type(tick: u32) -> u8 {
+    ((tick.saturating_sub(BOSS_SPAWN_TICK) / BOSS_PLATE_TICKS) % 5) as u8
+}
+
+/// Multiplier applied to one hit of `damage_type` on the BOSS at `tick`, given the
+/// arsenal's `coverage` (see [`arsenal_coverage`]) and whether a recent `Clear` has
+/// `breached` every plate (see `combat::boss_breached`). Replaces the normal armor
+/// matrix for boss targets.
+///
+///   exposed (or breached): `BOSS_EXPOSED_NUM × coverage / BOSS_EXPOSED_DEN`
+///   armored:               `BOSS_ARMORED_NUM / BOSS_ARMORED_DEN`
+pub fn boss_damage_mult(damage_type: u8, tick: u32, breached: bool, coverage: i64) -> Fixed {
+    if breached || damage_type % 5 == boss_exposed_type(tick) {
+        Fixed::from_ratio(BOSS_EXPOSED_NUM * coverage.clamp(1, 5), BOSS_EXPOSED_DEN)
+    } else {
+        Fixed::from_ratio(BOSS_ARMORED_NUM, BOSS_ARMORED_DEN)
+    }
+}
 
 /// One difficulty interval = 3 minutes @ 30 Hz. Cliffs land at `k*RAMP_INTERVAL`
 /// for k = 1..=10; the boss tick (54000) is the k=10 boundary.

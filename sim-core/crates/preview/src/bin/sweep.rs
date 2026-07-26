@@ -642,7 +642,7 @@ fn print_human(runs: &[Run], a: &Agg, cap: u32, challenge: Challenge, threads: u
 
     // ---- boss ----
     println!(
-        "\nboss (The Hippocrate, {} HP, Clear-only):",
+        "\nboss (The Hippocrate, {} HP, plated):",
         mag(content::ENEMIES[content::BOSS as usize].base_hp)
     );
     println!(
@@ -691,7 +691,7 @@ fn print_human(runs: &[Run], a: &Agg, cap: u32, challenge: Challenge, threads: u
     if !a.clears_boss.is_empty() {
         let base = content::ENEMIES[content::BOSS as usize].base_hp;
         println!(
-            "  Clears in boss phase : median {}  max {}  ({} needed for a clean kill)",
+            "  Clears in boss phase : median {}  max {}  ({} Clear-equivalents if Clear were the only source)",
             pctl(&a.clears_boss, 50),
             a.clears_boss.last().unwrap(),
             (base + 2_999_999) / 3_000_000

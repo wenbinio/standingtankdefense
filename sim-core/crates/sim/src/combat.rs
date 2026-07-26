@@ -101,17 +101,83 @@ impl CondDamage {
     }
 }
 
+/// The boss's live vulnerability at one damage site: which armor plate is
+/// exposed, and whether a recent `Clear` has BREACHED all five. Captured once
+/// per damage pass (both terms are pure functions of state that cannot change
+/// mid-pass) and consulted at impact, exactly like [`CondDamage`].
+///
+/// See the BOSS ENCOUNTER block in `content.rs`: the boss is no longer immune to
+/// weapon fire, it is *plated*. One damage type at a time takes
+/// `BOSS_EXPOSED_NUM/DEN`; the rest take `BOSS_ARMORED_NUM/DEN`; a `Clear` opens
+/// everything for `BOSS_BREACH_TICKS`.
+#[derive(Clone, Copy)]
+struct BossVuln {
+    tick: u32,
+    breached: bool,
+    /// Distinct damage types in the arsenal (1..=5) — the term that makes BREADTH
+    /// pay at the boss. A plate rotation alone cannot: see the arithmetic in the
+    /// BOSS ENCOUNTER block in `content.rs`.
+    coverage: i64,
+}
+
+impl BossVuln {
+    fn of(s: &ArenaState) -> BossVuln {
+        BossVuln {
+            tick: s.tick,
+            breached: boss_breached(s),
+            coverage: content::arsenal_coverage(s.weapons.iter().map(|w| w.def)),
+        }
+    }
+    /// Mitigation for one hit of `damage_type` on the boss.
+    fn mult(&self, damage_type: u8) -> Fixed {
+        content::boss_damage_mult(damage_type, self.tick, self.breached, self.coverage)
+    }
+}
+
+/// Is the boss currently BREACHED (all plates open) by a recent `Clear`?
+///
+/// Derived, deliberately: `input::apply` sets
+/// `tank.clear_cooldown_end = clear_tick + CLEAR_COOLDOWN_TICKS`, so the last
+/// `Clear` landed at `clear_cooldown_end - CLEAR_COOLDOWN_TICKS` and the breach
+/// runs for `BOSS_BREACH_TICKS` from there:
+///
+/// ```text
+/// breached  ⇔  clear_cooldown_end > tick
+///           ∧  (clear_cooldown_end - tick) + BOSS_BREACH_TICKS > CLEAR_COOLDOWN_TICKS
+/// ```
+///
+/// Reading it off the existing cooldown field means the breach window adds NO
+/// new per-arena state, so the snapshot layout and `state_checksum` are
+/// untouched. All-integer, no wall-clock, no RNG. The first guard also keeps the
+/// u32 subtraction from underflowing and makes a never-Cleared tank
+/// (`clear_cooldown_end == 0`) unbreached.
+fn boss_breached(s: &ArenaState) -> bool {
+    let end = s.tank.clear_cooldown_end;
+    end > s.tick && (end - s.tick) + content::BOSS_BREACH_TICKS > content::CLEAR_COOLDOWN_TICKS
+}
+
 /// Apply one weapon hit to an enemy: `base × armor-matrix × modifier-stack ×
 /// fire-vulnerability × target-conditional` damage, then the weapon's on-hit
-/// status. Bosses are immune to weapon fire — only `Clear` damages them.
-/// Returns the integer damage subtracted from the enemy (0 for an immune boss),
-/// for the caller's damage/Bloodmoney accounting.
+/// status.
+///
+/// The BOSS takes a different path (`docs/11 §11.5` #1): plate mitigation
+/// (`BossVuln::mult`) replaces the armor matrix, and it is still immune to
+/// STATUS and to weapon ABILITIES — no poison/fire/frost/stun/root/knockback,
+/// no life-drain, no corpse summons. That asymmetry is load-bearing, not
+/// laziness: a 60-tick stun aura on an 18-tick cooldown (Shocker) would
+/// otherwise pin the boss forever and delete the climax, and letting Fire/Poison
+/// DoTs tick on a multi-million HP pool would reintroduce a damage source the
+/// plates cannot gate at all.
+///
+/// Returns the integer damage subtracted from the enemy, for the caller's
+/// damage/Bloodmoney accounting.
 fn apply_weapon_hit(
     e: &mut Enemy,
     base: i64,
     damage_type: u8,
     mod_mult: Fixed,
     cond: CondDamage,
+    boss: BossVuln,
     on_hit: &content::StatusOnHit,
     ability: WeaponAbility,
     tank_pos: Vec2,
@@ -119,8 +185,11 @@ fn apply_weapon_hit(
 ) -> i64 {
     let edef = &content::ENEMIES[e.def as usize];
     if edef.boss {
-        // Bosses are immune to weapon fire AND to its abilities.
-        return 0;
+        // Plated, not immune. No armor matrix, no status vulnerability (the boss
+        // carries no statuses), no on-hit, no ability — just mitigated damage.
+        let dmg = boss.mult(damage_type).mul(mod_mult).scale_i64(base);
+        e.hp -= dmg;
+        return dmg;
     }
     let armor = content::damage_multiplier(damage_type, edef.armor_class);
     let vuln = crate::status::vulnerability_mult(e);
@@ -201,6 +270,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
     let mut instant_damage: i64 = 0;
     // Target-conditional bonuses are constant across this tick's fires.
     let cond = CondDamage::of(s);
+    let boss = BossVuln::of(s);
 
     for wi in 0..s.weapons.len() {
         let def = s.weapons[wi].def;
@@ -258,20 +328,58 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
             });
         };
 
+        // BOSS FOCUS (`docs/11 §11.5` #1). While The Hippocrate is in range it is
+        // this weapon's target, ahead of the escort chaff. "Attack at random" still
+        // governs every other tick of the match; the boss is the one exception,
+        // because it is a building-sized enemy planted on the tank.
+        //
+        // This is not flavor, it is THE fix. Random targeting alone made the
+        // arsenal invisible to the boss: with ~50 escort enemies alive, a random
+        // pick lands on the boss ~2% of the time, and a measured 80-seed sweep with
+        // boss mitigation switched OFF ENTIRELY still had the arsenal contribute
+        // under 1M of the boss's HP bar (33M at the time) across a 290 s fight — the
+        // kill was ~30 Clears start to finish. Letting weapons damage the boss is
+        // worthless without letting them AIM at it.
+        //
+        // The price, deliberately paid: single-target guns stop answering the
+        // escort while the boss is up, so the escort swarm is what threatens to kill
+        // you during the climax. That is the fight's central tension — AoE and
+        // `Clear` hold the board, focused fire kills the boss, and you cannot fully
+        // have both.
+        let boss_pick = candidates
+            .iter()
+            .copied()
+            .find(|&ei| content::ENEMIES[s.enemies[ei].def as usize].boss);
+
         match wdef.attack {
             Attack::SingleTarget => {
-                let pick = candidates[s.rng_targeting.below(candidates.len() as u32) as usize];
+                let pick = match boss_pick {
+                    Some(bi) => bi,
+                    None => candidates[s.rng_targeting.below(candidates.len() as u32) as usize],
+                };
                 new_proj(s, pick, Fixed::ZERO);
             }
             Attack::Splash(r) => {
-                let pick = candidates[s.rng_targeting.below(candidates.len() as u32) as usize];
+                let pick = match boss_pick {
+                    Some(bi) => bi,
+                    None => candidates[s.rng_targeting.below(candidates.len() as u32) as usize],
+                };
                 new_proj(s, pick, Fixed::from_int(r));
             }
             Attack::Barrage(n) => {
-                // N distinct random in-range targets (partial Fisher–Yates).
+                // N distinct random in-range targets (partial Fisher–Yates). With the
+                // boss in range it claims the FIRST bolt and the remaining N-1 still
+                // scatter — a volley spreads, so only part of it finds the boss.
                 let mut pool = candidates.clone();
                 let shots = (n as usize).min(pool.len());
-                for k in 0..shots {
+                let mut k0 = 0;
+                if let Some(bi) = boss_pick {
+                    let at = pool.iter().position(|&x| x == bi).unwrap();
+                    pool.swap(0, at);
+                    new_proj(s, pool[0], Fixed::ZERO);
+                    k0 = 1;
+                }
+                for k in k0..shots {
                     let j = k + s.rng_targeting.below((pool.len() - k) as u32) as usize;
                     pool.swap(k, j);
                     new_proj(s, pool[k], Fixed::ZERO);
@@ -283,7 +391,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 for e in s.enemies.iter_mut() {
                     if tank_pos.dist_sq(e.pos) <= r2 {
                         instant_damage += apply_weapon_hit(
-                            e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit, ability,
+                            e, wdef.damage, wdef.damage_type, wmult, cond, boss, &on_hit, ability,
                             tank_pos, &mut accum,
                         );
                     }
@@ -297,7 +405,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 for e in s.enemies.iter_mut() {
                     if tank_pos.dist_sq(e.pos) <= r2 {
                         instant_damage += apply_weapon_hit(
-                            e, wdef.damage, wdef.damage_type, wmult, cond, &on_hit, ability,
+                            e, wdef.damage, wdef.damage_type, wmult, cond, boss, &on_hit, ability,
                             tank_pos, &mut accum,
                         );
                     }
@@ -305,8 +413,12 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                 any_instant_damage = true;
             }
             Attack::Bounce(n) => {
-                // Random first target, then the N-1 nearest OTHER enemies to it.
-                let first = candidates[s.rng_targeting.below(candidates.len() as u32) as usize];
+                // Random first target (the boss if it is in range), then the N-1
+                // nearest OTHER enemies to it.
+                let first = match boss_pick {
+                    Some(bi) => bi,
+                    None => candidates[s.rng_targeting.below(candidates.len() as u32) as usize],
+                };
                 let origin = s.enemies[first].pos;
                 let mut order: Vec<usize> = (0..s.enemies.len()).filter(|&i| i != first).collect();
                 // Sort by (distance to origin, id) for a deterministic chain.
@@ -321,7 +433,7 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                         wdef.damage,
                         wdef.damage_type,
                         wmult,
-                        cond,
+                        cond, boss,
                         &on_hit,
                         ability,
                         tank_pos,
@@ -445,6 +557,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     // them), and each hit also applies the weapon's on-hit status.
     // Conditional bonuses are evaluated live at impact against the target's status.
     let cond = CondDamage::of(s);
+    let boss = BossVuln::of(s);
     let tank_pos = s.tank.pos;
     let mut impact_damage: i64 = 0;
     for imp in impacts {
@@ -457,14 +570,14 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
             for e in s.enemies.iter_mut() {
                 if imp.point.dist_sq(e.pos) <= radius_sq {
                     impact_damage += apply_weapon_hit(
-                        e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit, imp.ability,
+                        e, imp.damage, imp.damage_type, mod_mult, cond, boss, &imp.on_hit, imp.ability,
                         tank_pos, &mut accum,
                     );
                 }
             }
         } else if let Some(e) = s.enemies.iter_mut().find(|e| e.id == imp.target) {
             impact_damage += apply_weapon_hit(
-                e, imp.damage, imp.damage_type, mod_mult, cond, &imp.on_hit, imp.ability, tank_pos,
+                e, imp.damage, imp.damage_type, mod_mult, cond, boss, &imp.on_hit, imp.ability, tank_pos,
                 &mut accum,
             );
         }
@@ -505,16 +618,18 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
                 // BOSS — PERSISTENT ATTRITION FIGHT (not a one-shot self-destruct).
                 // The boss does NOT despawn on contact: it plants at the tank and
                 // grinds it with a CADENCED contact hit (every `BOSS_CONTACT_CADENCE`
-                // ticks) until the player kills it with `Clear` (the only thing that
-                // hurts it) or the tank dies. This is what makes the 30-min climax a
-                // real multi-Clear RACE — survival is no longer a single dodge coin
-                // flip on one burst; the player must out-Clear the boss's sustained
-                // DPS while the escort piles on. Determinism: the cadence is a pure
-                // function of `s.tick` (no wall-clock, no new RNG); dodge/armor/shield
-                // are still honored per hit inside `hit_tank`.
+                // ticks) until the player kills it or the tank dies. Determinism:
+                // the cadence and the enrage are pure functions of `s.tick` (no
+                // wall-clock, no new RNG); dodge/armor/shield are still honored per
+                // hit inside `hit_tank`.
                 e.pos = moved; // pin at the tank
                 if s.tick % content::BOSS_CONTACT_CADENCE == 0 {
-                    crate::defense::hit_tank(s, contact);
+                    // ENRAGE: the hit grows every `BOSS_ENRAGE_INTERVAL` the boss
+                    // stays alive, so the encounter is a RACE against a rising
+                    // damage curve rather than a fixed DPS threshold you either
+                    // clear or don't. Pure integer function of the tick.
+                    let enraged = content::boss_enrage_mult(s.tick).scale_i64(contact);
+                    crate::defense::hit_tank(s, enraged);
                 }
                 survivors.push(e);
             } else {
@@ -542,6 +657,7 @@ pub(crate) fn tick_hazards(s: &mut ArenaState) {
         return;
     }
     let cond = CondDamage::of(s);
+    let boss = BossVuln::of(s);
     let tank_pos = s.tank.pos;
     let mut total: i64 = 0;
     let mut any = false;
@@ -557,7 +673,7 @@ pub(crate) fn tick_hazards(s: &mut ArenaState) {
         for e in s.enemies.iter_mut() {
             if h.pos.dist_sq(e.pos) <= r2 {
                 total += apply_weapon_hit(
-                    e, h.dmg, h.damage_type, Fixed::ONE, cond, &content::StatusOnHit::NONE,
+                    e, h.dmg, h.damage_type, Fixed::ONE, cond, boss, &content::StatusOnHit::NONE,
                     WeaponAbility::None, tank_pos, &mut accum,
                 );
                 any = true;
@@ -599,6 +715,7 @@ pub(crate) fn tick_aura(s: &mut ArenaState) {
     let range = Fixed::from_int(s.tank.aura_range);
     let r2 = range.mul(range);
     let cond = CondDamage::of(s);
+    let boss = BossVuln::of(s);
     let tank_pos = s.tank.pos;
     let poison = if s.tank.aura_poison_dps > 0 && s.tank.aura_poison_ticks > 0 {
         content::StatusOnHit {
@@ -616,7 +733,7 @@ pub(crate) fn tick_aura(s: &mut ArenaState) {
     for e in s.enemies.iter_mut() {
         if tank_pos.dist_sq(e.pos) <= r2 {
             total += apply_weapon_hit(
-                e, dmg, content::DMG_MAGIC, Fixed::ONE, cond, &poison,
+                e, dmg, content::DMG_MAGIC, Fixed::ONE, cond, boss, &poison,
                 WeaponAbility::None, tank_pos, &mut accum,
             );
             any = true;
@@ -690,13 +807,14 @@ pub(crate) fn tick_minions(s: &mut ArenaState) {
     // Resolve strikes (deterministic: minion id order). A minion strike carries
     // no on-hit status and no chained ability.
     let cond = CondDamage::of(s);
+    let boss = BossVuln::of(s);
     let tank_pos = s.tank.pos;
     let mut accum = AbilityAccum::default();
     let mut total: i64 = 0;
     for (tid, dmg, dtype) in strikes {
         if let Some(e) = s.enemies.iter_mut().find(|e| e.id == tid) {
             total += apply_weapon_hit(
-                e, dmg, dtype, Fixed::ONE, cond, &content::StatusOnHit::NONE,
+                e, dmg, dtype, Fixed::ONE, cond, boss, &content::StatusOnHit::NONE,
                 WeaponAbility::None, tank_pos, &mut accum,
             );
         }
@@ -1082,7 +1200,7 @@ mod tests {
         off.tick = content::BOSS_SPAWN_TICK + 1; // not a multiple of cadence (16)
         assert_ne!(off.tick % cadence, 0);
         let hp_off = off.tank.hp;
-        mk_enemy(&mut off, boss_def, 33_000_000, Vec2::new(Fixed::from_int(2), Fixed::ZERO));
+        mk_enemy(&mut off, boss_def, content::ENEMIES[boss_def as usize].base_hp, Vec2::new(Fixed::from_int(2), Fixed::ZERO));
         move_enemies(&mut off);
         assert_eq!(off.enemies.len(), 1, "boss persists on contact (no self-destruct)");
         assert_eq!(off.enemies[0].pos, Vec2::ZERO, "boss planted on the tank");
@@ -1095,7 +1213,7 @@ mod tests {
         assert_eq!(on.tick % cadence, 0);
         let expected = content::enemy_hp_mult(on.tick).scale_i64(raw);
         let hp_on = on.tank.hp;
-        mk_enemy(&mut on, boss_def, 33_000_000, Vec2::new(Fixed::from_int(2), Fixed::ZERO));
+        mk_enemy(&mut on, boss_def, content::ENEMIES[boss_def as usize].base_hp, Vec2::new(Fixed::from_int(2), Fixed::ZERO));
         move_enemies(&mut on);
         assert_eq!(on.enemies.len(), 1, "boss still present after a contact hit");
         assert_eq!(on.tank.hp, hp_on - expected, "cadence tick deals one scaled boss hit");
@@ -1155,12 +1273,13 @@ mod tests {
         let mut s = blank_state();
         s.modifiers.vs_stunned = Fixed::from_ratio(1, 1);
         let cond = CondDamage::of(&s);
+        let boss = BossVuln::of(&s);
         let mut plain = Enemy::new(EntityId(2), 0, 1_000_000, Vec2::ZERO);
         let mut stunned = Enemy::new(EntityId(1), 0, 1_000_000, Vec2::ZERO);
         stunned.status.stun_ticks = 10;
         // Piercing vs armor 0 = 2× matrix; base 100 ⇒ plain takes 200.
-        apply_weapon_hit(&mut plain, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE, WeaponAbility::None, Vec2::ZERO, &mut AbilityAccum::default());
-        apply_weapon_hit(&mut stunned, 100, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE, WeaponAbility::None, Vec2::ZERO, &mut AbilityAccum::default());
+        apply_weapon_hit(&mut plain, 100, content::DMG_PIERCING, Fixed::ONE, cond, boss, &content::StatusOnHit::NONE, WeaponAbility::None, Vec2::ZERO, &mut AbilityAccum::default());
+        apply_weapon_hit(&mut stunned, 100, content::DMG_PIERCING, Fixed::ONE, cond, boss, &content::StatusOnHit::NONE, WeaponAbility::None, Vec2::ZERO, &mut AbilityAccum::default());
         assert_eq!(1_000_000 - plain.hp, 200, "no conditional bonus on un-stunned");
         assert_eq!(1_000_000 - stunned.hp, 400, "+100% vs stunned doubles it");
     }
@@ -1264,28 +1383,326 @@ mod tests {
         assert_eq!(s.economy.gold, gold0 + 40, "160 × 1/4 = 40 gold");
     }
 
-    #[test]
-    fn boss_is_immune_to_weapon_fire() {
+    // ---- the boss encounter: plates, coverage, breach, focus, enrage --------
+
+    /// A catalog weapon index whose `damage_type` is `dt` (for building an arsenal
+    /// with a known [`content::arsenal_coverage`]).
+    fn weapon_of_type(dt: u8) -> u16 {
+        content::WEAPONS
+            .iter()
+            .position(|w| w.damage_type == dt)
+            .expect("catalog covers every damage type") as u16
+    }
+
+    /// Fire one `damage` projectile of `damage_type` into a boss standing next to
+    /// the tank at `tick`, with an arsenal covering exactly `types`, and return the
+    /// HP it removed. `clear_cooldown_end` drives the breach window.
+    fn boss_hit_with(
+        tick: u32,
+        damage_type: u8,
+        damage: i64,
+        types: &[u8],
+        clear_cooldown_end: u32,
+    ) -> i64 {
         let mut s = blank_state();
         s.weapons.clear();
+        for &dt in types {
+            give_weapon(&mut s, weapon_of_type(dt));
+        }
+        s.tick = tick;
+        s.tank.clear_cooldown_end = clear_cooldown_end;
         let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
-        let bid = mk_enemy(&mut s, content::BOSS, 10_000_000, pos);
-        let _ = bid;
+        let hp0 = i64::MAX / 4; // never dies, so the raw hit is readable
+        mk_enemy(&mut s, content::BOSS, hp0, pos);
         let pid = s.alloc_entity_id();
         s.projectiles.push(Projectile {
             id: pid,
             pos: Vec2::ZERO,
             target: s.enemies[0].id,
             last_target_pos: pos,
-            damage: 1_000_000,
-            damage_type: content::DMG_PIERCING,
+            damage,
+            damage_type,
             splash_radius: Fixed::ZERO,
             speed: Fixed::from_int(1000),
             on_hit: content::StatusOnHit::NONE,
             ability: content::WeaponAbility::None,
         });
         advance_projectiles(&mut s);
-        assert_eq!(s.enemies[0].hp, 10_000_000, "boss takes zero weapon damage");
+        hp0 - s.enemies[0].hp
+    }
+
+    /// All five damage types, for a full-coverage arsenal.
+    const ALL_TYPES: [u8; 5] = [
+        content::DMG_NORMAL,
+        content::DMG_PIERCING,
+        content::DMG_MAGIC,
+        content::DMG_SIEGE,
+        content::DMG_CHAOS,
+    ];
+
+    #[test]
+    fn boss_takes_weapon_damage_gated_by_the_exposed_plate() {
+        // The old rule ("immune to weapon fire, only `Clear` hurts it") is gone.
+        // At the boss tick plate 0 (Normal) is exposed. With full coverage the open
+        // plate takes 4/5×5 = 4×; every other plate takes 2/5×.
+        let t = content::BOSS_SPAWN_TICK;
+        assert_eq!(content::boss_exposed_type(t), content::DMG_NORMAL);
+        let exposed = Fixed::from_ratio(content::BOSS_EXPOSED_NUM * 5, content::BOSS_EXPOSED_DEN)
+            .scale_i64(1_000_000);
+        let armored = Fixed::from_ratio(content::BOSS_ARMORED_NUM, content::BOSS_ARMORED_DEN)
+            .scale_i64(1_000_000);
+        assert_eq!(exposed, 4_000_000, "full coverage cracks the open plate for 4×");
+        assert_eq!(
+            boss_hit_with(t, content::DMG_NORMAL, 1_000_000, &ALL_TYPES, 0),
+            exposed,
+            "exposed plate"
+        );
+        for dt in [
+            content::DMG_PIERCING,
+            content::DMG_MAGIC,
+            content::DMG_SIEGE,
+            content::DMG_CHAOS,
+        ] {
+            assert_eq!(
+                boss_hit_with(t, dt, 1_000_000, &ALL_TYPES, 0),
+                armored,
+                "armored plate ({dt})"
+            );
+        }
+        assert!(armored < exposed, "the open plate must be the soft spot");
+    }
+
+    #[test]
+    fn boss_plates_rotate_through_all_five_damage_types() {
+        // One plate per `BOSS_PLATE_TICKS`, in damage-type order, cycling every 5.
+        for k in 0..12u32 {
+            let t = content::BOSS_SPAWN_TICK + k * content::BOSS_PLATE_TICKS;
+            assert_eq!(content::boss_exposed_type(t), (k % 5) as u8, "plate {k}");
+            // The whole plate window exposes the same type.
+            let last = t + content::BOSS_PLATE_TICKS - 1;
+            assert_eq!(content::boss_exposed_type(last), (k % 5) as u8);
+        }
+    }
+
+    #[test]
+    fn exposed_plate_damage_scales_with_arsenal_coverage() {
+        // `coverage` = distinct damage types owned, clamped to 1..=5, and the open
+        // plate's multiplier is `4/5 × coverage`. This is the term that makes
+        // breadth pay; a plate rotation on its own cannot (see the content.rs
+        // block).
+        let t = content::BOSS_SPAWN_TICK;
+        let exposed_dt = content::boss_exposed_type(t);
+        let mut last = 0;
+        for k in 1..=5usize {
+            let types = &ALL_TYPES[..k];
+            // Sanity: the arsenal really does cover exactly `k` types.
+            let defs: Vec<u16> = types.iter().map(|&dt| weapon_of_type(dt)).collect();
+            assert_eq!(content::arsenal_coverage(defs.into_iter()), k as i64);
+            let hit = boss_hit_with(t, exposed_dt, 1_000_000, types, 0);
+            let want = Fixed::from_ratio(
+                content::BOSS_EXPOSED_NUM * k as i64,
+                content::BOSS_EXPOSED_DEN,
+            )
+            .scale_i64(1_000_000);
+            assert_eq!(hit, want, "coverage {k}");
+            assert!(hit > last, "more coverage must crack the plate harder");
+            last = hit;
+        }
+        // A weaponless tank (aura / hazard damage only) clamps to coverage 1 rather
+        // than 0, so the open plate is never weaker than the armored ones.
+        assert_eq!(content::arsenal_coverage(std::iter::empty()), 1);
+    }
+
+    #[test]
+    fn clear_breaches_every_plate_for_the_breach_window() {
+        // `Clear` at `t0` ⇒ `clear_cooldown_end = t0 + CLEAR_COOLDOWN_TICKS`. For
+        // the next `BOSS_BREACH_TICKS` ticks EVERY damage type lands at the exposed
+        // rate; after that the plates close again.
+        let t0 = content::BOSS_SPAWN_TICK;
+        let end = t0 + content::CLEAR_COOLDOWN_TICKS;
+        // Piercing is NOT the open plate at t0, so it is the honest probe.
+        assert_ne!(content::boss_exposed_type(t0), content::DMG_PIERCING);
+        let exposed = Fixed::from_ratio(content::BOSS_EXPOSED_NUM * 5, content::BOSS_EXPOSED_DEN)
+            .scale_i64(1_000_000);
+        let armored = Fixed::from_ratio(content::BOSS_ARMORED_NUM, content::BOSS_ARMORED_DEN)
+            .scale_i64(1_000_000);
+        let probe = |tick: u32, cd_end: u32| {
+            boss_hit_with(tick, content::DMG_PIERCING, 1_000_000, &ALL_TYPES, cd_end)
+        };
+        assert_eq!(probe(t0, end), exposed, "breach opens on the Clear tick");
+        assert_eq!(
+            probe(t0 + content::BOSS_BREACH_TICKS - 1, end),
+            exposed,
+            "breach holds to its last tick"
+        );
+        assert_eq!(
+            probe(t0 + content::BOSS_BREACH_TICKS, end),
+            armored,
+            "plates close after the window"
+        );
+        // A tank that has never Cleared (`clear_cooldown_end == 0`) is never breached.
+        assert_eq!(probe(t0, 0), armored, "no Clear ⇒ no breach");
+    }
+
+    /// Boss HP removed over ONE full plate rotation by a build whose arsenal covers
+    /// `types` and whose NOMINAL DPS IS HELD CONSTANT: each plate window lands
+    /// `TOTAL / types.len()` damage of every type it owns, so the only variable
+    /// between builds is coverage, not firepower.
+    fn boss_damage_over_one_rotation(types: &[u8]) -> i64 {
+        const TOTAL: i64 = 5_000_000;
+        let per_type = TOTAL / types.len() as i64;
+        let mut sum = 0;
+        for k in 0..5u32 {
+            let t = content::BOSS_SPAWN_TICK + k * content::BOSS_PLATE_TICKS;
+            for &dt in types {
+                sum += boss_hit_with(t, dt, per_type, types, 0);
+            }
+        }
+        sum
+    }
+
+    #[test]
+    fn damage_type_breadth_beats_a_mono_stack_at_the_boss() {
+        // THE point of the design (`docs/11 §11.5` #1 / §11.3 #4). Nominal DPS held
+        // equal, a five-type arsenal out-damages a single-type stack at the boss by
+        //   (0.16·5 + 0.32) / (0.16·1 + 0.32) = 1.12 / 0.48 = 2.333×
+        // and every extra damage type is a strict improvement.
+        let mut prev = 0;
+        for k in 1..=5usize {
+            let d = boss_damage_over_one_rotation(&ALL_TYPES[..k]);
+            assert!(d > prev, "coverage {k} must beat coverage {}", k - 1);
+            prev = d;
+        }
+        let mono = boss_damage_over_one_rotation(&ALL_TYPES[..1]);
+        let all = boss_damage_over_one_rotation(&ALL_TYPES);
+        // 2.30× ≤ ratio ≤ 2.37× — pins the size of the incentive, not just its sign.
+        assert!(
+            all * 100 >= mono * 230 && all * 100 <= mono * 237,
+            "breadth advantage should be ~2.33×, got {all}/{mono}"
+        );
+    }
+
+    #[test]
+    fn weapons_focus_the_boss_over_the_escort() {
+        // A single-target weapon with the boss and a crowd of chaff in range picks
+        // the BOSS every time. This is what gives the arsenal a path to the win
+        // condition at all: random picking gave the boss ~1/N of the fire, which
+        // measured as under 1M of its HP across a 290 s fight even with mitigation
+        // switched off entirely.
+        let mut s = blank_state();
+        s.weapons.clear();
+        give_weapon(&mut s, 0); // Bow: SingleTarget, range 900
+        let bid = mk_enemy(
+            &mut s,
+            content::BOSS,
+            content::ENEMIES[content::BOSS as usize].base_hp,
+            Vec2::new(Fixed::from_int(400), Fixed::ZERO),
+        );
+        for i in 0..40 {
+            mk_enemy(&mut s, 0, 300, Vec2::new(Fixed::from_int(100 + i), Fixed::from_int(i)));
+        }
+        fire_weapons(&mut s);
+        assert_eq!(s.projectiles.len(), 1);
+        assert_eq!(s.projectiles[0].target, bid, "the boss is the focus target");
+
+        // Out of range the boss is not a candidate, and normal "attack at random"
+        // targeting resumes untouched.
+        let mut s2 = blank_state();
+        s2.weapons.clear();
+        give_weapon(&mut s2, 0);
+        let far = mk_enemy(
+            &mut s2,
+            content::BOSS,
+            content::ENEMIES[content::BOSS as usize].base_hp,
+            Vec2::new(Fixed::from_int(5000), Fixed::ZERO),
+        );
+        mk_enemy(&mut s2, 0, 300, Vec2::new(Fixed::from_int(100), Fixed::ZERO));
+        fire_weapons(&mut s2);
+        assert_eq!(s2.projectiles.len(), 1);
+        assert_ne!(s2.projectiles[0].target, far, "an out-of-range boss is not focused");
+    }
+
+    #[test]
+    fn boss_stays_immune_to_status_and_weapon_abilities() {
+        // Damage yes, control no. A stun-on-hit weapon must not pin the boss (a
+        // 60-tick stun on an 18-tick cooldown would switch the climax off), and a
+        // life-drain hit must not heal off it.
+        let mut s = blank_state();
+        s.weapons.clear();
+        s.tick = content::BOSS_SPAWN_TICK;
+        let pos = Vec2::new(Fixed::from_int(10), Fixed::ZERO);
+        mk_enemy(&mut s, content::BOSS, content::ENEMIES[content::BOSS as usize].base_hp, pos);
+        s.tank.hp = 1; // so any heal would be visible
+        let pid = s.alloc_entity_id();
+        s.projectiles.push(Projectile {
+            id: pid,
+            pos: Vec2::ZERO,
+            target: s.enemies[0].id,
+            last_target_pos: pos,
+            damage: 1000,
+            damage_type: content::DMG_NORMAL,
+            splash_radius: Fixed::ZERO,
+            speed: Fixed::from_int(1000),
+            on_hit: content::StatusOnHit {
+                poison_dps: 500,
+                poison_ticks: 90,
+                frost_stacks: 5,
+                fire_stacks: 40,
+                stun_ticks: 60,
+            },
+            ability: content::WeaponAbility::LifeDrain { per_hit: 5_000 },
+        });
+        advance_projectiles(&mut s);
+        let b = &s.enemies[0];
+        assert!(b.hp < content::ENEMIES[content::BOSS as usize].base_hp, "the boss still takes the damage");
+        assert_eq!(b.status.stun_ticks, 0, "boss cannot be stunned");
+        assert_eq!(b.status.poison_ticks, 0, "boss cannot be poisoned");
+        assert_eq!(b.status.frost_stacks, 0, "boss cannot be chilled");
+        assert_eq!(b.status.fire_stacks, 0, "boss cannot be set alight");
+        assert_eq!(s.tank.hp, 1, "no life-drain off the boss");
+    }
+
+    #[test]
+    fn boss_contact_hit_enrages_over_the_fight() {
+        // Every `BOSS_ENRAGE_INTERVAL` the planted boss's hit grows by `1 + steps/2`
+        // of its base, so a long fight is a losing race.
+        let boss_def = content::BOSS;
+        let raw = content::ENEMIES[boss_def as usize].contact_damage;
+        let cadence = content::BOSS_CONTACT_CADENCE;
+        // First cadence tick at or after `steps` enrage intervals into the fight.
+        let cadence_tick = |steps: u32| -> u32 {
+            let mut k = steps * content::BOSS_ENRAGE_INTERVAL;
+            while (content::BOSS_SPAWN_TICK + k) % cadence != 0 {
+                k += 1;
+            }
+            assert!(
+                k / content::BOSS_ENRAGE_INTERVAL == steps,
+                "cadence tick must stay inside interval {steps}"
+            );
+            content::BOSS_SPAWN_TICK + k
+        };
+        let hit_at = |steps: u32| -> i64 {
+            let t = cadence_tick(steps);
+            let mut s = blank_state();
+            s.weapons.clear();
+            s.tick = t;
+            s.tank.max_hp = i64::MAX / 4;
+            s.tank.hp = s.tank.max_hp;
+            let hp0 = s.tank.hp;
+            mk_enemy(&mut s, boss_def, content::ENEMIES[boss_def as usize].base_hp, Vec2::new(Fixed::from_int(2), Fixed::ZERO));
+            move_enemies(&mut s);
+            assert_eq!(s.enemies.len(), 1, "the boss plants, it does not self-destruct");
+            hp0 - s.tank.hp
+        };
+        // `enemy_hp_mult` is flat across the boss phase, so the only thing moving is
+        // the enrage multiplier.
+        let base_mult = content::enemy_hp_mult(content::BOSS_SPAWN_TICK);
+        assert_eq!(base_mult, content::enemy_hp_mult(cadence_tick(4)));
+        let base = base_mult.scale_i64(raw);
+        assert_eq!(content::boss_enrage_mult(content::BOSS_SPAWN_TICK), Fixed::ONE);
+        assert_eq!(hit_at(0), base, "no enrage in the first interval");
+        assert_eq!(hit_at(2), base * 2, "two intervals in: 1 + 2·(1/2) = 2×");
+        assert_eq!(hit_at(4), base * 3, "four intervals in: 3×");
     }
 
     fn give_weapon(s: &mut ArenaState, def: u16) {
@@ -1382,14 +1799,16 @@ mod tests {
         let gdef = &content::ENEMIES[giant as usize];
         assert_eq!(gdef.armor_class, content::ARMOR_FORTIFIED);
 
-        let cond = CondDamage::of(&blank_state());
+        let bs = blank_state();
+        let cond = CondDamage::of(&bs);
+        let boss = BossVuln::of(&bs);
         let base = 1000;
 
         // Piercing vs Fortified must be far less than piercing vs Light (2× there).
         let mut g_pierce = Enemy::new(EntityId(1), giant, 1_000_000, Vec2::ZERO);
         let mut accum = AbilityAccum::default();
         let dealt_pierce =
-            apply_weapon_hit(&mut g_pierce, base, content::DMG_PIERCING, Fixed::ONE, cond, &content::StatusOnHit::NONE, content::WeaponAbility::None, Vec2::ZERO, &mut accum);
+            apply_weapon_hit(&mut g_pierce, base, content::DMG_PIERCING, Fixed::ONE, cond, boss, &content::StatusOnHit::NONE, content::WeaponAbility::None, Vec2::ZERO, &mut accum);
         let light_pierce = content::damage_multiplier(content::DMG_PIERCING, content::ARMOR_LIGHT).scale_i64(base);
         assert!(dealt_pierce < base, "Fortified resists Piercing (<1×)");
         assert!(dealt_pierce < light_pierce, "Fortified takes far less Piercing than Light armor");
@@ -1397,7 +1816,7 @@ mod tests {
         // Siege vs Fortified should be amplified (>1×) — siege is the counter.
         let mut g_siege = Enemy::new(EntityId(2), giant, 1_000_000, Vec2::ZERO);
         let dealt_siege =
-            apply_weapon_hit(&mut g_siege, base, content::DMG_SIEGE, Fixed::ONE, cond, &content::StatusOnHit::NONE, content::WeaponAbility::None, Vec2::ZERO, &mut accum);
+            apply_weapon_hit(&mut g_siege, base, content::DMG_SIEGE, Fixed::ONE, cond, boss, &content::StatusOnHit::NONE, content::WeaponAbility::None, Vec2::ZERO, &mut accum);
         assert!(dealt_siege > base, "Siege bites Fortified harder (>1×)");
     }
 
@@ -1737,11 +2156,12 @@ mod tests {
 
     fn summon_kill(s: &mut ArenaState, eid: EntityId, ability: WeaponAbility) {
         let cond = CondDamage::of(s);
+        let boss = BossVuln::of(s);
         let mut accum = AbilityAccum::default();
         {
             let e = s.enemies.iter_mut().find(|e| e.id == eid).unwrap();
             apply_weapon_hit(
-                e, 9_999_999, content::DMG_CHAOS, Fixed::ONE, cond,
+                e, 9_999_999, content::DMG_CHAOS, Fixed::ONE, cond, boss,
                 &content::StatusOnHit::NONE, ability, Vec2::ZERO, &mut accum,
             );
         }
@@ -1767,11 +2187,12 @@ mod tests {
         let eid = mk_enemy(&mut s, 0, 1_000_000, Vec2::ZERO);
         let ability = WeaponAbility::Summon { kind: 1, hp: 1500, damage: 600 };
         let cond = CondDamage::of(&s);
+        let boss = BossVuln::of(&s);
         let mut accum = AbilityAccum::default();
         {
             let e = s.enemies.iter_mut().find(|e| e.id == eid).unwrap();
             apply_weapon_hit(
-                e, 100, content::DMG_CHAOS, Fixed::ONE, cond,
+                e, 100, content::DMG_CHAOS, Fixed::ONE, cond, boss,
                 &content::StatusOnHit::NONE, ability, Vec2::ZERO, &mut accum,
             );
         }
@@ -1784,6 +2205,7 @@ mod tests {
         let mut s = blank_state();
         let ability = WeaponAbility::Summon { kind: 0, hp: 1, damage: 1 };
         let cond = CondDamage::of(&s);
+        let boss = BossVuln::of(&s);
         let mut accum = AbilityAccum::default();
         let mut ids = Vec::new();
         for i in 0..(MAX_MINIONS + 4) {
@@ -1792,7 +2214,7 @@ mod tests {
         for id in &ids {
             let e = s.enemies.iter_mut().find(|e| e.id == *id).unwrap();
             apply_weapon_hit(
-                e, 9_999_999, content::DMG_CHAOS, Fixed::ONE, cond,
+                e, 9_999_999, content::DMG_CHAOS, Fixed::ONE, cond, boss,
                 &content::StatusOnHit::NONE, ability, Vec2::ZERO, &mut accum,
             );
         }
@@ -1928,3 +2350,4 @@ mod tests {
         assert_eq!(crate::checksum(&a), crate::checksum(&b), "checksum stable across runs");
     }
 }
+

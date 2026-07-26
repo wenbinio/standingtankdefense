@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_hash": "d6457891073d5e30",
+  "content_hash": "f8827ab62c932991",
   "trace_schema_version": 1,
   "player_id": 0,
   "tick_hz": 30,
@@ -78,7 +78,7 @@
       "bot": "default",
       "input_events": 441,
       "exercises": "FULL baseline: balanced archetype; boss spawn + escort flood; dies at death_tick 54400 inside the boss phase, then runs the dead short-circuit to the end",
-      "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":173,"weapons_bought":13,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":325,"max_projectiles":7,"saw_hazards":false,"saw_minions":true,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":3521201373,"total_damage_dealt":1008553820}
+      "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":173,"weapons_bought":13,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":325,"max_projectiles":7,"saw_hazards":false,"saw_minions":true,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":3521201373,"total_damage_dealt":998230792}
     },
     {
       "name": "full-seed-5",
@@ -122,18 +122,18 @@
       "bot": "default",
       "input_events": 437,
       "exercises": "FULL, META: arms a PENDING PERK (duplicator / Black-Market voucher), the Input.apply branch where one BuyOffer grants several instances or costs nothing; survives to the end",
-      "coverage": {"buys":259,"weapon_buys":9,"modifier_buys":250,"rerolls":5,"clears":173,"weapons_bought":9,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":311,"max_projectiles":9,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":true,"saw_fire":false,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":156320731,"total_damage_dealt":938263461}
+      "coverage": {"buys":259,"weapon_buys":9,"modifier_buys":250,"rerolls":5,"clears":173,"weapons_bought":9,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":311,"max_projectiles":9,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":true,"saw_fire":false,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":156320173,"total_damage_dealt":928865234}
     },
     {
       "name": "full-seed-272",
       "file": "full-seed-272.json",
       "seed": 272,
       "ticks": 55200,
-      "bytes": 1060481,
+      "bytes": 1060455,
       "bot": "default",
-      "input_events": 442,
+      "input_events": 441,
       "exercises": "FULL, REVIVE: buys Ankh of Reconstruction, so economy.resolve_deaths takes the revive branch instead of setting dead; also vuln pulses and stuns",
-      "coverage": {"buys":269,"weapon_buys":19,"modifier_buys":250,"rerolls":5,"clears":168,"weapons_bought":19,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":267,"max_projectiles":13,"saw_hazards":false,"saw_minions":false,"saw_ramps":true,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":553276182,"total_damage_dealt":939621630}
+      "coverage": {"buys":269,"weapon_buys":19,"modifier_buys":250,"rerolls":5,"clears":167,"weapons_bought":19,"death_tick":55056,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":267,"max_projectiles":13,"saw_hazards":false,"saw_minions":false,"saw_ramps":true,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":551778550,"total_damage_dealt":925476177}
     },
     {
       "name": "full-seed-311",
@@ -144,7 +144,7 @@
       "bot": "default",
       "input_events": 441,
       "exercises": "FULL, FROST: frost stacks reaching FROST_MAX_STACKS and the Deep-Freeze payoff (freeze_ticks), plus poison and vuln pulses — the coldest corner of Status.tick",
-      "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":173,"weapons_bought":13,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":308,"max_projectiles":10,"saw_hazards":false,"saw_minions":true,"saw_ramps":true,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":263941396,"total_damage_dealt":787736889}
+      "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":173,"weapons_bought":13,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":308,"max_projectiles":10,"saw_hazards":false,"saw_minions":true,"saw_ramps":true,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":263941542,"total_damage_dealt":777323432}
     },
     {
       "name": "purist3-seed-7",
@@ -155,18 +155,18 @@
       "bot": "purist-3",
       "input_events": 9584,
       "exercises": "FULL, WEAPON ABILITIES: an Area-class purist buys Shroom Doom and Boom Bloom, so this is the trace that drives Combat.tickMinions AND Combat.tickHazards. ~9k input events (the purist rerolls to fish), which also stresses Shop.generateOffers and the reroll economy",
-      "coverage": {"buys":9248,"weapon_buys":8976,"modifier_buys":272,"rerolls":153,"clears":183,"weapons_bought":8976,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":260,"max_projectiles":2,"saw_hazards":false,"saw_minions":true,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":12488406,"total_damage_dealt":206550011616}
+      "coverage": {"buys":9248,"weapon_buys":8976,"modifier_buys":272,"rerolls":153,"clears":183,"weapons_bought":8976,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":260,"max_projectiles":2,"saw_hazards":false,"saw_minions":true,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":12488566,"total_damage_dealt":232611872430}
     },
     {
       "name": "purist4-seed-8",
       "file": "purist4-seed-8.json",
       "seed": 8,
       "ticks": 55200,
-      "bytes": 1295938,
+      "bytes": 1299552,
       "bot": "purist-4",
-      "input_events": 9545,
+      "input_events": 9684,
       "exercises": "FULL, HAZARDS: a Wave-class purist (Boom Bloom mine fields, Bloody Spikes stacking) — second, independent cover for Combat.tickHazards plus the stacking-spikes round reset",
-      "coverage": {"buys":9246,"weapon_buys":9015,"modifier_buys":231,"rerolls":119,"clears":180,"weapons_bought":9015,"death_tick":54400,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":263,"max_projectiles":33,"saw_hazards":true,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":true,"saw_frost":true,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":3540227,"total_damage_dealt":3096178829111}
+      "coverage": {"buys":9376,"weapon_buys":9145,"modifier_buys":231,"rerolls":125,"clears":183,"weapons_bought":9145,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":263,"max_projectiles":33,"saw_hazards":true,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":true,"saw_frost":true,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":3549620,"total_damage_dealt":3262101222067}
     }
   ]
 }

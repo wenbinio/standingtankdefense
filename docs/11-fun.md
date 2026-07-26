@@ -123,3 +123,56 @@ The R3 gate now fails at tick 0. This is expected and was accepted going in, but
 Until those are re-transcribed, the Roblox build runs the **old** balance. The oracle still works — it is doing exactly its job by failing loudly at tick 0 rather than letting the two builds drift apart silently — but the R3 milestone is not green again until the four modules are updated and the gate passes.
 
 **This is the recurring lesson of the fun pass, in its third form:** balance is shared, but only *data* is single-source. Logic is duplicated across two languages, and every logic-level balance change costs a transcription. That is the standing tax `[09] §1.8` predicted, now being paid for the first time.
+
+## 11.7 The boss is a fight now
+
+The last structural failure is fixed. **All five §11.2 headline targets are IN**, measured at 80 seeds and confirmed at 240:
+
+| metric | before the fun pass | now | target |
+| --- | --- | --- | --- |
+| Win rate | 16.2% | **33.8%** | 25–40% ✅ |
+| Deaths in first quarter | 0.0% | **18.8%** | 10–20% ✅ |
+| Biggest death decile | 81.8% | **18.9%** | <25% ✅ |
+| Peak max HP (worst run) | 3.72 B | **447.7k** | <500k ✅ |
+| Distinct weapons, winners | 3.2 | **6.9** | ≥5 ✅ |
+
+### The finding that changed the design
+
+**Letting weapons damage the boss is worth nothing on its own.** Implemented first with mitigation off entirely — 1× weapon damage on the boss — TTK went to a median of 290 s and the arsenal still contributed **under 1M of 33M**. Two independent causes, both measured:
+
+1. **Random targeting.** With ~50 escort enemies alive, a "pick a random in-range target" weapon lands on the boss about **2%** of the time. Permission to damage is decorative without aiming.
+2. **33M was a Clear-denominated number.** A 30-minute arsenal's *nominal per-target* DPS is ~30k/s; its ~900k/s of measured output is that figure times the ~30 enemies an AoE pulse covers. 33M was therefore ~1,100 seconds of arsenal fire. No multiplier fixes a health bar sized for eleven uses of one ability.
+
+### And a subtler one: a plate rotation alone cannot reward breadth
+
+The first cut was rotating damage-type plates and nothing else. That is **provably breadth-neutral**: if the multiplier depends only on `(damage_type, tick)`, the expected multiplier across a rotation is `(1/5)·EXPOSED + (4/5)·ARMORED` for *every* build — a `k`-type build spends `k/5` of the rotation amplifying `1/k` of its DPS, and the two cancel exactly. **Any rule linear in the build's composition is invariant to it.**
+
+So the incentive has to *read the build*. A `coverage` term — distinct damage types owned, clamped 1..5 — gives `0.16k + 0.32`: **0.48× at one type, 1.12× at five, a 2.33× spread at equal nominal DPS**. Framed as upside (you crack the open plate harder) rather than as a tax.
+
+### The shipped mechanic
+
+Boss HP 33M → **6.3M**. One damage-type plate exposed at a time, rotating every 150 ticks; exposed takes `4/5 × coverage`, everything else `2/5`. **Boss focus**: while the boss is in a weapon's range it *is* that weapon's target — the load-bearing fix. A `Clear` **breaches** all five plates for 45 ticks of its 300-tick cooldown, which is what finally makes `Clear` *interactive* rather than a flat chunk of HP. And the boss's contact damage **enrages** by `1 + steps/2` every 900 ticks, converting a threshold into a race.
+
+Nothing new enters the checksum: the breach is *derived* from `tank.clear_cooldown_end`.
+
+### Is it a fight?
+
+**Yes — but a race more than a puzzle, and the distinction is worth keeping.** Outcomes are now continuous where they were binary:
+
+| | before | now |
+| --- | --- | --- |
+| Boss HP left on failure | median 82%, min 55% | median **61%**, min **8%** |
+| Time-to-kill | 100–108 s | **25–185 s** |
+| Clears spent | median 11, max 11 | median **12**, max **19** |
+| Arsenal share of the kill | ~0% | **16–92%**, median ~41% |
+| Arsenal rate on the boss | — | **1.5k–69k/s — a 45× spread between builds** |
+
+"I nearly had it" exists. A great build visibly deletes the boss faster than a mediocre one. Build decisions finally reach the win condition.
+
+**What is still missing, honestly:** moment-to-moment decisions. The only real-time input is `Clear`, and the reference bot fires it off cooldown — so the breach window is a mechanic the bot *benefits from* but never *plays*. A human who saves `Clear` for a plate they cannot otherwise reach will do meaningfully better, and **none of that skill expression is in these measurements.** The plate rotation likewise reads as texture rather than a decision, because you cannot re-aim. Making the boss a *puzzle* rather than a race needs a second boss-phase input — a design decision, not a tuning one.
+
+### Still open
+
+- **`naked_eco_rush_*` guards remain red** (14/24 against a ≥75% bar), unchanged by the boss work. A no-weapon economy build is under-punished, and the guard is in genuine tension with `modest_opener_survives_past_the_deadline`.
+- **A narrow-build challenge bot** is needed to *observe* the breadth incentive. The reference bot builds ~7 distinct types regardless of outcome, so the sweep's distinct-weapon metric is saturated and cannot show the effect; it is currently verified only by a unit test pinning the ratio at 2.30–2.37×.
+- **`Arena.step` is ~2.5× slower** than before the balance pass. That eats R2's headroom and needs a look.

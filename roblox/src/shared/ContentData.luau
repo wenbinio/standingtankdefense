@@ -5,7 +5,7 @@
          return [==[
 {
   "schema_version": 1,
-  "content_hash": "d6457891073d5e30",
+  "content_hash": "f8827ab62c932991",
   "damage_matrix": [
     [65536,65536,32768],
     [131072,65536,22937],
@@ -104,11 +104,11 @@
   "enemies": [
     {"name":"Squeakzilla","base_hp":300,"move_speed":8,"contact_damage":500,"bounty":10,"armor_class":0,"archetype":0,"ability":{"tag":0,"a":0,"b":0,"c":0},"boss":false},
     {"name":"Fanged Death","base_hp":3000,"move_speed":4,"contact_damage":1500,"bounty":40,"armor_class":1,"archetype":1,"ability":{"tag":0,"a":0,"b":0,"c":0},"boss":false},
-    {"name":"The Hippocrate","base_hp":33000000,"move_speed":3,"contact_damage":1900,"bounty":0,"armor_class":0,"archetype":5,"ability":{"tag":0,"a":0,"b":0,"c":0},"boss":true},
+    {"name":"The Hippocrate","base_hp":6300000,"move_speed":3,"contact_damage":1620,"bounty":0,"armor_class":0,"archetype":5,"ability":{"tag":0,"a":0,"b":0,"c":0},"boss":true},
     {"name":"Doomduck","base_hp":200,"move_speed":8,"contact_damage":350,"bounty":6,"armor_class":0,"archetype":0,"ability":{"tag":0,"a":0,"b":0,"c":0},"boss":false},
     {"name":"Bacon","base_hp":600,"move_speed":16,"contact_damage":700,"bounty":16,"armor_class":0,"archetype":2,"ability":{"tag":0,"a":0,"b":0,"c":0},"boss":false},
     {"name":"Honk","base_hp":400,"move_speed":22,"contact_damage":600,"bounty":18,"armor_class":0,"archetype":2,"ability":{"tag":0,"a":0,"b":0,"c":0},"boss":false},
-    {"name":"Bonk","base_hp":16000,"move_speed":3,"contact_damage":2200,"bounty":80,"armor_class":2,"archetype":1,"ability":{"tag":0,"a":0,"b":0,"c":0},"boss":false},
+    {"name":"Bonk","base_hp":16000,"move_speed":3,"contact_damage":1620,"bounty":80,"armor_class":2,"archetype":1,"ability":{"tag":0,"a":0,"b":0,"c":0},"boss":false},
     {"name":"Nope Rope","base_hp":800,"move_speed":6,"contact_damage":200,"bounty":30,"armor_class":0,"archetype":3,"ability":{"tag":1,"a":900,"b":8589934637,"c":250},"boss":false},
     {"name":"Croak","base_hp":700,"move_speed":6,"contact_damage":200,"bounty":22,"armor_class":0,"archetype":4,"ability":{"tag":1,"a":700,"b":4294967326,"c":180},"boss":false},
     {"name":"Spicy","base_hp":2000,"move_speed":5,"contact_damage":300,"bounty":34,"armor_class":0,"archetype":4,"ability":{"tag":1,"a":600,"b":17179869220,"c":420},"boss":false},

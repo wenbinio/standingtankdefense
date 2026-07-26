@@ -1,14 +1,17 @@
 //! Input application — AGENT C. Applies one player action this tick.
+use crate::content;
 use crate::ids::Input;
 use crate::shop;
 use crate::state::*;
 
-/// Damage dealt to every enemy by a `Clear`. Large but FINITE: it wipes normal
-/// enemies instantly, but the boss (The Hippocrate, ~33M HP) takes
-/// ~11 Clears — and `Clear` is the ONLY thing that can hurt the boss.
-const CLEAR_DAMAGE: i64 = 3_000_000;
-/// Cooldown (in ticks) imposed after a `Clear`.
-const CLEAR_COOLDOWN_TICKS: u32 = 300;
+/// Damage dealt to every NON-boss enemy by a `Clear`. Large but FINITE: it wipes
+/// the board instantly. The BOSS takes only `content::BOSS_CLEAR_DAMAGE` (1.1M),
+/// because `Clear` is no longer the only thing that can hurt it — see the BOSS
+/// ENCOUNTER block in `content.rs`. A `Clear` also BREACHES the boss's armor
+/// plates for `BOSS_BREACH_TICKS`; that window is read straight off
+/// `clear_cooldown_end` by `combat::boss_breached`, so nothing extra is stored
+/// here.
+use content::{CLEAR_COOLDOWN_TICKS, CLEAR_DAMAGE};
 /// Gold increment added to `reroll_cost` after a paid reroll.
 const REROLL_COST_STEP: i64 = 100;
 
@@ -74,8 +77,18 @@ pub(crate) fn apply(s: &mut ArenaState, inp: Input) {
                 let mut survivors = Vec::with_capacity(s.enemies.len());
                 let mut cleared_damage: i64 = 0;
                 for mut e in s.enemies.drain(..) {
+                    // The boss takes a much smaller chunk than the board does:
+                    // 280k vs 3M. The 11 Clears a clean ~110 s fight affords come
+                    // to 3.08M of its 6.3M, so the ARSENAL has to supply the rest.
+                    // `Clear`'s real boss value is now the BREACH it opens
+                    // (`combat::boss_breached`), not this chip.
+                    let chunk = if content::ENEMIES[e.def as usize].boss {
+                        content::BOSS_CLEAR_DAMAGE
+                    } else {
+                        CLEAR_DAMAGE
+                    };
                     let before = e.hp.max(0);
-                    e.hp = e.hp.saturating_sub(CLEAR_DAMAGE);
+                    e.hp = e.hp.saturating_sub(chunk);
                     // Actual HP removed (clamped: no credit past the kill).
                     cleared_damage += before - e.hp.max(0);
                     if e.hp <= 0 {
@@ -333,22 +346,31 @@ mod tests {
     }
 
     #[test]
-    fn clear_chips_the_boss_over_several_uses() {
-        // Clear deals a large FINITE amount: normal enemies die instantly, but
-        // the boss (huge fixed HP) takes several Clears — the only thing that
-        // can hurt it.
+    fn clear_chips_the_boss_for_the_reduced_boss_chunk() {
+        // `Clear` wipes the board with `CLEAR_DAMAGE` but only chips the BOSS for
+        // `BOSS_CLEAR_DAMAGE` — a deliberately MINORITY share of its HP, so the
+        // arsenal has to supply the rest (`docs/11 §11.5` #1). Clears alone can
+        // still finish it in principle, but not inside a survivable fight.
         let mut s = fresh();
         s.tick = 0;
         s.tank.clear_cooldown_end = 0;
         let _ = Fixed::ONE;
         let boss_hp = content::ENEMIES[content::BOSS as usize].base_hp;
-        s.enemies = vec![mk_enemy(10, content::BOSS, boss_hp)];
+        s.enemies = vec![mk_enemy(10, content::BOSS, boss_hp), mk_enemy(11, 0, 200)];
 
         apply(&mut s, Input::Clear);
-        assert_eq!(s.enemies.len(), 1, "boss survives a single Clear");
-        assert_eq!(s.enemies[0].hp, boss_hp - CLEAR_DAMAGE);
+        assert_eq!(s.enemies.len(), 1, "chaff wiped, boss survives");
+        assert_eq!(s.enemies[0].def, content::BOSS);
+        assert_eq!(s.enemies[0].hp, boss_hp - content::BOSS_CLEAR_DAMAGE);
+        assert!(
+            content::BOSS_CLEAR_DAMAGE < CLEAR_DAMAGE,
+            "the boss must take LESS from a Clear than the board does"
+        );
+        // A ~110 s fight affords 11 Clears; those must be a minority of the HP bar.
+        let eleven = 11 * content::BOSS_CLEAR_DAMAGE;
+        assert!(eleven * 2 < boss_hp, "11 Clears must be under half the boss's HP");
 
-        let needed = (boss_hp + CLEAR_DAMAGE - 1) / CLEAR_DAMAGE; // ceil
+        let needed = (boss_hp + content::BOSS_CLEAR_DAMAGE - 1) / content::BOSS_CLEAR_DAMAGE;
         for _ in 1..needed {
             s.tick = s.tank.clear_cooldown_end; // come off cooldown
             apply(&mut s, Input::Clear);

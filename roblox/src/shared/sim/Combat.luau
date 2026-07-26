@@ -19,6 +19,15 @@
 	Area and Wave draw NOTHING. `rng_proc` is never touched here — the dodge roll
 	lives in `defense::hit_tank`, which this module calls.
 
+	BOSS FOCUS SKIPS DRAWS. When a BOSS is among a weapon's in-range candidates it
+	replaces the random pick outright (`fire_weapons`, `boss_pick`), so:
+	  * SingleTarget / Splash / Bounce — NO `below` draw at all that fire;
+	  * Barrage(n)                     — the first bolt is the boss and draws
+	                                     nothing; the loop starts at k = 1, so the
+	                                     volley consumes `shots - 1` draws.
+	This is a real change to the `rng_targeting` SEQUENCE, not an optimization:
+	skipping (or not skipping) one word here desynchronizes every later draw.
+
 	Every enemy/projectile/hazard/minion loop below walks a 1-indexed array with
 	an explicit numeric `for`, never generalized iteration: iteration order is
 	part of the spec here, so it is spelled out rather than inherited.
@@ -139,8 +148,44 @@ local function contentConst(name: string, snake: string): number
 	return v
 end
 
+--- A `content.rs` scalar that the C1 artifact does not (yet) EXPORT.
+--- `content.json` carries `boss_contact_cadence` and the timeline's
+--- `boss_spawn_tick`, but NOT the BOSS ENCOUNTER block (`BOSS_PLATE_TICKS`,
+--- `BOSS_EXPOSED_*`, `BOSS_ARMORED_*`, `BOSS_BREACH_TICKS`, the enrage ramp) nor
+--- `CLEAR_COOLDOWN_TICKS`. Those are pinned here against `content.rs`, but
+--- `Content` STILL WINS whenever it has the name — so once `export::constants`
+--- carries them, the artifact can never be shadowed by a stale literal here.
+local function contentConstOr(name: string, snake: string, pinned: number): number
+	local v = Content[name]
+	if v == nil and Content.constants ~= nil then
+		v = Content.constants[snake]
+	end
+	if v == nil then
+		return pinned
+	end
+	return v
+end
+
 local BOSS_CONTACT_CADENCE = contentConst("BOSS_CONTACT_CADENCE", "boss_contact_cadence")
 local DMG_MAGIC = contentConst("DMG_MAGIC", "dmg_magic")
+local BOSS_SPAWN_TICK = contentConst("BOSS_SPAWN_TICK", "boss_spawn_tick")
+local NUM_DAMAGE_TYPES = contentConst("NUM_DAMAGE_TYPES", "num_damage_types")
+
+-- THE BOSS ENCOUNTER — ADAPTIVE ARMOR PLATES (`content.rs`, the BOSS ENCOUNTER
+-- block). The boss is not immune to weapon fire, it is PLATED: one damage-type
+-- plate is exposed at a time and takes `BOSS_EXPOSED_NUM/DEN × coverage`, every
+-- other plate takes `BOSS_ARMORED_NUM/DEN`, and a `Clear` BREACHES all five for
+-- `BOSS_BREACH_TICKS`.
+local BOSS_PLATE_TICKS = contentConstOr("BOSS_PLATE_TICKS", "boss_plate_ticks", 150)
+local BOSS_EXPOSED_NUM = contentConstOr("BOSS_EXPOSED_NUM", "boss_exposed_num", 4)
+local BOSS_EXPOSED_DEN = contentConstOr("BOSS_EXPOSED_DEN", "boss_exposed_den", 5)
+local BOSS_ARMORED_NUM = contentConstOr("BOSS_ARMORED_NUM", "boss_armored_num", 2)
+local BOSS_ARMORED_DEN = contentConstOr("BOSS_ARMORED_DEN", "boss_armored_den", 5)
+local BOSS_BREACH_TICKS = contentConstOr("BOSS_BREACH_TICKS", "boss_breach_ticks", 45)
+local CLEAR_COOLDOWN_TICKS = contentConstOr("CLEAR_COOLDOWN_TICKS", "clear_cooldown_ticks", 300)
+local BOSS_ENRAGE_INTERVAL = contentConstOr("BOSS_ENRAGE_INTERVAL", "boss_enrage_interval", 900)
+local BOSS_ENRAGE_STEP_NUM = contentConstOr("BOSS_ENRAGE_STEP_NUM", "boss_enrage_step_num", 1)
+local BOSS_ENRAGE_STEP_DEN = contentConstOr("BOSS_ENRAGE_STEP_DEN", "boss_enrage_step_den", 2)
 
 -- Content ids are 0-based (array position IS identity, §C1/§S3); Luau arrays
 -- are 1-indexed. These two accessors are the ONLY place that offset lives.
@@ -168,6 +213,123 @@ local function scaleI64(m, v: number): number
 end
 
 local Combat = {}
+
+-- ===========================================================================
+-- THE BOSS ENCOUNTER
+-- Transcriptions of the `content.rs` boss functions (`arsenal_coverage`,
+-- `boss_enrage_mult`, `boss_exposed_type`, `boss_damage_mult`) plus
+-- `combat::boss_breached` / `BossVuln`. The `content.rs` half lives here rather
+-- than in `Content.luau` only because the C1 artifact does not export the
+-- constants they read; the arithmetic is a straight transcription either way.
+-- ===========================================================================
+
+--- `content::boss_exposed_type` — which of the boss's five plates is exposed at
+--- `tick`: the damage type that takes the amplified rate. Rotates every
+--- `BOSS_PLATE_TICKS` from `BOSS_SPAWN_TICK`. Pure integer function of the tick —
+--- no state, no RNG. The subtraction SATURATES (Rust `saturating_sub`), so a boss
+--- placed before the boss tick gets plate 0 rather than a negative index.
+local function bossExposedType(tick: number): number
+	local since = tick - BOSS_SPAWN_TICK
+	if since < 0 then
+		since = 0
+	end
+	return math.floor(since / BOSS_PLATE_TICKS) % NUM_DAMAGE_TYPES
+end
+
+--- `content::boss_enrage_mult` — `1 + steps·(STEP_NUM/STEP_DEN)`, where `steps =
+--- (tick -| BOSS_SPAWN_TICK) / BOSS_ENRAGE_INTERVAL`. `Fixed`, so it composes with
+--- `enemyHpMult` the way the base contact scaling does. SATURATING subtraction
+--- again: no enrage before the boss tick.
+local function bossEnrageMult(tick: number)
+	local since = tick - BOSS_SPAWN_TICK
+	if since < 0 then
+		since = 0
+	end
+	local steps = math.floor(since / BOSS_ENRAGE_INTERVAL)
+	return fadd(ONE, Fixed.fromRatio(steps * BOSS_ENRAGE_STEP_NUM, BOSS_ENRAGE_STEP_DEN))
+end
+
+--- `content::arsenal_coverage` — the number of DISTINCT damage types across the
+--- player's owned weapons, clamped to `1..=5`. Counted into a fixed 5-slot bitmap,
+--- so it is O(n) and independent of iteration order. Clamped at 1 so a weaponless
+--- tank's aura/hazard damage can never end up with the exposed plate weaker than
+--- the armored ones.
+local function arsenalCoverage(weapons): number
+	local seen = table.create(NUM_DAMAGE_TYPES, false)
+	for wi = 1, #weapons do
+		seen[weaponDef(weapons[wi].def).damage_type % NUM_DAMAGE_TYPES + 1] = true
+	end
+	local n = 0
+	for i = 1, NUM_DAMAGE_TYPES do
+		if seen[i] then
+			n += 1
+		end
+	end
+	if n < 1 then
+		n = 1
+	end
+	return n
+end
+
+--- `content::boss_damage_mult` — the multiplier applied to one hit of
+--- `damageType` on the BOSS at `tick`, given the arsenal's `coverage` and whether
+--- a recent `Clear` has `breached` every plate. REPLACES the normal armor matrix
+--- for boss targets.
+---
+---   exposed (or breached): `BOSS_EXPOSED_NUM × coverage / BOSS_EXPOSED_DEN`
+---   armored:               `BOSS_ARMORED_NUM / BOSS_ARMORED_DEN`
+local function bossDamageMult(damageType: number, tick: number, breached: boolean, coverage: number)
+	if breached or damageType % NUM_DAMAGE_TYPES == bossExposedType(tick) then
+		-- Rust `coverage.clamp(1, 5)`.
+		local c = coverage
+		if c < 1 then
+			c = 1
+		elseif c > NUM_DAMAGE_TYPES then
+			c = NUM_DAMAGE_TYPES
+		end
+		return Fixed.fromRatio(BOSS_EXPOSED_NUM * c, BOSS_EXPOSED_DEN)
+	end
+	return Fixed.fromRatio(BOSS_ARMORED_NUM, BOSS_ARMORED_DEN)
+end
+
+--- `combat::boss_breached` — is the boss currently BREACHED (all plates open) by a
+--- recent `Clear`?
+---
+--- DERIVED, deliberately: `Input.apply` sets `tank.clear_cooldown_end = clear_tick
+--- + CLEAR_COOLDOWN_TICKS`, so the last `Clear` landed at `clear_cooldown_end -
+--- CLEAR_COOLDOWN_TICKS` and the breach runs for `BOSS_BREACH_TICKS` from there:
+---
+---     breached  <=>  clear_cooldown_end > tick
+---               and  (clear_cooldown_end - tick) + BOSS_BREACH_TICKS > CLEAR_COOLDOWN_TICKS
+---
+--- Reading it off the existing cooldown field means the breach window adds NO new
+--- per-arena state, so the state layout and `Arena.checksum` are untouched — do
+--- not add a field for it. All-integer, no wall-clock, no RNG. The first guard
+--- also keeps the u32 subtraction from underflowing and makes a never-Cleared tank
+--- (`clear_cooldown_end == 0`) unbreached.
+local function bossBreached(s): boolean
+	local endTick = s.tank.clear_cooldown_end
+	return endTick > s.tick and (endTick - s.tick) + BOSS_BREACH_TICKS > CLEAR_COOLDOWN_TICKS
+end
+
+--- `combat::BossVuln::of` — the boss's live vulnerability at one damage site:
+--- which armor plate is exposed, and whether a recent `Clear` has BREACHED all
+--- five. Captured once per damage pass (every term is a pure function of state
+--- that cannot change mid-pass) and consulted at impact, exactly like `cond`.
+local function bossVulnOf(s)
+	return {
+		tick = s.tick,
+		breached = bossBreached(s),
+		-- Distinct damage types in the arsenal (1..=5) — the term that makes
+		-- BREADTH pay at the boss. A plate rotation alone cannot.
+		coverage = arsenalCoverage(s.weapons),
+	}
+end
+
+--- `combat::BossVuln::mult` — mitigation for one hit of `damageType` on the boss.
+local function bossVulnMult(boss, damageType: number)
+	return bossDamageMult(damageType, boss.tick, boss.breached, boss.coverage)
+end
 
 -- ===========================================================================
 -- Ability accumulation
@@ -319,14 +481,27 @@ end
 
 --- Apply one weapon hit to an enemy: `base × armor-matrix × modifier-stack ×
 --- fire-vulnerability × target-conditional` damage, then the weapon's on-hit
---- status. Bosses are immune to weapon fire — only `Clear` damages them.
---- Returns the integer damage subtracted from the enemy (0 for an immune boss),
---- for the caller's damage/Bloodmoney accounting.
-local function applyWeaponHit(e, base: number, damageType: number, modMult, cond, onHit, ability, tankPos, accum): number
+--- status.
+---
+--- The BOSS takes a different path (`docs/11 §11.5` #1): plate mitigation
+--- (`bossVulnMult`) replaces the armor matrix, and it is still immune to STATUS
+--- and to weapon ABILITIES — no poison/fire/frost/stun/root/knockback, no
+--- life-drain, no corpse summons. That asymmetry is load-bearing, not laziness: a
+--- 60-tick stun aura on an 18-tick cooldown (Shocker) would otherwise pin the boss
+--- forever and delete the climax, and letting Fire/Poison DoTs tick on a
+--- multi-million HP pool would reintroduce a damage source the plates cannot gate
+--- at all.
+---
+--- Returns the integer damage subtracted from the enemy, for the caller's
+--- damage/Bloodmoney accounting.
+local function applyWeaponHit(e, base: number, damageType: number, modMult, cond, boss, onHit, ability, tankPos, accum): number
 	local edef = enemyDef(e.def)
 	if edef.boss then
-		-- Bosses are immune to weapon fire AND to its abilities.
-		return 0
+		-- Plated, not immune. No armor matrix, no status vulnerability (the boss
+		-- carries no statuses), no on-hit, no ability — just mitigated damage.
+		local dmg = scaleI64(fmul(bossVulnMult(boss, damageType), modMult), base)
+		e.hp -= dmg
+		return dmg
 	end
 	local armor = Content.damageMultiplier(damageType, edef.armor_class)
 	local vuln = vulnerabilityMult(e)
@@ -361,6 +536,7 @@ function Combat.fireWeapons(s)
 	local instantDamage = 0
 	-- Target-conditional bonuses are constant across this tick's fires.
 	local cond = condOf(s)
+	local boss = bossVulnOf(s)
 
 	for wi = 1, #s.weapons do
 		local def = s.weapons[wi].def
@@ -424,20 +600,74 @@ function Combat.fireWeapons(s)
 			})
 		end
 
+		-- BOSS FOCUS (`docs/11 §11.5` #1). While The Hippocrate is in range it is
+		-- this weapon's target, ahead of the escort chaff. "Attack at random" still
+		-- governs every other tick of the match; the boss is the one exception,
+		-- because it is a building-sized enemy planted on the tank.
+		--
+		-- This is not flavor, it is THE fix. Random targeting alone made the arsenal
+		-- invisible to the boss: with ~50 escort enemies alive, a random pick lands
+		-- on the boss ~2% of the time, and a measured 80-seed sweep with boss
+		-- mitigation switched OFF ENTIRELY still had the arsenal contribute under 1M
+		-- of the boss's HP bar (33M at the time) across a 290 s fight — the kill was
+		-- ~30 Clears start to finish. Letting weapons damage the boss is worthless
+		-- without letting them AIM at it.
+		--
+		-- The price, deliberately paid: single-target guns stop answering the escort
+		-- while the boss is up, so the escort swarm is what threatens to kill you
+		-- during the climax. That is the fight's central tension.
+		--
+		-- RNG: a focused fire REPLACES the `below` draw, it does not precede it. See
+		-- the BOSS FOCUS SKIPS DRAWS note in the module header — the skipped word is
+		-- part of the oracle.
+		local bossPick = nil
+		for ci = 1, #candidates do
+			if enemyDef(s.enemies[candidates[ci]].def).boss then
+				bossPick = candidates[ci]
+				break
+			end
+		end
+
 		local atk = wdef.attack
 		local tag = atk.tag
 		if tag == ATTACK_SINGLE_TARGET then
-			local pick = candidates[below(s.rng_targeting, #candidates) + 1]
+			local pick = bossPick
+			if pick == nil then
+				pick = candidates[below(s.rng_targeting, #candidates) + 1]
+			end
 			newProj(pick, ZERO)
 		elseif tag == ATTACK_SPLASH then
-			local pick = candidates[below(s.rng_targeting, #candidates) + 1]
+			local pick = bossPick
+			if pick == nil then
+				pick = candidates[below(s.rng_targeting, #candidates) + 1]
+			end
 			newProj(pick, fromInt(atk.a))
 		elseif tag == ATTACK_BARRAGE then
-			-- N distinct random in-range targets (partial Fisher–Yates).
+			-- N distinct random in-range targets (partial Fisher–Yates). With the
+			-- boss in range it claims the FIRST bolt and the remaining N-1 still
+			-- scatter — a volley spreads, so only part of it finds the boss.
 			local pool = table.clone(candidates)
 			local shots = math.min(atk.a, #pool)
 			-- `k` is the Rust's 0-based index; `pool` is 1-based.
-			for k = 0, shots - 1 do
+			local k0 = 0
+			if bossPick ~= nil then
+				local at = nil
+				for i = 1, #pool do
+					if pool[i] == bossPick then
+						at = i
+						break
+					end
+				end
+				if at == nil then
+					-- Unreachable: `bossPick` came out of `candidates`, which `pool`
+					-- is a clone of. Rust `.unwrap()`s the same search.
+					error("Combat.fireWeapons: boss focus target missing from the barrage pool", 2)
+				end
+				pool[1], pool[at] = pool[at], pool[1]
+				newProj(pool[1], ZERO)
+				k0 = 1
+			end
+			for k = k0, shots - 1 do
 				local j = k + below(s.rng_targeting, #pool - k)
 				pool[k + 1], pool[j + 1] = pool[j + 1], pool[k + 1]
 				newProj(pool[k + 1], ZERO)
@@ -455,6 +685,7 @@ function Combat.fireWeapons(s)
 						wdef.damage_type,
 						wmult,
 						cond,
+						boss,
 						onHit,
 						ability,
 						tankPos,
@@ -476,6 +707,7 @@ function Combat.fireWeapons(s)
 						wdef.damage_type,
 						wmult,
 						cond,
+						boss,
 						onHit,
 						ability,
 						tankPos,
@@ -485,8 +717,12 @@ function Combat.fireWeapons(s)
 			end
 			anyInstantDamage = true
 		elseif tag == ATTACK_BOUNCE then
-			-- Random first target, then the N-1 nearest OTHER enemies to it.
-			local first = candidates[below(s.rng_targeting, #candidates) + 1]
+			-- Random first target (the boss if it is in range), then the N-1 nearest
+			-- OTHER enemies to it.
+			local first = bossPick
+			if first == nil then
+				first = candidates[below(s.rng_targeting, #candidates) + 1]
+			end
 			local origin = s.enemies[first].pos
 			local order = {}
 			for i = 1, #s.enemies do
@@ -523,6 +759,7 @@ function Combat.fireWeapons(s)
 					wdef.damage_type,
 					wmult,
 					cond,
+					boss,
 					onHit,
 					ability,
 					tankPos,
@@ -630,11 +867,12 @@ function Combat.advanceProjectiles(s)
 	s.projectiles = survivors
 
 	-- Apply impacts in order. Final damage = base × armor-matrix ×
-	-- modifier-stack × status-vulnerability (`docs/05 §5.3`). Bosses are immune
-	-- to weapon fire (only `Clear` hurts them), and each hit also applies the
-	-- weapon's on-hit status. Conditional bonuses are evaluated live at impact
-	-- against the target's status.
+	-- modifier-stack × status-vulnerability (`docs/05 §5.3`). The BOSS takes plate
+	-- mitigation instead of the armor matrix and no status/ability at all; every
+	-- other enemy also takes the weapon's on-hit status. Conditional bonuses are
+	-- evaluated live at impact against the target's status.
 	local cond = condOf(s)
+	local boss = bossVulnOf(s)
 	local tankPos = s.tank.pos
 	local impactDamage = 0
 	for ii = 1, #impacts do
@@ -655,6 +893,7 @@ function Combat.advanceProjectiles(s)
 						imp.damage_type,
 						modMult,
 						cond,
+						boss,
 						imp.on_hit,
 						imp.ability,
 						tankPos,
@@ -672,6 +911,7 @@ function Combat.advanceProjectiles(s)
 						imp.damage_type,
 						modMult,
 						cond,
+						boss,
 						imp.on_hit,
 						imp.ability,
 						tankPos,
@@ -726,13 +966,19 @@ function Combat.moveEnemies(s)
 				-- self-destruct). The boss does NOT despawn on contact: it
 				-- plants at the tank and grinds it with a CADENCED contact hit
 				-- (every `BOSS_CONTACT_CADENCE` ticks) until the player kills it
-				-- with `Clear` (the only thing that hurts it) or the tank dies.
-				-- Determinism: the cadence is a pure function of `s.tick` (no
-				-- wall-clock, no new RNG); dodge/armor/shield are still honored
-				-- per hit inside `hitTank`.
+				-- or the tank dies. Determinism: the cadence and the enrage are
+				-- pure functions of `s.tick` (no wall-clock, no new RNG);
+				-- dodge/armor/shield are still honored per hit inside `hitTank`.
 				e.pos = v2(moved) -- pin at the tank
 				if s.tick % BOSS_CONTACT_CADENCE == 0 then
-					hitTank(s, contact)
+					-- ENRAGE: the hit grows every `BOSS_ENRAGE_INTERVAL` the boss
+					-- stays alive, so the encounter is a RACE against a rising
+					-- damage curve rather than a fixed DPS threshold you either
+					-- clear or don't. Pure integer function of the tick. Note the
+					-- TWO successive `scale_i64`s (`enemyHpMult` into `contact`
+					-- above, then the enrage) — each truncates, so folding them
+					-- into one multiply would not round the same way.
+					hitTank(s, scaleI64(bossEnrageMult(s.tick), contact))
 				end
 				table.insert(survivors, e)
 			else
