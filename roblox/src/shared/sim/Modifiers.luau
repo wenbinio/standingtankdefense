@@ -54,7 +54,9 @@ local fromInt = Fixed.fromInt
 
 -- `Fixed::scale_i64` returning a plain Luau number. `scaleI64` yields an opaque
 -- i64 value (so the saturation boundary stays exact); every consumer here feeds
--- it straight into integer arithmetic, exactly as the Rust does.
+-- it straight into integer arithmetic, exactly as the Rust does. `toInt` ERRORS
+-- above 2^53 rather than rounding — per §S4 every quantity that reaches here
+-- sits far inside that, and a loud failure beats a silently wrong stat.
 local function scaleToInt(f, v: number): number
 	return Fixed.toInt(Fixed.scaleI64(f, v))
 end
@@ -196,6 +198,11 @@ function Modifiers.scaleOnHit(m, onHit)
 		out.poison_dps = scaleToInt(m.poison_dmg_mult, out.poison_dps)
 	end
 	if out.stun_ticks > 0 and not Fixed.eq(m.stun_dur_mult, ONE) then
+		-- SOURCE FIDELITY: the Rust is `scale_i64(..) as u32`, a WRAPPING cast.
+		-- It is unreachable in practice (`stun_dur_mult` starts at ONE and every
+		-- catalog rider is positive, so the product is never negative), and a
+		-- silent wrap here would be worse than a visible number, so the plain
+		-- integer is kept.
 		out.stun_ticks = scaleToInt(m.stun_dur_mult, out.stun_ticks)
 	end
 	return out

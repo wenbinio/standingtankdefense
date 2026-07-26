@@ -232,7 +232,8 @@ local function traverse(s, c)
 
 	c:writeU32(s.tick, "tick")
 	c:writeU32(s.round, "round")
-	c:writeU64(Rng.seedParts(s.master_seed))
+	local mhi, mlo = Rng.seedParts(s.master_seed)
+	c:writeU64(mhi, mlo, "master_seed")
 	c:writeU32(s.player_id, "player_id")
 
 	local t = s.tank
@@ -298,11 +299,16 @@ local function traverse(s, c)
 	c:writeI64(s.total_damage_dealt, "total_damage_dealt")
 	c:writeI64(s.total_gold_earned, "total_gold_earned")
 
-	c:writeU64(Rng.state(s.rng_spawn))
-	c:writeU64(Rng.state(s.rng_targeting))
-	c:writeU64(Rng.state(s.rng_shop))
-	c:writeU64(Rng.state(s.rng_reroll))
-	c:writeU64(Rng.state(s.rng_proc))
+	local rhi, rlo = Rng.state(s.rng_spawn)
+	c:writeU64(rhi, rlo, "rng_spawn")
+	rhi, rlo = Rng.state(s.rng_targeting)
+	c:writeU64(rhi, rlo, "rng_targeting")
+	rhi, rlo = Rng.state(s.rng_shop)
+	c:writeU64(rhi, rlo, "rng_shop")
+	rhi, rlo = Rng.state(s.rng_reroll)
+	c:writeU64(rhi, rlo, "rng_reroll")
+	rhi, rlo = Rng.state(s.rng_proc)
+	c:writeU64(rhi, rlo, "rng_proc")
 
 	-- Weapons (instance ids are monotonic; checksum in id order).
 	local wl = sortedById(s.weapons, "instance_id")

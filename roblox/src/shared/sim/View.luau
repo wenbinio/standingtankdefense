@@ -86,33 +86,19 @@ export type RenderView = {
 
 -- ============================ catalog access ============================
 
---- Content ids are 0-BASED (`SIM-SPEC.md` §S3: array position in `content.json`
---- IS identity), while Luau array storage is 1-based. `Content.luau` may expose
---- either an accessor function or the raw catalog table; resolve which ONCE at
---- load, and detect the table's base from whether index 0 is populated. Getting
---- this wrong is an off-by-one that never raises — hence the explicit probe.
-local function catalogGetter(fnName, arrName)
-	local fn = Content[fnName]
-	if type(fn) == "function" then
-		return fn
-	end
-	local t = Content[arrName]
-	if type(t) ~= "table" then
-		error("View: Content exposes neither " .. fnName .. "() nor " .. arrName, 2)
-	end
-	local off = (t[0] ~= nil) and 0 or 1
-	return function(def)
-		local d = t[def + off]
-		if d == nil then
-			error("View: no " .. arrName .. " entry for def " .. tostring(def), 2)
-		end
-		return d
-	end
+-- Content ids are 0-based (`SIM-SPEC.md` §S3: array position in `content.json`
+-- IS identity); Luau array storage is 1-indexed.
+local function weaponDef(def: number)
+	return Content.WEAPONS[def + 1]
 end
 
-local weaponDef = catalogGetter("weapon", "WEAPONS")
-local enemyDef = catalogGetter("enemy", "ENEMIES")
-local modifierDef = catalogGetter("modifier", "MODIFIERS")
+local function enemyDef(def: number)
+	return Content.ENEMIES[def + 1]
+end
+
+local function modifierDef(def: number)
+	return Content.MODIFIERS[def + 1]
+end
 
 --- An i64 sim field as a plain Luau number. Fields the Rust types `i64` are held
 --- as plain numbers (§S4); anything carried as an opaque `Fixed` i64 is
@@ -153,7 +139,7 @@ function View.snapshot(s): RenderView
 			-- Catalog base HP — a denominator for an approximate HP bar.
 			base_hp = num(def.base_hp),
 			kind = e.def,
-			boss = def.boss and true or false,
+			boss = def.boss,
 			name = def.name,
 		}
 	end

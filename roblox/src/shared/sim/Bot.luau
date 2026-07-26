@@ -72,9 +72,6 @@ end
 local TAG_TRADE_MAXHP_FOR_GOLD = 31
 local TAG_TRADE_REGEN_FOR_GOLD = 32
 
---- `ModEffect::is_economy` — IncomeFlat | IncomePct | GrantGold.
-local ECONOMY_TAGS = { [5] = true, [17] = true, [26] = true }
-
 --- STATIC offense the bot can stack safely. The DYNAMIC stat-scaling damage
 --- scalers (`DamagePerMaxHp` 40 / `DamagePerBountyPct` 41 /
 --- `ShieldActiveDamagePct` 42 / `DamagePerWeapon` 30) are deliberately NOT here:
@@ -120,17 +117,10 @@ local DEFENSE_TAGS = {
 --- absorb the scaling contact damage.
 local MAX_HP_TAGS = { [6] = true, [35] = true }
 
---- `ModifierDef::is_economy` — any effect is an economy effect.
+--- `ModifierDef::is_economy` — precomputed by `Content.luau` (true if ANY of the
+--- def's effects is an economy effect).
 local function modIsEconomy(def)
-	local m = modifierDef(def)
-	local fx = m.effects
-	for i = 1, #fx do
-		local tag = words(fx[i])
-		if ECONOMY_TAGS[tag] then
-			return true
-		end
-	end
-	return false
+	return modifierDef(def).is_economy
 end
 
 -- ============================ offer classification ============================

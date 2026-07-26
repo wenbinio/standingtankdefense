@@ -292,7 +292,11 @@ local function runTrace(doc, label)
 			print("========================================================")
 			print(string.format("    expected (rust) : %s", want))
 			print(string.format("    got      (luau) : %s", got))
-			print(string.format("    ticks verified  : %d (0 .. %d)", tick, tick - 1))
+			if tick > 0 then
+				print(string.format("    ticks verified  : %d (0 .. %d)", tick, tick - 1))
+			else
+				print("    ticks verified  : 0 — the very first tick already diverges")
+			end
 			if verbose then
 				dumpFields(s, tick)
 			else
@@ -333,4 +337,4 @@ if #failures > 0 then
 	end
 	error("trace_test: FAILED", 0)
 end
-print(string.format("trace_test: PASS — %d trace(s), checksum-identical to the Rust.", #traces))
+print(string.format("trace_test: PASS — %d trace(s); every per-tick checksum matched the recorded trace.", #traces))

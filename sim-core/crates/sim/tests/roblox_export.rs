@@ -14,6 +14,18 @@ use sim::export::{all_artifacts, repo_root, OUTPUTS};
 
 // ============================ round-trip ============================
 
+
+/// Look an artifact up by file name rather than by position in `OUTPUTS`.
+/// Positional indexing silently mis-targets whenever an artifact is added --
+/// which is exactly what happened when `ContentData.luau` was inserted.
+fn out(name: &str) -> &'static str {
+    OUTPUTS
+        .iter()
+        .copied()
+        .find(|p| p.ends_with(name))
+        .unwrap_or_else(|| panic!("no artifact named {name} in OUTPUTS"))
+}
+
 fn rt_attack(a: Attack) {
     let (t, x, y, z) = a.words();
     assert_eq!(Attack::from_words(t, x, y, z), Some(a), "Attack round-trip: {a:?}");
@@ -127,7 +139,7 @@ fn checked_in_artifacts_are_current() {
 }
 
 fn content() -> Value {
-    Value::parse(&read_artifact(OUTPUTS[0])).expect("content.json parses")
+    Value::parse(&read_artifact(out("content.json"))).expect("content.json parses")
 }
 
 fn payload(v: &Value) -> (u8, i64, i64, i64) {
@@ -390,7 +402,7 @@ fn from_hex_i64(v: &Value) -> i64 {
 #[test]
 fn fixed_vectors_reproduce_the_rust() {
     use determinism::Fixed as F;
-    let doc = Value::parse(&read_artifact(OUTPUTS[1])).expect("fixed_vectors.json parses");
+    let doc = Value::parse(&read_artifact(out("fixed_vectors.json"))).expect("fixed_vectors.json parses");
     assert_eq!(doc.at("frac_bits").as_i64(), F::FRAC_BITS as i64);
     assert_eq!(doc.at("one").as_i64(), F::ONE.raw());
 
@@ -458,7 +470,7 @@ fn fixed_vectors_reproduce_the_rust() {
 #[test]
 fn rng_vectors_reproduce_the_rust() {
     use determinism::Rng;
-    let doc = Value::parse(&read_artifact(OUTPUTS[2])).expect("rng_vectors.json parses");
+    let doc = Value::parse(&read_artifact(out("rng_vectors.json"))).expect("rng_vectors.json parses");
     let u64_of = |v: &Value| u64::from_str_radix(v.as_str(), 16).expect("hex u64");
 
     for blk in doc.at("seeds").as_arr() {

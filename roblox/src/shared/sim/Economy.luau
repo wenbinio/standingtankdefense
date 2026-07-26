@@ -11,7 +11,12 @@
 	------------------------------------------------------------
 	* `Fixed` values stay `Fixed.luau` values and are never indexed (§S4);
 	  `Fixed::scale_i64` results are converted with `Fixed.toInt` at the point
-	  the Rust would already be holding an `i64`.
+	  the Rust would already be holding an `i64`. `toInt` errors above 2^53
+	  instead of rounding; per §S4 no gold/heal quantity reaches that, and a
+	  loud failure beats a silently wrong wallet.
+	* `award_gold` / `Tank::heal` / `Tank::restore_mana` live in `state.rs`, so
+	  the `total_gold_earned` scoreboard accumulation and the `healing_mult` /
+	  max-HP / pool caps are reached through `State`, not duplicated here.
 	* Enemy defs are 0-based content ids; `Content.ENEMIES` is a 1-indexed Luau
 	  array (§S3) — see `enemyDef` below.
 	* `rng_proc` is drawn EXACTLY where the Rust draws it: once per kill, and
@@ -29,6 +34,10 @@ local State = require("./State")
 local Economy = {}
 
 local ZERO = Fixed.ZERO
+-- `Tank::heal` / `Tank::restore_mana` — the healing chokepoints in `state.rs`
+-- (`healing_mult` and the max-HP / pool caps live there, in one place).
+local tankHeal = State.Tank.heal
+local tankRestoreMana = State.Tank.restoreMana
 
 -- Content ids are 0-based (§S3); Luau array storage is 1-indexed.
 local function enemyDef(def: number)
@@ -72,13 +81,13 @@ function Economy.collectBounties(s)
 	State.awardGold(s, gained)
 	-- On-kill trigger: heal the tank per enemy killed this tick.
 	if s.tank.heal_on_kill > 0 and kills > 0 and not s.dead then
-		State.heal(s.tank, kills * s.tank.heal_on_kill)
+		tankHeal(s.tank, kills * s.tank.heal_on_kill)
 	end
 	-- On-kill trigger: restore Mana Shield per enemy killed this tick (the source's
 	-- Maw of Death). Mirrors `heal_on_kill`: applies per kill, capped at the pool
 	-- max via `restoreMana` (a no-op if the tank owns no shield pool).
 	if s.tank.mana_on_kill > 0 and kills > 0 and not s.dead then
-		State.restoreMana(s.tank, kills * s.tank.mana_on_kill)
+		tankRestoreMana(s.tank, kills * s.tank.mana_on_kill)
 	end
 end
 
@@ -91,7 +100,7 @@ function Economy.tickIncome(s)
 	State.awardGold(s, amount)
 	-- Income-as-HP-regen (the source's "% of Gold Income as instant HP Regen").
 	if Fixed.lt(ZERO, economy.income_regen_pct) and not s.dead then
-		State.heal(s.tank, Fixed.toInt(Fixed.scaleI64(economy.income_regen_pct, amount)))
+		tankHeal(s.tank, Fixed.toInt(Fixed.scaleI64(economy.income_regen_pct, amount)))
 	end
 	-- Income-as-survival: route a fraction of the award into the Mana-Shield pool
 	-- (capped at its max), mirroring the HP-regen path above.

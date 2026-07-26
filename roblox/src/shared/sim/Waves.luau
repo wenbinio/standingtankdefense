@@ -174,6 +174,25 @@ function Waves.setTimeline(tl)
 	end
 end
 
+--- Rescale a content `start_tick` gate onto the active timeline.
+---
+--- The wave/escort `start_tick` gates ship at STEAM scale (up to 45000) and are
+--- deliberately not pre-rescaled in `content.json`, so the one catalog serves
+--- both timelines. Without this, a Roblox-timeline run (boss at 9000) would
+--- leave 7 of 17 roster gates permanently shut — the roster would silently
+--- collapse to its opening mix with no error anywhere.
+---
+--- `tick_scale_num/den` is 1/1 on Steam, so this is the identity there and the
+--- Rust oracle is unaffected. Every shipped gate divides evenly by 6, so the
+--- Roblox rescale is exact rather than merely floored.
+local function gateTick(tl, startTick: number): number
+	local num, den = tl.tick_scale_num, tl.tick_scale_den
+	if num == nil or den == nil or den == 0 or num == den then
+		return startTick
+	end
+	return math.floor(startTick * num / den)
+end
+
 --- The timeline in force for `s`: per-arena override, then module override,
 --- then the Steam default (which is what the Rust — and the oracle — runs).
 local function timelineFor(s)
@@ -293,8 +312,9 @@ function Waves.spawn(s)
 	for i = 1, #waves do
 		local ws = waves[i]
 		if ws.cadence_ticks ~= 0 then
-			-- Escalation gate: this entry is dormant until its start_tick.
-			if s.tick >= ws.start_tick then
+			-- Escalation gate: this entry is dormant until its start_tick,
+			-- rescaled onto the active timeline (identity on Steam).
+			if s.tick >= gateTick(tl, ws.start_tick) then
 				if s.tick % ws.cadence_ticks == 0 then
 					local ringIdx = Rng.below(s.rng_spawn, nring)
 					local pos = ring[ringIdx + 1]

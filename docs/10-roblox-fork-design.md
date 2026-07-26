@@ -52,7 +52,9 @@ This is the layer `[02] §2.9` defers to v2. On Roblox it is v1, because without
 
 **Decision:** account-persistent progression, built out of machinery that already exists:
 
-1. **Offer-pool unlocks.** The shop's draw pool starts small and widens with account XP. Reuses the existing rarity/weighting system — new content is *unlocked*, not *rolled*.
+1. **Offer-pool unlocks.** The shop's draw pool starts small and widens with account XP. New content is *unlocked*, not *rolled*.
+
+   **Correction (found during the R3 transcription):** an earlier draft of this said it "reuses the existing rarity/weighting system." **There is no such system.** `shop.rs` draws *uniformly* over the full pools into a fixed 4-weapon + 4-modifier layout; the rarity ladder, Black Market, copy-effects and draw-altering meta items described in `[02] §2.5`/`§2.8` are **not implemented**. Pool *restriction* is still trivial — draw from a subset — so the unlock mechanic survives intact. But any rarity weighting would have to be **built**, not reused, and that cost belongs in this milestone's estimate rather than being discovered later.
 2. **Tank chassis.** A handful of starting loadouts (starting weapon + one passive). Light mechanical variety, strong identity hook.
 3. **Cosmetics.** Skins, projectile trails, arena themes. The primary monetization surface.
 
@@ -154,3 +156,33 @@ Also unmodelled: hazards, minions, auras, vulnerability pulses and Fire chain ex
 ### Carried forward
 
 An upstream finding about the **existing Rust sim**, not the port: `combat.rs::fire_weapons` does not advance cooldown when nothing is in range, so short-range weapons rescan every enemy every tick — **1,670 weapon-range scans/tick** at E=300/W=20, turning an amortised `O(W·E/cooldown)` into a per-tick `O(W·E)`. Worth fixing on its own merits, and it would benefit both builds.
+
+## F9 — Findings carried upstream (about the Steam build, not the fork)
+
+The R3 transcription put eight independent readers through `sim-core` line by line, which surfaced divergences no one was looking for. **None of these are port bugs**, and none were "fixed" in transit — every agent transcribed the Rust as it stands and flagged the gap. Recording them here so they are decided deliberately rather than rediscovered.
+
+### `docs/02` is materially stale against the implementation
+
+Five confirmed divergences, in rough order of consequence:
+
+1. **Match length.** `[02] §2.3` describes a ~15-minute arc; `content.rs` implements **30 minutes** (`BOSS_SPAWN_TICK = 54000`).
+2. **The entire shop meta-layer is unimplemented.** `[02] §2.5`/`§2.8` specify a rarity ladder driving draw weight, Black Market, Multiplication Gems, "copy of the next Rare", and a *stateful, order-dependent* offer stream. `shop.rs` draws **uniformly over the full pools** into a fixed 4+4 layout. `pending_perk` alters the next matching **purchase** (free / +N copies), not future **draws** — so the offer stream is advanced only by `generateOffers`, and there is nothing to save-scum because there is nothing stateful to scum.
+3. **Income scoping is inverted.** `[02] §2.4` says income-% multipliers apply "only to *bonus* income, not the base". `economy.rs` applies `income_mult` to the whole of `income_per_tick`, base included.
+4. **No dodge diminishing-returns curve.** `[02] §2.2` implies one; `defense.rs` rolls a flat `dodge_num/dodge_den`, and the only non-linearity is a hard **70% cap** applied in `modifiers.rs` at purchase time.
+5. **Frost and Poison have no attack-speed/movement slow beyond movement.** `[02] §2.5` gives Frost a "move/**attack**-speed slow" and Poison a slow; `status.rs` exposes only `move_speed_mult`, consumed by `combat::move_enemies`. Enemy attack cadence never consults either.
+
+Each is a **doc-vs-code** question, not a transcription question. The code is the shipped behavior; the doc is the older intent. Someone should decide, per item, which one is wrong — and `[02]` should carry the result. Until then, `[02]` should not be read as a description of the current game.
+
+### `lib.rs::checksum` has blind spots
+
+The checksum omits several fields that are **checksum-relevant sim state**, not render-only: `tank.shield_active_dr`, `tank.heal_on_damaged`, `tank.mana_on_kill`, `modifiers.dmg_per_maxhp_rate`, `modifiers.dmg_per_bounty_rate`, `modifiers.shield_active_dmg`, and `Projectile.last_target_pos`.
+
+This matters twice over: a genuine desync in any of them goes undetected on Steam, **and** an R3 transcription error in any of them passes the Roblox gate silently. Widening the checksum would change every existing digest, so it is a deliberate call — but it should be a call, not an oversight.
+
+### A real inefficiency in `combat.rs`
+
+`fire_weapons` does not advance a weapon's cooldown when nothing is in range, so short-range weapons re-scan every enemy every tick — **1,670 weapon-range scans/tick** at E=300/W=20, turning an amortised `O(W·E/cooldown)` into a per-tick `O(W·E)`. Load-bearing behavior, so the port transcribes it as-is; fixing it would benefit both builds and must be done on both sides at once, or the oracle breaks.
+
+### Wave gates are not timeline-scaled (fixed here)
+
+`waves[].start_tick` gates ship pre-baked at Steam scale (up to 45000). Under the F1 Roblox timeline (boss at 9000) **7 of 17 gates would never open**, silently collapsing the roster to its opening mix with no error anywhere. Fixed by emitting `tick_scale_num`/`tick_scale_den` per timeline and having `Waves.luau` rescale the gates — identity on Steam, so the oracle is untouched. Every shipped gate divides evenly by 6, so the rescale is exact.
