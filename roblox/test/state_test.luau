@@ -449,12 +449,16 @@ eq("offer_is_meta(modifier 37 vuln)", State.offerIsMeta({ kind = OK.Modifier, de
 
 G("input encoding")
 eq("NOOP", Input.NOOP, 0)
-eq("REROLL", Input.REROLL, 2)
-eq("CLEAR", Input.CLEAR, 3)
-eq("buyOffer(0)", Input.buyOffer(0), 1)
+-- Encoding is `kind * 256 + slot` (kind in the HIGH byte), matching
+-- `net::wire::InputCode`'s byte order and the `code` field in the R3 trace
+-- corpus. SIM-SPEC S6 originally left this unpinned and two agents chose
+-- opposite conventions; the corpus won, and this is now the single definition.
+eq("REROLL", Input.REROLL, 2 * 256)
+eq("CLEAR", Input.CLEAR, 3 * 256)
+eq("buyOffer(0)", Input.buyOffer(0), 256)
 eq("buyOffer(1)", Input.buyOffer(1), 257)
-eq("buyOffer(7)", Input.buyOffer(7), 1793)
-eq("buyOffer(255)", Input.buyOffer(255), 65281)
+eq("buyOffer(7)", Input.buyOffer(7), 263)
+eq("buyOffer(255)", Input.buyOffer(255), 511)
 eq("kind(NOOP)", Input.kind(Input.NOOP), Input.Kind.Noop)
 eq("kind(REROLL)", Input.kind(Input.REROLL), Input.Kind.Reroll)
 eq("kind(CLEAR)", Input.kind(Input.CLEAR), Input.Kind.Clear)
@@ -644,7 +648,10 @@ eq("boss def recorded in pending_kills", c4.pending_kills[#c4.pending_kills], BO
 
 G("input: unknown code")
 checks += 1
-if pcall(Input.apply, fresh(), 9) then
+-- kind 4 (= 4*256) is not an `ids::Input` variant. Under the corpus encoding
+-- the kind lives in the HIGH byte, so a small integer like 9 decodes to
+-- kind 0 (Noop) with slot 9 -- valid, not unknown.
+if pcall(Input.apply, fresh(), 4 * 256) then
 	fail("an unknown input kind must error", "ok", "error")
 end
 

@@ -10,7 +10,7 @@
 	puts in the trace log — no wrapper table, no allocation per tick, and the
 	trace's `code` field is directly applicable:
 
-	    code = kind + slot * 256          (kind = code % 256, slot = code // 256)
+	    code = kind * 256 + slot          (kind = code // 256, slot = code % 256)
 
 	    kind 0  Noop
 	    kind 1  BuyOffer(slot)   slot is a u8, 0-BASED (shop.offers[slot + 1])
@@ -46,22 +46,22 @@ Input.Kind = table.freeze({
 
 --- Ready-made codes for the payload-free actions.
 Input.NOOP = 0
-Input.REROLL = 2
-Input.CLEAR = 3
+Input.REROLL = 2 * 256
+Input.CLEAR = 3 * 256
 
 --- `Input::BuyOffer { slot }` — `slot` is a 0-BASED u8 shop slot.
 function Input.buyOffer(slot: number): number
-	return 1 + slot * 256
+	return 256 + slot
 end
 
 --- The action kind of a code (`Input.Kind.*`).
 function Input.kind(code: number): number
-	return code % 256
+	return (code - code % 256) / 256
 end
 
 --- The `BuyOffer` slot carried by a code (0-BASED; 0 for every other kind).
 function Input.slot(code: number): number
-	return (code - code % 256) / 256
+	return code % 256
 end
 
 --=============================================================================
@@ -92,12 +92,12 @@ local REROLL_COST_STEP = 100
 --- (`s.rng_shop`), and only on the branches where the Rust calls it — an ignored
 --- reroll must not regenerate, or `rng_shop` desynchronizes (§S4).
 function Input.apply(s: State.ArenaState, inp: number)
-	local kind = inp % 256
+	local kind = (inp - inp % 256) / 256
 
 	if kind == 0 then -- Input::Noop
 		return
 	elseif kind == 1 then -- Input::BuyOffer { slot }
-		local slot = (inp - kind) / 256
+		local slot = inp % 256
 		-- `s.shop.offers.get(idx)`: `slot` is 0-based, Luau arrays are 1-indexed.
 		local offer = s.shop.offers[slot + 1]
 		if offer == nil then

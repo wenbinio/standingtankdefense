@@ -8,3 +8,14 @@ license = "MIT"
 
 [profile.release]
 overflow-checks = true   # determinism: never silently wrap in release
+
+# The R3 oracle test (`crates/sim/tests/traces.rs`) replays ~700k sim ticks and
+# parses ~12 MB of committed JSON on every `cargo test`. Unoptimized that is ~6.5
+# min; optimizing just these two packages brings it to ~30 s. Scoped to the two
+# crates whose inner loops dominate — nothing else in the workspace changes.
+# `overflow-checks` and `debug-assertions` stay at their dev defaults (ON), so
+# this buys speed without relaxing a single determinism guard.
+[profile.dev.package.determinism]
+opt-level = 2
+[profile.dev.package.sim]
+opt-level = 2

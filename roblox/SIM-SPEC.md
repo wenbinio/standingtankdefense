@@ -92,6 +92,11 @@ Trace format (`roblox/test/traces/`), one JSON document per seed:
 ```
 
 - `checksums[i]` is the checksum **after** tick `i` completes.
+- **`code` is `kind * 256 + slot`** — kind in the HIGH byte, `kind ∈ {0 Noop, 1 BuyOffer, 2 Reroll, 3 Clear}` (the `ids::Input` declaration order), `slot` 0-based and 0 for every kind but `BuyOffer`. Decode as `kind = code // 256`, `slot = code % 256`. This matches `net::wire::InputCode`'s byte order.
+
+  *This was originally left undefined here, and two agents independently chose opposite conventions — one packing the kind in the low byte, the other in the high byte. It cost a diverge-at-tick-0 on the first gate run. Pinned now; do not re-derive it.*
+- **`inputs` is SPARSE** — only non-`Noop` ticks appear. Any tick absent from the log is a `Noop`. A dense log would be 55,200 entries per trace for ~400 real events.
+- `player_id` is `0` for every trace in the corpus.
 - `inputs` is the scripted input log — a fixed, seeded `Bot` script, so the Luau side replays identical decisions rather than reimplementing bot judgment as a prerequisite.
 - `content_hash` must match `content.json`'s, so a stale trace fails loudly instead of silently.
 - `u64` values are 16-digit lowercase hex, per `CONTRACTS.md` C4.

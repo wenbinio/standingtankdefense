@@ -19,6 +19,7 @@
 //! - Engine-independent, dependency-free (see [`json`]).
 
 pub mod json;
+pub mod trace;
 
 use crate::content as c;
 use determinism::{Fixed, Rng};
