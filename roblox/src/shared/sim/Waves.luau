@@ -14,18 +14,29 @@
 	That is reproduced exactly by `Rng.luau`; never substitute an equivalent.
 	`rng_spawn` is drawn from HERE AND NOWHERE ELSE, matching the Rust.
 
-	TIMELINE (`docs/10` F1, `CONTRACTS.md` C1). `content.json` ships two
-	timelines. This module hardcodes NEITHER: it reads `boss_spawn_tick`,
-	`ramp_interval`, `gentle_ticks` and `ramp_intervals_to_boss` from a timeline
-	table resolved, in order, from
+	TIMELINE (`docs/10` F1, `CONTRACTS.md` C1, `PHASE2-CONTRACTS.md` P3).
+	`content.json` ships two timelines. This module hardcodes NEITHER: it reads
+	`boss_spawn_tick`, `ramp_interval`, `gentle_ticks`, `ramp_intervals_to_boss`
+	and `tick_scale_num/den` from a timeline table resolved, in order, from
 	    `state.timeline`  ->  `Waves.timeline`  ->  `Content.TIMELINE.steam`.
 	The DEFAULT is therefore **steam**, because the R3 oracle traces are
 	generated from the Rust, which runs the Steam timeline. Switching the
 	default would fail the gate for a reason that is not a bug.
 
-	Note: the wave/escort tables' `start_tick` gates are CONTENT, not timeline —
-	they ship pre-baked at Steam scale and are not rescaled here (see the report
-	/ spec gap: a Roblox-timeline run would leave most roster gates closed).
+	`state.timeline` is the SINGLE SOURCE OF TRUTH (P3) and the only form that is
+	safe with per-player sharded arenas (`docs/03`): `Waves.timeline` is a
+	process-wide override and would apply to every arena in the server at once.
+	Use it in tests, not in the arena runner.
+
+	The wave/escort `start_tick` gates are CONTENT: they ship pre-baked at STEAM
+	scale so one catalog serves both timelines, and `gateTick` below rescales
+	them onto the active timeline by `tick_scale_num/den` (identity on Steam).
+	Without that rescale a Roblox-timeline run (boss at 9000) would leave 7 of
+	the 17 roster gates permanently shut.
+
+	NOT rescaled, deliberately: `cadence_ticks`. F1 is a rescale of the run's
+	*schedule*, not of its spawn rate — compressing cadences too would cut the
+	total enemy count and turn the rescale into a rebalance.
 ]]
 
 local Fixed = require("../Fixed")
@@ -157,21 +168,39 @@ end
 
 -- ============================ timeline ============================
 
---- Explicit timeline override for this module (nil ⇒ `Content.TIMELINE.steam`).
+--- PROCESS-WIDE timeline override (nil ⇒ `Content.TIMELINE.steam`). Applies to
+--- every arena that has no `state.timeline` of its own, so it is a TEST hook —
+--- the arena runner sets `state.timeline` per shard instead (P3).
 Waves.timeline = nil
 
---- Set the active timeline: a table (or `"steam"` / `"roblox"` to name one of
---- the two `content.json` ships). `nil` restores the default (steam).
-function Waves.setTimeline(tl)
+--- Resolve a timeline argument to a timeline table: a table passes through, a
+--- string names one of the two `content.json` ships (`"steam"` / `"roblox"`),
+--- and `nil` stays `nil` (meaning "no override" / the Steam default).
+---
+--- Validates that the result actually looks like a timeline, because the failure
+--- mode of a wrong table here is silent: a missing `boss_spawn_tick` would make
+--- `s.tick == bossTick` never true and the boss would simply never arrive.
+function Waves.resolveTimeline(tl)
+	if tl == nil then
+		return nil
+	end
 	if type(tl) == "string" then
 		local t = content().timeline[tl]
 		if t == nil then
-			error("Waves: unknown timeline '" .. tl .. "'", 2)
+			error("Waves: unknown timeline '" .. tl .. "'", 3)
 		end
-		Waves.timeline = t
-	else
-		Waves.timeline = tl
+		return t
 	end
+	if type(tl) ~= "table" or tl.boss_spawn_tick == nil or tl.round_ticks == nil then
+		error("Waves: not a timeline (want a table with boss_spawn_tick/round_ticks, or \"steam\"/\"roblox\")", 3)
+	end
+	return tl
+end
+
+--- Set the process-wide timeline: a table, or `"steam"` / `"roblox"`. `nil`
+--- restores the default (steam). Prefer `state.timeline` — see above.
+function Waves.setTimeline(tl)
+	Waves.timeline = Waves.resolveTimeline(tl)
 end
 
 --- Rescale a content `start_tick` gate onto the active timeline.
@@ -207,6 +236,21 @@ local function timelineFor(s)
 		error("Waves: Content.TIMELINE has no 'steam' entry", 3)
 	end
 	return steam
+end
+
+--- The timeline in force for `s` (public form of the resolver above): the
+--- per-arena `state.timeline`, else the module override, else Steam. `s` may be
+--- `nil` to ask for "the default timeline". This is the ONE resolver — `Arena`
+--- and anything else needing a timeline constant calls through here rather than
+--- re-implementing the precedence.
+function Waves.timelineFor(s)
+	return timelineFor(s)
+end
+
+--- Rescale a content `start_tick` gate onto `tl` (identity on Steam). Public so
+--- tooling/tests can check the gate schedule without re-deriving the rule.
+function Waves.gateTick(tl, startTick: number): number
+	return gateTick(tl, startTick)
 end
 
 -- ============================ enemy_hp_mult ============================

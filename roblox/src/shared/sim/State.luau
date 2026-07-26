@@ -652,6 +652,25 @@ function State.recordPlayerDamage(s: ArenaState, amount: number)
 	end
 end
 
+--- Rescale a catalog ramp interval onto the arena's active timeline.
+---
+--- The catalog bakes Steam's `RAMP_PER_ROUND` (900) into every `ramp`, so the
+--- interval means "one round" only while a round IS 900 ticks. `nil` timeline
+--- (Steam) and any timeline whose `ramp_per_round` matches Steam's return the
+--- value unchanged, which is what keeps the R3 checksum gate byte-identical.
+local function rampInterval(s: ArenaState, interval: number): number
+	local tl = s.timeline
+	if tl == nil or tl.ramp_per_round == nil then
+		return interval
+	end
+	local steam = Content.TIMELINE and Content.TIMELINE.steam
+	local base = steam and steam.ramp_per_round
+	if base == nil or base == 0 or tl.ramp_per_round == base then
+		return interval
+	end
+	return math.floor(interval * tl.ramp_per_round / base)
+end
+
 --- `ArenaState::buy_modifier` — apply a purchased modifier (folds into the
 --- damage/attack-speed aggregate, and applies any immediate economy/defensive
 --- effect).
@@ -706,10 +725,17 @@ function State.buyModifier(s: ArenaState, def_idx: number)
 	-- `if let Some(r) = ramp`. The `.effect ~= nil` guard also absorbs a
 	-- `Json.null` that survived content decoding (§S3: `Option<T>` -> `nil`).
 	if ramp ~= nil and ramp.effect ~= nil then
+		-- Ramp intervals ship at STEAM scale in the catalog (RAMP_PER_ROUND = 900,
+		-- i.e. "grows once per round"). A shorter Roblox round would otherwise make
+		-- those modifiers grow every 1.5 rounds, quietly nerfing every ramping
+		-- purchase on the fork. Rescale by the ACTIVE timeline's ramp_per_round so
+		-- "per round" keeps meaning per round -- identity on Steam, so the R3
+		-- oracle is untouched. (`docs/10` F1: rescale, not rebalance.)
+		local interval = rampInterval(s, ramp.interval_ticks)
 		s.ramps[#s.ramps + 1] = {
 			effect = ramp.effect,
-			interval_ticks = ramp.interval_ticks,
-			next_apply = s.tick + ramp.interval_ticks,
+			interval_ticks = interval,
+			next_apply = s.tick + interval,
 		}
 	end
 end

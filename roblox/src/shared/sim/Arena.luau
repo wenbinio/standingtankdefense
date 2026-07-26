@@ -64,18 +64,72 @@ local Waves = require("./Waves")
 local Arena = {}
 
 --- Simulation frequency. The only clock the sim knows (`lib.rs::TICK_HZ`).
+--- Timeline-INVARIANT: both `content.json` timelines carry `tick_hz = 30`, and
+--- `roblox_export.rs` asserts they agree, so this is not a hidden Steam constant.
 Arena.TICK_HZ = 30
---- Ticks per round (a new shop opens each round). 30 s @ 30 Hz.
----
---- TRANSCRIBED FROM `lib.rs::ROUND_TICKS` (= 900), NOT the `timeline.roblox`
---- rescale in `content.json` (600). The Rust is the oracle for R3: a trace's
---- checksums are produced by a sim using 900, so using 600 here would diverge at
---- the first round boundary. The F1 rescale is a separate, later switch — it is
---- exposed here as one named constant so that switch is a one-line change.
-Arena.ROUND_TICKS = 30 * 30
 
-local ROUND_TICKS = Arena.ROUND_TICKS
 local U32_MAX = 4294967295
+
+-- ============================ timeline ============================
+--
+-- `PHASE2-CONTRACTS.md` P3 / `docs/10` F1. Two timelines ship as DATA in
+-- `content.json` (`Content.TIMELINE.steam` / `.roblox`); which one an arena runs
+-- is a RUNTIME choice carried on the state as `state.timeline`, never a
+-- compile-time swap. `nil` means Steam — the Rust's schedule, and therefore the
+-- one the R3 oracle traces are recorded against.
+--
+-- There used to be an `Arena.ROUND_TICKS = 900` constant here. It is gone on
+-- purpose: it was the last place the sim hardcoded a timeline. Round length is
+-- now looked up per state via `Arena.roundTicks(s)`. A stale reader of the old
+-- constant gets `nil` and a loud arithmetic error rather than a silent 900.
+--
+-- `state.timeline` is deliberately NOT checksummed. It is configuration, like
+-- `content_hash` — it selects which schedule the sim runs, the same way the
+-- content catalog selects which enemies exist, and adding it to the digest would
+-- change every Steam checksum and invalidate the oracle. Two arenas on different
+-- timelines diverge in their checksummed state within a few hundred ticks
+-- anyway; the timeline is agreed out-of-band at arena setup (`docs/03`).
+
+--- The timeline in force for `s` (per-arena, else module override, else Steam).
+--- Delegates to `Waves` so the precedence rule exists in exactly one place.
+function Arena.timelineFor(s)
+	return Waves.timelineFor(s)
+end
+
+--- Ticks per round — a new shop opens on each boundary. Steam 900 (30 s @ 30 Hz,
+--- `lib.rs::ROUND_TICKS`), Roblox 600 (20 s, F1). THE LOOKUP that replaced the
+--- old constant; read from the active timeline's `round_ticks` on every call.
+function Arena.roundTicks(s): number
+	local rt = Arena.timelineFor(s).round_ticks
+	if type(rt) ~= "number" or rt <= 0 then
+		error("Arena: active timeline has no positive round_ticks", 2)
+	end
+	return rt
+end
+
+--- The tick the boss spawns on. Steam 54000 (30 min), Roblox 9000 (5 min).
+--- `Waves.spawn` reads the same field off the same resolved timeline.
+function Arena.bossTick(s): number
+	return Arena.timelineFor(s).boss_spawn_tick
+end
+
+--- Select the timeline for one arena: a timeline table, or `"steam"` /
+--- `"roblox"` to name one of the two `content.json` ships; `nil` clears the
+--- override back to the default (Steam). Returns `s`.
+---
+--- Set this at arena construction (or immediately after restoring a snapshot)
+--- and do not change it mid-run: round boundaries and the wave gates are derived
+--- from it every tick, so switching it at tick > 0 would make a replay of the
+--- same inputs produce a different state. That is a determinism hazard, not a
+--- feature — hence the loud error below.
+function Arena.setTimeline(s, tl)
+	local resolved = Waves.resolveTimeline(tl)
+	if s.tick ~= 0 and s.timeline ~= resolved then
+		error("Arena.setTimeline: the timeline is fixed at arena setup (tick 0); changing it mid-run breaks replay", 2)
+	end
+	s.timeline = resolved
+	return s
+end
 
 -- ============================ step ============================
 
@@ -94,7 +148,10 @@ function Arena.step(s, inp)
 
 	-- 1. Round boundary → refresh shop + per-round economy.
 	-- `tick` is a u32 (never negative), so floor division matches Rust's `/`.
-	local new_round = s.tick // ROUND_TICKS
+	-- Round LENGTH is a per-arena timeline lookup (900 Steam / 600 Roblox), not a
+	-- constant; on the Steam path this resolves to the same 900 the Rust uses, so
+	-- the arithmetic below is unchanged.
+	local new_round = s.tick // Arena.roundTicks(s)
 	if new_round ~= s.round then
 		s.round = new_round
 		Shop.generateOffers(s)
@@ -148,8 +205,16 @@ function Arena.step(s, inp)
 end
 
 --- Convenience re-export of the state constructor (`lib.rs` does `pub use state::*`).
-function Arena.newState(master_seed, player_id)
-	return State.new(master_seed, player_id)
+---
+--- `timeline` is OPTIONAL and defaults to `nil` ⇒ Steam, so every existing
+--- two-argument call site keeps the oracle's schedule. Pass `"roblox"` (or a
+--- timeline table) for an F1 five-minute run.
+function Arena.newState(master_seed, player_id, timeline)
+	local s = State.new(master_seed, player_id)
+	if timeline ~= nil then
+		s.timeline = Waves.resolveTimeline(timeline)
+	end
+	return s
 end
 
 -- ============================ checksum plumbing ============================
