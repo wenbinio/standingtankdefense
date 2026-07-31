@@ -176,3 +176,55 @@ Nothing new enters the checksum: the breach is *derived* from `tank.clear_cooldo
 - **`naked_eco_rush_*` guards remain red** (14/24 against a ≥75% bar), unchanged by the boss work. A no-weapon economy build is under-punished, and the guard is in genuine tension with `modest_opener_survives_past_the_deadline`.
 - **A narrow-build challenge bot** is needed to *observe* the breadth incentive. The reference bot builds ~7 distinct types regardless of outcome, so the sweep's distinct-weapon metric is saturated and cannot show the effect; it is currently verified only by a unit test pinning the ratio at 2.30–2.37×.
 - **`Arena.step` is ~2.5× slower** than before the balance pass. That eats R2's headroom and needs a look.
+
+## 11.8 The income-regen ceiling — and a degeneracy it exposed
+
+### The finding that matters most in this document
+
+Measuring the eco-rush guard turned up something larger than the guard. Across 80 seeds:
+
+> **Runs that own income-as-HP-regen win 26 of 37. Runs that do not win 1 of 43.**
+
+The 33.8% win rate in §11.7 is, to a first approximation, **the draw rate of a single modifier**. `MODIFIERS[7]`'s `IncomeRegenPct` is not one sustain option among many — it is *the* sustain mechanism, and every other build is playing a different, much harder game without knowing it.
+
+That reframes the five green targets in §11.7. They are real measurements, but they are measurements of a game balanced around one mandatory item. **This is now the most important open problem in the design**, ahead of anything else in §11.3: an 86-weapon, 91-modifier catalog in which one modifier decides 97% of losses is not a build-craft game.
+
+### Why the obvious fix does not work
+
+The guard is red because the naked eco build stacks that modifier without limit. The intuitive bound — cap the per-tick income heal at a fraction of `max_hp` — was swept across the full range and **the window is empty from both ends**:
+
+| cap per tick (24k pool) | guard | win rate |
+| --- | --- | --- |
+| ∞ (baseline) | 50.0% | 33.8% ✅ |
+| 240 (1% of pool) | 50.0% | 2.5% ❌ |
+| 24 | 50.0% | 2.5% ❌ |
+| 6 | 97.9% | 2.5% ❌ |
+| ≤4 | 100% | 2.5% ❌ |
+
+Two measurements explain it. The naked tank leaks only **~12–20 HP/tick** early, so the guard needs a ceiling under ~6 HP/tick. But a real build's income heal closes a **median deficit of 3,387 HP/tick on the same 24,000 pool** (p90 12,097, p99 43,030), and on ~1,000 sampled ticks it heals from *negative* HP — absorbing up to **4.1 pools of single-tick overkill** before `resolve_deaths` runs. That resurrection, not the sustained rate, is what real builds actually draw on.
+
+Identical pools, roughly **280× apart in demand**. No constant multiple of `max_hp` separates them.
+
+### What shipped
+
+What separates the cases is not magnitude but **timing**: the naked build needs the heal in the opening, real builds need it late. So the ceiling ramps in over the match:
+
+```
+c = max_hp * INCOME_REGEN_CAP_POOLS          -- 5
+repeat INCOME_REGEN_CAP_POW times:           -- 4
+    c = floor(c * tick / BOSS_SPAWN_TICK)    -- 54000
+heal(min(floor(income_regen_pct * amount), c))
+```
+
+Four **separate truncating** steps — the per-step floor is part of the definition and must not be folded into one division when transcribing to Luau. All operands non-negative. Applied to the *input* of `Tank::heal`, so `+% Healing` still scales it. The exponent is forced rather than chosen: closing the ~8,000× gap over the 15× span from tick 3,600 to 54,000 needs `k ≥ log(8000)/log(15) ≈ 3.32`.
+
+Result: the guard passes at **100%** across 24, 48, 96 and 240 seeds (deaths at ticks 1890–2476, over 1,100 ticks inside the deadline), and all five §11.2 targets are unchanged.
+
+### Being honest about what this is
+
+**It is a time gate on the opening, not a magnitude bound.** At the shipped constants the ceiling is **bit-identical to baseline across all 80 seeds** — it never binds in a normal run. Two consequences:
+
+- **§11.1 failure 5 is not fixed.** Median peak max HP is still 24,000, the starting value. HP still buys no sustain, because the ceiling that would make it matter never engages. The *mechanism* (`cap ∝ max_hp`) is in place and unit-tested; nothing exercises it.
+- The exponent is a curve fit to close a specific gap. It is defensible and it is bounded, but it is not a principle.
+
+A genuinely binding magnitude bound is not reachable from `economy.rs` alone: any ceiling that bites where real builds live costs the win rate outright, precisely *because* of the degeneracy at the top of this section. Fixing that needs other sustain sources to become viable — content values, `combat.rs`, or the bot's valuation — so that no single modifier is load-bearing. **That is the work, and it is not done.**
