@@ -272,6 +272,55 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
     let cond = CondDamage::of(s);
     let boss = BossVuln::of(s);
 
+    // ---- Per-call precomputation, hoisted OUT of the O(W) weapon loop. -------
+    // Nothing below moves an enemy, adds one, or removes one: `apply_weapon_hit`
+    // only writes hp/status, `accum.flush` only touches tank/hazards/minions, and
+    // `reap_dead` runs after the loop. The tank is immobile, so `tank_pos` is
+    // constant too. Everything here is therefore stable for the whole loop.
+    //
+    // This is PURE BOOKKEEPING — it changes no decision, no RNG draw and no
+    // cooldown, only how many times the same arithmetic is repeated:
+    //
+    //  * `dist_sq[ei]` was recomputed for every (weapon, enemy) PAIR; now once
+    //    per enemy per tick.
+    //  * `nearest_sq` lets a weapon whose range cannot reach even the closest
+    //    enemy skip its scan outright. That is the `docs/10 §F8` "1,670 weapon-
+    //    range scans/tick" finding: a short-range weapon never advances its
+    //    cooldown while nothing is in range, so it re-scanned every enemy every
+    //    tick forever. The rescan is now O(1) instead of O(E) — WITHOUT touching
+    //    the cooldown rule, so behaviour (and the checksum) is unchanged.
+    //  * `first_boss` makes BOSS FOCUS O(1) per weapon instead of an O(E) scan
+    //    for a boss that does not exist for the first 30 minutes of a match.
+    //    Enemy ids ascend with index, so "first in-range candidate that is a
+    //    boss" == "first boss by index, if it is in range" — the same pick.
+    //  * `synergy` is a pure function of the arsenal, which cannot change during
+    //    this call, so the distinct-count runs once per tick rather than once per
+    //    damage application. It is a LOCAL — nothing new enters `ArenaState`, so
+    //    nothing new enters the checksum.
+    let tank_pos = s.tank.pos;
+    let mut dist_sq: Vec<Fixed> = Vec::with_capacity(s.enemies.len());
+    let mut nearest_sq = Fixed::from_raw(i64::MAX);
+    let mut first_boss: Option<usize> = None;
+    for (ei, e) in s.enemies.iter().enumerate() {
+        let d = tank_pos.dist_sq(e.pos);
+        dist_sq.push(d);
+        if d < nearest_sq {
+            nearest_sq = d;
+        }
+        if first_boss.is_none() && content::ENEMIES[e.def as usize].boss {
+            first_boss = Some(ei);
+        }
+    }
+    // Resolved on the first weapon that actually reaches a target — most ticks
+    // fire nothing at all, and this is the value that used to be recomputed per
+    // damage application.
+    let mut synergy_cell: Option<Fixed> = None;
+    // Reused across weapons so the candidate list, and the Bounce chain, cost no
+    // allocation per fire.
+    let mut candidates: Vec<usize> = Vec::new();
+    let mut chain: Vec<(i64, u32, usize)> = Vec::new();
+    let mut targets: Vec<usize> = Vec::new();
+
     for wi in 0..s.weapons.len() {
         let def = s.weapons[wi].def;
         if s.tick < s.weapons[wi].next_fire_tick {
@@ -281,10 +330,16 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         let range = Fixed::from_int(wdef.range);
         let range_sq = range.mul(range);
 
+        if nearest_sq > range_sq {
+            // Provably nothing in range (the closest enemy is already outside it,
+            // and an empty board leaves `nearest_sq` at i64::MAX). Same outcome as
+            // the full scan below: do not fire, do not advance cooldown.
+            continue;
+        }
+
         // Candidates: enemies within range, in stable id order.
-        let candidates: Vec<usize> = (0..s.enemies.len())
-            .filter(|&ei| s.tank.pos.dist_sq(s.enemies[ei].pos) <= range_sq)
-            .collect();
+        candidates.clear();
+        candidates.extend((0..s.enemies.len()).filter(|&ei| dist_sq[ei] <= range_sq));
         if candidates.is_empty() {
             // No enemy in range: do not fire, do not advance cooldown.
             continue;
@@ -297,7 +352,10 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // ("+% per owned weapon"). Folding identity:
         // (1 + add_static + add_self)×mul = weapon_damage_mult + add_self×mul.
         let static_mult = s.modifiers.weapon_damage_mult(&wdef);
-        let add_self = s.modifiers.self_scaling_add(wdef.damage_type, &s.weapons);
+        let synergy = *synergy_cell
+            .get_or_insert_with(|| Modifiers::arsenal_synergy_add(&s.weapons));
+        let add_self =
+            s.modifiers.self_scaling_add_with(wdef.damage_type, &s.weapons, synergy);
         // DYNAMIC global-damage scalers resolved from the LIVE tank/economy (per
         // 2000 Max HP / per 50% Bounty / while Mana Shield active). GLOBAL additive,
         // so they thread in exactly like `add_self` — additive, then `×mul_global`.
@@ -308,7 +366,6 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // modifiers, so (like base damage) they bake into the hit at fire time.
         let on_hit = s.modifiers.scale_on_hit(wdef.on_hit);
         let ability = wdef.ability;
-        let tank_pos = s.tank.pos;
         // Instant-attack abilities (Area/Wave/Bounce) accumulate here, flushed
         // once after this weapon's instant hits resolve.
         let mut accum = AbilityAccum::default();
@@ -346,10 +403,9 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
         // you during the climax. That is the fight's central tension — AoE and
         // `Clear` hold the board, focused fire kills the boss, and you cannot fully
         // have both.
-        let boss_pick = candidates
-            .iter()
-            .copied()
-            .find(|&ei| content::ENEMIES[s.enemies[ei].def as usize].boss);
+        // (`first_boss` was resolved once per call above; it is the boss only if
+        // this weapon can actually reach it.)
+        let boss_pick = first_boss.filter(|&bi| dist_sq[bi] <= range_sq);
 
         match wdef.attack {
             Attack::SingleTarget => {
@@ -420,14 +476,40 @@ pub(crate) fn fire_weapons(s: &mut ArenaState) {
                     None => candidates[s.rng_targeting.below(candidates.len() as u32) as usize],
                 };
                 let origin = s.enemies[first].pos;
-                let mut order: Vec<usize> = (0..s.enemies.len()).filter(|&i| i != first).collect();
-                // Sort by (distance to origin, id) for a deterministic chain.
-                order.sort_by_key(|&i| {
-                    (s.enemies[i].pos.dist_sq(origin).raw(), s.enemies[i].id.0)
-                });
-                let mut targets = vec![first];
-                targets.extend(order.into_iter().take((n as usize).saturating_sub(1)));
-                for ti in targets {
+                // The chain wants the `n-1` OTHER enemies nearest `origin`, ordered
+                // by (distance to origin, id) for determinism. That used to sort the
+                // WHOLE board — and `sort_by_key` re-evaluates its key, so `dist_sq`
+                // (two Fixed multiplies) ran O(E log E) times per bounce; on a full
+                // late-game board this single line was ~12% of all instructions in
+                // the sim.
+                //
+                // Selecting the k smallest by insertion is O(E·k) with EXACTLY ONE
+                // `dist_sq` per enemy, and yields the identical list: ids are unique,
+                // so `(dist_sq, id)` is a strict total order with no ties, and the
+                // k-smallest prefix of a total order is unique — the same k elements
+                // in the same sequence the full sort produced.
+                let k = (n as usize).saturating_sub(1);
+                chain.clear();
+                if k > 0 {
+                    for i in 0..s.enemies.len() {
+                        if i == first {
+                            continue;
+                        }
+                        let key = (s.enemies[i].pos.dist_sq(origin).raw(), s.enemies[i].id.0);
+                        if chain.len() == k && key >= (chain[k - 1].0, chain[k - 1].1) {
+                            continue;
+                        }
+                        let at = chain.partition_point(|c| (c.0, c.1) < key);
+                        chain.insert(at, (key.0, key.1, i));
+                        if chain.len() > k {
+                            chain.pop();
+                        }
+                    }
+                }
+                targets.clear();
+                targets.push(first);
+                targets.extend(chain.iter().map(|c| c.2));
+                for &ti in targets.iter() {
                     instant_damage += apply_weapon_hit(
                         &mut s.enemies[ti],
                         wdef.damage,
@@ -497,6 +579,20 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
         ability: WeaponAbility,
     }
 
+    // `s.enemies` is kept in ascending id order everywhere (ids are allocated
+    // monotonically, spawns push, and every removal path filters in place), so a
+    // projectile's target can be found by bisection instead of by walking the
+    // whole list — the O(P·E) term that grows fastest as the board fills. Ids are
+    // unique, so a hit is the same element the linear scan found; a MISS falls
+    // back to the linear scan, which makes this exactly equivalent even if some
+    // future path were to break the ordering.
+    fn find_enemy(enemies: &[Enemy], id: EntityId) -> Option<usize> {
+        match enemies.binary_search_by_key(&id.0, |e| e.id.0) {
+            Ok(i) => Some(i),
+            Err(_) => enemies.iter().position(|e| e.id == id),
+        }
+    }
+
     let mut impacts: Vec<Impact> = Vec::new();
     let mut survivors: Vec<Projectile> = Vec::with_capacity(s.projectiles.len());
 
@@ -504,11 +600,7 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
     let projectiles = std::mem::take(&mut s.projectiles);
     for mut p in projectiles {
         // Resolve current target position (if the enemy still exists).
-        let target_pos = s
-            .enemies
-            .iter()
-            .find(|e| e.id == p.target)
-            .map(|e| e.pos);
+        let target_pos = find_enemy(&s.enemies, p.target).map(|i| s.enemies[i].pos);
 
         match target_pos {
             Some(tpos) => {
@@ -575,10 +667,10 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
                     );
                 }
             }
-        } else if let Some(e) = s.enemies.iter_mut().find(|e| e.id == imp.target) {
+        } else if let Some(ti) = find_enemy(&s.enemies, imp.target) {
             impact_damage += apply_weapon_hit(
-                e, imp.damage, imp.damage_type, mod_mult, cond, boss, &imp.on_hit, imp.ability, tank_pos,
-                &mut accum,
+                &mut s.enemies[ti], imp.damage, imp.damage_type, mod_mult, cond, boss, &imp.on_hit,
+                imp.ability, tank_pos, &mut accum,
             );
         }
         accum.flush(s, imp.ability, imp.damage_type);
@@ -595,22 +687,32 @@ pub(crate) fn advance_projectiles(s: &mut ArenaState) {
 /// `s.enemies` ordered by id.
 pub(crate) fn move_enemies(s: &mut ArenaState) {
     let tank_pos = s.tank.pos;
-    let mut survivors: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
+    if s.enemies.is_empty() {
+        return;
+    }
 
     // Contact damage scales with match time on the SAME curve as enemy HP
     // (`content::enemy_hp_mult`): late game gets deadlier, not just tankier
     // (`docs/05`; mirrors the spawn-time HP scaling in `waves::spawn`).
     let dmg_mult = content::enemy_hp_mult(s.tick);
 
-    for mut e in std::mem::take(&mut s.enemies) {
+    // Compact in place instead of building a second `Vec<Enemy>` every tick: the
+    // survivors keep their relative (id) order either way, this just drops the
+    // per-tick allocation and the copy of every surviving enemy. The list is
+    // detached from `s` so `hit_tank` can still take `&mut s`.
+    let mut enemies = std::mem::take(&mut s.enemies);
+    let mut kept = 0usize;
+    for i in 0..enemies.len() {
+        let e = &mut enemies[i];
         // Stunned / frozen enemies can't move this tick.
-        if crate::status::is_immobile(&e) {
-            survivors.push(e);
+        if crate::status::is_immobile(e) {
+            enemies.swap(kept, i);
+            kept += 1;
             continue;
         }
         let edef = &content::ENEMIES[e.def as usize];
         // Movement is slowed by Frost stacks.
-        let speed = Fixed::from_int(edef.move_speed).mul(crate::status::move_speed_mult(&e));
+        let speed = Fixed::from_int(edef.move_speed).mul(crate::status::move_speed_mult(e));
         let contact = dmg_mult.scale_i64(edef.contact_damage);
         let moved = e.pos.step_toward(tank_pos, speed);
         if moved == tank_pos {
@@ -631,18 +733,21 @@ pub(crate) fn move_enemies(s: &mut ArenaState) {
                     let enraged = content::boss_enrage_mult(s.tick).scale_i64(contact);
                     crate::defense::hit_tank(s, enraged);
                 }
-                survivors.push(e);
+                enemies.swap(kept, i);
+                kept += 1;
             } else {
                 // Normal enemy: self-destruct on contact (no bounty), one hit, gone.
                 crate::defense::hit_tank(s, contact);
             }
         } else {
             e.pos = moved;
-            survivors.push(e);
+            enemies.swap(kept, i);
+            kept += 1;
         }
     }
 
-    s.enemies = survivors;
+    enemies.truncate(kept);
+    s.enemies = enemies;
 }
 
 /// Phase: tick persistent hazards (land mines / burning oil). Each hazard pulses

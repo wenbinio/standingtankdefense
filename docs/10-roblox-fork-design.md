@@ -145,6 +145,18 @@ Allocation was measured rather than assumed: pre-allocated out-params cost **72 
 
 Both are needed, and this was verified rather than assumed. Widening the `div` fast-path guard from |a| < 2^36 to |a| < 2^48 is caught by parity with **2 failing assertions out of 7,309**, and by the differential harness with **269 divergences**. Parity's coverage of fast-path boundaries is real but razor-thin — it knows nothing about guards the Rust doesn't have. Deleting the differential suite would leave optimization work effectively untested.
 
+### ⚠ INVALIDATED by the `[11]` balance pass — R2 must be re-measured
+
+**The workload this section is sized against no longer exists.** F8's budget was computed from a measured "peak 66–67 enemies, 70–84 projectiles". After the fun pass rebuilt `WAVE_M0`, the same reference bot produces **peak 218 enemies, mean 53** — roughly 4.7× the mean population and 7× the peak.
+
+That matters because F8's own stress column put the exact-`Fixed` Luau backend at **357.9% of budget at E=300**. The reassuring **56.7%** headline above was measured at E≈67 and is no longer the operating point.
+
+Profiling of the Rust confirms the cost is **workload, not a per-tick regression**: at matched board size the pre- and post-balance builds cost the same per tick (2.950 µs vs 2.986 µs in the E 0..24 bucket), and per unit of work the new build is *cheaper* (1,558 → 1,207 instructions per enemy-tick). A subsequent optimization pass recovered **1.66×** on the Rust side — the largest single win being an `Attack::Bounce` sort that re-evaluated its distance key, costing **12.2% of all instructions in the sim**.
+
+Two of those fixes are portable and should be mirrored into `roblox/src/shared/sim/Combat.luau`: the bounded k-smallest bounce selection (replacing a full sort), and the `nearest_sq` early-out that makes the in-range rescan `O(1)` instead of `O(E)`.
+
+**Until the Luau bench is re-run against the E≈218 workload, R2 should be treated as UNMEASURED rather than passed.** The gate may well still clear — the Rust evidence is that the sim is sublinear in entity count and the per-entity cost fell — but the number in this section is stale and must not be cited as if it were current.
+
 ### Caveats — what this does not prove
 
 Only a Studio run settles R2 formally. The Actor harness has never executed against a real Roblox VM; Roblox ships its own Luau build with different FFlags, allocator and sandbox; this ran on build-container hardware; Actor dispatch and barrier costs are unmodelled; and a real server frame also carries replication, physics and every other script. `--!native` is *not* applied here and typically wins another 1.5–3× on loops like these, so the Roblox figure could be materially better.

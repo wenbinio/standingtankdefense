@@ -1,6 +1,7 @@
 //! Wave spawning — AGENT B. Deterministic; randomness only from `s.rng_spawn`.
 use crate::content;
 use crate::state::*;
+use determinism::Fixed;
 
 /// Phase 3: for each `content::WAVE_M0` entry, if `s.tick % cadence_ticks == 0`,
 /// spawn one enemy of that def at a `content::SPAWN_RING` position chosen via
@@ -42,8 +43,11 @@ pub(crate) fn spawn(s: &mut ArenaState) {
         return;
     }
 
-    // Enemy HP scales with match time (identity until 10 min).
-    let hp_mult = content::enemy_hp_mult(s.tick);
+    // Enemy HP scales with match time (identity until 10 min). Resolved LAZILY:
+    // most ticks spawn nothing, and `enemy_hp_mult` is a pure function of `s.tick`
+    // (same value whenever it is asked), so deferring it to the first actual spawn
+    // changes nothing but skips the work on the ~90% of ticks that spawn nothing.
+    let mut hp_mult: Option<Fixed> = None;
     // Process wave entries in their fixed catalog order so the rng_spawn draws
     // happen in a deterministic sequence.
     for ws in content::WAVE_M0 {
@@ -58,7 +62,7 @@ pub(crate) fn spawn(s: &mut ArenaState) {
             let ring_idx = s.rng_spawn.below(content::SPAWN_RING.len() as u32) as usize;
             let pos = content::SPAWN_RING[ring_idx];
             let edef = &content::ENEMIES[ws.enemy as usize];
-            let hp = hp_mult.scale_i64(edef.base_hp);
+            let hp = hp_mult.get_or_insert_with(|| content::enemy_hp_mult(s.tick)).scale_i64(edef.base_hp);
             let id = s.alloc_entity_id();
             s.enemies.push(Enemy::new(id, ws.enemy, hp, pos));
         }

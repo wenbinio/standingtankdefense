@@ -319,7 +319,23 @@ impl Modifiers {
     /// (rather than in `weapon_damage_mult`) because this is the only fire-time hook
     /// that is handed the owned arsenal.
     pub fn self_scaling_add(&self, dmg_type: u8, weapons: &[crate::state::WeaponInstance]) -> Fixed {
-        let mut add = Self::arsenal_synergy_add(weapons);
+        self.self_scaling_add_with(dmg_type, weapons, Self::arsenal_synergy_add(weapons))
+    }
+
+    /// [`Modifiers::self_scaling_add`] with the arsenal-breadth term supplied by
+    /// the caller. The synergy is a pure function of `weapons` and the arsenal
+    /// cannot change inside one `fire_weapons` call, so the caller computes the
+    /// distinct-count ONCE per tick instead of once per damage application. Purely
+    /// a hoist: for `synergy == arsenal_synergy_add(weapons)` this is
+    /// bit-identical to `self_scaling_add`, and the value lives in a local — it
+    /// never enters `ArenaState`, so it never enters the checksum.
+    pub fn self_scaling_add_with(
+        &self,
+        dmg_type: u8,
+        weapons: &[crate::state::WeaponInstance],
+        synergy: Fixed,
+    ) -> Fixed {
+        let mut add = synergy;
         for rule in &self.weapon_count_scaling {
             if rule.dmg_type != dmg_type {
                 continue;

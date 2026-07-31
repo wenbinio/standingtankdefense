@@ -165,7 +165,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0114",
         tier: "TALLY I",
         nickname: "Squeaks",
-        flavor: "Arrives at a rate the intake form has no field for, which is why the register only ever records it in the plural. One of them is a housekeeping matter. The facility has never been asked about one of them.",
+        flavor: "They arrive in numbers the intake form has no field for. One of them would be a housekeeping matter.",
     },
     // 1 — Fanged Death: slow medium-armored bruiser, 3000 hp, heavy contact bite.
     Entity {
@@ -173,7 +173,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0207",
         tier: "ATTRITION III",
         nickname: "Bitey",
-        flavor: "Does not hurry, and has never had to. Plated at the shoulder, unhurried at the hip, and carrying the sincere institutional conviction that you are late for something. It closes the distance and it bites, and both of those take exactly as long as they take.",
+        flavor: "Does not hurry and has never had to. Plated at the shoulder, and carrying the sincere institutional conviction that you are late for something. It closes the distance and it bites, and both of those take exactly as long as they take.",
     },
     // 2 — The boss. Short form here; the full record is BOSS_RECORD below.
     Entity {
@@ -181,7 +181,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0000",
         tier: "UNCLOSED",
         nickname: "Doctor",
-        flavor: "Entry zero. Opened before the facility had a numbering system, which is why it holds that number and why nothing else does. Six point three million units of clinical patience behind five plates of armour worn one at a time. See the full record; there is a full record.",
+        flavor: "Entry zero. Six point three million units of clinical patience behind five plates of armour worn one at a time. There is a full record.",
     },
     // 3 — Doomduck: cheapest chaff, 200 hp, weakest thing in the catalog.
     Entity {
@@ -189,7 +189,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0031",
         tier: "TALLY 0",
         nickname: "Ducks",
-        flavor: "Two hundred units of unhappy poultry per unit, released into the corridors when the aviary level was written off rather than emptied. The cheapest line the register still bothers to count. Individually it is the least of your problems, in the strict sense that everything else is worse.",
+        flavor: "Two hundred units of unhappy poultry, released into the corridors when the aviary level was written off rather than emptied. The cheapest line the register still bothers to count.",
     },
     // 4 — Bacon: fast rusher, speed 16, 700 contact.
     Entity {
@@ -197,7 +197,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0342",
         tier: "PURSUIT II",
         nickname: "Speedpig",
-        flavor: "Left the agricultural level under its own power and has been improving its time ever since. It covers open floor fast enough to reach the anchor between purges, and it hits considerably harder than its file suggests. The facility's position is that it remains an asset.",
+        flavor: "Left the agricultural level under its own power and has been improving its time ever since. It covers open floor fast enough to reach the anchor between purges, and it hits considerably harder than its file suggests.",
     },
     // 5 — Honk: fastest enemy, speed 22, glassy at 400 hp.
     Entity {
@@ -205,7 +205,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0343",
         tier: "PURSUIT III",
         nickname: "Honk",
-        flavor: "The fastest thing in the inventory and the least able to absorb an answer, a combination the register stopped describing as a trade-off after the third revision. Four hundred units of grievance at speed. It announces itself on approach. That is not a courtesy.",
+        flavor: "The fastest thing in the inventory and the least able to absorb an answer. Four hundred units of grievance at speed. It announces itself on approach.",
     },
     // 6 — Bonk: Fortified armor, 16000 hp, speed 3. Only Siege bites hard.
     Entity {
@@ -213,7 +213,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0509",
         tier: "IMMURED IV",
         nickname: "Wall",
-        flavor: "Structural — not as a figure of speech. It was surveyed as part of the building and stayed on the plans for two years, until the team resurveying the west stair found it two metres from where the plans put it. Small arms register on it as maintenance. Taking it out of a corridor is demolition work, and demolition work is a requisition.",
+        flavor: "Structural, and not as a figure of speech: it was surveyed as part of the building and stayed on the plans for two years, until the team resurveying the west stair found it two metres from where the plans had put it. Sixteen thousand units of wall, moving at the pace of a wall. Small arms register on it as maintenance. Taking one out of a corridor is demolition work, and demolition work is a requisition.",
     },
     // 7 — Nope Rope: caster, magic bolts at range 900 — the longest standoff.
     Entity {
@@ -221,7 +221,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0621",
         tier: "INTERDICT III",
         nickname: "The Cable",
-        flavor: "Logged during the rewire as nine metres of surplus conduit and signed off by an electrician who has since transferred. It has developed a preference for the far end of a corridor and a way of reaching down one that the electrical schedule does not cover. Do not close with it. It has no need of you closing with it.",
+        flavor: "Logged during the rewire as nine metres of surplus conduit. It has since developed a preference for the far end of a corridor, and a way of reaching down one that the electrical schedule does not cover. Do not close with it. It has no need of you closing with it.",
     },
     // 8 — Croak: ranged spitter, light frequent piercing spit at range 700.
     Entity {
@@ -229,7 +229,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0705",
         tier: "STANDOFF II",
         nickname: "Spitter",
-        flavor: "Came up the drainage the month the lower sumps stopped draining. It sits at the edge of the light and spits at whatever is nearest, steadily, from further off than feels reasonable — a small wound delivered often enough that the incident log now files it weekly rather than individually.",
+        flavor: "Came up the drainage the month the lower sumps stopped draining. It sits at the edge of the light and spits at whatever is nearest, steadily, from further off than feels reasonable.",
     },
     // 9 — Spicy: ranged chaos breath, harder-hitting, 2000 hp.
     Entity {
@@ -237,7 +237,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0808",
         tier: "STANDOFF III",
         nickname: "Warm",
-        flavor: "Relocated itself out of the boiler level and brought the boiler level's working temperature with it. It exhales across open floor without ever needing to arrive, hard enough that coveralls are now issued as a consumable. Two thousand units of it, and every one of them warm.",
+        flavor: "Relocated itself out of the boiler level and brought the boiler level's working temperature with it. It exhales across open floor without ever needing to arrive. Coveralls are now issued as a consumable.",
     },
     // 10 — Popsicle: slow, medium-armored ranged breather with heavy siege breath.
     Entity {
@@ -245,7 +245,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-0912",
         tier: "STANDOFF IV",
         nickname: "Chill",
-        flavor: "Signed out of the cold store on a form nobody has been able to produce. Slow, plated, and entirely unhurried about the business: it opens up from a distance, it opens up heavy, and then it takes its time about opening up again. The frost on the corridor around it is not weather.",
+        flavor: "Signed out of the cold store on a form nobody has been able to produce. Slow and plated. It opens up from a distance, it opens up heavy, and then it takes its time about opening up again.",
     },
     // 11 — Dodo: inert practice target. Never moves, no contact damage.
     Entity {
@@ -253,7 +253,7 @@ pub static ENTITIES: [Entity; 12] = [
         code: "SI-1000",
         tier: "DORMANT 0",
         nickname: "Target",
-        flavor: "Issued to the range for sighting-in and never collected. It does not approach, does not answer, and does not appear to mind. Eight hundred units of standing there. The register lists it as a fixture. The register does not say what it was before it was a fixture.",
+        flavor: "Issued to the range for sighting-in and never collected. It does not approach and it does not answer. Eight hundred units of standing there.",
     },
 ];
 
@@ -277,17 +277,17 @@ pub static BOSS_RECORD: BossRecord = BossRecord {
     code: "SI-0000",
     tier: "UNCLOSED",
     nickname: "Doctor",
-    register: "STANDING INVENTORY, ENTRY ZERO. Status: OPEN. Status has been OPEN for the entire operating history of this facility, and the field admits no other value, because no other value was ever typed into it.",
-    containment: "File SI-0000 was opened before there was a numbering system to open it under, which is why it holds that number and why nothing else does. It has never been closed. Containment consists of the building: ten sublevels of it, surveyed, numbered, and placed on top of the entry in the hope that depth counts as a procedure. It does not eat, does not sleep, does not heal, and has never been observed to do anything to a member of staff that is not written down somewhere as a step. Six point three million units of clinical patience. The apron is not stained. It has simply always been that colour.",
-    plates: "It wears five plates — impact, puncture, charge, blast, and the fifth, which the schedule lists only as OTHER — and it can wear exactly one at a time. The rotation is five seconds a plate, in that order, without deviation, the way a round is walked. Whichever plate is forward, the flank behind it is bare, and the readout will tell you which. Everything you put anywhere else lands, and lands at a fraction, and is duly recorded as having landed.",
-    coverage: "It armours against what it has been shown. An arsenal that has only ever done one thing to it has taught it precisely one thing, and it is an attentive study: a single-note build finds every plate seated and the bare flank narrower than it looks. Bring more kinds of harm than it has plates for the habit of, and the flank opens wider each rotation — not because its armour is worse, but because it cannot pre-empt a punishment it has no file for. Five kinds of harm crack it better than four times over one kind.",
-    breach: "A floor purge takes every plate off it at once. One and a half seconds, out of a ten-second recharge, in which there is no forward plate and nothing you own is landing on armour — this is the window the whole arsenal is for. The purge also chips it directly, but only a chip: entry zero is not a thing you delete with the emergency system, it is a thing you open with the emergency system and then shoot.",
-    enrage: "It becomes less patient at a measurable rate. Every thirty seconds it is on the floor adds half again to what a single contact costs you, compounding, and there is no ceiling written into the procedure because nobody drafting the procedure expected the question to come up. This is a race and always has been. It is not on the sign by the lift.",
-    immunities: "Contaminants, combustion, cold, shock and restraint have all been applied to SI-0000 under controlled conditions and are recorded in the file as ATTEMPTED. None of them take. It is not resistant to them; the entry simply declines to be a thing they happen to.",
-    contact: "On reaching the anchor it does not detonate, and it does not stop. It plants, and it works — one contact roughly twice a second, at a pace it has clearly done before, for as long as there is an anchor in front of it.",
+    register: "STANDING INVENTORY, ENTRY ZERO. Status: OPEN. It has read OPEN for the entire operating history of this facility. No other value was ever typed into the field.",
+    containment: "File SI-0000 was opened before there was a numbering system to open it under, which is why it holds that number and why nothing else does. It has never been closed. Containment consists of the building: ten sublevels of it, surveyed, numbered, and placed on top of the entry in the hope that depth counts as a procedure. It does not eat, does not sleep and does not heal. It has never been observed to do anything to a member of staff that is not written down somewhere as a step. Six point three million units of clinical patience. The apron is not stained. It has always been that colour.",
+    plates: "It wears five plates: impact, puncture, charge, blast, and a fifth that the schedule lists only as OTHER. It can wear exactly one at a time. The rotation is five seconds a plate, in that order, without deviation, the way a round is walked. Whichever plate is forward, the flank behind it is bare, and the readout will tell you which. Everything you put anywhere else lands at a fraction, and is duly recorded as having landed.",
+    coverage: "It armours against what it has been shown. An arsenal that has only ever done one thing to it has taught it precisely one thing, and it is an attentive study: a single-note build finds every plate seated and the bare flank narrower than it looks. Bring more kinds of harm than it has the habit of and the flank opens wider each rotation. Five kinds of harm crack it better than four times over one kind.",
+    breach: "A floor purge takes every plate off it at once. One and a half seconds, out of a ten-second recharge, in which there is no forward plate and nothing you own is landing on armour. That is the window the whole arsenal is for. The purge also chips it directly, but only a chip. Entry zero is not a thing you delete with the emergency system. It is a thing you open with the emergency system and then shoot.",
+    enrage: "It becomes less patient at a measurable rate. Every thirty seconds it is on the floor adds half again to what a single contact costs you, compounding, and there is no ceiling written into the procedure because nobody drafting the procedure expected the question to come up. This is a race and always has been.",
+    immunities: "Contaminants, combustion, cold, shock and restraint have all been applied to SI-0000 under controlled conditions and are recorded in the file as ATTEMPTED. None of them take. It is not resistant to them; the entry declines to be a thing they happen to.",
+    contact: "On reaching the anchor it does not detonate and it does not stop. It plants, and it works: one contact roughly twice a second, at a pace it has clearly done before, for as long as there is an anchor in front of it.",
     arrival: "30:00 — INTAKE SUSPENDED. THE ATTENDING IS ON THE FLOOR. It is not hurrying, and it has known where you are for thirty minutes. Watch the flank. Save the purge for a plate you cannot otherwise reach.",
-    resolved: "SI-0000 marked RESOLVED, pending review. For the first time in the operating history of this facility, entry zero reads something other than OPEN. Review is scheduled. Please vacate the floor.",
-    unresolved: "SI-0000 REMAINS OPEN. The figure it was standing at when you stopped has been entered in the file, which is more than most attempts contribute. It will be waiting at exactly the same number of minutes, wearing exactly the same five plates, in exactly this order.",
+    resolved: "SI-0000 marked RESOLVED, pending review. For the first time in the operating history of this facility, entry zero reads something other than OPEN. Please vacate the floor.",
+    unresolved: "SI-0000 REMAINS OPEN. The figure it was standing at when you stopped has been entered in the file. It will be waiting at the same number of minutes, wearing the same five plates, in the same order.",
 };
 
 // ---------------------------------------------------------------------------
@@ -302,17 +302,17 @@ pub static STRATA: [Stratum; 11] = [
     // 00:00 — 03:00
     Stratum {
         name: "Sublevel 1 — Intake",
-        note: "Fluorescent, linoleum, a chair by the door for a visitor. Nothing here is wrong yet, and that is the strongest evidence you are going to be offered.",
+        note: "Fluorescent, linoleum, a chair by the door for a visitor. Nothing here is wrong yet.",
     },
     // 03:00 — 06:00
     Stratum {
         name: "Sublevel 2 — Records",
-        note: "Aisles of cabinets holding a form for every occupant this building has had. Yours is already filled in. It is filled in in the past tense.",
+        note: "Aisles of cabinets holding a form for every occupant this building has had. Yours is already filled in, in the past tense.",
     },
     // 06:00 — 09:00
     Stratum {
         name: "Sublevel 3 — Plant Rooms",
-        note: "Pumps, ducting, and a hum the survey attributes to the pumps. The survey has been asked about the hum twice and has attributed it to the pumps twice.",
+        note: "Pumps, ducting, and a hum the survey attributes to the pumps. The survey has been asked twice.",
     },
     // 09:00 — 12:00
     Stratum {
@@ -322,12 +322,12 @@ pub static STRATA: [Stratum; 11] = [
     // 12:00 — 15:00
     Stratum {
         name: "Sublevel 5 — Repeating Ward",
-        note: "Six beds, a window, a chart. Then six beds, a window, a chart. It is the same chart; staff have checked, and the checking is what stopped.",
+        note: "Six beds, a window, a chart. Then six beds, a window, a chart. It is the same chart.",
     },
     // 15:00 — 18:00
     Stratum {
         name: "Sublevel 6 — Descending Stair",
-        note: "It has landings, handrails, and non-slip nosings to specification. It has no upward flight. This was logged as a fire-code deficiency and the shift went home.",
+        note: "Landings, handrails and non-slip nosings, all to specification. No upward flight.",
     },
     // 18:00 — 21:00
     Stratum {
@@ -337,22 +337,22 @@ pub static STRATA: [Stratum; 11] = [
     // 21:00 — 24:00
     Stratum {
         name: "Sublevel 8 — Plant Rooms (Inverted)",
-        note: "The same pumps as Sublevel 3 — same models, same serial numbers, same service stickers — mounted on the ceiling and running. Maintenance signed the inspection from below.",
+        note: "The same pumps as Sublevel 3, same serial numbers, same service stickers, mounted on the ceiling and running. Maintenance signed the inspection from below.",
     },
     // 24:00 — 27:00
     Stratum {
         name: "Sublevel 9 — Below The Lowest Floor",
-        note: "This building has eight sublevels. That is documented, it is on the plaque by the lift, and you are welcome to file a correction from where you are standing.",
+        note: "This building has eight sublevels. It is on the plaque by the lift.",
     },
     // 27:00 — 30:00
     Stratum {
         name: "Sublevel 10 — Cartographic Error",
-        note: "Not on the plan, not on the fire map, not on the plaque. Present, lit, and swept weekly. The facility's position is that the plans are correct.",
+        note: "Not on the plan, not on the fire map, not on the plaque. Present, lit, and swept weekly.",
     },
     // 30:00 — the boss floor. The numbering wraps to zero, which is where you came in.
     Stratum {
         name: "Sublevel 0 — The Attending's Floor",
-        note: "The numbering resets here. The survey places Sublevel 0 at street level, above the entrance, where you came in — and the survey is not wrong, which is the part to sit with. Something has been standing in it for thirty minutes, waiting for you to finish descending to it.",
+        note: "The numbering resets here. The survey places Sublevel 0 at street level, above the entrance, where you came in, and the survey is not wrong. Something has been standing in it for thirty minutes, waiting for you to finish descending to it.",
     },
 ];
 
@@ -378,32 +378,32 @@ pub static STATUS: [StatusText; 8] = [
     StatusText {
         key: "freeze",
         name: "SEIZED",
-        note: "Cold-soak carried to completion. The subject is still on the floor plan; it is no longer on the move.",
+        note: "Cold-soak carried to completion. Still on the floor plan, no longer on the move.",
     },
     StatusText {
         key: "fire",
         name: "ALIGHT",
-        note: "Combustion in progress and progressing. Extinguishers are mounted on Sublevel 3, which is above you.",
+        note: "Combustion in progress. Extinguishers are mounted on Sublevel 3, which is above you.",
     },
     StatusText {
         key: "spikes",
         name: "HAZARD TRIM",
-        note: "Unsafe projections fitted to the anchor's exterior. Anything that reaches the hull is injured by the hull. This is a documented feature.",
+        note: "Unsafe projections fitted to the anchor's exterior. Anything that reaches the hull is injured by the hull.",
     },
     StatusText {
         key: "stun",
         name: "NON-RESPONSIVE",
-        note: "Upright, present, and not currently participating. It will resume; the file is clear that it resumes.",
+        note: "Upright, present, and not currently participating. It resumes.",
     },
     StatusText {
         key: "root",
         name: "SECURED IN PLACE",
-        note: "Restrained where it stands. It is not stopped — only stopped from getting any closer.",
+        note: "Restrained where it stands. Not stopped, only stopped from getting any closer.",
     },
     StatusText {
         key: "vulnerable",
         name: "FLAGGED FOR REVIEW",
-        note: "Marked by the anchor's survey field. Everything that lands on it after the mark lands harder.",
+        note: "Marked by the anchor's survey field. Everything that lands after the mark lands harder.",
     },
 ];
 

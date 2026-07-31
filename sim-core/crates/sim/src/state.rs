@@ -13,6 +13,75 @@ pub struct Vec2 {
     pub y: Fixed,
 }
 
+// ---- Exact narrow-domain fast paths for the movement inner loop -------------
+//
+// `step_toward` is the single hottest thing in the sim (a callgrind profile of a
+// bot-driven 30-min run puts `move_enemies` at ~48% of all instructions, and
+// `Fixed::sqrt` alone at ~17%). Both `Fixed::sqrt` and `Fixed::div` are written
+// for the FULL Q47.16 range and pay for it: `sqrt` runs Newton's method over
+// `u128` (each iteration a software `u128` division), and `div` compiles to
+// `__divti3`, a software 128-bit divide.
+//
+// Arena geometry never needs that range. The two helpers below take the same
+// integers, detect the range in which 64-bit arithmetic is EXACT, and compute the
+// IDENTICAL value there — same floor, same truncation-toward-zero, same
+// saturation domain — falling back to the general routine outside it. This is
+// not an approximation and not a different rounding rule: it is the same integer
+// result reached with cheaper instructions, so no checksum can observe it.
+// `fast_path_agrees_with_fixed_over_the_arena_domain` (below) pins that.
+
+/// `floor(sqrt(v))` in Fixed units, identical to [`Fixed::sqrt`].
+///
+/// `Fixed::sqrt` computes `isqrt((raw as u128) << 16)`. When `raw < 2^47` that
+/// shifted value fits in a `u64`, and `u64::isqrt` is the same exact floor-sqrt
+/// on the same integer — so the two agree bit-for-bit. `raw < 2^47` means a
+/// squared distance under 2^31 ≈ 2.1e9 arena units², i.e. any two points within
+/// ~46,000 units of each other; the arena is ~2,000 units across.
+#[inline]
+fn fx_sqrt(v: Fixed) -> Fixed {
+    let raw = v.raw();
+    if (0..(1i64 << 47)).contains(&raw) {
+        Fixed::from_raw(((raw as u64) << Fixed::FRAC_BITS).isqrt() as i64)
+    } else {
+        v.sqrt()
+    }
+}
+
+/// `a * b` in Fixed units, identical to [`Fixed::mul`].
+///
+/// `Fixed::mul` computes `sat((a as i128 * b as i128) >> 16)`. When both operands
+/// are under 2^31 in magnitude the product is under 2^62 and therefore fits an
+/// `i64` — the saturation is the identity, and an arithmetic right shift floors
+/// toward negative infinity in 64 bits exactly as it does in 128. Arena
+/// coordinates run to ~2,000 units (raw ~1.3e8, i.e. 2^27), and speeds/radii are
+/// far smaller, so the fast path carries every geometric multiply in the sim.
+#[inline]
+fn fx_mul(a: Fixed, b: Fixed) -> Fixed {
+    const LIM: i64 = 1 << 31;
+    let (ar, br) = (a.raw(), b.raw());
+    if ar > -LIM && ar < LIM && br > -LIM && br < LIM {
+        Fixed::from_raw((ar * br) >> Fixed::FRAC_BITS)
+    } else {
+        a.mul(b)
+    }
+}
+
+/// `a / b` in Fixed units, identical to [`Fixed::div`].
+///
+/// `Fixed::div` computes `sat(((a as i128) << 16) / b)`. When `|a| < 2^47` the
+/// shifted numerator fits in an `i64`, the quotient is no larger in magnitude
+/// than the numerator (so it cannot overflow and the saturation is the identity),
+/// and `i64` division truncates toward zero exactly like the `i128` one.
+#[inline]
+fn fx_div(a: Fixed, b: Fixed) -> Fixed {
+    let (ar, br) = (a.raw(), b.raw());
+    if br != 0 && ar > -(1i64 << 47) && ar < (1i64 << 47) {
+        Fixed::from_raw((ar << Fixed::FRAC_BITS) / br)
+    } else {
+        a.div(b)
+    }
+}
+
 impl Vec2 {
     pub const ZERO: Vec2 = Vec2 {
         x: Fixed::ZERO,
@@ -27,22 +96,22 @@ impl Vec2 {
     pub fn dist_sq(self, o: Vec2) -> Fixed {
         let dx = o.x - self.x;
         let dy = o.y - self.y;
-        dx.mul(dx) + dy.mul(dy)
+        fx_mul(dx, dx) + fx_mul(dy, dy)
     }
     /// Move from `self` toward `target` by at most `max_step`; clamps to target
     /// on arrival. Fully deterministic (integer sqrt). Returns the new point.
     pub fn step_toward(self, target: Vec2, max_step: Fixed) -> Vec2 {
         let dx = target.x - self.x;
         let dy = target.y - self.y;
-        let d2 = dx.mul(dx) + dy.mul(dy);
-        let step2 = max_step.mul(max_step);
+        let d2 = fx_mul(dx, dx) + fx_mul(dy, dy);
+        let step2 = fx_mul(max_step, max_step);
         if d2 <= step2 || d2 == Fixed::ZERO {
             return target;
         }
-        let dist = d2.sqrt();
+        let dist = fx_sqrt(d2);
         Vec2 {
-            x: self.x + dx.mul(max_step).div(dist),
-            y: self.y + dy.mul(max_step).div(dist),
+            x: self.x + fx_div(fx_mul(dx, max_step), dist),
+            y: self.y + fx_div(fx_mul(dy, max_step), dist),
         }
     }
 
@@ -52,14 +121,14 @@ impl Vec2 {
     pub fn step_away(self, from: Vec2, step: Fixed) -> Vec2 {
         let dx = self.x - from.x;
         let dy = self.y - from.y;
-        let d2 = dx.mul(dx) + dy.mul(dy);
+        let d2 = fx_mul(dx, dx) + fx_mul(dy, dy);
         if d2 == Fixed::ZERO {
             return self;
         }
-        let dist = d2.sqrt();
+        let dist = fx_sqrt(d2);
         Vec2 {
-            x: self.x + dx.mul(step).div(dist),
-            y: self.y + dy.mul(step).div(dist),
+            x: self.x + fx_div(fx_mul(dx, step), dist),
+            y: self.y + fx_div(fx_mul(dy, step), dist),
         }
     }
 }
@@ -741,5 +810,124 @@ impl ArenaState {
     pub fn offer_is_meta(offer: Offer) -> bool {
         matches!(offer.kind, OfferKind::Modifier)
             && content::MODIFIERS[offer.def as usize].is_meta()
+    }
+}
+
+#[cfg(test)]
+mod fast_path_tests {
+    use super::{fx_div, fx_mul, fx_sqrt, Vec2};
+    use determinism::Fixed;
+
+    /// The optimization's whole warrant: over (and well past) the domain the arena
+    /// actually reaches, the cheap 64-bit routines return the SAME integers as
+    /// `Fixed::sqrt` / `Fixed::div`. Any divergence here would be a checksum
+    /// divergence, so this is checked exhaustively over a dense sweep plus the
+    /// boundaries of the fast-path guards.
+    #[test]
+    fn fast_path_agrees_with_fixed_over_the_arena_domain() {
+        let mut probes: Vec<i64> = Vec::new();
+        // Dense low range (sub-unit through a few hundred units squared).
+        for i in 0..40_000i64 {
+            probes.push(i);
+        }
+        // Geometric sweep across the whole i64 range, including both sides of the
+        // 2^47 guard and the saturating extremes.
+        let mut v = 1i64;
+        while v < i64::MAX / 3 {
+            probes.push(v - 1);
+            probes.push(v);
+            probes.push(v + 1);
+            v = v.saturating_mul(3);
+        }
+        for b in 40..52 {
+            let e = 1i64 << b;
+            probes.extend([e - 2, e - 1, e, e + 1, e + 2]);
+        }
+        probes.extend([i64::MAX, i64::MAX - 1]);
+
+        for &p in &probes {
+            let f = Fixed::from_raw(p);
+            let nf = Fixed::from_raw(p.saturating_neg());
+            assert_eq!(fx_sqrt(f).raw(), f.sqrt().raw(), "sqrt diverged at raw {p}");
+            for &q in &[1i64, 2, 3, 65_536, 65_537, -1, -65_536, 7_919, -7_919, i64::MAX, i64::MIN] {
+                let d = Fixed::from_raw(q);
+                assert_eq!(fx_div(f, d).raw(), f.div(d).raw(), "div diverged at {p} / {q}");
+                assert_eq!(fx_div(nf, d).raw(), nf.div(d).raw(), "div diverged at -{p} / {q}");
+                assert_eq!(fx_mul(f, d).raw(), f.mul(d).raw(), "mul diverged at {p} * {q}");
+                assert_eq!(fx_mul(nf, d).raw(), nf.mul(d).raw(), "mul diverged at -{p} * {q}");
+                assert_eq!(fx_mul(d, f).raw(), d.mul(f).raw(), "mul diverged at {q} * {p}");
+            }
+            // `mul` squares its own operand all over the geometry code.
+            assert_eq!(fx_mul(f, f).raw(), f.mul(f).raw(), "square diverged at {p}");
+            assert_eq!(fx_mul(nf, nf).raw(), nf.mul(nf).raw(), "square diverged at -{p}");
+            assert_eq!(fx_mul(f, nf).raw(), f.mul(nf).raw(), "mixed-sign mul diverged at {p}");
+        }
+        // Both sides of the 2^31 `fx_mul` guard, in every sign combination.
+        for a in [(1i64 << 31) - 2, (1 << 31) - 1, 1 << 31, (1 << 31) + 1, 1 << 40] {
+            for b in [1i64, 65_536, (1 << 31) - 1, 1 << 31, (1 << 31) + 1] {
+                for (sa, sb) in [(1i64, 1i64), (1, -1), (-1, 1), (-1, -1)] {
+                    let (x, y) = (Fixed::from_raw(a * sa), Fixed::from_raw(b * sb));
+                    assert_eq!(fx_mul(x, y).raw(), x.mul(y).raw(), "mul diverged at {a}*{sa} × {b}*{sb}");
+                }
+            }
+        }
+    }
+
+    /// `dist_sq` is the most-called routine in the sim (every range check in
+    /// combat, hazards, auras and minions), so its rewrite gets its own check
+    /// against the unoptimized formula over the arena and well past it.
+    #[test]
+    fn dist_sq_matches_the_unoptimized_reference() {
+        for ax in (-3_000_000..=3_000_000).step_by(97_003) {
+            for ay in (-3_000_000..=3_000_000).step_by(311_027) {
+                let a = Vec2::new(Fixed::from_raw(ax), Fixed::from_raw(ay));
+                for bx in [-2_100_000i64, -65_536, 0, 1, 65_537, 2_100_000] {
+                    let b = Vec2::new(Fixed::from_raw(bx), Fixed::from_raw(-bx));
+                    let dx = b.x - a.x;
+                    let dy = b.y - a.y;
+                    assert_eq!(a.dist_sq(b), dx.mul(dx) + dy.mul(dy), "dist_sq diverged");
+                }
+            }
+        }
+    }
+
+    /// End-to-end: the two callers of the fast paths reproduce a reference
+    /// `step_toward` / `step_away` built from the unoptimized `Fixed` routines,
+    /// over a grid of offsets and speeds spanning the arena.
+    #[test]
+    fn step_toward_matches_the_unoptimized_reference() {
+        fn ref_step_toward(a: Vec2, target: Vec2, max_step: Fixed) -> Vec2 {
+            let dx = target.x - a.x;
+            let dy = target.y - a.y;
+            let d2 = dx.mul(dx) + dy.mul(dy);
+            let step2 = max_step.mul(max_step);
+            if d2 <= step2 || d2 == Fixed::ZERO {
+                return target;
+            }
+            let dist = d2.sqrt();
+            Vec2 { x: a.x + dx.mul(max_step).div(dist), y: a.y + dy.mul(max_step).div(dist) }
+        }
+        fn ref_step_away(a: Vec2, from: Vec2, step: Fixed) -> Vec2 {
+            let dx = a.x - from.x;
+            let dy = a.y - from.y;
+            let d2 = dx.mul(dx) + dy.mul(dy);
+            if d2 == Fixed::ZERO {
+                return a;
+            }
+            let dist = d2.sqrt();
+            Vec2 { x: a.x + dx.mul(step).div(dist), y: a.y + dy.mul(step).div(dist) }
+        }
+
+        let origin = Vec2::ZERO;
+        for xr in (-2_100_000..=2_100_000).step_by(9_973) {
+            for yr in (-2_100_000..=2_100_000).step_by(131_071) {
+                let p = Vec2::new(Fixed::from_raw(xr), Fixed::from_raw(yr));
+                for spd in [1i64, 3, 7, 11, 40] {
+                    let s = Fixed::from_int(spd);
+                    assert_eq!(p.step_toward(origin, s), ref_step_toward(p, origin, s));
+                    assert_eq!(p.step_away(origin, s), ref_step_away(p, origin, s));
+                }
+            }
+        }
     }
 }
