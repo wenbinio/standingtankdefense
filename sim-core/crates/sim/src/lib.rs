@@ -14,6 +14,13 @@ pub mod descriptions;
 /// Build-artifact generation for the Roblox fork (`roblox/CONTRACTS.md`).
 /// Tooling only — nothing in `step()` reaches it, and it adds no dependency.
 pub mod export;
+/// Swappable presentation packs (`docs/12`). Display strings ONLY — nothing here
+/// is observable by `step()` or reaches `content_hash`.
+pub mod themes;
+/// `facility` theme pack, WORLD half — entity/boss/strata/UI/status display strings
+/// keyed by catalog index (`docs/12`). Presentation only: nothing here is read by
+/// `step()`, reaches `state_checksum`, or enters `content.json`/`content_hash`.
+pub mod theme_facility_world;
 pub mod snapshot;
 pub mod view;
 mod combat;
