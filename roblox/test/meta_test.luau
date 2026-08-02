@@ -487,7 +487,19 @@ do
 	eq(#s.weapons, 1, "the chassis weapon REPLACES rather than adds")
 	eq(s.weapons[1].instance_id, base.weapons[1].instance_id, "entity ids are untouched")
 	eq(s.next_entity_id, base.next_entity_id, "no entity id was consumed")
-	eq(s.tank.max_hp, 24500, "Bulwark's Improved Masonry passive is folded in (+500 max HP)")
+	-- Derived from the catalog, never hand-copied: `content.rs` retunes the Max-HP
+	-- grants (the `docs/11 §11.8` pass doubled most of them), and a literal here
+	-- would assert the stale figure rather than the shipped one.
+	local bulwarkMaxHp
+	for _, e in Content.modifiers[Meta.chassis("bulwark").passive + 1].effects do
+		if e.tag == 6 then -- MaxHp(f)
+			bulwarkMaxHp = e.a
+		end
+	end
+	eq(bulwarkMaxHp ~= nil, true, "Bulwark's passive is a flat Max-HP modifier")
+	eq(s.tank.max_hp, 24000 + bulwarkMaxHp, "Bulwark's Improved Masonry passive is folded in")
+	-- And, since §11.8, that pool also buys its own faucet.
+	eq(s.tank.hp_regen_per_tick > 0, true, "the chassis Max HP grants pool-fed regen")
 	eq(s.economy.gold, base.economy.gold, "a chassis passive is free — no gold is spent")
 
 	local p = State.new(7, 1)

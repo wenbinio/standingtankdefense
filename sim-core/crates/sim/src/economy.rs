@@ -53,20 +53,26 @@ pub(crate) fn collect_bounties(s: &mut ArenaState) {
 /// live `max_hp`) once the ceiling has fully ramped in. See
 /// [`income_regen_tick_cap`] for the ramp and for why a *constant* fraction of
 /// `max_hp` provably cannot work here.
-pub(crate) const INCOME_REGEN_CAP_POOLS: i64 = 5;
-/// Exponent of the ramp. Four is the SMALLEST integer power that admits any
-/// working constant at all — see [`income_regen_tick_cap`].
-pub(crate) const INCOME_REGEN_CAP_POW: u32 = 4;
+pub(crate) const INCOME_REGEN_CAP_POOLS: i64 = 3;
+/// Exponent of the ramp. Four was the SMALLEST integer power that admitted any
+/// working constant at all; five is what the `docs/11 §11.8` degeneracy pass
+/// settled on — see [`income_regen_tick_cap`], "Choosing POOLS and POW".
+pub(crate) const INCOME_REGEN_CAP_POW: u32 = 5;
 
 /// Per-tick ceiling on the income-as-HP-regen heal:
 ///
 /// ```text
-///     cap(max_hp, t) = INCOME_REGEN_CAP_POOLS × max_hp × (t / BOSS_SPAWN_TICK)^4
+///     cap(max_hp, t) = INCOME_REGEN_CAP_POOLS × max_hp × (t / BOSS_SPAWN_TICK)^POW
 /// ```
 ///
-/// evaluated as four truncating integer steps (below). It reaches its full value of
+/// evaluated as `POW` truncating integer steps (below). It reaches its full value of
 /// `POOLS × max_hp` per tick exactly when the boss arrives, and is a rounding error
 /// in the opening minutes.
+///
+/// This is one of TWO independent bounds on income-as-HP-regen, and they bind in
+/// different places. This one bounds the per-tick RESULT and is a function of TIME;
+/// `modifiers::INCOME_REGEN_SOFT` bounds the accumulated RATIO and is a function of
+/// how many copies were bought. Neither alone is sufficient — see `docs/11 §11.8`.
 ///
 /// ## Why the ceiling exists
 ///
@@ -110,11 +116,27 @@ pub(crate) const INCOME_REGEN_CAP_POW: u32 = 4;
 /// measured fully in band and identical to each other; 2 sits exactly on the win-rate
 /// floor (25.0%) and 1 falls out of it (16.3%).
 ///
+/// ## Choosing POOLS and POW (the `docs/11 §11.8` degeneracy pass)
+///
+/// The two constants do NOT do the same thing, and the difference is what the
+/// degeneracy pass turned on. `POOLS` sets the ceiling's HEIGHT and therefore how many
+/// income builds convert a boss ARRIVAL into a boss KILL. `POW` sets the ceiling's
+/// TIMING and therefore WHEN an income build that is going to die, dies. That second
+/// effect is invisible in the win rate and very visible in `docs/11 §11.2`'s
+/// "biggest death decile" target: at `POW = 4` the income builds the ratio cap no
+/// longer carries die at the BOSS, piling 28–30% of all deaths into one bucket; at
+/// `POW = 7` they die in the first quarter instead (23.8%, over that target's band).
+/// Five sits between: measured at 240 seeds, first-quarter deaths 16.2% and the
+/// biggest decile 19.8%, both comfortably inside. `POOLS` was then set to 3 — the
+/// lowest value that keeps the overall win rate off its floor once the ratio cap is
+/// also in place (5 → 41.2%, over the band's top; 3 → 32.5%; 1 → 36.2% but with
+/// first-quarter deaths pushed to 21.2%).
+///
 /// ## Exact arithmetic (for the Luau port — transcribe literally)
 ///
 /// ```text
-///     c = max_hp * INCOME_REGEN_CAP_POOLS          -- POOLS = 5
-///     repeat INCOME_REGEN_CAP_POW (= 4) times:
+///     c = max_hp * INCOME_REGEN_CAP_POOLS          -- POOLS = 3
+///     repeat INCOME_REGEN_CAP_POW (= 5) times:
 ///         c = floor(c * tick / BOSS_SPAWN_TICK)    -- BOSS_SPAWN_TICK = 54000
 ///     cap = c
 /// ```
@@ -299,10 +321,12 @@ mod tests {
             INCOME_REGEN_CAP_POOLS * max_hp
         );
         // A rounding error over the `naked_eco_rush` deadline (tick 3600): the whole
-        // point — the opening cannot be carried by income-as-HP-regen.
+        // point — the opening cannot be carried by income-as-HP-regen. At the shipped
+        // POOLS/POW it truncates all the way to zero there; the bar is that it is far
+        // under the ~12–20 HP/tick the naked eco tank leaks, not that it is non-zero.
         let early = income_regen_tick_cap(max_hp, 3600);
         assert!(
-            (1..=8).contains(&early),
+            (0..=8).contains(&early),
             "cap at the eco-rush deadline must be single-digit HP/tick, was {early}"
         );
         // Zero at tick 0, and monotonically non-decreasing in the tick.

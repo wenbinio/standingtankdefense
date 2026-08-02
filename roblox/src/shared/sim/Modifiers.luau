@@ -344,19 +344,27 @@ end
 --- without moving anything below the knee.
 local SOFT_FALLOFF_POW = 3
 
---- Soft-cap knee for **Max HP**, flat and `%` sources alike. Measured p90 is
---- 117,000, so this sits just clear of nine runs in ten while cutting the p99 tail
---- (3.72e9) by four orders of magnitude.
-local MAX_HP_SOFT = 130000
---- Soft-cap knee for **HP regen**, in HP per tick. Measured p90 is 14,670/tick;
---- the p99 was 284,428/tick (8.5M HP/s), which is unloseable by construction.
-local HP_REGEN_SOFT = 16000
---- Soft-cap knee for **Mana-Shield regen**, in shield per tick. Measured p90
---- 1,720, p99 569,275.
-local MANA_REGEN_SOFT = 2000
+-- The four defensive knees below were re-placed by the `docs/11 §11.8` pass. The
+-- RULE is unchanged — a knee sits just clear of the measured p90 — but the
+-- distributions underneath moved, because Max HP and the Mana-Shield pool stopped
+-- being inert buckets and became the sustain stats (see `grantPoolRegen` /
+-- `grantPoolRecharge`).
+
+--- Soft-cap knee for **Max HP**, flat and `%` sources alike. LOWERED from 130,000
+--- because the per-item Max-HP grants roughly doubled in the same pass.
+local MAX_HP_SOFT = 90000
+--- Soft-cap knee for **HP regen**, in HP per tick. RAISED from 16,000: regen is
+--- now the stat that Max HP feeds, and it has to answer a median 3,387 HP/tick
+--- deficit (p99 43,030).
+local HP_REGEN_SOFT = 120000
+--- Soft-cap knee for **Mana-Shield regen**, in shield per tick. RAISED from 2,000:
+--- at that knee a 158,000 pool took 79 ticks to refill, so the pool was a one-shot
+--- buffer and never a sustain path.
+local MANA_REGEN_SOFT = 60000
 --- Soft-cap knee for the **Mana-Shield pool** — a second HP bar, so it gets the
---- same treatment as Max HP. Measured p90 94,000, p99 970,200.
-local MANA_SHIELD_SOFT = 100000
+--- same treatment as Max HP. RAISED from 100,000; the shield absorbs before HP and
+--- carries no `docs/11 §11.2` magnitude target, so it has headroom Max HP does not.
+local MANA_SHIELD_SOFT = 300000
 --- Soft-cap knee for **Armor**. Armor is flat subtraction, so an unbounded value
 --- is literal invulnerability. Measured p90 660, p99 17,240.
 local ARMOR_SOFT = 1000
@@ -366,6 +374,12 @@ local ARMOR_SOFT = 1000
 --- (Epic)` purchases land at the knee at full value; past it each further
 --- multiplicative source contributes a shrinking factor.
 local DAMAGE_MUL_SOFT = Fixed.fromRaw(8 * 65536) -- Rust: `Fixed::from_raw(8 << 16)`
+--- Soft-cap knee for **income-as-HP-regen**, as a raw `Fixed` (×0.25 = 25% of the
+--- per-tick gold award healed). `Entangled Gold Mine` grants exactly +25% per copy,
+--- so this knee is "one copy": copies one and two land at full value and every copy
+--- after them decays cubically. Much tighter than the other knees, deliberately —
+--- see `EFFECTS[18]`.
+local INCOME_REGEN_SOFT = Fixed.fromRaw(16384) -- Rust: `Fixed::from_raw(1 << 14)`
 
 --- `raw_inc × (soft / |stat|)^SOFT_FALLOFF_POW`, returned unchanged below the
 --- knee. `soft` must be > 0. The result is always <= `raw_inc` in magnitude, so
@@ -410,6 +424,69 @@ local function addSoftCapped(t, key: string, rawInc: number, soft: number): numb
 	end
 	t[key] = nextStat
 	return nextStat - stat
+end
+
+--- Denominator of the Max-HP → HP-regen grant, in `max_hp²` units per HP/tick.
+local POOL_REGEN_SCALE = 500000
+--- Denominator of the Mana-Shield pool → shield-regen grant.
+local POOL_RECHARGE_SCALE = 500000
+
+--- Shared body of the two pool-fed sustain grants (`docs/11 §11.8`): Max HP and
+--- the Mana-Shield pool each buy their OWN faucet, so a pool is the sustain stat
+--- rather than a bucket that merely delays a loss.
+---
+--- The grant is `inc × pool / scale`, i.e. QUADRATIC in the pool. That shape is
+--- forced: the opening leak is ~12–20 HP/tick so two cheap Masonry buys must be
+--- worth tens of HP/tick, while a 170k end-game fortress needs thousands — a
+--- ~1,000× span demanded across a ~7× span in pool size, which no constant divisor
+--- covers. Squaring turns the 7× into ~50×.
+---
+--- Rust computes `(i128 × i128 / i128) as i64` and then tests `> 0`, so a
+--- non-positive `inc` or a non-positive pool grants nothing.
+---
+--- EXACTNESS. This cannot call `addSoftCapped`, because the raw grant is the one
+--- place in this file where an INTERMEDIATE legitimately leaves the exact-double
+--- range: `inc × pool` is quadratic, and a pathological Max-HP stack pushes it past
+--- 2^53 while the soft-capped RESULT stays tiny. Rust's `i128` carries that
+--- intermediate for free; here it stays a magnitude, and the knee's cubic
+--- attenuation is applied to the magnitude — so `magToInt` is only ever reached on
+--- a value the cap has already brought back inside range. The destination stat is a
+--- regen rate and is never negative, so only the positive side of `addSoftCapped`'s
+--- clamp is reproduced; above `STAT_CEIL` the answer is `STAT_CEIL` either way and
+--- the wide magnitude never has to be narrowed at all.
+local function grantPoolFed(t, key: string, poolValue: number, inc: number, scale: number, soft: number)
+	if inc <= 0 or poolValue <= 0 then
+		return
+	end
+	local g = magDiv(magMul(magFromInt(inc), magFromInt(poolValue)), magFromInt(scale))
+	if #g == 0 then
+		return -- the truncating division floored to zero: Rust's `g > 0` fails
+	end
+	local stat = t[key]
+	local mag = stat < 0 and -stat or stat
+	if mag > soft then
+		g = magDiv(magMul(g, magPow(magFromInt(soft), SOFT_FALLOFF_POW)), magPow(magFromInt(mag), SOFT_FALLOFF_POW))
+	end
+	local nextStat
+	if magCmp(g, magFromInt(STAT_CEIL)) >= 0 then
+		nextStat = STAT_CEIL
+	else
+		nextStat = stat + magToInt(g)
+		if nextStat > STAT_CEIL then
+			nextStat = STAT_CEIL
+		end
+	end
+	t[key] = nextStat
+end
+
+--- Max HP buys SUSTAIN, not just a bigger bucket. See `grantPoolFed`.
+local function grantPoolRegen(tank, maxHpInc: number)
+	grantPoolFed(tank, "hp_regen_per_tick", tank.max_hp, maxHpInc, POOL_REGEN_SCALE, HP_REGEN_SOFT)
+end
+
+--- The Mana Shield's twin: a bigger pool recharges faster. See `grantPoolFed`.
+local function grantPoolRecharge(tank, poolInc: number)
+	grantPoolFed(tank, "mana_regen_per_tick", tank.mana_shield_max, poolInc, POOL_RECHARGE_SCALE, MANA_REGEN_SOFT)
 end
 
 --- `Fixed` twin of `softCappedInc`, for the multiplicative damage product.
@@ -801,6 +878,7 @@ end
 EFFECTS[6] = function(_m, f, _b, _c, _economy, tank)
 	local inc = addSoftCapped(tank, "max_hp", f, MAX_HP_SOFT)
 	tank.hp += inc
+	grantPoolRegen(tank, inc)
 end
 
 -- 7: Armor(a)
@@ -813,6 +891,7 @@ EFFECTS[8] = function(_m, pool, regen, _c, _economy, tank)
 	local inc = addSoftCapped(tank, "mana_shield_max", pool, MANA_SHIELD_SOFT)
 	tank.mana_shield += inc
 	addSoftCapped(tank, "mana_regen_per_tick", regen, MANA_REGEN_SOFT)
+	grantPoolRecharge(tank, inc)
 end
 
 -- 9: HpRegen(r)
@@ -875,8 +954,16 @@ EFFECTS[17] = function(_m, n, d, _c, economy, _tank)
 end
 
 -- 18: IncomeRegenPct(n, d)
+-- SOFT-CAPPED, and this is the load-bearing one (`docs/11 §11.8`).
+-- `income_regen_pct` was the ONLY sustain stat in the game with no bound of any
+-- kind on its stack, and that ONE fact decided 97% of losses. The knee is placed at
+-- ONE copy, so a build that treats this as one sustain option among several is
+-- bit-for-bit unaffected; past it the ratio grows ~n^¼ instead of ~n. Note this
+-- bounds the RATIO, where `Economy.incomeRegenTickCap` bounds the per-tick RESULT:
+-- independent, and both needed.
 EFFECTS[18] = function(_m, n, d, _c, economy, _tank)
-	economy.income_regen_pct = add(economy.income_regen_pct, fromRatio(n, d))
+	local f = softCappedFactor(fromRatio(n, d), economy.income_regen_pct, INCOME_REGEN_SOFT)
+	economy.income_regen_pct = add(economy.income_regen_pct, f)
 end
 
 -- 19: BountyProc(c, b) — chance is a plain percent; the bonus is a FRACTION of
@@ -987,6 +1074,7 @@ EFFECTS[35] = function(_m, n, d, _c, _economy, tank)
 	local raw = scaleToInt(fromRatio(n, d), tank.max_hp)
 	local inc = addSoftCapped(tank, "max_hp", raw, MAX_HP_SOFT)
 	tank.hp += inc
+	grantPoolRegen(tank, inc)
 end
 
 -- 36: HpRegenPct(n, d)

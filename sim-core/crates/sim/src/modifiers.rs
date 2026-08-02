@@ -58,19 +58,36 @@ const STAT_CEIL: i64 = 1_000_000_000_000;
 /// for 3 (see [`soft_capped_inc`]).
 const SOFT_FALLOFF_POW: u32 = 3;
 
-/// Soft-cap knee for **Max HP**, flat and `%` sources alike. Measured p90 is
-/// 117,000, so this sits just clear of nine runs in ten while cutting the p99 tail
-/// (3.72e9) by four orders of magnitude.
-const MAX_HP_SOFT: i64 = 130_000;
-/// Soft-cap knee for **HP regen**, in HP per tick. Measured p90 is 14,670/tick;
-/// the p99 was 284,428/tick (8.5M HP/s), which is unloseable by construction.
-const HP_REGEN_SOFT: i64 = 16_000;
-/// Soft-cap knee for **Mana-Shield regen**, in shield per tick. Measured p90 1,720,
-/// p99 569,275.
-const MANA_REGEN_SOFT: i64 = 2_000;
+// The four defensive knees below were re-placed by the `docs/11 §11.8` pass. The
+// RULE is unchanged — a knee sits just clear of the measured p90 so nine runs in ten
+// are bit-identical — but the distributions underneath moved, because Max HP and the
+// Mana-Shield pool stopped being inert buckets and became the sustain stats (see
+// `grant_pool_regen` / `grant_pool_recharge`). Measured at 240 seeds after the
+// change: Max HP p90 116,000 / worst run 324,300; HP regen p90 22,400/tick;
+// shield pool p90 76,000.
+
+/// Soft-cap knee for **Max HP**, flat and `%` sources alike. LOWERED from 130,000:
+/// the per-item Max-HP grants in `content.rs` were roughly doubled in the same pass,
+/// so an unchanged knee would have carried the worst run past the `docs/11 §11.2`
+/// ceiling of 500k. At 90,000 the worst run over 240 seeds lands at 324k.
+const MAX_HP_SOFT: i64 = 90_000;
+/// Soft-cap knee for **HP regen**, in HP per tick. RAISED from 16,000. That knee was
+/// placed when flat regen was a marginal stat; it is now the stat that Max HP feeds,
+/// and the demand it has to meet is the one `docs/11 §11.8` measured on the income
+/// heal — a median deficit of 3,387 HP/tick with a p99 of 43,030 on a 24,000 pool. A
+/// 16,000 knee crushed the only builds that could have answered that.
+const HP_REGEN_SOFT: i64 = 120_000;
+/// Soft-cap knee for **Mana-Shield regen**, in shield per tick. RAISED from 2,000 for
+/// the same reason: 2,000/tick meant a 158,000 shield pool took 79 ticks to refill,
+/// i.e. the pool was a one-shot buffer and never a sustain path. Measured: every
+/// 115k–158k shield build in the 80-seed sample lost.
+const MANA_REGEN_SOFT: i64 = 60_000;
 /// Soft-cap knee for the **Mana-Shield pool** — a second HP bar, so it gets the
-/// same treatment as Max HP. Measured p90 94,000, p99 970,200.
-const MANA_SHIELD_SOFT: i64 = 100_000;
+/// same treatment as Max HP. RAISED from 100,000: the shield absorbs before HP, so a
+/// full pool is worth one pool of overkill absorbed PER TICK, which is the closest
+/// thing in the catalog to what income-as-HP-regen does. There is no `docs/11 §11.2`
+/// magnitude target on the shield, so it has the headroom that Max HP does not.
+const MANA_SHIELD_SOFT: i64 = 300_000;
 /// Soft-cap knee for **Armor**. Armor is flat subtraction, so an unbounded value is
 /// literal invulnerability. Measured p90 660, p99 17,240.
 const ARMOR_SOFT: i64 = 1_000;
@@ -80,6 +97,17 @@ const ARMOR_SOFT: i64 = 1_000;
 /// (Epic)` purchases land at the knee at full value; past it each further
 /// multiplicative source contributes a shrinking factor.
 const DAMAGE_MUL_SOFT: Fixed = Fixed::from_raw(8 << 16);
+/// Soft-cap knee for **income-as-HP-regen**, as a raw `Fixed` (×0.25 = 25% of the
+/// per-tick gold award healed). `Entangled Gold Mine` grants exactly +25% per copy,
+/// so this knee is "one copy": copies one and two land at full value and every copy
+/// after them decays cubically. That is a much tighter knee than the others in this
+/// file, and deliberately so — see the `IncomeRegenPct` arm in
+/// [`Modifiers::apply_effect`]. Swept over the whole range: at ×2.0 the item still
+/// carried 54% of the runs that owned it (and the overall win rate sat on the top of
+/// its band at 40.0%); ×1.0 and ×0.5 both landed at 48.6%; ×0.25 lands at 40.5%
+/// against 27.9% for runs without it — the first value at which owning the item stops
+/// being most of the answer.
+const INCOME_REGEN_SOFT: Fixed = Fixed::from_raw(1 << 14);
 
 /// `raw_inc × (soft / |stat|)^SOFT_FALLOFF_POW`, returned unchanged below the knee.
 /// Integer only (i128 intermediate; the result is always ≤ `raw_inc` in magnitude,
@@ -178,6 +206,79 @@ const SYNERGY_DEF_CAP: i64 = 8;
 /// keeps the count exact as the catalog grows and is a no-op if it ever exceeds
 /// this, which would only under-count, never panic).
 const DEF_BITSET_WORDS: usize = 4;
+
+/// Denominator of the Max-HP → HP-regen grant, in `max_hp²` units per HP/tick.
+/// See [`grant_pool_regen`].
+const POOL_REGEN_SCALE: i64 = 500_000;
+
+/// Max HP buys SUSTAIN, not just a bigger bucket.
+///
+/// `docs/11 §11.1` failure 5 and `§11.8`: over half of all runs never buy a
+/// Max-HP item, because HP is a bucket with no refill — a 176,000 HP tank and a
+/// 24,000 HP tank both lose to the same leak, they just take longer. Meanwhile
+/// income-as-HP-regen wins because it restores several POOLS per tick. So the
+/// pool has to feed the faucet: every point of Max HP a build buys also raises
+/// its HP regeneration.
+///
+/// The grant is `inc × max_hp / POOL_REGEN_SCALE`, i.e. QUADRATIC in the pool (the
+/// sum telescopes to ≈ `(max_hp² − 24,000²) / 2·SCALE`), and that shape is forced,
+/// not chosen. A LINEAR grant cannot work, and the reason is the same one that
+/// forced the ramp on `economy::income_regen_tick_cap`: the opening leak is ~12–20
+/// HP/tick, so two cheap Masonry buys must be worth only tens of HP/tick, while a
+/// 170k end-game fortress needs thousands. That is a ~1,000× span demanded across a
+/// ~7× span in pool size, and no constant divisor spans it. Squaring turns the 7×
+/// into ~50×, and the rest is covered by the fact that big pools are themselves only
+/// reachable late. At the shipped `SCALE = 500,000`:
+///
+/// | pool    | total granted regen |
+/// | ------- | ------------------- |
+/// |  30,000 |       ~324 /tick    |
+/// |  60,000 |     ~3,000 /tick    |
+/// | 176,000 |    ~30,400 /tick    |
+/// | 324,000 |   ~104,400 /tick    |
+///
+/// Measured effect: the three 160k–176k Max-HP builds in the 80-seed sample all lost
+/// before this and all win after it, and the median peak Max HP of a WINNING build
+/// moves off the 24,000 starting value (the `docs/11 §11.1` failure 5) to 85,500.
+///
+/// Integer only (i128 intermediate) — it feeds the checksum. Applied to the
+/// already-soft-capped increment, so the Max-HP soft cap bounds this too, and routed
+/// through [`add_soft_capped`] so `HP_REGEN_SOFT` still bounds the result. The sum is
+/// path-dependent only through per-step truncation, which is deterministic.
+fn grant_pool_regen(tank: &mut Tank, max_hp_inc: i64) {
+    if max_hp_inc <= 0 {
+        return;
+    }
+    let g = (i128::from(max_hp_inc) * i128::from(tank.max_hp)
+        / i128::from(POOL_REGEN_SCALE)) as i64;
+    if g > 0 {
+        add_soft_capped(&mut tank.hp_regen_per_tick, g, HP_REGEN_SOFT);
+    }
+}
+
+/// Denominator of the Mana-Shield pool → shield-regen grant. See
+/// [`grant_pool_recharge`]; same shape as [`POOL_REGEN_SCALE`], smaller because
+/// the shield is a strictly smaller and more conditional bar than HP.
+const POOL_RECHARGE_SCALE: i64 = 500_000;
+
+/// The Mana Shield's twin of [`grant_pool_regen`]: a bigger pool recharges faster.
+///
+/// Measured (`docs/11 §11.8` pass): builds reached 115,000–158,000 shield pools and
+/// lost anyway, because the pool refilled at ≤ 2,000/tick — a one-shot buffer, not a
+/// sustain path. The shield is the natural analogue of income-as-HP-regen (it
+/// absorbs overkill BEFORE it reaches HP, by construction), so it is the pool that
+/// most deserves a faucet. Quadratic in the pool for exactly the reason
+/// [`grant_pool_regen`] is.
+fn grant_pool_recharge(tank: &mut Tank, pool_inc: i64) {
+    if pool_inc <= 0 {
+        return;
+    }
+    let g = (i128::from(pool_inc) * i128::from(tank.mana_shield_max)
+        / i128::from(POOL_RECHARGE_SCALE)) as i64;
+    if g > 0 {
+        add_soft_capped(&mut tank.mana_regen_per_tick, g, MANA_REGEN_SOFT);
+    }
+}
 
 /// Phase: apply each active time-scaling ramp whose interval has elapsed
 /// (`docs/06`). Deterministic — fixed ticks, fixed order (ramps are append-only,
@@ -400,6 +501,7 @@ impl Modifiers {
             ModEffect::MaxHp(f) => {
                 let inc = add_soft_capped(&mut tank.max_hp, f, MAX_HP_SOFT);
                 tank.hp += inc;
+                grant_pool_regen(tank, inc);
             }
             ModEffect::Armor(a) => {
                 add_soft_capped(&mut tank.armor, a, ARMOR_SOFT);
@@ -408,6 +510,7 @@ impl Modifiers {
                 let inc = add_soft_capped(&mut tank.mana_shield_max, pool, MANA_SHIELD_SOFT);
                 tank.mana_shield += inc;
                 add_soft_capped(&mut tank.mana_regen_per_tick, regen, MANA_REGEN_SOFT);
+                grant_pool_recharge(tank, inc);
             }
             ModEffect::HpRegen(r) => {
                 add_soft_capped(&mut tank.hp_regen_per_tick, r, HP_REGEN_SOFT);
@@ -438,7 +541,30 @@ impl Modifiers {
             ModEffect::ManaOnKill(n) => tank.mana_on_kill += n,
             ModEffect::HealOnPoison(n) => tank.heal_on_poison += n,
             ModEffect::IncomePct(n, d) => economy.income_mult += Fixed::from_ratio(n, d),
-            ModEffect::IncomeRegenPct(n, d) => economy.income_regen_pct += Fixed::from_ratio(n, d),
+            // SOFT-CAPPED, and this is the load-bearing one (`docs/11 §11.8`).
+            // `income_regen_pct` was the ONLY sustain stat in the game with no bound
+            // of any kind on its stack: every other survival stat in this file is
+            // soft-capped (Max HP, HP regen, shield pool, shield regen, armor) or
+            // hard-capped (dodge). A build that spends a shop round on
+            // `Entangled Gold Mine` banked ~150 copies at +25% each — 3,750% of a
+            // snowballing income, per tick — and that ONE fact decided 97% of losses.
+            // The knee is placed at ONE copy, so a build that treats this as one
+            // sustain option among several is bit-for-bit unaffected; past it the
+            // ratio grows ~n^¼ instead of ~n, which is what removes the mono-stack
+            // without removing the item — 150 copies now buy ~1.2× income healed
+            // instead of 37.5×, while the first two copies buy exactly what they
+            // always did. Note this bounds the RATIO, where
+            // `economy::income_regen_tick_cap` bounds the per-tick RESULT: the two are
+            // independent and both are needed — the ratio cap is what bites in the
+            // mid-game, the tick ceiling is what bites the opening.
+            ModEffect::IncomeRegenPct(n, d) => {
+                let f = soft_capped_factor(
+                    Fixed::from_ratio(n, d),
+                    economy.income_regen_pct,
+                    INCOME_REGEN_SOFT,
+                );
+                economy.income_regen_pct += f;
+            }
             ModEffect::BountyProc(c, b) => {
                 economy.bounty_proc_chance_pct += c;
                 economy.bounty_proc_bonus += Fixed::from_ratio(b, 100);
@@ -488,6 +614,7 @@ impl Modifiers {
                 let raw = Fixed::from_ratio(n, d).scale_i64(tank.max_hp);
                 let inc = add_soft_capped(&mut tank.max_hp, raw, MAX_HP_SOFT);
                 tank.hp += inc;
+                grant_pool_regen(tank, inc);
             }
             ModEffect::HpRegenPct(n, d) => {
                 let raw = Fixed::from_ratio(n, d).scale_i64(tank.hp_regen_per_tick);
@@ -948,6 +1075,110 @@ mod tests {
             }
             assert_eq!(m.mul_global, expect, "unchanged below the knee");
         }
+    }
+
+    // ---- Pool-fed sustain (docs/11 §11.8) -----------------------------------
+
+    #[test]
+    fn max_hp_buys_regen_and_the_grant_is_quadratic_in_the_pool() {
+        // The whole point of §11.8: HP is no longer an inert bucket.
+        let (mut m, mut e, mut t) = parts();
+        assert_eq!(t.hp_regen_per_tick, 0, "a fresh tank has no regen");
+
+        // A small opening buy is worth a rounding error against the ~12-20 HP/tick
+        // early leak — the early game must not become unloseable.
+        m.apply_effect(ModEffect::MaxHp(1500), &mut e, &mut t);
+        assert!(
+            t.hp_regen_per_tick <= 100,
+            "one cheap Masonry must stay tiny, got {}",
+            t.hp_regen_per_tick
+        );
+
+        // Growing the pool grows the regen SUPERLINEARLY: the same +1500 buy is
+        // worth strictly more once the pool is larger. That is what lets one
+        // constant serve both the opening and the end game.
+        let first = t.hp_regen_per_tick;
+        let mut prev_gain = first;
+        for _ in 0..20 {
+            let before = t.hp_regen_per_tick;
+            m.apply_effect(ModEffect::MaxHp(1500), &mut e, &mut t);
+            let gain = t.hp_regen_per_tick - before;
+            assert!(gain >= prev_gain, "each identical buy is worth at least as much");
+            prev_gain = gain;
+        }
+        assert!(prev_gain > first, "the last buy is worth more than the first");
+
+        // The `%` rider feeds it too (it is the same stat), and current HP still
+        // tracks max HP exactly.
+        let before = t.hp_regen_per_tick;
+        m.apply_effect(ModEffect::MaxHpPct(25, 100), &mut e, &mut t);
+        assert!(t.hp_regen_per_tick > before, "MaxHpPct also grants regen");
+        assert_eq!(t.hp, t.max_hp);
+    }
+
+    #[test]
+    fn shield_pool_buys_its_own_recharge() {
+        let (mut m, mut e, mut t) = parts();
+        let regen0 = t.mana_regen_per_tick;
+        // Moonwell-shaped: a pool with a token flat regen. The pool-fed grant must
+        // dominate the flat 10/tick once the pool is real.
+        for _ in 0..20 {
+            m.apply_effect(ModEffect::ManaShield(4000, 10), &mut e, &mut t);
+        }
+        assert!(t.mana_shield_max >= 79_000, "20 Moonwells ⇒ a real pool");
+        assert_eq!(t.mana_shield, t.mana_shield_max, "current shield tracks the pool");
+        assert!(
+            t.mana_regen_per_tick > regen0 + 20 * 10,
+            "recharge must exceed the flat component alone, got {}",
+            t.mana_regen_per_tick
+        );
+    }
+
+    #[test]
+    fn pool_grants_are_bounded_and_never_negative() {
+        // A pathological stack must stay inside the soft caps and never overflow.
+        let (mut m, mut e, mut t) = parts();
+        for _ in 0..400 {
+            m.apply_effect(ModEffect::MaxHp(4000), &mut e, &mut t);
+            m.apply_effect(ModEffect::MaxHpPct(25, 100), &mut e, &mut t);
+            m.apply_effect(ModEffect::ManaShield(8000, 20), &mut e, &mut t);
+        }
+        assert!(t.max_hp > 0 && t.max_hp < STAT_CEIL);
+        assert!(t.hp_regen_per_tick > 0 && t.hp_regen_per_tick < STAT_CEIL);
+        assert!(t.mana_shield_max > 0 && t.mana_shield_max < STAT_CEIL);
+        assert!(t.mana_regen_per_tick > 0 && t.mana_regen_per_tick < STAT_CEIL);
+        // A REDUCTION in Max HP must not hand out regen (the grant is one-way).
+        let regen = t.hp_regen_per_tick;
+        m.apply_effect(ModEffect::MaxHp(-5000), &mut e, &mut t);
+        assert_eq!(t.hp_regen_per_tick, regen, "shrinking the pool grants nothing");
+    }
+
+    #[test]
+    fn income_regen_ratio_is_soft_capped_at_one_copy() {
+        // `Entangled Gold Mine` grants +25% per copy. The first two copies are
+        // bit-identical to the old unbounded behaviour; the mono-stack is not.
+        let (mut m, mut e, mut t) = parts();
+        let quarter = Fixed::from_ratio(1, 4);
+        m.apply_effect(ModEffect::IncomeRegenPct(25, 100), &mut e, &mut t);
+        assert_eq!(e.income_regen_pct, quarter, "copy 1 is untouched");
+        m.apply_effect(ModEffect::IncomeRegenPct(25, 100), &mut e, &mut t);
+        assert_eq!(e.income_regen_pct, quarter + quarter, "copy 2 is untouched");
+
+        // Past the knee each copy is worth cubically less, but never nothing.
+        let mut prev = e.income_regen_pct;
+        for _ in 0..150 {
+            m.apply_effect(ModEffect::IncomeRegenPct(25, 100), &mut e, &mut t);
+            assert!(e.income_regen_pct > prev, "every copy is still an upgrade");
+            prev = e.income_regen_pct;
+        }
+        // 152 copies used to be ×38 of income healed PER TICK. It has to land in a
+        // range a player can reason about instead.
+        let v = e.income_regen_pct.scale_i64(100);
+        assert!(
+            (100..400).contains(&v),
+            "152 copies must land near ×1-4 of income, got ×{}",
+            v as f64 / 100.0
+        );
     }
 
     // ---- Arsenal breadth synergy (docs/11 §11.2) -----------------------------

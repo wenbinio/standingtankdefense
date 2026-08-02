@@ -126,7 +126,7 @@ Until those are re-transcribed, the Roblox build runs the **old** balance. The o
 
 ## 11.7 The boss is a fight now
 
-The last structural failure is fixed. **All five §11.2 headline targets are IN**, measured at 80 seeds and confirmed at 240:
+The last structural failure is fixed. **All five §11.2 headline targets are IN**, measured at 80 seeds and confirmed at 240. The figures below are as of this pass; §11.8 later moved them and carries the current set.
 
 | metric | before the fun pass | now | target |
 | --- | --- | --- | --- |
@@ -173,9 +173,9 @@ Nothing new enters the checksum: the breach is *derived* from `tank.clear_cooldo
 
 ### Still open
 
-- **`naked_eco_rush_*` guards remain red** (14/24 against a ≥75% bar), unchanged by the boss work. A no-weapon economy build is under-punished, and the guard is in genuine tension with `modest_opener_survives_past_the_deadline`.
+- **`naked_eco_rush_*` guards remain red** (14/24 against a ≥75% bar), unchanged by the boss work. A no-weapon economy build is under-punished, and the guard is in genuine tension with `modest_opener_survives_past_the_deadline`. *(Closed in §11.8 — all three guards are green.)*
 - **A narrow-build challenge bot** is needed to *observe* the breadth incentive. The reference bot builds ~7 distinct types regardless of outcome, so the sweep's distinct-weapon metric is saturated and cannot show the effect; it is currently verified only by a unit test pinning the ratio at 2.30–2.37×.
-- **`Arena.step` is ~2.5× slower** than before the balance pass. That eats R2's headroom and needs a look.
+- **`Arena.step` is ~2.5× slower** than before the balance pass. That eats R2's headroom and needs a look. *(Looked at: `status.rs` gave back 1.128× on the whole sim, and R2 was then re-measured on the real sim rather than a model — see `docs/10` F8. It fails serially and passes across 8 Actors.)*
 
 ## 11.8 The income-regen ceiling — and a degeneracy it exposed
 
@@ -210,21 +210,45 @@ Identical pools, roughly **280× apart in demand**. No constant multiple of `max
 What separates the cases is not magnitude but **timing**: the naked build needs the heal in the opening, real builds need it late. So the ceiling ramps in over the match:
 
 ```
-c = max_hp * INCOME_REGEN_CAP_POOLS          -- 5
-repeat INCOME_REGEN_CAP_POW times:           -- 4
+c = max_hp * INCOME_REGEN_CAP_POOLS          -- 3
+repeat INCOME_REGEN_CAP_POW times:           -- 5
     c = floor(c * tick / BOSS_SPAWN_TICK)    -- 54000
 heal(min(floor(income_regen_pct * amount), c))
 ```
 
-Four **separate truncating** steps — the per-step floor is part of the definition and must not be folded into one division when transcribing to Luau. All operands non-negative. Applied to the *input* of `Tank::heal`, so `+% Healing` still scales it. The exponent is forced rather than chosen: closing the ~8,000× gap over the 15× span from tick 3,600 to 54,000 needs `k ≥ log(8000)/log(15) ≈ 3.32`.
+`POW` **separate truncating** steps — the per-step floor is part of the definition and must not be folded into one division when transcribing to Luau. All operands non-negative. Applied to the *input* of `Tank::heal`, so `+% Healing` still scales it. The exponent is forced rather than chosen: closing the ~8,000× gap over the 15× span from tick 3,600 to 54,000 needs `k ≥ log(8000)/log(15) ≈ 3.32`.
 
-Result: the guard passes at **100%** across 24, 48, 96 and 240 seeds (deaths at ticks 1890–2476, over 1,100 ticks inside the deadline), and all five §11.2 targets are unchanged.
+The ceiling shipped first at `POOLS = 5, POW = 4`, which made the guard green and left the degeneracy untouched. The constants below are what the follow-up pass settled on, and they are not interchangeable: `POOLS` sets the ceiling's *height*, so it moves the win rate; `POW` sets its *timing*, so it moves **when** an income build that is going to die dies. That second effect is invisible in the win rate and loud in the death distribution — at `POW = 4` the builds the ratio cap no longer carries died at the boss and piled 28–30% of all deaths into one decile.
 
-### Being honest about what this is
+### The degeneracy: what actually fixed it
 
-**It is a time gate on the opening, not a magnitude bound.** At the shipped constants the ceiling is **bit-identical to baseline across all 80 seeds** — it never binds in a normal run. Two consequences:
+A ceiling on the per-tick *result* was never going to be enough, because it does not touch the reason the item was mandatory. `income_regen_pct` was the only sustain stat in the game with no bound of any kind on its stack — every other survival stat in `modifiers.rs` is soft-capped or hard-capped — and it was an *economy* modifier on top, so an all-economy build maximised the rate and the base it multiplied at the same time. A build that spent one shop round on `Entangled Gold Mine` banked around 150 copies at +25% each.
 
-- **§11.1 failure 5 is not fixed.** Median peak max HP is still 24,000, the starting value. HP still buys no sustain, because the ceiling that would make it matter never engages. The *mechanism* (`cap ∝ max_hp`) is in place and unit-tested; nothing exercises it.
-- The exponent is a curve fit to close a specific gap. It is defensible and it is bounded, but it is not a principle.
+Three changes, all in `modifiers.rs` and `content.rs`:
 
-A genuinely binding magnitude bound is not reachable from `economy.rs` alone: any ceiling that bites where real builds live costs the win rate outright, precisely *because* of the degeneracy at the top of this section. Fixing that needs other sustain sources to become viable — content values, `combat.rs`, or the bot's valuation — so that no single modifier is load-bearing. **That is the work, and it is not done.**
+1. **The ratio is soft-capped**, knee at exactly one copy (`INCOME_REGEN_SOFT`, ×0.25). Copies one and two are bit-for-bit what they always were; past the knee the total grows roughly `n^¼` instead of `n`, so 150 copies buy ~1.2× income healed rather than 37.5×. The item is untouched for anyone using it as one option among several, and gone as a mono-stack.
+2. **Pools buy their own faucet.** `MaxHp` and `MaxHpPct` now also grant HP regen, and `ManaShield` grants shield regen, at `inc × pool / 500,000` — quadratic in the pool. The shape is forced by the same span problem as the ramp: two cheap Masonry buys must be worth tens of HP/tick against a ~12–20 HP/tick opening leak, while a 170k end-game fortress needs thousands. That is a ~1,000× demand across a ~7× span in pool size, which no constant divisor covers. Squaring turns the 7× into ~50× and the rest is covered by big pools only being reachable late.
+3. **The Max-HP and shield-pool magnitudes roughly doubled**, and the four defensive soft-cap knees moved with the distributions underneath them (`MAX_HP_SOFT` down to 90k, `HP_REGEN_SOFT` up to 120k, `MANA_REGEN_SOFT` up to 60k, `MANA_SHIELD_SOFT` up to 300k). A 2,000/tick shield-regen knee meant a 158,000 pool took 79 ticks to refill; every 115k–158k shield build in the sample lost.
+
+The item names still quote the old figures (`+1000 Max HP`, `Aegis Protocol (+2500 Shield…)`). Those are display strings the theme packs override by index, and renaming them would churn every pack for nothing. The code is authoritative. Nothing was added, removed or reordered — 91 entries, original positions.
+
+### Where it landed
+
+At 80 seeds, the partition that opened this section:
+
+| | before | after |
+| --- | --- | --- |
+| Runs owning income-regen | 26/37 (70.3%) | 15/37 (**40.5%**) |
+| Runs without it | 1/43 (2.3%) | 12/43 (**27.9%**) |
+| Gap | 67.9 points | **12.6 points** |
+| Share of wins from builds without it | 3.7% | **44.4%** |
+
+At 240 seeds all five §11.2 targets are still in: win rate 32.5% [25–40], first-quarter deaths 16.2% [10–20], biggest death decile 19.8% [<25], worst peak max HP 324.3k [<500k], distinct weapons among winners 6.7 [≥5]. The three `naked_eco_rush_*` guards are green.
+
+### What is still not fixed
+
+**§11.1 failure 5 is half closed.** The median peak max HP across *all* runs is still 24,000 — over half of runs never buy a Max-HP item at all, so the median cannot move. Among winners it is now 85,500, and `Improved Masonry` is the fourth most-bought modifier by winners (579 copies) where it used to be noise. So HP buys sustain when a build buys HP; getting more builds to buy it is a `bot.rs` valuation problem or an economy repricing, paired with early-game difficulty, and it is not done.
+
+**The ramp exponent is still a curve fit**, now with a second constant fitted next to it. `POOLS = 3` is the lowest value that keeps the win rate off its floor once the ratio cap is also in place; `POW = 5` is the value between the two failure modes at 4 and 7. Both are defensible, bounded, and measured. Neither is a principle.
+
+**One modifier is no longer load-bearing; one modifier *family* still is.** Six of the twelve most-bought modifiers are income items. The gap between owning income-regen and not is now 12.6 points rather than 67.9, which is a real spread rather than a gate — but economy is still the spine of every build the bot knows how to make.

@@ -75,8 +75,8 @@ local BOSS_SPAWN_TICK = contentConst("BOSS_SPAWN_TICK", "boss_spawn_tick")
 -- not `content.rs`), so there is nothing to read them from and they are pinned
 -- here against their Rust declaration. If `economy.rs` retunes them, this pair
 -- must move with it — the trace corpus is what catches a miss.
-local INCOME_REGEN_CAP_POOLS = 5
-local INCOME_REGEN_CAP_POW = 4
+local INCOME_REGEN_CAP_POOLS = 3
+local INCOME_REGEN_CAP_POW = 5
 
 -- Largest value the ceiling arithmetic may reach and stay exact in a double.
 -- See `Economy.incomeRegenTickCap` for why the bound cannot be hit in practice
@@ -111,21 +111,22 @@ end
 --- `economy::income_regen_tick_cap` — the per-tick ceiling on the
 --- income-as-HP-regen heal:
 ---
----     cap(max_hp, t) = INCOME_REGEN_CAP_POOLS × max_hp × (t / BOSS_SPAWN_TICK)^4
+---     cap(max_hp, t) = INCOME_REGEN_CAP_POOLS × max_hp × (t / BOSS_SPAWN_TICK)^POW
 ---
---- evaluated as FOUR SEPARATE TRUNCATING STEPS. The per-step floor is part of the
---- definition: folding the four multiplies and four divisions into one
---- multiply-then-divide changes the result, so it must not be folded (`docs/11
---- §11.8`, and the `economy.rs` doc comment says so explicitly for this port).
+--- evaluated as `POW` SEPARATE TRUNCATING STEPS. The per-step floor is part of the
+--- definition: folding the multiplies and divisions into one multiply-then-divide
+--- changes the result, so it must not be folded (`docs/11 §11.8`, and the
+--- `economy.rs` doc comment says so explicitly for this port).
 ---
 --- It reaches its full value of `POOLS × max_hp` per tick exactly when the boss
 --- arrives and is a rounding error in the opening minutes — a time gate on the
---- opening, not a magnitude bound. `income_regen_pct` stacks additively per copy
---- with no cap AND is an economy modifier, so the uncapped heal is
---- `pct × copies × income` and an all-economy build maximises both factors; the
---- ceiling is what stops a weaponless eco tank from being unkillable by tick
---- 1200. `economy.rs` carries the full derivation, including why a flat fraction
---- of `max_hp` provably cannot work and why 4 is the smallest exponent that can.
+--- opening, not a magnitude bound. This is one of TWO independent bounds and they
+--- bind in different places: this one bounds the per-tick RESULT and is a function
+--- of TIME, while `Modifiers`' `INCOME_REGEN_SOFT` bounds the accumulated RATIO and
+--- is a function of how many copies were bought. `economy.rs` carries the full
+--- derivation, including why a flat fraction of `max_hp` provably cannot work, and
+--- how POOLS (the ceiling's HEIGHT, hence the win rate) and POW (its TIMING, hence
+--- WHEN a doomed income build dies) were chosen separately.
 ---
 --- EXACTNESS. The largest intermediate is `c × tick`, i.e. `POOLS × max_hp × tick`
 --- on the first step (later steps only exceed it once `tick > BOSS_SPAWN_TICK`,

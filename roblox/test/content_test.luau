@@ -465,11 +465,16 @@ do
 	eq(m.effects[1].den, 10, "MODIFIERS[1].den")
 end
 do
-	local m = Content.MODIFIERS[11 + 1] -- MaxHp(2000) then MaxHpPct(25, 100)
+	local m = Content.MODIFIERS[11 + 1] -- MaxHp(flat) then MaxHpPct(25, 100)
 	eq(m.name, "Imbued Masonry", "MODIFIERS[11].name")
 	eq(#m.effects, 2, "ImbuedMasonry effect count")
 	eq(m.effects[1].variant, "MaxHp", "ImbuedMasonry.effects[0].variant")
-	eq(m.effects[1].flat, 2000, "ImbuedMasonry.effects[0].flat")
+	-- The MAGNITUDE is balance, not schema: `docs/11 §11.8` doubled every Max-HP
+	-- and shield-pool grant in the catalog. What this file is here to prove is that
+	-- the decoder puts the right JSON field in the right struct field, so it is
+	-- asserted against the raw document rather than against a literal that goes
+	-- stale on the next balance pass.
+	eq(m.effects[1].flat, doc.modifiers[11 + 1].effects[1].a, "ImbuedMasonry.effects[0].flat")
 	eq(m.effects[2].variant, "MaxHpPct", "ImbuedMasonry.effects[1].variant")
 	eq(m.effects[2].num, 25, "ImbuedMasonry.effects[1].num")
 	eq(m.effects[2].den, 100, "ImbuedMasonry.effects[1].den")
@@ -494,8 +499,9 @@ end
 do
 	local m = Content.MODIFIERS[56 + 1] -- ManaShield(400, 4) ramp
 	eq(m.ramp.effect.variant, "ManaShield", "MODIFIERS[56].ramp.effect.variant")
-	eq(m.ramp.effect.pool, 400, "MODIFIERS[56].ramp.pool")
-	eq(m.ramp.effect.regen, 4, "MODIFIERS[56].ramp.regen")
+	-- Magnitudes from the raw document, for the reason given at `MODIFIERS[11]`.
+	eq(m.ramp.effect.pool, doc.modifiers[56 + 1].ramp.effect.a, "MODIFIERS[56].ramp.pool")
+	eq(m.ramp.effect.regen, doc.modifiers[56 + 1].ramp.effect.b, "MODIFIERS[56].ramp.regen")
 end
 
 -- ============================ scope ids ============================

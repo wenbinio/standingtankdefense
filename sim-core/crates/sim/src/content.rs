@@ -671,6 +671,21 @@ impl ModifierDef {
 /// exotic part. A handful of entries have no clean source mapping and are kept as
 /// representative slices (flagged "representative"). Numbers track the source
 /// effect text; existing cost/rarity preserved.
+///
+/// # `docs/11 §11.8` retune — HP pools and shield pools
+///
+/// One later pass has moved numbers away from the source text: the sustain-parity
+/// pass that broke the single-modifier degeneracy. Every **Max HP** grant and every
+/// **Mana-Shield pool** grant in this table was raised (roughly ×2, ×3 for the
+/// cheapest Max-HP item), because `modifiers.rs` now makes both pools generate their
+/// own regeneration — so a pool is no longer a bucket that merely delays a loss, it
+/// is the sustain stat, and it had to be priced like one. **Where an entry's NAME or
+/// its source-text comment still quotes the old figure (`+1000 Max HP`, `Aegis
+/// Protocol (+2500 Shield…)`, …), the name is the stale one and the code is
+/// authoritative.** Names are deliberately left alone: they are display strings that
+/// the theme packs override by index, and renaming them would churn every pack.
+/// Nothing was added, removed or reordered — the table is still exactly 91 entries in
+/// their original positions.
 pub static MODIFIERS: &[ModifierDef] = &[
     // representative: "+10% to ALL damage" has no single source upgrade (closest
     // is Improved Attacks "+5% all types"); kept as a generic global-damage item.
@@ -700,11 +715,11 @@ pub static MODIFIERS: &[ModifierDef] = &[
     ModifierDef { name: "Transmute", rarity: 2, cost: 3000, effects: &[ModEffect::BountyPct(100, 100), ModEffect::BountyProc(5, 200)], ramp: None },
     // Imbued Masonry (A04J): "+2000 Max HP | +25% Max HP". RE-BUNDLED via the new
     // MaxHpPct rider (the +25% is taken of max_hp AFTER the +2000 flat applies).
-    ModifierDef { name: "Imbued Masonry", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(2000), ModEffect::MaxHpPct(25, 100)], ramp: None },
+    ModifierDef { name: "Imbued Masonry", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(4000), ModEffect::MaxHpPct(25, 100)], ramp: None },
     ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(10)], ramp: None },
     // Moonwell (A0FA): "+2000 Mana Shield | +10 Mana Shield every second" — the
     // per-second shield regen is modeled as the ManaShield regen-per-tick field.
-    ModifierDef { name: "Moonwell", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(2000, 10)], ramp: None },
+    ModifierDef { name: "Moonwell", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(4000, 10)], ramp: None },
     // representative flat-regen item (the true source +50-regen upgrades all bundle
     // a secondary; this plain +50 is kept as a slice).
     ModifierDef { name: "+50 HP Regen", rarity: 0, cost: 500, effects: &[ModEffect::HpRegen(50)], ramp: None },
@@ -780,7 +795,7 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // On-event triggers (`docs/06`): heal the tank on enemy-kill / on-poison-tick.
     // Mask of Death (A07S): "+1000 Max HP | +15 Heal when an enemy dies". RE-BUNDLED
     // — the live "+15 Heal on Kill" gains its Max-HP half from the source upgrade.
-    ModifierDef { name: "Mask of Death", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(1000), ModEffect::HealOnKill(15)], ramp: None },
+    ModifierDef { name: "Mask of Death", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(2500), ModEffect::HealOnKill(15)], ramp: None },
     // representative larger heal-on-kill item (no source for a bare +60-on-kill).
     ModifierDef { name: "+60 Heal on Kill", rarity: 2, cost: 3000, effects: &[ModEffect::HealOnKill(60)], ramp: None },
     // Reanimating Poison (A0FL): "+5 instant HP Regen when an enemy takes Poison
@@ -813,7 +828,7 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // Living Wood (A09C): "+2000 Max HP | +1.5% Missing HP Heal every second".
     // RE-BUNDLED — the live "Regeneration" modeled only the missing-HP heal; the
     // Max-HP half now rides the named upgrade.
-    ModifierDef { name: "Living Wood", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(2000), ModEffect::MissingHpHealPct(15, 1000)], ramp: None },
+    ModifierDef { name: "Living Wood", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(4000), ModEffect::MissingHpHealPct(15, 1000)], ramp: None },
     // Enchanted Moon Arrow (A0CZ): "+100% Piercing Damage | +1% Piercing per Bow".
     // RE-BUNDLED — the live item modeled only the per-Bow self-scaling; the flat
     // +100% Piercing half now rides the named upgrade.
@@ -849,29 +864,30 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // representative ramping epic shield (no exact source; closest named shields
     // are Recharge / Energy Shield below). Kept as a slice.
     ModifierDef { name: "Aegis Protocol (+2500 Shield, +400/round)", rarity: 3, cost: 5000,
-        effects: &[ModEffect::ManaShield(2500, 20)],
-        ramp: Some(RampSpec { effect: ModEffect::ManaShield(400, 4), interval_ticks: RAMP_PER_ROUND }) },
+        effects: &[ModEffect::ManaShield(5000, 20)],
+        ramp: Some(RampSpec { effect: ModEffect::ManaShield(800, 4), interval_ticks: RAMP_PER_ROUND }) },
     // Improved Masonry (A001): "+500 Max HP".
-    ModifierDef { name: "Improved Masonry", rarity: 0, cost: 500, effects: &[ModEffect::MaxHp(500)], ramp: None },
+    ModifierDef { name: "Improved Masonry", rarity: 0, cost: 500, effects: &[ModEffect::MaxHp(1500)], ramp: None },
     ModifierDef { name: "Greater Piercing Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_PIERCING, 10, 100)], ramp: None },
     ModifierDef { name: "Improved Normal Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_NORMAL, 10, 100)], ramp: None },
     ModifierDef { name: "Improved Siege Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 10, 100)], ramp: None },
     ModifierDef { name: "Improved Chaos Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_CHAOS, 10, 100)], ramp: None },
     // representative +1000-Max-HP item (the source bundles +1000 with a secondary
     // on Mask of Death / Magic Seeds); kept as a plain slice.
-    ModifierDef { name: "+1000 Max HP", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(1000)], ramp: None },
+    ModifierDef { name: "+1000 Max HP", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(2500)], ramp: None },
     // representative +10-armor item (every source +10-armor upgrade bundles a
     // secondary — Blessed/Spiky/Frost/Poison Armor); kept as a plain slice.
     ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(10)], ramp: None },
     // representative +2000-Max-HP item (Imbued Masonry above is the bundled source).
-    ModifierDef { name: "+2000 Max HP", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(2000)], ramp: None },
+    ModifierDef { name: "+2000 Max HP", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(4000)], ramp: None },
     // representative +50%-bounty item (Bounty Hunter above is the named source).
     ModifierDef { name: "+50% Kill Bounty", rarity: 2, cost: 3000, effects: &[ModEffect::BountyPct(50, 100)], ramp: None },
     // Recharge (A0EX): "+4000 Mana Shield | +25% Mana Regeneration". RE-BUNDLED via
     // the new ManaRegenPct rider (+25% of the shield's per-tick regen, applied after
-    // the flat pool). NOTE: kept this entry's existing pool (2000) per rule 5 rather
-    // than the source's 4000 — flagged as a judgement call.
-    ModifierDef { name: "Recharge", rarity: 2, cost: 3000, effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ManaRegenPct(25, 100)], ramp: None },
+    // the flat pool). The pool was held at 2000 (below the source's 4000) as a
+    // judgement call; the §11.8 shield retune doubled it, which lands it back ON the
+    // source figure.
+    ModifierDef { name: "Recharge", rarity: 2, cost: 3000, effects: &[ModEffect::ManaShield(4000, 10), ModEffect::ManaRegenPct(25, 100)], ramp: None },
     // representative +20-income item (Entangled Gold Mine above is the bundled source).
     ModifierDef { name: "+20 Gold Income", rarity: 0, cost: 500, effects: &[ModEffect::IncomeFlat(20)], ramp: None },
     // Tower Armor (A02G): "+5 Armor".
@@ -897,7 +913,7 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // Energy Shield (A0FD): "+10000 Mana Shield | +30% Damage Reduction while Mana
     // Shield is active". Both effects modeled: the huge shield pool plus the
     // conditional -30% DR that applies to ALL incoming damage while the shield holds.
-    ModifierDef { name: "Energy Shield", rarity: 3, cost: 5000, effects: &[ModEffect::ManaShield(10000, 50), ModEffect::ShieldActiveDrPct(30, 100)], ramp: None },
+    ModifierDef { name: "Energy Shield", rarity: 3, cost: 5000, effects: &[ModEffect::ManaShield(20000, 50), ModEffect::ShieldActiveDrPct(30, 100)], ramp: None },
     // Evasion (A0CL): "+10% Dodge".
     ModifierDef { name: "Evasion", rarity: 0, cost: 500, effects: &[ModEffect::Dodge(10)], ramp: None },
     // representative ramping-bounty item (Golden Ring's "+1% Damage per 50% Bounty"
@@ -908,10 +924,10 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // representative ramping-Max-HP item (Magic Seeds "+1000 +5/sec" is the closest
     // source; this is a bigger epic slice). Kept.
     ModifierDef { name: "Living Fortress (+2500 Max HP, +500/round)", rarity: 3, cost: 5000,
-        effects: &[ModEffect::MaxHp(2500)],
-        ramp: Some(RampSpec { effect: ModEffect::MaxHp(500), interval_ticks: RAMP_PER_ROUND }) },
+        effects: &[ModEffect::MaxHp(5000)],
+        ramp: Some(RampSpec { effect: ModEffect::MaxHp(800), interval_ticks: RAMP_PER_ROUND }) },
     // Mana Shield (A0EQ): "+1000 Mana Shield".
-    ModifierDef { name: "Mana Shield", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(1000, 5)], ramp: None },
+    ModifierDef { name: "Mana Shield", rarity: 1, cost: 1500, effects: &[ModEffect::ManaShield(2000, 5)], ramp: None },
     // representative ramping-regen item (no exact source; closest named regen items
     // are Renew / Repair Crew). Kept as a slice.
     ModifierDef { name: "Mending Engine (+120 Regen, +30/round)", rarity: 1, cost: 1500,
@@ -927,7 +943,7 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // Gained". The damage half scales LIVE with the tank's current Max HP (so later
     // Max-HP buys retroactively boost it), via DamagePerMaxHp.
     ModifierDef { name: "Mastercrafted Masonry", rarity: 2, cost: 3000,
-        effects: &[ModEffect::MaxHp(5000), ModEffect::DamagePerMaxHp(1, 100)], ramp: None },
+        effects: &[ModEffect::MaxHp(8000), ModEffect::DamagePerMaxHp(1, 100)], ramp: None },
     // Golden Ring (A0H3): "+200% Kill Bounty | +1% Damage per 50% Kill Bounty". The
     // damage half scales LIVE with the bounty multiplier (above the 1.0 base), via
     // DamagePerBountyPct. rarity 3 / cost 5000 (a top-end bounty-snowball payoff).
@@ -938,12 +954,12 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // 20/tick matches Energy Shield's pool→regen ratio (10000→50, i.e. 4000→20).
     // rarity 3 / cost 5000.
     ModifierDef { name: "Arcane Mark", rarity: 3, cost: 5000,
-        effects: &[ModEffect::ManaShield(4000, 20), ModEffect::ShieldActiveDamagePct(20, 100)], ramp: None },
+        effects: &[ModEffect::ManaShield(8000, 20), ModEffect::ShieldActiveDamagePct(20, 100)], ramp: None },
     // Maw of Death (A0EU): "+2000 Mana Shield | +15 Mana regenerated when an enemy
     // dies". The shield half uses Moonwell's 2000→10/tick regen ratio; the on-kill
     // half restores 15 to the shield per kill (cap-respecting). rarity 2 / cost 3000.
     ModifierDef { name: "Maw of Death", rarity: 2, cost: 3000,
-        effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ManaOnKill(15)], ramp: None },
+        effects: &[ModEffect::ManaShield(4000, 10), ModEffect::ManaOnKill(15)], ramp: None },
     // EXPANSION batch E2 — four MEDIUM-RISK exotic mechanics from the source map.
     // The source prices upgrades via a separate in-game gold system with no per-item
     // cost in the catalog, so cost/rarity follow the batch guidance (rarity 2-3 /
@@ -954,7 +970,7 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // 2000→10/tick regen ratio; the stun half fires on the shield's >0→0 down-edge
     // (range 1200 source units; 0.5 s = 15 ticks @ 30 Hz). rarity 2 / cost 3000.
     ModifierDef { name: "Energy Pulse", rarity: 2, cost: 3000,
-        effects: &[ModEffect::ManaShield(2000, 10), ModEffect::ShieldBreakStun(1200, 15)], ramp: None },
+        effects: &[ModEffect::ManaShield(4000, 10), ModEffect::ShieldBreakStun(1200, 15)], ramp: None },
     // Poison Armor (A0DE/F/G): "+10 Armor | +40 Poison damage per second for 3 s to
     // an enemy when damaged." Modeled as flat armor + a Spikes-applied Poison DoT on
     // the reflected attacker (reuses the existing poison status). Source "40/s for
