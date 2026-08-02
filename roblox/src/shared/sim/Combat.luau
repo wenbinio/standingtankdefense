@@ -57,6 +57,8 @@ local fdiv = Fixed.div
 local flt = Fixed.lt
 local fle = Fixed.le
 local feq = Fixed.eq
+local fcompare = Fixed.compare
+local I64_MAX = Fixed.I64_MAX
 local floorToInt = Fixed.floorToInt
 
 -- Rng (landed, §C3). `below` mutates the stream in place.
@@ -526,20 +528,77 @@ function Combat.fireWeapons(s)
 	local cond = condOf(s)
 	local boss = bossVulnOf(s)
 
+	-- ---- Per-call precomputation, hoisted OUT of the O(W) weapon loop. ------
+	-- Transcribed from the same hoist in `combat.rs::fire_weapons`. Nothing in
+	-- this function moves an enemy, adds one or removes one: `applyWeaponHit`
+	-- only writes hp/status, `flushAccum` only touches tank/hazards/minions, and
+	-- `reapDead` runs after the loop. The tank is immobile, so `tank.pos` is
+	-- constant too. Everything here is therefore stable for the whole loop.
+	--
+	-- This is PURE BOOKKEEPING — it changes no decision, no RNG draw and no
+	-- cooldown, only how many times the same arithmetic is repeated:
+	--
+	--  * `distSq[ei]` was recomputed for every (weapon, enemy) PAIR; now once
+	--    per enemy per tick.
+	--  * `nearestSq` lets a weapon whose range cannot reach even the closest
+	--    enemy skip its scan outright. That is the `docs/10 §F8` "1,670 weapon-
+	--    range scans/tick" finding: a short-range weapon never advances its
+	--    cooldown while nothing is in range, so it re-scanned every enemy every
+	--    tick forever. The rescan is now O(1) instead of O(E) — WITHOUT touching
+	--    the cooldown rule, so behaviour (and the checksum) is unchanged.
+	--
+	-- DELIBERATELY LAZY, and this is where the port diverges from the Rust's
+	-- SHAPE (never from its results). `combat.rs` builds this table eagerly at
+	-- the top of `fire_weapons`. Doing that in Luau was MEASURED as a net loss:
+	-- over a 56,000-tick seed-0 match it added 1.9M `Vec2::dist_sq` evaluations
+	-- and 6.0M comparisons, +2.2% of all `Fixed` calls in the sim, because the
+	-- eager table is built on every tick while the scan it replaces only ever
+	-- ran for weapons that were actually off cooldown. A `Fixed` multiply costs
+	-- ~1000x what the branch it saves costs, so Rust's arithmetic is cheap
+	-- enough to precompute unconditionally and Luau's is not.
+	--
+	-- Building it on the FIRST ready weapon instead keeps every saving (the
+	-- table is still shared by every weapon in the tick, and `nearestSq` still
+	-- kills the rescan) and pays nothing on the ticks — the majority — where no
+	-- weapon fires at all.
+	local tankPos = s.tank.pos
+	local nEnemies = #s.enemies
+	local distSq = nil
+	-- `Fixed::from_raw(i64::MAX)`: larger than any reachable range², so an empty
+	-- board skips every weapon exactly as the empty-candidates test used to.
+	local nearestSq = I64_MAX
+
 	for wi = 1, #s.weapons do
 		local def = s.weapons[wi].def
 		if s.tick < s.weapons[wi].next_fire_tick then
 			continue
 		end
+		if distSq == nil then
+			distSq = table.create(nEnemies)
+			for ei = 1, nEnemies do
+				local d = vecDistSq(tankPos, s.enemies[ei].pos)
+				distSq[ei] = d
+				if flt(d, nearestSq) then
+					nearestSq = d
+				end
+			end
+		end
 		local wdef = weaponDef(def)
 		local range = fromInt(wdef.range)
 		local rangeSq = fmul(range, range)
 
+		if flt(rangeSq, nearestSq) then
+			-- Provably nothing in range (the closest enemy is already outside it,
+			-- and an empty board leaves `nearestSq` at i64::MAX). Same outcome as
+			-- the full scan below: do not fire, do not advance cooldown.
+			continue
+		end
+
 		-- Candidates: enemies within range, in stable id order. Entries are
 		-- 1-based indices into `s.enemies`.
 		local candidates = {}
-		for ei = 1, #s.enemies do
-			if fle(vecDistSq(s.tank.pos, s.enemies[ei].pos), rangeSq) then
+		for ei = 1, nEnemies do
+			if fle(distSq[ei], rangeSq) then
 				table.insert(candidates, ei)
 			end
 		end
@@ -567,7 +626,6 @@ function Combat.fireWeapons(s)
 		-- modifiers, so (like base damage) they bake into the hit at fire time.
 		local onHit = scaleOnHit(s.modifiers, wdef.on_hit)
 		local ability = wdef.ability
-		local tankPos = s.tank.pos
 		-- Instant-attack abilities (Area/Wave/Bounce) accumulate here, flushed
 		-- once after this weapon's instant hits resolve.
 		local accum = newAccum()
@@ -712,32 +770,65 @@ function Combat.fireWeapons(s)
 				first = candidates[below(s.rng_targeting, #candidates) + 1]
 			end
 			local origin = s.enemies[first].pos
-			local order = {}
-			for i = 1, #s.enemies do
-				if i ~= first then
-					table.insert(order, i)
+			-- The chain wants the `n-1` OTHER enemies nearest `origin`, ordered by
+			-- (distance to origin, id) for determinism. This used to sort the WHOLE
+			-- board with a comparator that calls `Fixed.compare` — and it first had
+			-- to compute `dist_sq` for every enemy. In the Rust the equivalent line
+			-- (`sort_by_key`, which re-evaluates its key) was ~12% of all
+			-- instructions in the sim on a full late-game board.
+			--
+			-- Selecting the k smallest by insertion is O(E·k) with EXACTLY ONE
+			-- `dist_sq` per enemy, and yields the identical list: ids are unique, so
+			-- `(dist_sq, id)` is a strict total order with no ties, and the
+			-- k-smallest prefix of a total order is unique — the same k elements in
+			-- the same sequence the full sort produced. Fixed comparison is exactly
+			-- raw comparison, so this reproduces the Rust's `(dist_sq.raw(), id.0)`
+			-- key.
+			local k = math.max(atk.a - 1, 0)
+			-- Parallel arrays rather than tuples: `chainD` distance, `chainId` the
+			-- tiebreaking id, `chainIdx` the enemy index the chain actually wants.
+			local chainD, chainId, chainIdx = {}, {}, {}
+			local m = 0 -- entries currently held, 0..k
+			if k > 0 then
+				for i = 1, nEnemies do
+					if i ~= first then
+						local e = s.enemies[i]
+						local d = vecDistSq(e.pos, origin)
+						local id = e.id
+						-- Full and this key is not smaller than the current worst kept:
+						-- it cannot enter the k-smallest prefix.
+						local skip = false
+						if m == k then
+							local c = fcompare(d, chainD[k])
+							if c > 0 or (c == 0 and id >= chainId[k]) then
+								skip = true
+							end
+						end
+						if not skip then
+							-- Insert in ascending (d, id) order, shifting the tail down.
+							-- When already full, starting at `k` drops the old worst.
+							local at = if m < k then m + 1 else k
+							while at > 1 do
+								local c = fcompare(d, chainD[at - 1])
+								if c < 0 or (c == 0 and id < chainId[at - 1]) then
+									chainD[at], chainId[at], chainIdx[at] =
+										chainD[at - 1], chainId[at - 1], chainIdx[at - 1]
+									at -= 1
+								else
+									break
+								end
+							end
+							chainD[at], chainId[at], chainIdx[at] = d, id, i
+							if m < k then
+								m += 1
+							end
+						end
+					end
 				end
 			end
-			-- Sort by (distance to origin, id) for a deterministic chain. Fixed
-			-- comparison is exactly raw comparison, so this reproduces the
-			-- Rust's `(dist_sq.raw(), id.0)` key; the id makes the order total,
-			-- so the sort's (in)stability cannot matter.
-			local d2 = {}
-			for oi = 1, #order do
-				local i = order[oi]
-				d2[i] = vecDistSq(s.enemies[i].pos, origin)
-			end
-			table.sort(order, function(a, b)
-				local c = Fixed.compare(d2[a], d2[b])
-				if c ~= 0 then
-					return c < 0
-				end
-				return s.enemies[a].id < s.enemies[b].id
-			end)
 			local targets = { first }
-			local take = math.max(atk.a - 1, 0)
-			for i = 1, math.min(take, #order) do
-				table.insert(targets, order[i])
+			for i = 1, m do
+				table.insert(targets, chainIdx[i])
 			end
 			for tj = 1, #targets do
 				local ti = targets[tj]

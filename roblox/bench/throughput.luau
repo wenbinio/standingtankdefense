@@ -10,18 +10,36 @@
 	     a percentage of a 33.33 ms tick budget.
 	  2. The cost of the exact fixed-point path (CONTRACTS §C2 `Fixed`) against
 	     the same workload written in plain doubles — i.e. what exactness costs.
-	  3. Replication: bytes/tick for ~300 entity positions packed into a
-	     `buffer`, against the ~900 B `UnreliableRemoteEvent` payload cap at a
-	     10-15 Hz send rate (docs/09 §1.6).
+	  3. Replication: bytes/tick for the measured peak board (325 entities)
+	     packed into a `buffer`, against the ~900 B `UnreliableRemoteEvent`
+	     payload cap at a 10-15 Hz send rate (docs/09 §1.6).
 
-	HOW THE WORKLOAD IS SIZED — NOT INVENTED
+	HOW THE WORKLOAD IS SIZED — MEASURED, NO LONGER DERIVED
 	  Entity counts, spawn cadences, movement speeds, ring radii, the damage
 	  matrix and the arsenal below are transcribed from
-	  `sim-core/crates/sim/src/{content.rs,waves.rs}`. The steady-state
-	  population is *derived* from those cadences (see WaveModel) rather than
-	  guessed, and the derivation reproduces the population the Rust sim
-	  actually reaches (see README — analytic 67.5 vs measured peak 67 over 24
-	  seeds). The per-tick phases mirror `sim::step`'s phase order.
+	  `sim-core/crates/sim/src/{content.rs,waves.rs}`, and the per-tick phases
+	  mirror `sim::step`'s phase order. That part still holds.
+
+	  What no longer holds is the POPULATION. `WaveModel` below derives a
+	  steady state by Little's law over the spawn cadences — rate x lifetime,
+	  ignoring kills — and for the pre-`[11]` game that landed within 1% of the
+	  Rust sim's measured peak (analytic 67.5 vs measured 67 over 24 seeds).
+	  The `[11]` balance pass then changed NOTHING the model can see: `WAVE_M0`
+	  and `BOSS_ESCORT` still carry the exact cadences below. It ramped enemy
+	  HP instead (`content::enemy_hp_mult`), so enemies now survive far longer
+	  than they spawn-to-contact, and the real board runs several times denser
+	  than the kill-free model predicts. The model is not wrong about spawn
+	  rate; it is blind to the kill rate, and the kill rate is what moved.
+
+	  So the populations pinned in section 1 are now MEASURED, not derived:
+	  they come from `bench/realsim.luau`, which runs the shipped `Arena.step`
+	  under the shipped `Bot` for whole matches and reports the board it
+	  actually reaches. `WaveModel` is kept because the spawn-rate half of it
+	  is still correct and still worth printing — but it is a cross-check that
+	  now FAILS, and section 0 says so.
+
+	  THIS FILE IS A MODEL, `realsim.luau` IS THE SIM. Read this one for what
+	  exact fixed-point costs per entity; read that one for the R2 verdict.
 
 	PORTABILITY
 	  Everything above the `Studio glue` section touches no Roblox global. It
@@ -124,7 +142,7 @@ local ENEMIES = {
 	[7] = { name = "Nope Rope", hp = 320, speed = 6, contact = 200, armor = 0, ranged = true, rcd = 45 },
 	[8] = { name = "Croak", hp = 300, speed = 6, contact = 200, armor = 0, ranged = true, rcd = 30 },
 	[9] = { name = "Spicy", hp = 600, speed = 5, contact = 300, armor = 0, ranged = true, rcd = 36 },
-	[10] = { name = "Popsicle", hp = 900, speed = 4, contact = 350, armor = 0, ranged = true, rcd = 40 },
+	[10] = { name = "Popsicle", hp = 900, speed = 4, contact = 350, armor = 1, ranged = true, rcd = 40 },
 	[11] = { name = "Dodo", hp = 800, speed = 0, contact = 0, armor = 0, ranged = false },
 }
 
@@ -1247,14 +1265,26 @@ function Bench.run(opts)
 	Env.write("  0.5x / 0.1x are Frost slow (status.rs move_speed_mult: -2%/stack,")
 	Env.write("  floored at 10%; FROST_MAX_STACKS = 25). A Frost build IS the worst case:")
 	Env.write("  slower enemies live longer, so the board fills up.")
-	Env.write(string.format("  Cross-check: the Rust sim's measured peak over 24 seeds was 67 enemies;"))
-	Env.write(string.format("  this model puts the boss-escort steady state at %.1f. The model is sound.", worstPop))
+	Env.write(string.format("  CROSS-CHECK — AND IT NOW FAILS. This model puts the boss-escort steady"))
+	Env.write(string.format("  state at %.1f. Before the [11] balance pass that matched the sim's measured", worstPop))
+	Env.write("  peak of 67 to within 1%. It no longer does: `bench/realsim.luau` drives the")
+	Env.write("  shipped Arena.step with the shipped Bot and measures a mean of ~105 and a")
+	Env.write("  peak of ~325 live enemies on the Steam timeline.")
+	Env.write("  The cadences above did NOT change — [11] ramped enemy HP instead")
+	Env.write("  (content::enemy_hp_mult), so enemies now live far longer than spawn-to-")
+	Env.write("  contact. Little's law over spawn rate cannot see a kill rate, so this")
+	Env.write("  model is a LOWER BOUND on population, not an estimate of it.")
+	Env.write("  The populations pinned in section 1 come from realsim.luau, not from here.")
 
 	--------------------------------------------------------------- throughput
 	Env.write("")
 	Env.write("== 1. PER-TICK SIMULATION COST, ONE ARENA ==")
-	Env.write("  E = live enemies, W = owned weapons. The measured Rust run peaked at")
-	Env.write("  E=67 / W=20; E=300 is docs/09 §1.6's stated replication worst case.")
+	Env.write("  E = live enemies, W = owned weapons. The pinned populations are MEASURED")
+	Env.write("  off the shipped sim by bench/realsim.luau (Steam timeline, reference Bot):")
+	Env.write("  mean 105, p99 282, peak 325. E=218 is the [10] §F8 reference-bot peak")
+	Env.write("  quoted in the [11] invalidation note; E=675 is the analytic Frost ceiling.")
+	Env.write("  The old E=68 row is GONE — it was the pre-[11] operating point and citing")
+	Env.write("  it was what made §F8's 56.7% verdict stale.")
 	Env.write("  Three numeric backends, IDENTICAL algorithm:")
 	Env.write("    exact  — the real §C2 Fixed (4 x 16-bit limb tables, bit-identical to Rust)")
 	Env.write("    api-dbl— the same §C2 API over a plain-double representation (the §F5")
@@ -1267,11 +1297,17 @@ function Bench.run(opts)
 	Env.write("")
 	Env.write("  backend    E     W   ms/tick  8 arenas   % of 33.33ms   % of 30% budget  ticks")
 
+	-- Pinned populations, all of them measured or cited, none invented:
+	--   105 — mean live enemies over whole matches (realsim.luau, Steam timeline)
+	--   218 — the reference-bot peak [10] §F8's invalidation note quotes
+	--   282 — p99 of the measured board; the density a tick budget must survive
+	--   325 — the measured peak, at W=40 for a broad late arsenal
+	--   675 — the analytic max-Frost ceiling, retained as a stress column
 	local configs = {
-		{ pop = 68, weapons = 20 },
-		{ pop = 150, weapons = 20 },
-		{ pop = 300, weapons = 20 },
-		{ pop = 300, weapons = 40 },
+		{ pop = 105, weapons = 20 },
+		{ pop = 218, weapons = 20 },
+		{ pop = 282, weapons = 20 },
+		{ pop = 325, weapons = 40 },
 		{ pop = 675, weapons = 20 },
 	}
 	local backends = {
@@ -1317,9 +1353,9 @@ function Bench.run(opts)
 
 	------------------------------------------------------------ phase profile
 	Env.write("")
-	Env.write("== 1b. WHERE THE TIME GOES (E=300, W=20, fixed-point) ==")
+	Env.write("== 1b. WHERE THE TIME GOES (E=282, W=20, fixed-point) ==")
 	local profCfg = {
-		pop = 300,
+		pop = 282,
 		weapons = 20,
 		ticks = 60,
 		frost = 0,
@@ -1351,9 +1387,14 @@ function Bench.run(opts)
 	Env.write("  cooldown when nothing is in range (\"do not fire, do not advance cooldown\"),")
 	Env.write("  so a short-range weapon on a board whose enemies are all still marching in")
 	Env.write("  re-scans every enemy EVERY tick. That turns the amortised O(W*E/cooldown)")
-	Env.write("  into a true O(W*E). It is the single cheapest algorithmic win available:")
-	Env.write("  a spatial grid, or a per-tick nearest-enemy distance computed once and")
-	Env.write("  shared by all weapons, removes it.")
+	Env.write("  into a true O(W*E).")
+	Env.write("  THE SHIPPED SIM NO LONGER PAYS THIS: Combat.luau now computes the board's")
+	Env.write("  distances once per tick (on the first weapon that is actually off cooldown)")
+	Env.write("  and keeps the nearest, so a weapon that cannot reach the closest enemy")
+	Env.write("  skips its scan in O(1). The cooldown rule is untouched, so the R3 oracle is")
+	Env.write("  untouched. THIS MODEL still has the rescan, deliberately — it exists to")
+	Env.write("  price the arithmetic, and changing its algorithm would break comparability")
+	Env.write("  with every earlier run of this file. Read realsim.luau for the shipped cost.")
 	Env.write("  (per-phase os.clock() calls add a few % of overhead; the table is for")
 	Env.write("   apportioning blame, not for the headline number.)")
 
@@ -1373,11 +1414,11 @@ function Bench.run(opts)
 		Env.write(string.format("  %-12s %10.1f %12.2f %s", r.name, r.fixed * 1e9, r.double * 1e9, ratio))
 	end
 
-	local wf = results["exact/300/20"]
-	local wa = results["api-dbl/300/20"]
-	local wd = results["raw-dbl/300/20"]
+	local wf = results["exact/282/20"]
+	local wa = results["api-dbl/282/20"]
+	local wd = results["raw-dbl/282/20"]
 	Env.write("")
-	Env.write(string.format("  whole-workload, E=300 / W=20:"))
+	Env.write(string.format("  whole-workload, E=282 / W=20:"))
 	Env.write(string.format("    exact §C2 Fixed          %8.3f ms/tick   %6.0fx raw doubles", wf, wf / wd))
 	Env.write(string.format("    §C2 API over doubles     %8.3f ms/tick   %6.1fx raw doubles", wa, wa / wd))
 	Env.write(string.format("    raw doubles              %8.3f ms/tick        1.0x", wd))
@@ -1387,7 +1428,7 @@ function Bench.run(opts)
 
 	---------------------------------------------------------------- replication
 	yield()
-	replicationReport(300, { 10, 15, 30 })
+	replicationReport(325, { 10, 15, 30 })
 
 	----------------------------------------------------------------- verdict
 	Env.write("")
@@ -1405,10 +1446,11 @@ function Bench.run(opts)
 		SAFE_SHARE * 100, TICK_BUDGET_MS * SAFE_SHARE
 	))
 	Env.write("")
-	Env.write("  backend    scenario            serial (1 thread)      parallel (8 Actors)")
+	Env.write("  backend    scenario                serial (1 thread)      parallel (8 Actors)")
 	local scen = {
-		{ "realistic  E=68  W=20", "68/20" },
-		{ "worst case E=300 W=20", "300/20" },
+		{ "measured mean  E=105 W=20", "105/20" },
+		{ "measured p99   E=282 W=20", "282/20" },
+		{ "measured peak  E=325 W=40", "325/40" },
 	}
 	for _, be in { "exact", "api-dbl", "raw-dbl" } do
 		for _, sc in scen do
@@ -1416,7 +1458,7 @@ function Bench.run(opts)
 			local serial = ms * ARENAS / (TICK_BUDGET_MS * SAFE_SHARE) * 100
 			local par = ms / (TICK_BUDGET_MS * SAFE_SHARE) * 100
 			Env.write(string.format(
-				"  %-8s   %-20s %7.1f%% %-8s %9.1f%% %-8s",
+				"  %-8s   %-24s %7.1f%% %-8s %9.1f%% %-8s",
 				be, sc[1],
 				serial, if serial < 100 then "PASS" else "FAIL",
 				par, if par < 100 then "PASS" else "FAIL"

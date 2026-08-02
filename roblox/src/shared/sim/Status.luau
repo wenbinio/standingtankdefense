@@ -80,6 +80,14 @@ local I64_MIN = -9223372036854775808
 -- change).
 local FROST_SLOW_FLOOR = Fixed.fromRatio(1, 10) -- "floor at 10%"
 local FREEZE_VULN_BONUS = Fixed.fromRatio(1, 2) -- +50% damage taken while frozen
+-- `reap_dead`'s explosion radius, squared. A function of one literal, so hoisting
+-- it out of the per-call body changes nothing except how often the same two ops
+-- run: the Rust folds these into constants for free, Luau does not.
+local FIRE_RADIUS_SQ = Fixed.mul(Fixed.fromInt(FIRE_EXPLOSION_RADIUS), Fixed.fromInt(FIRE_EXPLOSION_RADIUS))
+
+-- Locals for the hot paths below. `Fixed.ONE` is returned by value from
+-- `moveSpeedMult`/`vulnerabilityMult` on their (dominant) no-status paths.
+local ONE = Fixed.ONE
 
 --- Apply a weapon's on-hit status to an enemy. Poison refreshes to the stronger
 --- DoT; frost/fire add stacks (frost capped); stun takes the longer remaining.
@@ -121,6 +129,16 @@ end
 --- Freeze payoff (+50% while frozen, `docs/appendix-A §A.2`).
 function Status.vulnerabilityMult(enemy)
 	local st = enemy.status
+	-- FAST PATH — no status at all, which is the overwhelming majority of hits.
+	-- This is not an approximation: `fromRatio(0, n)` is exactly zero (verified
+	-- by `parity.luau` / `differential.luau`), `add(ONE, 0)` is exactly `ONE`,
+	-- and with `freeze_ticks == 0` the bonus below is not applied — so `ONE` is
+	-- bit-for-bit what the general path returns. Two `fromRatio` calls saved per
+	-- weapon hit; `fromRatio` is ~683 ns in Luau because it goes through `div`,
+	-- where the Rust folds a constant divisor into a multiply for free.
+	if st.fire_stacks == 0 and st.vuln_stacks == 0 and st.freeze_ticks == 0 then
+		return ONE
+	end
 	-- Left-associative, exactly as the Rust `ONE + a + b` folds: each `add` is
 	-- its own saturating step.
 	local m = Fixed.add(
@@ -165,6 +183,18 @@ end
 
 --- Movement-speed multiplier from status (Frost slow: -2% per stack, floored).
 function Status.moveSpeedMult(enemy)
+	-- FAST PATH — unfrosted, which is almost every enemy on almost every tick.
+	-- Called once per enemy per tick from `Combat.moveEnemies`, so the general
+	-- path below was computing `1 - 0` through `Fixed.fromRatio` (~683 ns) for
+	-- the whole board every tick: at E=218 that is ~149 us/tick/arena, ~1.19 ms
+	-- across 8 arenas, ~12% of the entire 10.00 ms R2 ceiling.
+	--
+	-- Exact, not approximate: `fromRatio(0, 100)` is exactly zero, `sub(ONE, 0)`
+	-- is exactly `ONE`, and `lt(ONE, FROST_SLOW_FLOOR)` is false — so the general
+	-- path returns `ONE` here too, bit for bit.
+	if enemy.status.frost_stacks == 0 then
+		return ONE
+	end
 	local slow = Fixed.fromRatio(enemy.status.frost_stacks * 2, 100)
 	local m = Fixed.sub(Fixed.ONE, slow)
 	-- Floor at 10% so a fully-frosted enemy still crawls.
@@ -189,12 +219,14 @@ end
 --- explosions fire wherever an enemy dies. Bosses neither explode nor take
 --- explosion damage (they are damaged only by `Clear`).
 function Status.reapDead(s)
-	local radius = Fixed.fromInt(FIRE_EXPLOSION_RADIUS)
-	local radiusSq = Fixed.mul(radius, radius)
+	local radiusSq = FIRE_RADIUS_SQ
+	-- Reused across passes rather than reallocated per pass; `table.clear` keeps
+	-- the array's capacity, and nothing outside this function ever sees it.
+	local dead = {}
 	while true do
 		local enemies = s.enemies
 		-- Collect dead enemies (id-sorted) so explosions resolve deterministically.
-		local dead = {}
+		table.clear(dead)
 		for i = 1, #enemies do
 			if enemies[i].hp <= 0 then
 				dead[#dead + 1] = i
@@ -247,7 +279,16 @@ function Status.reapDead(s)
 		s.enemies = kept
 		-- Explosion damage is a player source (scoreboard / Bloodmoney).
 		recordPlayerDamage(s, explosionDamage)
-		-- Loop: chained deaths from this pass's explosions detonate next pass.
+		-- Loop: chained deaths from this pass's explosions detonate next pass —
+		-- but ONLY explosions can have produced one. Splash is the sole hp
+		-- decrement in this function, every enemy that was already at hp <= 0 on
+		-- entry was reaped in the pass just completed, and any decrement adds at
+		-- least 1 to `explosionDamage` (the `dmg > 0` guard). So zero explosion
+		-- damage means the next pass would scan the whole board and find nothing:
+		-- skip it, and the O(E) scan plus a `kept` allocation with it.
+		if explosionDamage == 0 then
+			return
+		end
 	end
 end
 
@@ -265,11 +306,23 @@ function Status.tick(s)
 	for i = 1, #enemies do
 		local e = enemies[i]
 		local st = e.status
-		local immune = enemyDef(e.def).boss
 
-		-- Poison damage-over-time.
+		-- FAST PATH — no timer running, so every branch below is a no-op. Most
+		-- enemies carry no status for their whole (short) life, and this also
+		-- skips the `enemyDef` catalog lookup that used to run unconditionally.
+		if
+			st.poison_ticks == 0
+			and st.frost_ticks == 0
+			and st.stun_ticks == 0
+			and st.freeze_ticks == 0
+		then
+			continue
+		end
+
+		-- Poison damage-over-time. `boss` is consulted HERE rather than above:
+		-- it is the only reader of the catalog and only poison cares.
 		if st.poison_ticks > 0 then
-			if not immune then
+			if not enemyDef(e.def).boss then
 				e.hp -= st.poison_dps
 				poisonHits += 1
 				poisonDamage += st.poison_dps

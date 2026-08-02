@@ -145,7 +145,38 @@ Allocation was measured rather than assumed: pre-allocated out-params cost **72 
 
 Both are needed, and this was verified rather than assumed. Widening the `div` fast-path guard from |a| < 2^36 to |a| < 2^48 is caught by parity with **2 failing assertions out of 7,309**, and by the differential harness with **269 divergences**. Parity's coverage of fast-path boundaries is real but razor-thin — it knows nothing about guards the Rust doesn't have. Deleting the differential suite would leave optimization work effectively untested.
 
-### ⚠ INVALIDATED by the `[11]` balance pass — R2 must be re-measured
+### ⚠ R2 RE-MEASURED — VERDICT: **FAILS SERIALLY.** Not passed.
+
+Re-measured against the workload that actually ships, using a new harness (`roblox/bench/realsim.luau`) that runs the **real sim** — `Arena.step` + `Bot.decide` over whole matches — rather than the synthetic model this section originally used. Budget 33.33 ms/tick for 8 arenas; honest ceiling 30% = 10.00 ms.
+
+| timeline | statistic | ms/arena/tick | serial (8 on 1 thread) | parallel (8 Actors) |
+| --- | --- | ---: | ---: | ---: |
+| **roblox** (F1 — what ships) | mean | 0.867 | **69.3% PASS** | 8.7% PASS |
+| roblox | worst sustained second | 3.105 | **248.4% FAIL** | 31.0% PASS |
+| roblox | worst single tick | 6.416 | **513.3% FAIL** | 64.2% PASS |
+| steam (oracle timeline) | mean | 1.670 | **133.6% FAIL** | 16.7% PASS |
+| steam | worst sustained second | 14.366 | **1149.3% FAIL** | **143.7% FAIL** |
+
+**Serial is the honest planning column** — Roblox sizes the Actor worker pool from the host and does not guarantee 8. Serially, only the *mean* fits, and only on the Roblox timeline; sustained peaks fit on neither. Across 8 Actors the Roblox timeline passes at every statistic including the worst single tick.
+
+Population is the reason: **mean 79–87, p99 270, peak 325**, against this section's original "peak 66–67, mean 14.3" — roughly 5× the peak. Projectiles moved the *other* way, 84 → 20.
+
+**Why the old model missed it:** no spawn cadence changed at all. `WAVE_M0`/`BOSS_ESCORT` are byte-identical. `[11]` raised enemy **HP**, so a Little's-law estimate over spawn *rate* is structurally blind to the kill *rate* that actually moved. `throughput.luau` now prints itself as a **lower bound** rather than claiming the model is sound.
+
+**Routes to clearing it, in order of promise:**
+1. **`--!native`** — never applied in any measurement here; `--codegen` was historically ≈2.1×, which would put the Roblox worst-second at 83–166%. Plausible, **not demonstrated**.
+2. **`sqrt` costs 1,747 ns** — now the most expensive operation measured, called once per enemy per tick by `Vec2::step_toward`, and **8.7× what this section's own post-optimization table records (200 ns)**. Either the operand mix changed or something regressed. This is the largest unexplained cost in the profile and is unchased.
+3. A spatial grid for weapon firing — still `O(W·E)` in the candidate scan even after the `nearestSq` early-out.
+4. The F5 `api-dbl` hatch — passes serially everywhere except the E=325/W=40 peak (111%), ~6× win, but forfeits the correctness oracle. Last resort.
+5. Fewer arenas per server, or a sub-30 Hz simulation rate — product decisions, not engineering ones.
+
+**A Rust optimization that does NOT port, and the general lesson:** `combat.rs` builds its distance table eagerly at the top of `fire_weapons`. Transcribed literally that is a net **loss** in Luau (+2.25%), because the table is rebuilt every tick while the scan it replaces only ran for weapons off cooldown — and a `Fixed` multiply costs ~1000× the branch it saves. Building it lazily on the first ready weapon keeps every saving and turns +2.25% into −1.59%. **Relative operation costs differ enough between the two languages that an optimization's *shape* does not always survive the port, even when its results must.**
+
+Measured by counted `Fixed`-API calls over a fixed 56,000-tick match rather than wall clock, because wall clock moved ±5% between interleaved repeats of an identical build on this shared container — larger than any single fix. Final: **−5.08% Fixed calls, 1.086× wall clock.** All R3 gates pass unchanged.
+
+---
+
+### Superseded: the earlier invalidation notice
 
 **The workload this section is sized against no longer exists.** F8's budget was computed from a measured "peak 66–67 enemies, 70–84 projectiles". After the fun pass rebuilt `WAVE_M0`, the same reference bot produces **peak 218 enemies, mean 53** — roughly 4.7× the mean population and 7× the peak.
 
