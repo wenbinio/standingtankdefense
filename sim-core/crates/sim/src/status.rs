@@ -63,6 +63,13 @@ pub(crate) fn apply_on_hit(enemy: &mut Enemy, on_hit: &StatusOnHit) {
 /// Vulnerability stacks (+1% per stack, from Vulnerability-Pulse auras), and the
 /// Freeze payoff (+50% while frozen, `docs/appendix-A §A.2`).
 pub(crate) fn vulnerability_mult(enemy: &Enemy) -> Fixed {
+    // No stacks and no freeze is exactly `ONE` (both ratios are 0/n); skip the
+    // two `from_ratio` divisions. Cheap here, but the mirrored Luau pays ~683 ns
+    // per `fromRatio`, so keep the two ports structurally identical.
+    let st = &enemy.status;
+    if st.fire_stacks == 0 && st.vuln_stacks == 0 && st.freeze_ticks == 0 {
+        return Fixed::ONE;
+    }
     let mut m = Fixed::ONE
         + Fixed::from_ratio(enemy.status.fire_stacks as i64 * 5, 1000)
         + Fixed::from_ratio(enemy.status.vuln_stacks as i64, 100);
@@ -98,6 +105,11 @@ pub(crate) fn pulse(s: &mut ArenaState) {
 
 /// Movement-speed multiplier from status (Frost slow: -2% per stack, floored).
 pub(crate) fn move_speed_mult(enemy: &Enemy) -> Fixed {
+    // Unfrosted is the common case, and it is exactly `ONE` (`ONE - 0`, which is
+    // above the floor); skip the ratio and the floor compare entirely.
+    if enemy.status.frost_stacks == 0 {
+        return Fixed::ONE;
+    }
     let slow = Fixed::from_ratio(enemy.status.frost_stacks as i64 * 2, 100);
     let m = Fixed::ONE - slow;
     // Floor at 10% so a fully-frosted enemy still crawls.
@@ -111,7 +123,9 @@ pub(crate) fn move_speed_mult(enemy: &Enemy) -> Fixed {
 
 /// Whether the enemy cannot move this tick (stunned or frozen).
 pub(crate) fn is_immobile(enemy: &Enemy) -> bool {
-    enemy.status.stun_ticks > 0 || enemy.status.freeze_ticks > 0
+    // Branchless combine: both fields share a cache line and are almost always
+    // zero, so the short-circuit `||` only ever bought a second branch.
+    (enemy.status.stun_ticks | enemy.status.freeze_ticks) != 0
 }
 
 /// Reap every enemy at `hp <= 0`, pushing its `def` to `pending_kills` and
@@ -124,17 +138,31 @@ pub(crate) fn is_immobile(enemy: &Enemy) -> bool {
 /// explosions fire wherever an enemy dies. Bosses neither explode nor take
 /// explosion damage (they are damaged only by `Clear`).
 pub(crate) fn reap_dead(s: &mut ArenaState) {
-    let radius = Fixed::from_int(FIRE_EXPLOSION_RADIUS);
-    let radius_sq = radius.mul(radius);
+    // Scratch index buffer, reused across chain passes. Purely local — nothing
+    // here enters `ArenaState` or the checksum. `Vec::new` does not allocate, so
+    // the overwhelmingly common "nobody died" call costs one scan and no heap
+    // traffic at all.
+    let mut dead: Vec<usize> = Vec::new();
     loop {
-        // Collect dead enemies (id-sorted) so explosions resolve deterministically.
-        let mut dead: Vec<usize> = (0..s.enemies.len())
-            .filter(|&i| s.enemies[i].hp <= 0)
-            .collect();
+        // Collect dead enemies (ascending index, hence id-sorted for the normal
+        // append-only enemy list) so explosions resolve deterministically. A
+        // direct `enumerate` scan rather than `(0..len).filter(..).collect()`:
+        // same order, same contents, but no bounds-checked re-indexing and no
+        // `Vec` growth machinery on the empty path.
+        dead.clear();
+        for (i, e) in s.enemies.iter().enumerate() {
+            if e.hp <= 0 {
+                dead.push(i);
+            }
+        }
         if dead.is_empty() {
             return;
         }
         dead.sort_by_key(|&i| s.enemies[i].id.0);
+
+        // Only now is the explosion radius needed; keep it off the empty path.
+        let radius = Fixed::from_int(FIRE_EXPLOSION_RADIUS);
+        let radius_sq = radius.mul(radius);
 
         // For each dead enemy: record the kill and, if it carried Fire, splash
         // explosion damage onto living non-boss enemies in range.
@@ -169,6 +197,12 @@ pub(crate) fn reap_dead(s: &mut ArenaState) {
         // Explosion damage is a player source (scoreboard / Bloodmoney).
         s.record_player_damage(explosion_damage);
         // Loop: chained deaths from this pass's explosions detonate next pass.
+        // Explosion splash is the only thing in this function that lowers an
+        // enemy's hp, so with none dealt the next pass provably finds nothing —
+        // skip its full scan instead of proving that emptiness the slow way.
+        if explosion_damage == 0 {
+            return;
+        }
     }
 }
 
@@ -176,43 +210,49 @@ pub(crate) fn reap_dead(s: &mut ArenaState) {
 /// Frost. Poison kills push their `def` to `pending_kills` (so they still award
 /// bounty). Boss enemies are immune to Poison (only `Clear` hurts the boss).
 pub(crate) fn tick(s: &mut ArenaState) {
-    let mut survivors: Vec<Enemy> = Vec::with_capacity(s.enemies.len());
     let mut poison_hits: i64 = 0;
     let mut poison_damage: i64 = 0;
-    for mut e in std::mem::take(&mut s.enemies) {
-        let immune = content::ENEMIES[e.def as usize].boss;
+    // Iterate in place. The previous form moved every `Enemy` out of the list
+    // through an `IntoIter` and pushed it into a freshly allocated `survivors`
+    // vector, unconditionally — a full copy of the enemy array plus a
+    // malloc/free every tick, for a pass that never drops or reorders anything.
+    for e in s.enemies.iter_mut() {
+        // All four timers live in the same cache line; a single combined test
+        // skips the untouched enemies (the common case) in one branch.
+        let Enemy { def, hp, status: st, .. } = e;
+        if (st.poison_ticks | st.frost_ticks | st.stun_ticks | st.freeze_ticks) == 0 {
+            continue;
+        }
 
         // Poison damage-over-time.
-        if e.status.poison_ticks > 0 {
-            if !immune {
-                e.hp -= e.status.poison_dps;
+        if st.poison_ticks > 0 {
+            // The boss lookup is only needed on the poison path.
+            if !content::ENEMIES[*def as usize].boss {
+                *hp -= st.poison_dps;
                 poison_hits += 1;
-                poison_damage += e.status.poison_dps;
+                poison_damage += st.poison_dps;
             }
-            e.status.poison_ticks -= 1;
-            if e.status.poison_ticks == 0 {
-                e.status.poison_dps = 0;
+            st.poison_ticks -= 1;
+            if st.poison_ticks == 0 {
+                st.poison_dps = 0;
             }
         }
         // Frost duration / expiry.
-        if e.status.frost_ticks > 0 {
-            e.status.frost_ticks -= 1;
-            if e.status.frost_ticks == 0 {
-                e.status.frost_stacks = 0;
+        if st.frost_ticks > 0 {
+            st.frost_ticks -= 1;
+            if st.frost_ticks == 0 {
+                st.frost_stacks = 0;
             }
         }
         // Stun duration.
-        if e.status.stun_ticks > 0 {
-            e.status.stun_ticks -= 1;
+        if st.stun_ticks > 0 {
+            st.stun_ticks -= 1;
         }
         // Freeze duration (clears cleanly; no residual effect).
-        if e.status.freeze_ticks > 0 {
-            e.status.freeze_ticks -= 1;
+        if st.freeze_ticks > 0 {
+            st.freeze_ticks -= 1;
         }
-
-        survivors.push(e);
     }
-    s.enemies = survivors;
     // Reap poison kills (and their Fire death-explosions) in a stable pass.
     reap_dead(s);
     // Poison DoT counts toward the player's damage scoreboard / Bloodmoney.
