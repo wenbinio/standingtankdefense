@@ -103,9 +103,25 @@ pub struct TraceSpec {
 /// tank's death inside the boss phase.
 pub const FULL_TICKS: u32 = content::BOSS_SPAWN_TICK + 1200;
 
-/// The corpus. Seeds were chosen from a 16-seed reconnaissance sweep so the set
-/// spans all four bot archetypes, three different death timings (mid-game,
-/// late-game, in-boss-phase) and one seed that survives the whole run.
+/// The corpus, ordered by run length so the Luau side can bring modules up on
+/// the cheap traces first. Two kinds of entry live here:
+///
+/// - **Narrative traces** (`smoke` / `short` / `mid` / `full` / `purist`): whole
+///   matches, chosen from a reconnaissance sweep so the set spans the bot
+///   archetypes, three death timings (mid-game, late-game, in-boss-phase) and
+///   one seed that survives the whole run.
+/// - **Coverage probes** (the 1.2k–2.4k-tick entries): seeds picked with
+///   `--scan` purely because they *reach a behaviour* the narrative traces stopped
+///   touching. A behaviour has to OCCUR to be covered, not run to completion, so
+///   these are deliberately the shortest seed found that arms the flag —
+///   `manifest_describes_the_committed_corpus` is satisfied for a few thousand
+///   ticks instead of another 55,200-tick replay through the interpreter.
+///
+/// When a balance change moves what the bot buys, that test goes red naming the
+/// behaviours that fell out; re-pick with
+/// `export-traces --scan <seeds> <ticks> [<challenge>]` and replace the probes.
+/// Do not delete the flag — an unreachable behaviour is a finding about the
+/// *game*, not a licence to stop testing it.
 ///
 /// Trimming this list is a one-line edit; every consumer (writer, `--check`,
 /// `MANIFEST.json`, the replay test) is driven from it.
@@ -116,16 +132,55 @@ pub const TRACES: &[TraceSpec] = &[
         ticks: 900,
         challenge: Challenge::None,
         exercises: "SMOKE (fastest inner loop, ~20 KB): tick-0 shop generation, the first \
-                    round boundary at 900, opening buys, early spawns, projectile flight and \
-                    poison DoT. Start here when bringing a module up.",
+                    round boundary at 900, opening buys, early spawns and projectile flight. \
+                    No status effect lands this early, so a divergence here is in the core \
+                    loop rather than in Status. Start here when bringing a module up.",
+    },
+    TraceSpec {
+        name: "purist4-seed-3045",
+        seed: 3045,
+        ticks: 1200,
+        challenge: Challenge::Purist(4),
+        exercises: "PROBE, HAZARDS + PENDING PERK (1200 ticks): a Wave-class purist that lays \
+                    a mine field and arms a duplicator/voucher inside the first 40 s. Second, \
+                    cheap cover for Combat.tickHazards and for the Input.apply pending-perk \
+                    branch, both of which otherwise ride on a single 55200-tick purist trace.",
+    },
+    TraceSpec {
+        name: "short-seed-8855",
+        seed: 8855,
+        ticks: 2100,
+        challenge: Challenge::None,
+        exercises: "PROBE, AURA + PENDING PERK (2100 ticks): buys Blight Aura, so this is the \
+                    only trace that reaches Combat.tickAura with a live cadence; also arms a \
+                    PendingPerk and stacks vulnerability.",
+    },
+    TraceSpec {
+        name: "short-seed-13430",
+        seed: 13430,
+        ticks: 2100,
+        challenge: Challenge::None,
+        exercises: "PROBE, DEEP FREEZE (2100 ticks): frost stacks reach FROST_MAX_STACKS and \
+                    convert into freeze_ticks — the only trace that reaches the Deep-Freeze \
+                    payoff in Status.tick. Also arms a PendingPerk.",
+    },
+    TraceSpec {
+        name: "short-seed-12283",
+        seed: 12283,
+        ticks: 2400,
+        challenge: Challenge::None,
+        exercises: "PROBE, REVIVE + MANA SHIELD + VULN PULSE (2400 ticks): buys a revive (so \
+                    economy.resolve_deaths has a revive branch to take), a mana shield, and a \
+                    Vulnerability-Pulse aura driving Status.pulse; also poisons enemies, which \
+                    gives poison DoT a second cover.",
     },
     TraceSpec {
         name: "short-seed-3",
         seed: 3,
         ticks: 6000,
         challenge: Challenge::None,
-        exercises: "SHORT inner loop: 6 round boundaries, a tanky build's weapon floor and \
-                    defensive modifier purchases, active time-scaling ramps",
+        exercises: "SHORT inner loop: 6 round boundaries, a lean build's weapon floor, the \
+                    economy-snowball modifier window, and the first Clear activations",
     },
     TraceSpec {
         name: "mid-seed-12",
@@ -133,87 +188,95 @@ pub const TRACES: &[TraceSpec] = &[
         ticks: 18000,
         challenge: Challenge::None,
         exercises: "MEDIUM: through the 10-min roster step (scale_step_1_tick), 3 difficulty \
-                    ramp intervals, a balanced build mid-snowball, mana shield + stuns",
+                    ramp intervals, a balanced build mid-snowball, fire stacks + stuns + \
+                    vulnerability stacks on a 160-enemy board",
     },
     TraceSpec {
         name: "full-seed-0",
         seed: 0,
         ticks: FULL_TICKS,
         challenge: Challenge::None,
-        exercises: "FULL baseline: balanced archetype; boss spawn + escort flood; dies at \
-                    death_tick 54400 inside the boss phase, then runs the dead \
-                    short-circuit to the end",
+        exercises: "FULL baseline, MINIONS: a summoner build (the only default-bot trace \
+                    that fields minions, so it drives Combat.tick_minions without a purist); \
+                    dies at death_tick 7114, so ~48k ticks of the post-death short-circuit \
+                    follow, boss tick included",
     },
     TraceSpec {
         name: "full-seed-5",
         seed: 5,
         ticks: FULL_TICKS,
         challenge: Challenge::None,
-        exercises: "FULL, EARLY DEATH at death_tick 29409 — ~25.8k ticks of the post-death \
+        exercises: "FULL, MID-GAME DEATH at death_tick 16551 — ~38.6k ticks of the post-death \
                     short-circuit. The boss tick passes while dead, so it also proves waves \
-                    and every other phase stay frozen after death",
+                    and every other phase stay frozen after death. Reaches spikes retaliation \
+                    and fire stacks on the way there",
     },
     TraceSpec {
         name: "full-seed-14",
         seed: 14,
         ticks: FULL_TICKS,
         challenge: Challenge::None,
-        exercises: "FULL, NEVER DIES — the only trace with no short-circuit anywhere, so all \
-                    21 phases run on all 55200 ticks including the whole boss phase",
+        exercises: "FULL, LATE DEATH at death_tick 32956 — the longest-running default build \
+                    that still dies before the boss, so it holds a 200-enemy board through 36 \
+                    rounds of difficulty ramp (the widest wave/targeting workload of any \
+                    default trace) and also drives the time-scaling ramps",
     },
     TraceSpec {
         name: "full-seed-67",
         seed: 67,
         ticks: FULL_TICKS,
         challenge: Challenge::None,
-        exercises: "FULL, EXOTIC: the damage/poison AURA (Blight Aura -> Combat.tickAura) and \
-                    Vulnerability-Pulse auras (Status.pulse) — the only trace that reaches \
-                    tick_aura with a live cadence",
+        exercises: "FULL, FAT ARSENAL: the widest default-bot weapon count (19 buys), so it is \
+                    the trace that stresses per-tick weapon iteration, arsenal-synergy scaling \
+                    and weapon_count_scaling; dies at death_tick 21020",
     },
     TraceSpec {
         name: "full-seed-189",
         seed: 189,
         ticks: FULL_TICKS,
         challenge: Challenge::None,
-        exercises: "FULL, META: arms a PENDING PERK (duplicator / Black-Market voucher), the \
-                    Input.apply branch where one BuyOffer grants several instances or costs \
-                    nothing; survives to the end",
+        exercises: "FULL, DEATH INSIDE THE RAMP TAIL at death_tick 44092, and the heaviest \
+                    board of any default trace (290 enemies): the frost/stun corner of \
+                    Status.tick under load, plus 136 Clear activations",
     },
     TraceSpec {
         name: "full-seed-272",
         seed: 272,
         ticks: FULL_TICKS,
         challenge: Challenge::None,
-        exercises: "FULL, REVIVE: buys Ankh of Reconstruction, so economy.resolve_deaths takes \
-                    the revive branch instead of setting dead; also vuln pulses and stuns",
+        exercises: "FULL, NEVER DIES on the default bot — no short-circuit anywhere, so all 21 \
+                    phases run on all 55200 ticks, including the whole boss phase and the \
+                    escort flood. The one default trace that both survives and spawns the \
+                    boss; also drives the time-scaling ramps",
     },
     TraceSpec {
         name: "full-seed-311",
         seed: 311,
         ticks: FULL_TICKS,
         challenge: Challenge::None,
-        exercises: "FULL, FROST: frost stacks reaching FROST_MAX_STACKS and the Deep-Freeze \
-                    payoff (freeze_ticks), plus poison and vuln pulses — the coldest corner \
-                    of Status.tick",
+        exercises: "FULL, SECOND MINION COVER: minions plus spikes retaliation, time-scaling \
+                    ramps and stuns on a starved economy (the lowest final_gold of any default \
+                    trace); dies early at death_tick 7720",
     },
     TraceSpec {
         name: "purist3-seed-7",
         seed: 7,
         ticks: FULL_TICKS,
         challenge: Challenge::Purist(3),
-        exercises: "FULL, WEAPON ABILITIES: an Area-class purist buys Shroom Doom and Boom \
-                    Bloom, so this is the trace that drives Combat.tickMinions AND \
-                    Combat.tickHazards. ~9k input events (the purist rerolls to fish), which \
-                    also stresses Shop.generateOffers and the reroll economy",
+        exercises: "FULL, WEAPON ABILITIES: an Area-class purist buys Shroom Doom, so this is \
+                    the only trace that drives Combat.tickMinions across the boss phase. ~9.6k \
+                    input events (the purist rerolls to fish), which also stresses \
+                    Shop.generateOffers and the reroll economy",
     },
     TraceSpec {
         name: "purist4-seed-8",
         seed: 8,
         ticks: FULL_TICKS,
         challenge: Challenge::Purist(4),
-        exercises: "FULL, HAZARDS: a Wave-class purist (Boom Bloom mine fields, Bloody Spikes \
-                    stacking) — second, independent cover for Combat.tickHazards plus the \
-                    stacking-spikes round reset",
+        exercises: "FULL, HAZARDS + POISON: a Wave-class purist (Boom Bloom mine fields, \
+                    Bloody Spikes stacking) — the only FULL-length cover for \
+                    Combat.tickHazards and for poison DoT, plus the stacking-spikes round \
+                    reset. purist4-seed-3045 is the cheap second cover for hazards",
     },
 ];
 

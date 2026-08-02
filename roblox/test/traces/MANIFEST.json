@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_hash": "580b37289e41990d",
+  "content_hash": "e98659256ef42d62",
   "trace_schema_version": 1,
   "player_id": 0,
   "tick_hz": 30,
@@ -15,26 +15,19 @@
     "hazard": true,
     "minion": true,
     "ramp": true,
-    "vulnpulse": false,
-    "perk": false,
+    "vulnpulse": true,
+    "perk": true,
     "poison": true,
     "frost": true,
     "fire": true,
     "stun": true,
-    "freeze": false,
+    "freeze": true,
     "vulnstack": true,
-    "aura": false,
-    "revive": false,
-    "shield": false
+    "aura": true,
+    "revive": true,
+    "shield": true
   },
-  "coverage_missing": [
-    "vulnpulse",
-    "perk",
-    "freeze",
-    "aura",
-    "revive",
-    "shield"
-  ],
+  "coverage_missing": [],
   "traces": [
     {
       "name": "smoke-seed-4",
@@ -44,8 +37,52 @@
       "bytes": 20575,
       "bot": "default",
       "input_events": 123,
-      "exercises": "SMOKE (fastest inner loop, ~20 KB): tick-0 shop generation, the first round boundary at 900, opening buys, early spawns, projectile flight and poison DoT. Start here when bringing a module up.",
+      "exercises": "SMOKE (fastest inner loop, ~20 KB): tick-0 shop generation, the first round boundary at 900, opening buys, early spawns and projectile flight. No status effect lands this early, so a divergence here is in the core loop rather than in Status. Start here when bringing a module up.",
       "coverage": {"buys":120,"weapon_buys":2,"modifier_buys":118,"rerolls":3,"clears":0,"weapons_bought":2,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":10,"max_projectiles":1,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":4390546,"total_damage_dealt":15458}
+    },
+    {
+      "name": "purist4-seed-3045",
+      "file": "purist4-seed-3045.json",
+      "seed": 3045,
+      "ticks": 1200,
+      "bytes": 27717,
+      "bot": "purist-4",
+      "input_events": 182,
+      "exercises": "PROBE, HAZARDS + PENDING PERK (1200 ticks): a Wave-class purist that lays a mine field and arms a duplicator/voucher inside the first 40 s. Second, cheap cover for Combat.tickHazards and for the Input.apply pending-perk branch, both of which otherwise ride on a single 55200-tick purist trace.",
+      "coverage": {"buys":152,"weapon_buys":137,"modifier_buys":15,"rerolls":26,"clears":4,"weapons_bought":137,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":11,"max_projectiles":1,"saw_hazards":true,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":true,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":3237,"total_damage_dealt":509768}
+    },
+    {
+      "name": "short-seed-8855",
+      "file": "short-seed-8855.json",
+      "seed": 8855,
+      "ticks": 2100,
+      "bytes": 46846,
+      "bot": "default",
+      "input_events": 262,
+      "exercises": "PROBE, AURA + PENDING PERK (2100 ticks): buys Blight Aura, so this is the only trace that reaches Combat.tickAura with a live cadence; also arms a PendingPerk and stacks vulnerability.",
+      "coverage": {"buys":257,"weapon_buys":7,"modifier_buys":250,"rerolls":5,"clears":0,"weapons_bought":7,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":10,"max_projectiles":5,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":true,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":true,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":1541061,"total_damage_dealt":74414}
+    },
+    {
+      "name": "short-seed-13430",
+      "file": "short-seed-13430.json",
+      "seed": 13430,
+      "ticks": 2100,
+      "bytes": 46995,
+      "bot": "default",
+      "input_events": 268,
+      "exercises": "PROBE, DEEP FREEZE (2100 ticks): frost stacks reach FROST_MAX_STACKS and convert into freeze_ticks — the only trace that reaches the Deep-Freeze payoff in Status.tick. Also arms a PendingPerk.",
+      "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":0,"weapons_bought":13,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":14,"max_projectiles":15,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":true,"saw_poison":false,"saw_frost":true,"saw_fire":false,"saw_stun":false,"saw_freeze":true,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":52910930,"total_damage_dealt":74376}
+    },
+    {
+      "name": "short-seed-12283",
+      "file": "short-seed-12283.json",
+      "seed": 12283,
+      "ticks": 2400,
+      "bytes": 52693,
+      "bot": "default",
+      "input_events": 268,
+      "exercises": "PROBE, REVIVE + MANA SHIELD + VULN PULSE (2400 ticks): buys a revive (so economy.resolve_deaths has a revive branch to take), a mana shield, and a Vulnerability-Pulse aura driving Status.pulse; also poisons enemies, which gives poison DoT a second cover.",
+      "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":0,"weapons_bought":13,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":12,"max_projectiles":17,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":true,"saw_pending_perk":false,"saw_poison":true,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":true,"saw_mana_shield":true,"saw_spikes":false,"final_gold":582676,"total_damage_dealt":349296}
     },
     {
       "name": "short-seed-3",
@@ -55,7 +92,7 @@
       "bytes": 121113,
       "bot": "default",
       "input_events": 269,
-      "exercises": "SHORT inner loop: 6 round boundaries, a tanky build's weapon floor and defensive modifier purchases, active time-scaling ramps",
+      "exercises": "SHORT inner loop: 6 round boundaries, a lean build's weapon floor, the economy-snowball modifier window, and the first Clear activations",
       "coverage": {"buys":257,"weapon_buys":7,"modifier_buys":250,"rerolls":5,"clears":7,"weapons_bought":7,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":20,"max_projectiles":5,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":69379317,"total_damage_dealt":4426162}
     },
     {
@@ -66,7 +103,7 @@
       "bytes": 350403,
       "bot": "default",
       "input_events": 317,
-      "exercises": "MEDIUM: through the 10-min roster step (scale_step_1_tick), 3 difficulty ramp intervals, a balanced build mid-snowball, mana shield + stuns",
+      "exercises": "MEDIUM: through the 10-min roster step (scale_step_1_tick), 3 difficulty ramp intervals, a balanced build mid-snowball, fire stacks + stuns + vulnerability stacks on a 160-enemy board",
       "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":49,"weapons_bought":13,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":163,"max_projectiles":20,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":39531612,"total_damage_dealt":17194846}
     },
     {
@@ -77,7 +114,7 @@
       "bytes": 1056216,
       "bot": "default",
       "input_events": 281,
-      "exercises": "FULL baseline: balanced archetype; boss spawn + escort flood; dies at death_tick 54400 inside the boss phase, then runs the dead short-circuit to the end",
+      "exercises": "FULL baseline, MINIONS: a summoner build (the only default-bot trace that fields minions, so it drives Combat.tick_minions without a purist); dies at death_tick 7114, so ~48k ticks of the post-death short-circuit follow, boss tick included",
       "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":13,"weapons_bought":13,"death_tick":7114,"reached_boss_phase":true,"boss_spawned":false,"max_enemies":48,"max_projectiles":7,"saw_hazards":false,"saw_minions":true,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":375679064,"total_damage_dealt":1353846}
     },
     {
@@ -88,7 +125,7 @@
       "bytes": 1057112,
       "bot": "default",
       "input_events": 316,
-      "exercises": "FULL, EARLY DEATH at death_tick 29409 — ~25.8k ticks of the post-death short-circuit. The boss tick passes while dead, so it also proves waves and every other phase stay frozen after death",
+      "exercises": "FULL, MID-GAME DEATH at death_tick 16551 — ~38.6k ticks of the post-death short-circuit. The boss tick passes while dead, so it also proves waves and every other phase stay frozen after death. Reaches spikes retaliation and fire stacks on the way there",
       "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":48,"weapons_bought":13,"death_tick":16551,"reached_boss_phase":true,"boss_spawned":false,"max_enemies":158,"max_projectiles":1,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":47702799,"total_damage_dealt":43123804}
     },
     {
@@ -99,7 +136,7 @@
       "bytes": 1058447,
       "bot": "default",
       "input_events": 364,
-      "exercises": "FULL, NEVER DIES — the only trace with no short-circuit anywhere, so all 21 phases run on all 55200 ticks including the whole boss phase",
+      "exercises": "FULL, LATE DEATH at death_tick 32956 — the longest-running default build that still dies before the boss, so it holds a 200-enemy board through 36 rounds of difficulty ramp (the widest wave/targeting workload of any default trace) and also drives the time-scaling ramps",
       "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":96,"weapons_bought":13,"death_tick":32956,"reached_boss_phase":true,"boss_spawned":false,"max_enemies":206,"max_projectiles":22,"saw_hazards":false,"saw_minions":false,"saw_ramps":true,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":556330525,"total_damage_dealt":151623811}
     },
     {
@@ -110,7 +147,7 @@
       "bytes": 1057503,
       "bot": "default",
       "input_events": 331,
-      "exercises": "FULL, EXOTIC: the damage/poison AURA (Blight Aura -> Combat.tickAura) and Vulnerability-Pulse auras (Status.pulse) — the only trace that reaches tick_aura with a live cadence",
+      "exercises": "FULL, FAT ARSENAL: the widest default-bot weapon count (19 buys), so it is the trace that stresses per-tick weapon iteration, arsenal-synergy scaling and weapon_count_scaling; dies at death_tick 21020",
       "coverage": {"buys":269,"weapon_buys":19,"modifier_buys":250,"rerolls":5,"clears":57,"weapons_bought":19,"death_tick":21020,"reached_boss_phase":true,"boss_spawned":false,"max_enemies":163,"max_projectiles":22,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":95503414,"total_damage_dealt":28760184}
     },
     {
@@ -121,7 +158,7 @@
       "bytes": 1059301,
       "bot": "default",
       "input_events": 400,
-      "exercises": "FULL, META: arms a PENDING PERK (duplicator / Black-Market voucher), the Input.apply branch where one BuyOffer grants several instances or costs nothing; survives to the end",
+      "exercises": "FULL, DEATH INSIDE THE RAMP TAIL at death_tick 44092, and the heaviest board of any default trace (290 enemies): the frost/stun corner of Status.tick under load, plus 136 Clear activations",
       "coverage": {"buys":259,"weapon_buys":9,"modifier_buys":250,"rerolls":5,"clears":136,"weapons_bought":9,"death_tick":44092,"reached_boss_phase":true,"boss_spawned":false,"max_enemies":290,"max_projectiles":9,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":true,"saw_fire":false,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":124410286,"total_damage_dealt":480849516}
     },
     {
@@ -132,7 +169,7 @@
       "bytes": 1060481,
       "bot": "default",
       "input_events": 442,
-      "exercises": "FULL, REVIVE: buys Ankh of Reconstruction, so economy.resolve_deaths takes the revive branch instead of setting dead; also vuln pulses and stuns",
+      "exercises": "FULL, NEVER DIES on the default bot — no short-circuit anywhere, so all 21 phases run on all 55200 ticks, including the whole boss phase and the escort flood. The one default trace that both survives and spawns the boss; also drives the time-scaling ramps",
       "coverage": {"buys":269,"weapon_buys":19,"modifier_buys":250,"rerolls":5,"clears":168,"weapons_bought":19,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":267,"max_projectiles":13,"saw_hazards":false,"saw_minions":false,"saw_ramps":true,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":553275920,"total_damage_dealt":933497543}
     },
     {
@@ -143,7 +180,7 @@
       "bytes": 1056266,
       "bot": "default",
       "input_events": 283,
-      "exercises": "FULL, FROST: frost stacks reaching FROST_MAX_STACKS and the Deep-Freeze payoff (freeze_ticks), plus poison and vuln pulses — the coldest corner of Status.tick",
+      "exercises": "FULL, SECOND MINION COVER: minions plus spikes retaliation, time-scaling ramps and stuns on a starved economy (the lowest final_gold of any default trace); dies early at death_tick 7720",
       "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":15,"weapons_bought":13,"death_tick":7720,"reached_boss_phase":true,"boss_spawned":false,"max_enemies":53,"max_projectiles":9,"saw_hazards":false,"saw_minions":true,"saw_ramps":true,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":32627159,"total_damage_dealt":1799722}
     },
     {
@@ -154,7 +191,7 @@
       "bytes": 1296971,
       "bot": "purist-3",
       "input_events": 9584,
-      "exercises": "FULL, WEAPON ABILITIES: an Area-class purist buys Shroom Doom and Boom Bloom, so this is the trace that drives Combat.tickMinions AND Combat.tickHazards. ~9k input events (the purist rerolls to fish), which also stresses Shop.generateOffers and the reroll economy",
+      "exercises": "FULL, WEAPON ABILITIES: an Area-class purist buys Shroom Doom, so this is the only trace that drives Combat.tickMinions across the boss phase. ~9.6k input events (the purist rerolls to fish), which also stresses Shop.generateOffers and the reroll economy",
       "coverage": {"buys":9248,"weapon_buys":8976,"modifier_buys":272,"rerolls":153,"clears":183,"weapons_bought":8976,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":260,"max_projectiles":2,"saw_hazards":false,"saw_minions":true,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":12488566,"total_damage_dealt":232611872430}
     },
     {
@@ -165,7 +202,7 @@
       "bytes": 1299552,
       "bot": "purist-4",
       "input_events": 9684,
-      "exercises": "FULL, HAZARDS: a Wave-class purist (Boom Bloom mine fields, Bloody Spikes stacking) — second, independent cover for Combat.tickHazards plus the stacking-spikes round reset",
+      "exercises": "FULL, HAZARDS + POISON: a Wave-class purist (Boom Bloom mine fields, Bloody Spikes stacking) — the only FULL-length cover for Combat.tickHazards and for poison DoT, plus the stacking-spikes round reset. purist4-seed-3045 is the cheap second cover for hazards",
       "coverage": {"buys":9376,"weapon_buys":9145,"modifier_buys":231,"rerolls":125,"clears":183,"weapons_bought":9145,"death_tick":null,"reached_boss_phase":true,"boss_spawned":true,"max_enemies":263,"max_projectiles":33,"saw_hazards":true,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":true,"saw_frost":true,"saw_fire":true,"saw_stun":true,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":3549620,"total_damage_dealt":3262101222067}
     }
   ]
