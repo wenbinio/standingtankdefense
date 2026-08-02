@@ -496,10 +496,10 @@ static MODIFIERS: [Entry; NUM_MODIFIERS] = [
         flavor: "Ten per cent more of whatever the meters measure. Nobody currently at this site can tell you what the meters measure.",
         tip: "+10% magic damage.",
     },
-    Entry {  // 4 — ×1.25 multiplicative
+    Entry {  // 4 — ×1.4 multiplicative
         name: "Sanction: Unrestricted",
         flavor: "One sheet, countersigned by an office that does not answer its telephone.",
-        tip: "×1.25 damage — multiplicative, on top of everything else.",
+        tip: "×1.4 damage — multiplicative, on top of everything else.",
     },
     Entry {  // 5 — Rapidfire, +10% attack speed
         name: "Duty Cycle Override",
@@ -531,20 +531,20 @@ static MODIFIERS: [Entry; NUM_MODIFIERS] = [
         flavor: "Weighs the remains and prices them.",
         tip: "+100% kill bounty; 5% of kills pay a further +200% of base bounty.",
     },
-    Entry {  // 11 — Imbued Masonry: +2000 max HP then +25%
+    Entry {  // 11 — Imbued Masonry: +4000 max HP then +25%
         name: "Poured Reinforcement",
         flavor: "Concrete over concrete over the original concrete, poured to a schedule that has not been reviewed since the schedule was written. The original is still in there and is still the part that holds.",
-        tip: "+2000 max HP, then +25% of max HP on top.",
+        tip: "+4000 max HP, then +25% of max HP on top.",
     },
     Entry {  // 12 — +10 flat armour
         name: "Plate Retrofit",
         flavor: "Bolted on during a night shift with no work order and no sign-off.",
         tip: "+10 flat armour — shaved off every incoming hit.",
     },
-    Entry {  // 13 — Moonwell: +2000 shield, 10/tick regen
+    Entry {  // 13 — Moonwell: +4000 shield, 10/tick regen
         name: "Reservoir Tap",
         flavor: "Something beneath the site refills faster than we can draw from it.",
-        tip: "+2000 shield pool, refilling 10 a tick.",
+        tip: "+4000 shield pool, refilling 10 a tick.",
     },
     Entry {  // 14 — +50 HP regen per tick
         name: "Standing Repair Order",
@@ -666,10 +666,10 @@ static MODIFIERS: [Entry; NUM_MODIFIERS] = [
         flavor: "Everything inside the marker is logged as already injured. The logging appears to be doing the work.",
         tip: "Enemies within 1200 take +5% more damage each second, stacking without limit.",
     },
-    Entry {  // 38 — Mask of Death: +1000 max HP, +15 heal on kill
+    Entry {  // 38 — Mask of Death: +2500 max HP, +15 heal on kill
         name: "Attrition Ledger",
         flavor: "Each death out in the corridor is entered as a credit against the anchor's condition.",
-        tip: "+1000 max HP, and +15 HP repaired per enemy killed.",
+        tip: "+2500 max HP, and +15 HP repaired per enemy killed.",
     },
     Entry {  // 39 — +60 heal on kill
         name: "Deep Attrition Clause",
@@ -711,10 +711,10 @@ static MODIFIERS: [Entry; NUM_MODIFIERS] = [
         flavor: "Everything the anchor is given now goes further. Medical are reluctant to explain why they had been holding back.",
         tip: "+25% to all healing you receive.",
     },
-    Entry {  // 47 — Living Wood: +2000 max HP, 1.5% missing HP per second
+    Entry {  // 47 — Living Wood: +4000 max HP, 1.5% missing HP per second
         name: "Structural Growth",
         flavor: "Something is growing through the anchor's plating. It closes the worst wounds fastest.",
-        tip: "+2000 max HP, and heals 1.5% of missing HP every second.",
+        tip: "+4000 max HP, and heals 1.5% of missing HP every second.",
     },
     Entry {  // 48 — Enchanted Moon Arrow: +100% piercing, +1% per Bow
         name: "Revised Fletching Standard",
@@ -756,15 +756,15 @@ static MODIFIERS: [Entry; NUM_MODIFIERS] = [
         flavor: "A quarter of every payment is diverted into the anchor's field before it reaches the account. Nobody set this up.",
         tip: "25% of every income payout also tops up your shield.",
     },
-    Entry {  // 56 — Aegis Protocol: +2500 shield, +400 per 30 s
+    Entry {  // 56 — Aegis Protocol: +5000 shield, +800 per 30 s
         name: "Escalating Containment Field",
         flavor: "The field studies each siege as it happens and comes back thicker.",
-        tip: "+2500 shield (20 a tick), growing +400 more every 30 seconds.",
+        tip: "+5000 shield (20 a tick), growing +800 more every 30 seconds.",
     },
-    Entry {  // 57 — Improved Masonry: +500 max HP
+    Entry {  // 57 — Improved Masonry: +1500 max HP
         name: "Patch Plate",
         flavor: "Cut from a plate that was itself a patch. There is a seam under the seam.",
-        tip: "+500 max HP.",
+        tip: "+1500 max HP.",
     },
     Entry {  // 58 — Greater Piercing Attacks: +10% piercing
         name: "Bonded Spare Quiver",
@@ -786,30 +786,30 @@ static MODIFIERS: [Entry; NUM_MODIFIERS] = [
         flavor: "Signed for with a single initial that corresponds to nobody on the roster. The crates went out.",
         tip: "+10% chaos damage.",
     },
-    Entry {  // 62 — +1000 max HP
+    Entry {  // 62 — +2500 max HP
         name: "Salvaged Hull Section",
         flavor: "Cut off an anchor that stopped answering on Sublevel 6 and welded over the anchor that still does.",
-        tip: "+1000 max HP.",
+        tip: "+2500 max HP.",
     },
     Entry {  // 63 — +10 armour
         name: "Armour Ration",
         flavor: "One issue per anchor per quarter, drawn against Form 6 and countersigned by the duty supervisor, who is required to inspect the plate for delamination and prior use before it leaves the store, and who has never found any.",
         tip: "+10 flat armour.",
     },
-    Entry {  // 64 — +2000 max HP
+    Entry {  // 64 — +4000 max HP
         name: "Heavy Plate Allocation",
         flavor: "Pulled off an anchor that held this corridor through three incidents.",
-        tip: "+2000 max HP.",
+        tip: "+4000 max HP.",
     },
     Entry {  // 65 — +50% kill bounty
         name: "Body Count Premium",
         flavor: "Accounting run the tally generous when the tally gets this long. The alternative is a per-item form, in triplicate, for every body, and Accounting have costed the paper.",
         tip: "+50% gold per kill.",
     },
-    Entry {  // 66 — Recharge: +2000 shield, then +25% shield regen
+    Entry {  // 66 — Recharge: +4000 shield, then +25% shield regen
         name: "Field Recharge Cycle",
         flavor: "Draws the pool back up a quarter faster than it drains.",
-        tip: "+2000 shield (10 a tick), then +25% to shield regeneration.",
+        tip: "+4000 shield (10 a tick), then +25% to shield regeneration.",
     },
     Entry {  // 67 — +20 gold income per tick
         name: "Standing Salvage Line",
@@ -861,10 +861,10 @@ static MODIFIERS: [Entry; NUM_MODIFIERS] = [
         flavor: "More than this corridor has ever been allocated. It arrived without a covering note or a requesting department.",
         tip: "+40 HP repaired per tick.",
     },
-    Entry {  // 77 — Energy Shield: +10000 shield, -30% damage while it holds
+    Entry {  // 77 — Energy Shield: +20000 shield, -30% damage while it holds
         name: "Full Envelope",
         flavor: "The anchor disappears inside its own field. Personnel report that it is quieter in there. Two of them have asked to go back in, and there is no form for that yet.",
-        tip: "+10000 shield (50 a tick), and -30% to ALL damage taken while the shield holds.",
+        tip: "+20000 shield (50 a tick), and -30% to ALL damage taken while the shield holds.",
     },
     Entry {  // 78 — Evasion: +10% dodge
         name: "Institutional Bad Habits",
@@ -876,45 +876,45 @@ static MODIFIERS: [Entry; NUM_MODIFIERS] = [
         flavor: "Payments rise with the length of the incident. The incident has no defined end.",
         tip: "+100% kill bounty now, +15% more every 30 seconds.",
     },
-    Entry {  // 80 — Living Fortress: +2500 max HP, +500 per 30 s
+    Entry {  // 80 — Living Fortress: +5000 max HP, +800 per 30 s
         name: "Continuous Pour",
         flavor: "The concrete never stops arriving. Nobody drives the trucks, and the trucks are punctual.",
-        tip: "+2500 max HP, +500 more every 30 seconds.",
+        tip: "+5000 max HP, +800 more every 30 seconds.",
     },
-    Entry {  // 81 — Mana Shield: +1000 shield
+    Entry {  // 81 — Mana Shield: +2000 shield
         name: "Thin Envelope",
         flavor: "Enough field to spend before the plating has to. Medical call it a buffer. Personnel call it first.",
-        tip: "+1000 shield (5 a tick).",
+        tip: "+2000 shield (5 a tick).",
     },
     Entry {  // 82 — Mending Engine: +120 regen, +30 per 30 s
         name: "Self-Improving Repair Loop",
         flavor: "It gets better at the job the longer the job goes on. It is the only thing on site that does.",
         tip: "+120 HP regen per tick, +30 more every 30 seconds.",
     },
-    Entry {  // 83 — Mastercrafted Masonry: +5000 max HP, +1% damage per 2000 max HP
+    Entry {  // 83 — Mastercrafted Masonry: +8000 max HP, +1% damage per 2000 max HP
         name: "Load-Bearing Doctrine",
         flavor: "The site engineer determined that a wall, made thick enough, becomes a weapon. He was correct, and he has been reassigned.",
-        tip: "+5000 max HP, and +1% damage for every 2000 max HP you have — recalculated live.",
+        tip: "+8000 max HP, and +1% damage for every 2000 max HP you have — recalculated live.",
     },
     Entry {  // 84 — Golden Ring: +200% bounty, +1% damage per 50% bounty
         name: "Procurement Signet",
         flavor: "Worn smooth on the body ledger. The richer the count it keeps, the meaner the register becomes about keeping it.",
         tip: "+200% kill bounty, and +1% damage for every 50% bounty above base.",
     },
-    Entry {  // 85 — Arcane Mark: +4000 shield, +20% damage while it holds
+    Entry {  // 85 — Arcane Mark: +8000 shield, +20% damage while it holds
         name: "Inward-Facing Sigil",
         flavor: "Cut into the inner face of the field housing, pointing at the anchor.",
-        tip: "+4000 shield (20 a tick), and +20% damage while the shield is up.",
+        tip: "+8000 shield (20 a tick), and +20% damage while the shield is up.",
     },
-    Entry {  // 86 — Maw of Death: +2000 shield, +15 shield per kill
+    Entry {  // 86 — Maw of Death: +4000 shield, +15 shield per kill
         name: "Reversed Intake",
         flavor: "The field was built to keep things out. At some point it began accepting deliveries.",
-        tip: "+2000 shield (10 a tick), and +15 shield restored per enemy killed.",
+        tip: "+4000 shield (10 a tick), and +15 shield restored per enemy killed.",
     },
-    Entry {  // 87 — Energy Pulse: +2000 shield; break stuns 1200 for 0.5 s
+    Entry {  // 87 — Energy Pulse: +4000 shield; break stuns 1200 for 0.5 s
         name: "Documented Failure Mode",
         flavor: "When the field fails, it fails outward. This was discovered rather than designed and written up afterwards as a feature.",
-        tip: "+2000 shield (10 a tick); when it breaks, stun everything within 1200 for half a second.",
+        tip: "+4000 shield (10 a tick); when it breaks, stun everything within 1200 for half a second.",
     },
     Entry {  // 88 — Poison Armor: +10 armour, +40 spikes, spikes poison
         name: "Septic Cladding",

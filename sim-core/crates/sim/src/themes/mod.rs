@@ -10,13 +10,15 @@
 //! - Indices are identity. A pack may not add, remove or reorder an entry; the
 //!   arrays are fixed-length and a test pins them to the catalog's length.
 //! - Flavor may lie to the player. The **tip may not** — it is the mechanical
-//!   truth about `content.rs`, in every pack.
+//!   truth about `content.rs`, in every pack. Balance passes move that truth, so
+//!   [`tests::modifier_tips_quote_the_catalog_magnitudes`] and its neighbours
+//!   re-derive every quoted magnitude from the catalog rather than trusting it.
 //!
 //! Two packs ship:
 //!
 //! | id | register |
 //! | --- | --- |
-//! | `wardens` | the original grim dark fantasy; the Steam default. Text migrated verbatim from `descriptions.rs`. |
+//! | `wardens` | the original grim dark fantasy; the Steam default. Text migrated from `descriptions.rs`, figures kept current with `content.rs`. |
 //! | `facility` | the Roblox fork's containment-log deadpan (`docs/12 §12.4`). Original fiction in the genre — see `§12.5`. |
 //!
 //! ### Display names
@@ -203,6 +205,290 @@ mod tests {
         // Wardens declines to rename: names fall through to the catalog.
         assert_eq!(wardens::PACK.weapon_name(0), content::WEAPONS[0].name);
         assert_eq!(wardens::PACK.modifier_name(0), content::MODIFIERS[0].name);
+    }
+
+    // ================= tips vs. the catalog's real magnitudes =================
+    //
+    // `docs/12 §12.5`, last line: "Every mechanical **tip** must stay accurate.
+    // Flavor may lie to the player; the tip may not."
+    //
+    // The failure this guards against has already happened: `docs/11 §11.8`
+    // roughly doubled every Max-HP grant and every Mana-Shield pool grant in
+    // `content.rs`, and both packs went on quoting the pre-retune figures. The
+    // checks below re-derive every figure FROM `content::MODIFIERS`/`WEAPONS`, so
+    // the next balance pass breaks a test instead of quietly turning two dozen
+    // tips into lies. They deliberately do not parse English: each one NAMES the
+    // entries it covers, so a tip dropping off the list is visible in a diff.
+
+    /// `b[k]` continues a number leftward: a digit, or the point of a decimal such
+    /// as `1.5` (a sentence-ending `300.` does not).
+    fn joins_left(b: &[u8], k: usize) -> bool {
+        b[k].is_ascii_digit() || (b[k] == b'.' && k >= 1 && b[k - 1].is_ascii_digit())
+    }
+    /// `b[k]` continues a number rightward; mirror of [`joins_left`].
+    fn joins_right(b: &[u8], k: usize) -> bool {
+        b[k].is_ascii_digit() || (b[k] == b'.' && k + 1 < b.len() && b[k + 1].is_ascii_digit())
+    }
+
+    /// `n` appears in `tip` as a standalone number — not inside a longer number,
+    /// and not as one half of a decimal.
+    fn quotes(tip: &str, n: i64) -> bool {
+        let needle = n.to_string();
+        let b = tip.as_bytes();
+        let mut from = 0;
+        while let Some(off) = tip[from..].find(&needle) {
+            let at = from + off;
+            let end = at + needle.len();
+            let left = at == 0 || !joins_left(b, at - 1);
+            let right = end == b.len() || !joins_right(b, end);
+            if left && right {
+                return true;
+            }
+            from = at + 1;
+        }
+        false
+    }
+
+    /// Every standalone integer in `tip`. Decimals (`1.5`, `0.5`) are skipped —
+    /// they are ratios the cases below express as their own figures.
+    fn integers(tip: &str) -> Vec<i64> {
+        let b = tip.as_bytes();
+        let (mut out, mut i) = (Vec::new(), 0);
+        while i < b.len() {
+            if !b[i].is_ascii_digit() {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < b.len() && b[i].is_ascii_digit() {
+                i += 1;
+            }
+            let dec = (start > 0 && joins_left(b, start - 1)) || (i < b.len() && joins_right(b, i));
+            if !dec {
+                out.push(tip[start..i].parse().expect("a run of digits parses"));
+            }
+        }
+        out
+    }
+
+    /// Below this a number in one of these tips is a percentage, a per-tick rate or
+    /// a count; at or above it, it is a POOL — a Max-HP or Mana-Shield magnitude,
+    /// i.e. exactly what `§11.8` moved. Every pool-sized number in a covered tip
+    /// has to be one the catalog explains.
+    const POOL_FLOOR: i64 = 500;
+
+    fn modifier_def(i: u16) -> &'static content::ModifierDef {
+        &content::MODIFIERS[i as usize]
+    }
+
+    /// Σ of the entry's flat `MaxHp` grants.
+    fn max_hp(i: u16) -> i64 {
+        modifier_def(i)
+            .effects
+            .iter()
+            .filter_map(|e| match e {
+                content::ModEffect::MaxHp(n) => Some(*n),
+                _ => None,
+            })
+            .sum()
+    }
+
+    /// The pool of the entry's `ManaShield` grant.
+    fn shield_pool(i: u16) -> i64 {
+        one(i, |e| match e {
+            content::ModEffect::ManaShield(p, _) => Some(vec![*p]),
+            _ => None,
+        })[0]
+    }
+
+    /// What the entry's per-round ramp re-applies, as one figure.
+    fn ramp(i: u16) -> i64 {
+        let r = modifier_def(i).ramp.unwrap_or_else(|| panic!("modifier[{i}] has no ramp"));
+        match r.effect {
+            content::ModEffect::MaxHp(n) => n,
+            content::ModEffect::ManaShield(p, _) => p,
+            other => panic!("modifier[{i}] ramps {other:?}, which no tip below quotes"),
+        }
+    }
+
+    /// The figures of the first effect `f` matches.
+    fn one(i: u16, f: impl Fn(&content::ModEffect) -> Option<Vec<i64>>) -> Vec<i64> {
+        modifier_def(i)
+            .effects
+            .iter()
+            .find_map(f)
+            .unwrap_or_else(|| panic!("modifier[{i}] lost the effect its tip describes"))
+    }
+
+    /// `(index, figures every pack's tip must quote, further pool-sized numbers it
+    /// is allowed to contain)`. The allowances are constants that are NOT this
+    /// entry's own grant, so they must not move with the pool.
+    fn numeric_tip_cases() -> Vec<(u16, Vec<i64>, Vec<i64>)> {
+        let pct = |i| {
+            one(i, |e| match e {
+                content::ModEffect::IncomePct(n, d) => Some(vec![n * 100 / d]),
+                _ => None,
+            })
+        };
+        let per_damage = |i| {
+            one(i, |e| match e {
+                content::ModEffect::GoldPerDamagePct(n, d) => Some(vec![*n, *d]),
+                _ => None,
+            })
+        };
+        let income = |i| {
+            one(i, |e| match e {
+                content::ModEffect::IncomeFlat(n) => Some(vec![*n]),
+                _ => None,
+            })
+        };
+        vec![
+            // ---- `docs/11 §11.8`: the Max-HP grants ----
+            (11, vec![max_hp(11)], vec![]), // Imbued Masonry
+            (38, vec![max_hp(38)], vec![]), // Mask of Death
+            (47, vec![max_hp(47)], vec![]), // Living Wood
+            (57, vec![max_hp(57)], vec![]), // Improved Masonry
+            (62, vec![max_hp(62)], vec![]), // catalog name "+1000 Max HP"; grants more
+            (64, vec![max_hp(64)], vec![]), // catalog name "+2000 Max HP"; grants more
+            (80, vec![max_hp(80), ramp(80)], vec![]), // Living Fortress
+            // Mastercrafted Masonry. Its trailing 2000 is the per-unit divisor in
+            // `modifiers::Modifiers::dynamic_global_add` (+1% damage per 2000 Max
+            // HP) — a live scaler, not a grant, so it is allowed, not required.
+            (83, vec![max_hp(83)], vec![2000]),
+            // ---- `docs/11 §11.8`: the Mana-Shield pools ----
+            (13, vec![shield_pool(13)], vec![]), // Moonwell
+            (56, vec![shield_pool(56), ramp(56)], vec![]), // Aegis Protocol
+            (66, vec![shield_pool(66)], vec![]), // Recharge
+            (77, vec![shield_pool(77)], vec![]), // Energy Shield
+            (81, vec![shield_pool(81)], vec![]), // Mana Shield
+            (85, vec![shield_pool(85)], vec![]), // Arcane Mark
+            (86, vec![shield_pool(86)], vec![]), // Maw of Death
+            // Energy Pulse; its 1200 is the shield-break stun radius, not a pool.
+            (
+                87,
+                vec![shield_pool(87)],
+                one(87, |e| match e {
+                    content::ModEffect::ShieldBreakStun(r, _) => Some(vec![*r]),
+                    _ => None,
+                }),
+            ),
+            // ---- Max HP granted or paid outside a plain grant ----
+            (
+                45, // Ankh of Reconstruction
+                one(45, |e| match e {
+                    content::ModEffect::GrantRevive(n) => Some(vec![*n]),
+                    _ => None,
+                }),
+                vec![],
+            ),
+            (
+                51, // Philosopher's Stone
+                one(51, |e| match e {
+                    content::ModEffect::TradeMaxHpForGold(hp, gold) => Some(vec![*hp, *gold]),
+                    _ => None,
+                }),
+                vec![],
+            ),
+            // ---- economy figures an EARLIER balance pass moved the same way ----
+            (8, pct(8), vec![]),          // catalog name "+10% Gold Income"
+            (9, pct(9), vec![]),          // catalog name "+25% Gold Income"
+            (53, per_damage(53), vec![]), // catalog name "…per 100 Damage"
+            (54, per_damage(54), vec![]), // catalog name "…per 20 Damage"
+            (67, income(67), vec![]),
+            (72, income(72), vec![]),
+        ]
+    }
+
+    /// The core check. For every covered modifier, in EVERY pack: the tip quotes
+    /// the figure `content.rs` actually grants, and carries no pool-sized number
+    /// the catalog does not explain — which is what a stale figure looks like.
+    #[test]
+    fn modifier_tips_quote_the_catalog_magnitudes() {
+        for (i, required, allowed) in numeric_tip_cases() {
+            for p in PACKS {
+                let tip = p.modifier(i).tip;
+                for n in &required {
+                    assert!(
+                        quotes(tip, *n),
+                        "{} modifier[{i}] tip must quote {n}, which content.rs grants: {tip:?}",
+                        p.id
+                    );
+                }
+                for n in integers(tip).into_iter().filter(|n| *n >= POOL_FLOOR) {
+                    assert!(
+                        required.contains(&n) || allowed.contains(&n),
+                        "{} modifier[{i}] tip quotes {n}, which content.rs does not grant \
+                         (it grants {required:?}): {tip:?}",
+                        p.id
+                    );
+                }
+            }
+        }
+    }
+
+    /// `IncomeFlat` pays out EVERY TICK (`economy::tick_income` is phase 9 of every
+    /// `step`). A tip saying "per round" overstates it by 900×, so for these the
+    /// figure alone is not enough — the period has to be right too.
+    #[test]
+    fn flat_income_tips_state_the_right_period() {
+        for i in [67u16, 72] {
+            for p in PACKS {
+                let tip = p.modifier(i).tip;
+                assert!(tip.contains("tick"), "{} modifier[{i}] tip: {tip:?}", p.id);
+                assert!(!tip.contains("round"), "{} modifier[{i}] tip: {tip:?}", p.id);
+            }
+        }
+    }
+
+    /// The Epic multiplier is the one covered entry whose two packs render the same
+    /// number differently (`×1.4` vs `+40%`), so it gets its own check rather than
+    /// a row above. Both renderings are derived from the catalog.
+    #[test]
+    fn multiplicative_damage_tip_matches_the_catalog() {
+        const IDX: u16 = 4;
+        let (n, d) = modifier_def(IDX)
+            .effects
+            .iter()
+            .find_map(|e| match e {
+                content::ModEffect::DamageMulPct(n, d) => Some((*n, *d)),
+                _ => None,
+            })
+            .expect("modifier[4] is the multiplicative-damage entry");
+        // `modifiers::apply_effect` banks ×(1 + n/d); one copy is far below the
+        // soft cap, so that product is what a player actually gets.
+        let permille = 1000 + n * 1000 / d;
+        assert_eq!(permille % 100, 0, "×{permille} no longer renders in one decimal");
+        let factor = format!("{}.{}", permille / 1000, (permille % 1000) / 100);
+        let pct = n * 100 / d;
+        let f_tip = facility::PACK.modifier(IDX).tip;
+        let w_tip = wardens::PACK.modifier(IDX).tip;
+        assert!(f_tip.contains(&format!("×{factor}")), "facility modifier[4]: {f_tip:?}");
+        assert!(w_tip.contains(&format!("+{pct}%")), "wardens modifier[4]: {w_tip:?}");
+    }
+
+    /// The weapon side. `facility` states each ability magnitude as a figure, so it
+    /// can be checked straight against `content::WEAPONS`; `wardens` states them in
+    /// words ("feeds the tank"), which is why it is not covered here. `Root`,
+    /// `Summon` and `VulnOnHit` are excluded deliberately: several facility tips
+    /// render those in prose or leave a secondary rider unsaid, which is an
+    /// omission rather than a contradiction.
+    #[test]
+    fn facility_weapon_tips_quote_the_ability_magnitudes() {
+        use content::WeaponAbility as A;
+        let mut checked = 0;
+        for (i, w) in content::WEAPONS.iter().enumerate() {
+            let tip = facility::PACK.weapon(i as u16).tip;
+            let (what, n) = match w.ability {
+                A::LifeDrain { per_hit } => ("life-drain per hit", per_hit),
+                A::ManaDrain { per_hit } => ("mana-drain per hit", per_hit),
+                A::Knockback { dist } => ("knockback distance", dist),
+                A::Hazard { dmg, .. } => ("hazard damage per tick", dmg),
+                _ => continue,
+            };
+            assert!(quotes(tip, n), "facility weapon[{i}] tip must quote its {what} ({n}): {tip:?}");
+            checked += 1;
+        }
+        assert_eq!(checked, 10, "the ability-magnitude weapon set moved; re-check those tips");
     }
 
     #[test]
