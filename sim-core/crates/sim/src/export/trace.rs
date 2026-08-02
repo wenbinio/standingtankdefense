@@ -147,13 +147,22 @@ pub const TRACES: &[TraceSpec] = &[
                     branch, both of which otherwise ride on a single 55200-tick purist trace.",
     },
     TraceSpec {
+        name: "short-seed-17620",
+        seed: 17620,
+        ticks: 1200,
+        challenge: Challenge::None,
+        exercises: "PROBE, AURA (1200 ticks): second, independent cover for the damage/poison \
+                    aura (Blight Aura -> Combat.tickAura) — the cheapest seed found that arms \
+                    an aura cadence at all. Also carries poison DoT and fire stacks.",
+    },
+    TraceSpec {
         name: "short-seed-8855",
         seed: 8855,
         ticks: 2100,
         challenge: Challenge::None,
-        exercises: "PROBE, AURA + PENDING PERK (2100 ticks): buys Blight Aura, so this is the \
-                    only trace that reaches Combat.tickAura with a live cadence; also arms a \
-                    PendingPerk and stacks vulnerability.",
+        exercises: "PROBE, AURA + PENDING PERK (2100 ticks): buys Blight Aura, so it reaches \
+                    Combat.tickAura with a live cadence; also arms a PendingPerk and stacks \
+                    vulnerability. Paired with short-seed-17620 so no aura bug can hide.",
     },
     TraceSpec {
         name: "short-seed-13430",
@@ -161,8 +170,28 @@ pub const TRACES: &[TraceSpec] = &[
         ticks: 2100,
         challenge: Challenge::None,
         exercises: "PROBE, DEEP FREEZE (2100 ticks): frost stacks reach FROST_MAX_STACKS and \
-                    convert into freeze_ticks — the only trace that reaches the Deep-Freeze \
-                    payoff in Status.tick. Also arms a PendingPerk.",
+                    convert into freeze_ticks, the Deep-Freeze payoff in Status.tick. Also \
+                    arms a PendingPerk.",
+    },
+    TraceSpec {
+        name: "short-seed-19260",
+        seed: 19260,
+        ticks: 2100,
+        challenge: Challenge::None,
+        exercises: "PROBE, DEEP FREEZE II (2100 ticks): second, independent cover for \
+                    freeze_ticks and FROST_MAX_STACKS, on a different build from \
+                    short-seed-13430. Also the cheapest poison-DoT cover in the corpus.",
+    },
+    TraceSpec {
+        name: "short-seed-5660",
+        seed: 5660,
+        ticks: 2100,
+        challenge: Challenge::None,
+        exercises: "PROBE, REVIVE + MANA SHIELD + VULN PULSE II (2100 ticks): second, \
+                    independent cover for all three behaviours short-seed-12283 carries. \
+                    Those three rode on a single seed, so one balance nudge could have taken \
+                    out the revive branch, the shield and Status.pulse together; this splits \
+                    that risk across two unrelated builds.",
     },
     TraceSpec {
         name: "short-seed-12283",

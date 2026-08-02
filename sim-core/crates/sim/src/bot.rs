@@ -1013,9 +1013,25 @@ const WEAPON_FLOOR_CAP: usize = 10;
 /// Hard cap on MODIFIER purchases per match for the default bot. A real build is
 /// finite; without a cap the bot would buy a modifier every few ticks for the whole
 /// 30-min match (~thousands), compounding multiplicative damage / economy into a
-/// fixed-point overflow. 120 is far more than any human buys yet bounded enough that
+/// fixed-point overflow. 250 is far more than any human buys yet bounded enough that
 /// no stat runs away (with the saturating Fixed ops as a final backstop). Challenge
 /// runs are exempt (they self-limit by playstyle).
+///
+/// # This is no longer a backstop and it is distorting every measurement
+///
+/// `docs/11 §11.9`: the bot now hits this cap at **tick 2,100 — seventy seconds
+/// into a thirty-minute match** — and then buys nothing for the remaining 98% of
+/// the run, banking a median 130M gold it never spends. Scanning seed 0 to tick
+/// 3,000 and to tick 55,200 returns the identical `263 buys, 13 weapons, 250
+/// modifiers`. Every income pass since this constant was written made the bot
+/// snowball faster, so a number chosen as "far more than any human buys" became the
+/// shape of the game: the whole build is locked in during the opening, on a small
+/// wallet, and `docs/11`'s win rate is an opening statistic.
+///
+/// Raising or removing it means re-measuring all of `docs/11 §11.2`. The overflow it
+/// guards is separately handled now — `modifiers::STAT_CEIL`, the seven soft caps and
+/// the saturating `Fixed` ops all postdate it — so it is likely redundant as well as
+/// harmful. Not changed here because that is a balance batch, not a comment fix.
 const MODIFIER_BUY_CAP: u32 = 250;
 /// Hard cap on WEAPON instances for the default bot — a realistic arsenal. Without
 /// it, once the modifier cap is reached the bot dumps all remaining gold into

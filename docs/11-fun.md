@@ -252,3 +252,53 @@ At 240 seeds all five §11.2 targets are still in: win rate 32.5% [25–40], fir
 **The ramp exponent is still a curve fit**, now with a second constant fitted next to it. `POOLS = 3` is the lowest value that keeps the win rate off its floor once the ratio cap is also in place; `POW = 5` is the value between the two failure modes at 4 and 7. Both are defensible, bounded, and measured. Neither is a principle.
 
 **One modifier is no longer load-bearing; one modifier *family* still is.** Six of the twelve most-bought modifiers are income items. The gap between owning income-regen and not is now 12.6 points rather than 67.9, which is a real spread rather than a gate — but economy is still the spine of every build the bot knows how to make.
+
+## 11.9 The reference bot stops playing after seventy seconds
+
+### What the corpus turned up
+
+Re-picking the R3 trace corpus (six behaviours had drifted out of coverage) meant scanning twenty thousand seeds for what the reference bot actually reaches. It surfaced something that undercuts every measurement in this document.
+
+Seed 0, scanned to **tick 3,000**: `263 buys, 13 weapons, 250 modifiers`.
+Seed 0, scanned to **tick 55,200**: `263 buys, 13 weapons, 250 modifiers`.
+
+Identical. Between tick 3,000 and the end of a thirty-minute match the bot buys **nothing**. Narrowing it down, the build is frozen by **tick 2,100 — seventy seconds in**:
+
+| tick | seed 0 | seed 1 | seed 2 | seed 3 |
+| --- | --- | --- | --- | --- |
+| 900 | 114 | 114 | 120 | 117 |
+| 1500 | 200 | 200 | 206 | 203 |
+| 2100 | **263** | **257** | **263** | **257** |
+| 3000 | 263 | 257 | 263 | 257 |
+| 18000 | 263 | 259 | 263 | 259 |
+
+Two weapon buys trickle in on one seed after tick 6,000. Otherwise the reference bot plays the opening ninety seconds and then makes no decision for the remaining 98% of the run, while banking a median of **130M gold it never spends** (max 14.2B).
+
+### Why
+
+`MODIFIER_BUY_CAP` is 250, checked in `can_buy_mod()`. It exists for a real reason — an unbounded stack compounds multiplicative damage and economy into a fixed-point overflow — and it was set as a far-away backstop. Its own doc comment still says *"120 is far more than any human buys"*, which is what the number used to be.
+
+It is no longer a backstop. Every income pass since has made the bot snowball faster, and the cap now fires at seventy seconds instead of never. Past it `mods_ok` is false for `Challenge::None`, and once `weapons.len()` reaches the archetype target the bot buys nothing at all. **The cap stopped being a safety rail and became the shape of the game.**
+
+### What this costs the rest of this document
+
+Every measurement in §11.2 through §11.8 was taken against this bot. That does not make them wrong, but it does narrow what they mean:
+
+- **The win rate is the win rate of a build locked in at seventy seconds.** 32.5% describes an opening, not a game.
+- **§11.1 failure 5 has a different cause than I gave it.** I wrote that median peak max HP sits at the 24,000 starting value because HP buys no sustain and the bot does not value it. §11.8 fixed the sustain half and the median did not move. This is why: the bot's whole modifier build happens in the first seventy seconds, on a small wallet, when nothing expensive is affordable. It is not declining to buy Max HP later — there is no later.
+- **The boss numbers are thinner than they look.** Across the seven full-length default-bot traces, **one** spawns the boss and **none** kill it; `full-seed-272` ends the window with the boss still holding 1.75M HP. Both purist-challenge traces spawn *and* kill theirs, dealing 249× and 3,494× more total damage than the best default run. The bot that beats the boss is the one that ignores the cap.
+- **Dead content is dead for a narrower reason than I thought.** The duplicator/voucher/Black Market branch is reached in 25 of 20,000 seeds at tick 1,200 and becomes *impossible* once the cap lands.
+
+### One correction to a diagnosis I made earlier today
+
+I said the specialty defensive items were unreachable because they score `ModAxis::Other` and fall through to a rarely-taken fallback. That is wrong, and reading `mod_axis` shows why: `GrantVulnPulse` sits in the offense arm; `ManaShield`, `GrantRevive` and `HpRegen` sit in the defense arm — which puts Mana Shield, Ankh of Reconstruction and even Blight Aura (whose `HpRegen(200)` sets the flag while its `DamageAura` matches nothing) squarely on an axis the bot asks for. Only `GrantDuplicator` and `GrantVoucher` are genuinely `Other`.
+
+They lose for a duller reason. The axis pick takes the **priciest affordable** offer, and within Defense it takes any offer that raises Max HP first. So the Defense slot collapses to *"the most expensive Max-HP modifier in this shop"*, and a specialty defensive item only wins in a shop that offers no Max-HP item at all. Combined with the cap, that decides the entire build inside the first seventy seconds.
+
+### What this does not change
+
+The §11.8 degeneracy work stands. It was measured as a *partition* — runs owning income-regen against runs not owning it — and both halves ran under the same cap, so the 67.9 → 12.6 point collapse is a real comparison. The same goes for the soft caps and the boss plate rotation, which are properties of the rules rather than of the bot.
+
+### The work
+
+**Raise or remove `MODIFIER_BUY_CAP` and re-measure everything in §11.2.** The overflow risk it guards is now separately handled — `STAT_CEIL`, the six soft caps and the saturating `Fixed` ops all postdate it — so the cap is likely redundant as well as harmful. Until that is done, every number in this document is an opening statistic, and should be read as one.

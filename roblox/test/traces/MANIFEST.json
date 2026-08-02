@@ -52,6 +52,17 @@
       "coverage": {"buys":152,"weapon_buys":137,"modifier_buys":15,"rerolls":26,"clears":4,"weapons_bought":137,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":11,"max_projectiles":1,"saw_hazards":true,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":true,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":3237,"total_damage_dealt":509768}
     },
     {
+      "name": "short-seed-17620",
+      "file": "short-seed-17620.json",
+      "seed": 17620,
+      "ticks": 1200,
+      "bytes": 27220,
+      "bot": "default",
+      "input_events": 161,
+      "exercises": "PROBE, AURA (1200 ticks): second, independent cover for the damage/poison aura (Blight Aura -> Combat.tickAura) — the cheapest seed found that arms an aura cadence at all. Also carries poison DoT and fire stacks.",
+      "coverage": {"buys":156,"weapon_buys":3,"modifier_buys":153,"rerolls":5,"clears":0,"weapons_bought":3,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":10,"max_projectiles":2,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":true,"saw_frost":false,"saw_fire":true,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":true,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":8913000,"total_damage_dealt":26875}
+    },
+    {
       "name": "short-seed-8855",
       "file": "short-seed-8855.json",
       "seed": 8855,
@@ -59,7 +70,7 @@
       "bytes": 46846,
       "bot": "default",
       "input_events": 262,
-      "exercises": "PROBE, AURA + PENDING PERK (2100 ticks): buys Blight Aura, so this is the only trace that reaches Combat.tickAura with a live cadence; also arms a PendingPerk and stacks vulnerability.",
+      "exercises": "PROBE, AURA + PENDING PERK (2100 ticks): buys Blight Aura, so it reaches Combat.tickAura with a live cadence; also arms a PendingPerk and stacks vulnerability. Paired with short-seed-17620 so no aura bug can hide.",
       "coverage": {"buys":257,"weapon_buys":7,"modifier_buys":250,"rerolls":5,"clears":0,"weapons_bought":7,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":10,"max_projectiles":5,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":true,"saw_poison":false,"saw_frost":false,"saw_fire":false,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":true,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":true,"final_gold":1541061,"total_damage_dealt":74414}
     },
     {
@@ -70,8 +81,30 @@
       "bytes": 46995,
       "bot": "default",
       "input_events": 268,
-      "exercises": "PROBE, DEEP FREEZE (2100 ticks): frost stacks reach FROST_MAX_STACKS and convert into freeze_ticks — the only trace that reaches the Deep-Freeze payoff in Status.tick. Also arms a PendingPerk.",
+      "exercises": "PROBE, DEEP FREEZE (2100 ticks): frost stacks reach FROST_MAX_STACKS and convert into freeze_ticks, the Deep-Freeze payoff in Status.tick. Also arms a PendingPerk.",
       "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":0,"weapons_bought":13,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":14,"max_projectiles":15,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":true,"saw_poison":false,"saw_frost":true,"saw_fire":false,"saw_stun":false,"saw_freeze":true,"saw_vuln_stacks":false,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":52910930,"total_damage_dealt":74376}
+    },
+    {
+      "name": "short-seed-19260",
+      "file": "short-seed-19260.json",
+      "seed": 19260,
+      "ticks": 2100,
+      "bytes": 45550,
+      "bot": "default",
+      "input_events": 207,
+      "exercises": "PROBE, DEEP FREEZE II (2100 ticks): second, independent cover for freeze_ticks and FROST_MAX_STACKS, on a different build from short-seed-13430. Also the cheapest poison-DoT cover in the corpus.",
+      "coverage": {"buys":200,"weapon_buys":13,"modifier_buys":187,"rerolls":5,"clears":2,"weapons_bought":13,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":14,"max_projectiles":5,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":false,"saw_pending_perk":false,"saw_poison":true,"saw_frost":true,"saw_fire":true,"saw_stun":false,"saw_freeze":true,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":false,"saw_mana_shield":false,"saw_spikes":false,"final_gold":1714982,"total_damage_dealt":55450}
+    },
+    {
+      "name": "short-seed-5660",
+      "file": "short-seed-5660.json",
+      "seed": 5660,
+      "ticks": 2100,
+      "bytes": 46992,
+      "bot": "default",
+      "input_events": 268,
+      "exercises": "PROBE, REVIVE + MANA SHIELD + VULN PULSE II (2100 ticks): second, independent cover for all three behaviours short-seed-12283 carries. Those three rode on a single seed, so one balance nudge could have taken out the revive branch, the shield and Status.pulse together; this splits that risk across two unrelated builds.",
+      "coverage": {"buys":263,"weapon_buys":13,"modifier_buys":250,"rerolls":5,"clears":0,"weapons_bought":13,"death_tick":null,"reached_boss_phase":false,"boss_spawned":false,"max_enemies":11,"max_projectiles":12,"saw_hazards":false,"saw_minions":false,"saw_ramps":false,"saw_vuln_pulses":true,"saw_pending_perk":false,"saw_poison":false,"saw_frost":false,"saw_fire":true,"saw_stun":false,"saw_freeze":false,"saw_vuln_stacks":true,"saw_damage_aura":false,"saw_revive":true,"saw_mana_shield":true,"saw_spikes":true,"final_gold":3133530,"total_damage_dealt":142552}
     },
     {
       "name": "short-seed-12283",
