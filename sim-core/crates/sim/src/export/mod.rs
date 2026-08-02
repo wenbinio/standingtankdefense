@@ -20,6 +20,11 @@
 
 pub mod json;
 pub mod trace;
+/// The `modifiers`/`economy` oracle document consumed by
+/// `roblox/test/modifiers_test.luau` (`roblox/CONTRACTS.md` C4). Lives inside the
+/// lib so it can drive the `pub(crate)` `apply_ramps` / `economy::*` entry points
+/// directly, which is what makes the WHOLE document regenerable.
+pub mod oracle;
 
 use crate::content as c;
 use determinism::{Fixed, Rng};
