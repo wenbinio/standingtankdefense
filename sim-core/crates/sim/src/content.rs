@@ -679,11 +679,18 @@ impl ModifierDef {
 /// **Mana-Shield pool** grant in this table was raised (roughly ×2, ×3 for the
 /// cheapest Max-HP item), because `modifiers.rs` now makes both pools generate their
 /// own regeneration — so a pool is no longer a bucket that merely delays a loss, it
-/// is the sustain stat, and it had to be priced like one. **Where an entry's NAME or
-/// its source-text comment still quotes the old figure (`+1000 Max HP`, `Aegis
-/// Protocol (+2500 Shield…)`, …), the name is the stale one and the code is
-/// authoritative.** Names are deliberately left alone: they are display strings that
-/// the theme packs override by index, and renaming them would churn every pack.
+/// is the sustain stat, and it had to be priced like one.
+///
+/// Nine names in this table were quoting figures their own code no longer granted —
+/// `+1000 Max HP` for a `MaxHp(2500)`, `+25% Damage (Epic)` for a ×1.4, and so on,
+/// four from this pass and five from an earlier one. They are renamed. The rule this
+/// leaves behind: **a name that states a magnitude is part of the contract, not
+/// decoration.** `facility` overrides every name by index and carries no magnitudes,
+/// but `wardens` declines to rename and falls through to these strings, so a stale
+/// one here is a lie a player reads. A **source-text comment** quoting the original
+/// WC3 upgrade is a different thing and stays as written — it is provenance, and it
+/// is labelled as such.
+///
 /// Nothing was added, removed or reordered — the table is still exactly 91 entries in
 /// their original positions.
 pub static MODIFIERS: &[ModifierDef] = &[
@@ -695,7 +702,7 @@ pub static MODIFIERS: &[ModifierDef] = &[
     ModifierDef { name: "Improved Magic Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_MAGIC, 1, 10)], ramp: None },
     // representative Epic multiplier (no source upgrade is a flat ×-damage item):
     // a true force-multiplier on an already-spiky build.
-    ModifierDef { name: "+25% Damage (Epic)", rarity: 3, cost: 5000, effects: &[ModEffect::DamageMulPct(2, 5)], ramp: None },
+    ModifierDef { name: "+40% Damage (Epic)", rarity: 3, cost: 5000, effects: &[ModEffect::DamageMulPct(2, 5)], ramp: None },
     ModifierDef { name: "Rapidfire", rarity: 0, cost: 500, effects: &[ModEffect::AttackSpeedPct(1, 10)], ramp: None },
     ModifierDef { name: "Bounty Hunter", rarity: 1, cost: 1500, effects: &[ModEffect::BountyPct(1, 2)], ramp: None },
     // Entangled Gold Mine (A0H0): "+20 Gold Income | +25% of Gold Income as instant
@@ -707,8 +714,8 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // of the snowball-or-die path. Cheap, but they buy gold not survival.
     // representative income-multiplier items (Gold Mine below is the true source
     // "+10 Income +10% Income"; these pure ×income items are kept as a slice).
-    ModifierDef { name: "+10% Gold Income", rarity: 1, cost: 1000, effects: &[ModEffect::IncomePct(20, 100)], ramp: None },
-    ModifierDef { name: "+25% Gold Income", rarity: 2, cost: 2000, effects: &[ModEffect::IncomePct(50, 100)], ramp: None },
+    ModifierDef { name: "+20% Gold Income", rarity: 1, cost: 1000, effects: &[ModEffect::IncomePct(20, 100)], ramp: None },
+    ModifierDef { name: "+50% Gold Income", rarity: 2, cost: 2000, effects: &[ModEffect::IncomePct(50, 100)], ramp: None },
     // Transmute (A0AE): "+100% Kill Bounty | +200% Bounty Gold with 5% activation
     // chance". RE-BUNDLED — the live catalog modeled ONLY the proc ("Lucky Strikes");
     // now both the flat bounty and the gambling proc ride one named upgrade.
@@ -854,8 +861,8 @@ pub static MODIFIERS: &[ModifierDef] = &[
     ModifierDef { name: "Cursed Treasure", rarity: 2, cost: 0, effects: &[ModEffect::TradeRegenForGold(100, 5000)], ramp: None },
     // representative damage→gold items (the source's "Bloodmoney" gold-per-damage
     // mechanic, no single named upgrade); kept as a slice.
-    ModifierDef { name: "Bloodmoney (+1 Gold per 100 Damage)", rarity: 1, cost: 1500, effects: &[ModEffect::GoldPerDamagePct(1, 60)], ramp: None },
-    ModifierDef { name: "Bloodmoney II (+1 Gold per 20 Damage)", rarity: 2, cost: 3000, effects: &[ModEffect::GoldPerDamagePct(1, 12)], ramp: None },
+    ModifierDef { name: "Bloodmoney (+1 Gold per 60 Damage)", rarity: 1, cost: 1500, effects: &[ModEffect::GoldPerDamagePct(1, 60)], ramp: None },
+    ModifierDef { name: "Bloodmoney II (+1 Gold per 12 Damage)", rarity: 2, cost: 3000, effects: &[ModEffect::GoldPerDamagePct(1, 12)], ramp: None },
     // representative income→shield item (mirrors income→HP for the shield); no
     // single source name. Kept as a slice.
     ModifierDef { name: "Wartithe (25% of Income as Mana Shield)", rarity: 2, cost: 3000, effects: &[ModEffect::IncomeShieldPct(25, 100)], ramp: None },
@@ -863,7 +870,7 @@ pub static MODIFIERS: &[ModifierDef] = &[
     // gen_catalog.py; names restored / re-bundled in the content-fidelity pass).
     // representative ramping epic shield (no exact source; closest named shields
     // are Recharge / Energy Shield below). Kept as a slice.
-    ModifierDef { name: "Aegis Protocol (+2500 Shield, +400/round)", rarity: 3, cost: 5000,
+    ModifierDef { name: "Aegis Protocol (+5000 Shield, +800/round)", rarity: 3, cost: 5000,
         effects: &[ModEffect::ManaShield(5000, 20)],
         ramp: Some(RampSpec { effect: ModEffect::ManaShield(800, 4), interval_ticks: RAMP_PER_ROUND }) },
     // Improved Masonry (A001): "+500 Max HP".
@@ -872,14 +879,16 @@ pub static MODIFIERS: &[ModifierDef] = &[
     ModifierDef { name: "Improved Normal Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_NORMAL, 10, 100)], ramp: None },
     ModifierDef { name: "Improved Siege Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_SIEGE, 10, 100)], ramp: None },
     ModifierDef { name: "Improved Chaos Attacks", rarity: 0, cost: 500, effects: &[ModEffect::DamageTypePct(DMG_CHAOS, 10, 100)], ramp: None },
-    // representative +1000-Max-HP item (the source bundles +1000 with a secondary
-    // on Mask of Death / Magic Seeds); kept as a plain slice.
-    ModifierDef { name: "+1000 Max HP", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(2500)], ramp: None },
+    // ORIGIN: a representative +1000-Max-HP slice (the source bundles +1000 with a
+    // secondary on Mask of Death / Magic Seeds). The §11.8 retune raised it; the name
+    // states what it grants NOW, this comment states where it came from.
+    ModifierDef { name: "+2500 Max HP", rarity: 1, cost: 1500, effects: &[ModEffect::MaxHp(2500)], ramp: None },
     // representative +10-armor item (every source +10-armor upgrade bundles a
     // secondary — Blessed/Spiky/Frost/Poison Armor); kept as a plain slice.
     ModifierDef { name: "+10 Armor", rarity: 0, cost: 500, effects: &[ModEffect::Armor(10)], ramp: None },
-    // representative +2000-Max-HP item (Imbued Masonry above is the bundled source).
-    ModifierDef { name: "+2000 Max HP", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(4000)], ramp: None },
+    // ORIGIN: a representative +2000-Max-HP slice (Imbued Masonry above is the
+    // bundled source). Raised by §11.8; the name states the current grant.
+    ModifierDef { name: "+4000 Max HP", rarity: 2, cost: 3000, effects: &[ModEffect::MaxHp(4000)], ramp: None },
     // representative +50%-bounty item (Bounty Hunter above is the named source).
     ModifierDef { name: "+50% Kill Bounty", rarity: 2, cost: 3000, effects: &[ModEffect::BountyPct(50, 100)], ramp: None },
     // Recharge (A0EX): "+4000 Mana Shield | +25% Mana Regeneration". RE-BUNDLED via
@@ -923,7 +932,7 @@ pub static MODIFIERS: &[ModifierDef] = &[
         ramp: Some(RampSpec { effect: ModEffect::BountyPct(15, 100), interval_ticks: RAMP_PER_ROUND }) },
     // representative ramping-Max-HP item (Magic Seeds "+1000 +5/sec" is the closest
     // source; this is a bigger epic slice). Kept.
-    ModifierDef { name: "Living Fortress (+2500 Max HP, +500/round)", rarity: 3, cost: 5000,
+    ModifierDef { name: "Living Fortress (+5000 Max HP, +800/round)", rarity: 3, cost: 5000,
         effects: &[ModEffect::MaxHp(5000)],
         ramp: Some(RampSpec { effect: ModEffect::MaxHp(800), interval_ticks: RAMP_PER_ROUND }) },
     // Mana Shield (A0EQ): "+1000 Mana Shield".
